@@ -1,0 +1,10 @@
+/*
+TODO: Decide what to do with the U*-series
+*/
+namespace Am.Lang 
+{
+    primitive native class UByte {
+        override native fun toString(): String
+    }
+}
+

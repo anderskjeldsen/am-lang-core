@@ -1,0 +1,8 @@
+
+namespace Am.Lang 
+{
+    primitive native class Short {
+        override native fun toString(): String
+    }
+}
+

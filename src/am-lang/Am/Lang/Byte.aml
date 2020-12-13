@@ -1,0 +1,8 @@
+
+namespace Am.Lang 
+{
+    primitive native class Byte {
+        override native fun toString(): String
+    }
+}
+

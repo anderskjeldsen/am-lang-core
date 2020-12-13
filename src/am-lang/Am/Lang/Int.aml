@@ -1,0 +1,8 @@
+
+namespace Am.Lang 
+{
+    primitive native class Int {
+        override native fun toString(): String
+    }
+}
+

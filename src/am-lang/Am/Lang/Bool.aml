@@ -1,0 +1,11 @@
+
+namespace Am.Lang 
+{
+    primitive native class Bool {
+        override fun toString(): String {
+            return if (this) "true" else "false"
+        }
+    }
+
+}
+

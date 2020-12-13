@@ -1,0 +1,14 @@
+
+namespace Am.Lang 
+{
+    native class String {
+        native fun getLength(): Int
+        native fun print()
+        native op + (s: String): String
+        fun println() {
+            var s = this + "\n"
+            s.print()
+        }
+    }
+}
+
