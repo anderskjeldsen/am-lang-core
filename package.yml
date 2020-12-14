@@ -4,6 +4,11 @@ version: 0.1.0
 type: library
 platforms:
   - id: amigaos
-    gcc-command: m68k-amigaos-gcc
-    additonal-headers: "core.h amigaos/amiga.h"
-    additonal-implementations: "core.c amigaos/amiga.c"
+    gccCommand: m68k-amigaos-gcc
+    additonalHeaders:
+      - core.h 
+      - amigaos/amiga.h"
+    additonalImplementations: 
+      - core.c
+      - amigaos/amiga.c"
+    
