@@ -2,3 +2,8 @@
 id: am.lang.core
 version: 0.1.0
 type: library
+platforms:
+  - id: amigaos
+    gcc-command: m68k-amigaos-gcc
+    additonal-headers: "core.h amigaos/amiga.h"
+    additonal-implementations: "core.c amigaos/amiga.c"
