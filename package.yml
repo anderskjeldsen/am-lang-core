@@ -7,8 +7,8 @@ platforms:
     gccCommand: m68k-amigaos-gcc
     additonalHeaders:
       - core.h 
-      - amigaos/amiga.h"
+      - amigaos/amiga.h
     additonalImplementations: 
       - core.c
-      - amigaos/amiga.c"
+      - amigaos/amiga.c
     
