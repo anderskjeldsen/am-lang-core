@@ -272,7 +272,7 @@ aobject * __create_string(unsigned char * const str, aclass * const string_class
     int len = strlen(str);
     unsigned char *newStr = malloc(len + 1);
     strcpy(str, newStr);
-    holder->string_value = newStr; // assume that string constants will never change
+    holder->string_value = newStr;
     holder->length = len; // TODO: how many characters exactly?
     holder->is_string_constant = false;
     return str_obj;

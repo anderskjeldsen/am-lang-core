@@ -25,6 +25,14 @@ function_result Am_Lang_String__native_release_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
+
+	string_holder *holder = this->object_data.value.custom_value;
+	if ( !holder->is_string_constant ) {
+		free(holder->string_value);
+	}
+	free(holder);
+	this->object_data.value.custom_value = NULL;
+
 	// TODO: implement native function Am_Lang_String__native_release_0
 	printf("TODO: implement native function Am_Lang_String__native_release_0\n");
 __exit: ;
