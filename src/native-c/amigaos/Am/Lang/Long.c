@@ -4,7 +4,7 @@
 #include <Am/Lang/Long.h>
 #include <Am/Lang/Object.h>
 
-function_result Am_Lang_Int_toString_0(nullable_value const this)
+function_result Am_Lang_Long_toString_0(nullable_value const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
