@@ -254,13 +254,27 @@ bool __is_primitive_null(const nullable_value nullable_value) {
     return nullable_value.flags & PRIMITIVE_NULL;
 }
 
-aobject * __create_string(unsigned char * const str, aclass * const string_class) {
+/* From constant */
+aobject * __create_string_constant(unsigned char * const str, aclass * const string_class) {
     aobject * str_obj = __allocate_object(string_class);
     string_holder *holder = malloc(sizeof(string_holder));
     str_obj->object_data.value.custom_value = holder;
     holder->string_value = str; // assume that string constants will never change
     holder->length = strlen(str); // TODO: how many characters exactly?
     holder->is_string_constant = true;
+    return str_obj;
+}
+
+aobject * __create_string(unsigned char * const str, aclass * const string_class) {
+    aobject * str_obj = __allocate_object(string_class);
+    string_holder *holder = malloc(sizeof(string_holder));
+    str_obj->object_data.value.custom_value = holder;
+    int len = strlen(str);
+    unsigned char *newStr = malloc(len + 1);
+    strcpy(str, newStr);
+    holder->string_value = newStr; // assume that string constants will never change
+    holder->length = len; // TODO: how many characters exactly?
+    holder->is_string_constant = false;
     return str_obj;
 }
 

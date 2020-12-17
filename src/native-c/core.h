@@ -181,6 +181,7 @@ bool __is_primitive_nullable(const nullable_value nullable_value);
 void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null);
 bool __is_primitive_null(const nullable_value nullable_value);
 bool __is_primitive(const nullable_value nullable_value);
+aobject * __create_string_constant(unsigned char * const str, aclass * const string_class);
 aobject * __create_string(unsigned char * const str, aclass * const string_class);
 void print_allocated_objects();
 
