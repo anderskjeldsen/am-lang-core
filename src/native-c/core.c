@@ -2,7 +2,7 @@
 #define am_lang_core_c
 
 // #include <stdlib.h>
-#include <core.h>
+#include "core.h"
 
 int __allocation_count = 0;
 
