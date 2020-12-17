@@ -3,6 +3,8 @@
 #include <core.h>
 #include <Am/Lang/Long.h>
 #include <Am/Lang/Object.h>
+#include <Am/Lang/String.h>
+#include <string.h>
 
 function_result Am_Lang_Long_toString_0(nullable_value const this)
 {
