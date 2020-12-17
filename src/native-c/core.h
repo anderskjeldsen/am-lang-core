@@ -1,5 +1,5 @@
-#ifndef asharp_h
-#define asharp_h
+#ifndef am_lang_core_h
+#define am_lang_core_h
 
 #include <stdio.h>
 #include <stdlib.h>

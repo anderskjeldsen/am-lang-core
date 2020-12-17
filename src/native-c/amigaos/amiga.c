@@ -1,6 +1,6 @@
 #ifndef amiga_c
 #define amiga_c
-#include <asharp.h>
+#include <core.h>
 #include <amiga.h>
 #include <exec/types.h>
 #include <proto/exec.h>

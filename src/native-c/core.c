@@ -1,8 +1,8 @@
-#ifndef asharp_c
-#define asharp_c
+#ifndef am_lang_core_c
+#define am_lang_core_c
 
 // #include <stdlib.h>
-#include "asharp.h"
+#include <core.h>
 
 int __allocation_count = 0;
 

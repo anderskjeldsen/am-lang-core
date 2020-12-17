@@ -1,6 +1,6 @@
 #ifndef native_aclass_Am_Lang_Int_c
 #define native_aclass_Am_Lang_Int_c
-#include <asharp.h>
+#include <core.h>
 #include <Am/Lang/Int.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/String.h>
