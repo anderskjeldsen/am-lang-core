@@ -1,0 +1,10 @@
+namespace Am.Lang
+{
+    native class Array<T>()
+    {
+        import Am.Lang
+        native fun length(): Long
+//        native fun operator<Long, T>[]
+//        native fun operator<Long> []:T
+    }
+}
