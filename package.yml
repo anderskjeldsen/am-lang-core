@@ -11,4 +11,10 @@ platforms:
     additonalImplementations: 
       - core.c
       - amigaos/amiga.c
+  - id: linux-x64
+    gccCommand: gcc
+    additonalHeaders:
+      - core.h 
+    additonalImplementations: 
+      - core.c
     
