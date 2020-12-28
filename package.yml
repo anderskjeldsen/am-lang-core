@@ -3,12 +3,24 @@ id: am-lang-core
 version: 0.1.0
 type: library
 platforms:
-  - id: amigaos
-    gccCommand: m68k-amigaos-gcc
+  - id: libc
+    abstract: true
     additonalHeaders:
       - core.h 
-      - amigaos/amiga.h
     additonalImplementations: 
       - core.c
+  - id: amigaos
+    extends: libc
+    gccCommand: m68k-amigaos-gcc
+    additonalHeaders:
+      - amigaos/amiga.h
+    additonalImplementations: 
       - amigaos/amiga.c
+  - id: linux-x64
+    extends: libc
+    gccCommand: gcc
+#    additonalHeaders:
+#      - core.h 
+#    additonalImplementations: 
+#      - core.c
     
