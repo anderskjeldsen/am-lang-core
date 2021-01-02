@@ -83,6 +83,12 @@ struct _string_holder {
     char *string_value;
 };
 
+struct _array_holder {
+    unsigned size_t size; // number of items
+//    unsigned char item_size; // size per item
+    char *array_data;
+};
+
 // rename to: any_value
 struct _nullable_value {
     unsigned char flags; // 1 = nullable primitive (this is a primitive that CAN be set to NULL), 2 = primitive null (this is a primitive that is CURRENTLY NULL)
@@ -183,6 +189,7 @@ bool __is_primitive_null(const nullable_value nullable_value);
 bool __is_primitive(const nullable_value nullable_value);
 aobject * __create_string_constant(unsigned char * const str, aclass * const string_class);
 aobject * __create_string(unsigned char * const str, aclass * const string_class);
+aobject * __create_array(size_t size, size_t item_size, aclass * const array_class);
 void print_allocated_objects();
 
 #endif

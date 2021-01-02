@@ -279,4 +279,15 @@ aobject * __create_string(unsigned char * const str, aclass * const string_class
     return str_obj;
 }
 
+aobject * __create_array(size_t size, size_t item_size, aclass * const array_class) {
+    aobject * array_obj = __allocate_object(array_class);
+    array_holder *holder = malloc(sizeof(array_holder));
+    array_obj->object_data.value.custom_value = holder;
+    size_t size = data_size * (size_t) item_size;
+    unsigned char *array_data = malloc(data_size);
+    holder->array_data = array_data;
+    holder->size = size;
+    return array_obj;
+}
+
 #endif
