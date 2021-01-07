@@ -60,6 +60,7 @@ typedef union _value value;
 typedef struct _nullable_value nullable_value;
 typedef struct _property property;
 typedef struct _string_holder string_holder;
+typedef struct _array_holder array_holder;
 typedef struct _suspend_state suspend_state;
 typedef void (*__suspend_function)(suspend_state *);
 
