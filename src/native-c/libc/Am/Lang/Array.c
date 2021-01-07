@@ -25,7 +25,14 @@ function_result Am_Lang_Array__native_release_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	// TODO: implement native function Am_Lang_Array__native_release_0
+
+	array_holder * ah = (array_holder *) this->object_data.value.custom_value;
+
+	free(ah->array_data);
+	ah->array_data = NULL;
+	free(array_holder);
+	this->object_data.value.custom_value = NULL;
+
 __exit: ;
 	return __result;
 };

@@ -4,16 +4,17 @@
 #include <Am/Lang/String.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/Int.h>
+#include <string.h>
 
 function_result Am_Lang_String__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	// Add reference count for this in String._native_init
 	if (this != NULL) {
 		__increase_reference_count(this);
 	}
 	// TODO: implement native function Am_Lang_String__native_init_0
+	printf("TODO: implement native function Am_Lang_String__native_init_0\n");
 __exit: ;
 	if (this != NULL) {
 		__decrease_reference_count(this);
@@ -25,20 +26,35 @@ function_result Am_Lang_String__native_release_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
+
+	string_holder *holder = this->object_data.value.custom_value;
+	if ( !holder->is_string_constant ) {
+		free(holder->string_value);
+	}
+	free(holder);
+	this->object_data.value.custom_value = NULL;
+
 	// TODO: implement native function Am_Lang_String__native_release_0
+	printf("TODO: implement native function Am_Lang_String__native_release_0\n");
 __exit: ;
 	return __result;
 };
 
 function_result Am_Lang_String_getLength_0(aobject * const this)
 {
-	function_result __result = { .has_return_value = true };
+	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	// Add reference count for this in String.getLength
 	if (this != NULL) {
 		__increase_reference_count(this);
 	}
 	// TODO: implement native function Am_Lang_String_getLength_0
+	string_holder *holder = this->object_data.value.custom_value;
+	if ( holder != NULL ) {
+		__result.return_value.value.int_value = holder->length;
+	} else {
+		__result.return_value.value.int_value = 0;
+	}
+
 __exit: ;
 	if (this != NULL) {
 		__decrease_reference_count(this);
@@ -50,11 +66,18 @@ function_result Am_Lang_String_print_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	// Add reference count for this in String.print
 	if (this != NULL) {
 		__increase_reference_count(this);
 	}
 	// TODO: implement native function Am_Lang_String_print_0
+	string_holder *holder = this->object_data.value.custom_value;
+	if ( holder != NULL ) {
+		printf(holder->string_value);
+	} else {
+		printf("null");
+	}
+
+
 __exit: ;
 	if (this != NULL) {
 		__decrease_reference_count(this);
@@ -66,17 +89,43 @@ function_result Am_Lang_String__op__plus_0(aobject * const this, aobject * s)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	// Add reference count for this in String._op__plus
 	if (this != NULL) {
 		__increase_reference_count(this);
 	}
-	// TODO: implement native function Am_Lang_String__op__plus_0
+	if (s != NULL) {
+		__increase_reference_count(s);
+	}
+
+
+	string_holder *holder1 = this->object_data.value.custom_value;
+	string_holder *holder2 = s->object_data.value.custom_value;
+
+	if ( holder1 != NULL && holder2 != NULL ) {
+		aobject * str_obj = __allocate_object(&Am_Lang_String);
+		string_holder *holder = malloc(sizeof(string_holder));
+		str_obj->object_data.value.custom_value = holder;
+		char * newStr = malloc(holder1->length + holder2->length + 1);
+//		printf("copy %s\n", holder1->string_value);
+//		printf("append %s\n", holder2->string_value);
+		strcpy(newStr, holder1->string_value);
+	    strcat(newStr, holder2->string_value);
+//		printf("new string: %s\n", newStr);
+		holder->string_value = newStr; // assume that string constants will never change
+		holder->length = holder1->length + holder2->length; // TODO: how many characters exactly?
+		holder->is_string_constant = false;
+
+		__result.return_value.value.object_value = str_obj;
+//		__increase_reference_count(str_obj);
+	}
+
+	// TODO: implement native function MyNamespace_CustomMyClass__op__plus_0
+//	printf("TODO: implement native function Am_Lang__op__plus_0\n");
 __exit: ;
 	if (this != NULL) {
 		__decrease_reference_count(this);
 	}
 	if (s != NULL) {
-		__increase_reference_count(s);
+		__decrease_reference_count(s);
 	}
 	return __result;
 };
