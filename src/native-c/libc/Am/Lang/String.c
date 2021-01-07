@@ -72,7 +72,7 @@ function_result Am_Lang_String_print_0(aobject * const this)
 	// TODO: implement native function Am_Lang_String_print_0
 	string_holder *holder = this->object_data.value.custom_value;
 	if ( holder != NULL ) {
-		printf(holder->string_value);
+		printf("%s", holder->string_value);
 	} else {
 		printf("null");
 	}
