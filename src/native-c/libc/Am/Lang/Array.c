@@ -30,7 +30,7 @@ function_result Am_Lang_Array__native_release_0(aobject * const this)
 
 	free(ah->array_data);
 	ah->array_data = NULL;
-	free(array_holder);
+	free(ah);
 	this->object_data.value.custom_value = NULL;
 
 __exit: ;
