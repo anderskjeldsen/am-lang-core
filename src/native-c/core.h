@@ -84,7 +84,7 @@ struct _string_holder {
 };
 
 struct _array_holder {
-    unsigned size_t size; // number of items
+    size_t size; // number of items
 //    unsigned char item_size; // size per item
     char *array_data;
 };
