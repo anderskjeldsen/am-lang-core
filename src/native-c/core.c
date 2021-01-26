@@ -13,7 +13,7 @@ int allocation_index = 0;
 void __decrease_reference_count(aobject * const __obj) {
     __obj->reference_count--;
     #ifdef DEBUG
-    printf("decrease reference count of object of type %s (address: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->reference_count);
+    printf("decrease reference count of object of type %s (address: %p), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->reference_count);
     #endif
     if ( __obj->reference_count == 0 ) {
         __deallocate_object(__obj);
@@ -23,7 +23,7 @@ void __decrease_reference_count(aobject * const __obj) {
 void __increase_reference_count(aobject * const __obj) {
     __obj->reference_count++;
     #ifdef DEBUG
-    printf("increase reference count of object of type %s (address: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->reference_count);
+    printf("increase reference count of object of type %s (address: %p), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->reference_count);
     #endif
 }
 
