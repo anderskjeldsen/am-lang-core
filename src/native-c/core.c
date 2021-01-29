@@ -13,7 +13,7 @@ int allocation_index = 0;
 
 void __decrease_reference_count(aobject * const __obj) {
     __obj->reference_count--;
-    #ifdef DEBUG
+   #ifdef DEBUG
     printf("decrease reference count of object of type %s (address: %p), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->reference_count);
     #endif
     if ( __obj->reference_count == 0 ) {
@@ -97,12 +97,13 @@ void __deallocate_object(aobject * const __obj) {
         __obj->properties = NULL;
     }
 
-// DEBUG:
-    // for(int i = 0; i < 256; i++) {
-    //     if ( allocations[i] == __obj) {
-    //         allocations[i] = NULL;
-    //     }
-    // }
+    #ifdef DEBUG
+    for(int i = 0; i < 256; i++) {
+        if ( allocations[i] == __obj) {
+            allocations[i] = NULL;
+        }
+    }
+    #endif
 
     free(__obj);
 }
