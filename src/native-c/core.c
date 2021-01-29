@@ -5,10 +5,11 @@
 #include <core.h>
 #include <string.h>
 
+#ifdef DEBUG
 int __allocation_count = 0;
-
 aobject * allocations[256];
 int allocation_index = 0;
+#endif
 
 void __decrease_reference_count(aobject * const __obj) {
     __obj->reference_count--;
@@ -34,7 +35,9 @@ aobject * __allocate_object(aclass * const __class) {
     #endif
     aobject * __obj = (aobject *) malloc(sizeof(aobject));
     // DEBUG:
-    // allocations[allocation_index++] = __obj;
+    #ifdef DEBUG
+    allocations[allocation_index++] = __obj;
+    #endif
     memset(__obj, 0, sizeof(aobject));
 
     __obj->class_ptr = __class;
@@ -105,13 +108,13 @@ void __deallocate_object(aobject * const __obj) {
 }
 
 void print_allocated_objects() {
+    #ifdef DEBUG
     for(int i = 0; i < 256; i++) {
         if ( allocations[i] != NULL) {
-            #ifdef DEBUG
             printf("Object still alive: %s\n", allocations[i]->class_ptr->name);
-            #endif
         }
     }
+    #endif
 }
 
 void __set_property(aobject * const __obj, int const __index, nullable_value __prop_value) {
