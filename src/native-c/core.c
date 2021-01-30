@@ -5,8 +5,9 @@
 #include <core.h>
 #include <string.h>
 
-#ifdef DEBUG
 int __allocation_count = 0;
+
+#ifdef DEBUG
 aobject * allocations[256];
 int allocation_index = 0;
 #endif
@@ -28,7 +29,7 @@ void __increase_reference_count(aobject * const __obj) {
     #endif
 }
 
-aobject * __allocate_object(aclass * const __class) {
+aobject * __allocate_object(aclass const * const __class) {
     __allocation_count++;
     #ifdef DEBUG
     printf("Allocate object of type %s (count: %d)\n", __class->name, __allocation_count);
@@ -38,15 +39,19 @@ aobject * __allocate_object(aclass * const __class) {
     #ifdef DEBUG
     allocations[allocation_index++] = __obj;
     #endif
-    memset(__obj, 0, sizeof(aobject));
+    aobject __objt = { .class_ptr = __class, .properties = malloc(sizeof(property) * __class->properties_count), .reference_count = 1 };
+    memcpy(__obj, &__objt, sizeof(aobject));
+//    memset(__obj, 0, sizeof(aobject));
 
-    __obj->class_ptr = __class;
-//    __obj->object_data = NULL;
-//    __obj->object_data_size = 0;
-    __obj->properties = malloc(sizeof(property) * __class->properties_count);
+//    *__obj = (aobject) ;
+//    __obj->class_ptr = __class;
+
+////    __obj->object_data = NULL;
+////    __obj->object_data_size = 0;
+//    __obj->properties = malloc(sizeof(property) * __class->properties_count);
     memset(__obj->properties, 0, sizeof(property) * __class->properties_count);
 
-    __obj->reference_count = 1;
+//    __obj->reference_count = 1;
     return __obj;
 }
 
@@ -260,37 +265,45 @@ bool __is_primitive_null(const nullable_value nullable_value) {
 }
 
 /* From constant */
-aobject * __create_string_constant(unsigned char * const str, aclass * const string_class) {
+aobject * __create_string_constant(unsigned char const * const str, aclass const * const string_class) {
     aobject * str_obj = __allocate_object(string_class);
-    string_holder *holder = malloc(sizeof(string_holder));
+    string_holder * const holder = malloc(sizeof(string_holder));
     str_obj->object_data.value.custom_value = holder;
-    holder->string_value = str; // assume that string constants will never change
-    holder->length = strlen(str); // TODO: how many characters exactly?
-    holder->is_string_constant = true;
+    string_holder const tHolder = { .is_string_constant = true, .length = strlen(str), .string_value = str };
+    memcpy(holder, &tHolder, sizeof(string_holder));
+    // holder->string_value = str; // assume that string constants will never change
+    // holder->length = strlen(str); // TODO: how many characters exactly?
+    // holder->is_string_constant = true;
     return str_obj;
 }
 
-aobject * __create_string(unsigned char * const str, aclass * const string_class) {
-    aobject * str_obj = __allocate_object(string_class);
-    string_holder *holder = malloc(sizeof(string_holder));
+aobject * __create_string(unsigned char const * const str, aclass const * const string_class) {
+    aobject * const str_obj = __allocate_object(string_class);
+    string_holder * const holder = malloc(sizeof(string_holder));
     str_obj->object_data.value.custom_value = holder;
-    int len = strlen(str);
-    unsigned char *newStr = malloc(len + 1);
+    int const len = strlen(str);
+    unsigned char * const newStr = malloc(len + 1);
     strcpy(newStr, str);
-    holder->string_value = newStr;
-    holder->length = len; // TODO: how many characters exactly?
-    holder->is_string_constant = false;
+    string_holder const tHolder = { .is_string_constant = false, .length = len, .string_value = newStr };
+    memcpy(holder, &tHolder, sizeof(string_holder));
+//    holder->string_value = newStr;
+//    holder->length = len; // TODO: how many characters exactly?
+//    holder->is_string_constant = false;
     return str_obj;
 }
 
-aobject * __create_array(size_t size, size_t item_size, aclass * const array_class) {
+aobject * __create_array(size_t const size, size_t const item_size, aclass const * const array_class, aclass const * const item_class) {
     aobject * array_obj = __allocate_object(array_class);
-    array_holder *holder = malloc(sizeof(array_holder));
+    array_holder * const holder = malloc(sizeof(array_holder));
     array_obj->object_data.value.custom_value = holder;
-    size_t data_size = size * item_size;
-    unsigned char *array_data = malloc(data_size);
-    holder->array_data = array_data;
-    holder->size = size;
+    size_t const data_size = size * item_size;
+//    unsigned char * const array_data = malloc(data_size);
+    array_holder const tHolder = { .array_data = malloc(data_size), .size = size, .item_class = item_class };
+    memcpy(holder, &tHolder, sizeof(array_holder));
+
+    // holder->array_data = malloc(data_size);
+    // holder->size = size;    
+    // holder->item_class = item_class;
     return array_obj;
 }
 

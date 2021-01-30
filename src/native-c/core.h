@@ -79,15 +79,17 @@ union _value {
 };
 
 struct _string_holder {
-    unsigned is_string_constant;
-    unsigned int length; // length of characters, not "char"/bytes
-    char *string_value;
+    bool const is_string_constant;
+    unsigned int const length; // length of characters, not "char"/bytes
+    char const * const string_value;
 };
 
 struct _array_holder {
-    size_t size; // number of items
+    size_t const size; // number of items
+    aclass const * const item_class;
+//    bool of_primitives;
 //    unsigned char item_size; // size per item
-    char *array_data;
+    char * const array_data;
 };
 
 // rename to: any_value
@@ -115,8 +117,11 @@ struct _aclass {
 };
 
 struct _aobject {
-    aclass * class_ptr;
+    aclass const * const class_ptr;
     nullable_value object_data;
+    #ifdef DEBUG
+    char * var_id;
+    #endif
 //    int object_data_size;
     property * properties;
     int reference_count;
@@ -173,7 +178,7 @@ void __set_property(aobject * const __obj, int const __index, nullable_value __p
 void __decrease_reference_count_nullable_value(nullable_value __value);
 void __increase_reference_count_nullable_value(nullable_value __value);
 void __deallocate_object(aobject * const __obj);
-aobject * __allocate_object(aclass * const __class);
+aobject * __allocate_object(aclass const * const __class);
 //void * __allocate_object_data(aobject * const __obj, int __size);
 // function_result const __return_int(int const value);
 // function_result const __return_long(long long const value);
@@ -188,9 +193,9 @@ bool __is_primitive_nullable(const nullable_value nullable_value);
 void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null);
 bool __is_primitive_null(const nullable_value nullable_value);
 bool __is_primitive(const nullable_value nullable_value);
-aobject * __create_string_constant(unsigned char * const str, aclass * const string_class);
-aobject * __create_string(unsigned char * const str, aclass * const string_class);
-aobject * __create_array(size_t size, size_t item_size, aclass * const array_class);
+aobject * __create_string_constant(unsigned char const * const str, aclass const * const string_class);
+aobject * __create_string(unsigned char const * const str, aclass const * const string_class);
+aobject * __create_array(size_t const size, size_t const item_size, aclass const * const array_class, aclass const * const item_class);
 void print_allocated_objects();
 
 #endif
