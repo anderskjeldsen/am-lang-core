@@ -63,6 +63,24 @@ typedef struct _string_holder string_holder;
 typedef struct _array_holder array_holder;
 typedef struct _suspend_state suspend_state;
 typedef void (*__suspend_function)(suspend_state *);
+typedef enum _ctype ctype;
+
+enum _ctype { 
+    object_type,
+    long_type,
+    int_type,
+    short_type,
+    char_type,
+    ulong_type,
+    uint_type,
+    ushort_type,
+    uchar_type,
+    float_type,
+    double_type,
+    bool_type,
+    any_type,
+    void_type
+ };
 
 union _value {
         aobject * object_value; // 0
@@ -87,7 +105,7 @@ struct _string_holder {
 struct _array_holder {
     size_t const size; // number of items
     aclass const * const item_class;
-//    bool of_primitives;
+    ctype const ctype;
 //    unsigned char item_size; // size per item
     char * const array_data;
 };
@@ -195,7 +213,7 @@ bool __is_primitive_null(const nullable_value nullable_value);
 bool __is_primitive(const nullable_value nullable_value);
 aobject * __create_string_constant(unsigned char const * const str, aclass const * const string_class);
 aobject * __create_string(unsigned char const * const str, aclass const * const string_class);
-aobject * __create_array(size_t const size, size_t const item_size, aclass const * const array_class, aclass const * const item_class);
+aobject * __create_array(size_t const size, size_t const item_size, aclass const * const array_class, ctype const ctype);
 void print_allocated_objects();
 
 #endif

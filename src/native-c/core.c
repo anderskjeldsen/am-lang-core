@@ -13,12 +13,14 @@ int allocation_index = 0;
 #endif
 
 void __decrease_reference_count(aobject * const __obj) {
-    __obj->reference_count--;
-   #ifdef DEBUG
-    printf("decrease reference count of object of type %s (address: %p), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->reference_count);
-    #endif
-    if ( __obj->reference_count == 0 ) {
-        __deallocate_object(__obj);
+    if ( __obj != NULL) {
+        __obj->reference_count--;
+        #ifdef DEBUG
+        printf("decrease reference count of object of type %s (address: %p), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->reference_count);
+        #endif
+        if ( __obj->reference_count == 0 ) {
+            __deallocate_object(__obj);
+        }
     }
 }
 
@@ -89,7 +91,8 @@ void __deallocate_object(aobject * const __obj) {
 
     if ( __obj->properties != NULL ) {
         for(int i = 0; i < __obj->class_ptr->properties_count; i++) {
-            property * __prop = &__obj->properties[i];
+            property * const __prop = &__obj->properties[i];
+            // TODO: use __decrease_reference_count_nullable_value
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
                 #ifdef DEBUG
                 printf("Detach property:\n");
@@ -292,13 +295,13 @@ aobject * __create_string(unsigned char const * const str, aclass const * const 
     return str_obj;
 }
 
-aobject * __create_array(size_t const size, size_t const item_size, aclass const * const array_class, aclass const * const item_class) {
+aobject * __create_array(size_t const size, size_t const item_size, aclass const * const array_class, ctype const ctype) {
     aobject * array_obj = __allocate_object(array_class);
     array_holder * const holder = malloc(sizeof(array_holder));
     array_obj->object_data.value.custom_value = holder;
     size_t const data_size = size * item_size;
 //    unsigned char * const array_data = malloc(data_size);
-    array_holder const tHolder = { .array_data = malloc(data_size), .size = size, .item_class = item_class };
+    array_holder const tHolder = { .array_data = malloc(data_size), .size = size, .ctype = ctype };
     memcpy(holder, &tHolder, sizeof(array_holder));
 
     // holder->array_data = malloc(data_size);
