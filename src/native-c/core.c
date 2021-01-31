@@ -272,8 +272,8 @@ aobject * __create_string_constant(unsigned char const * const str, aclass const
     aobject * str_obj = __allocate_object(string_class);
     string_holder * const holder = malloc(sizeof(string_holder));
     str_obj->object_data.value.custom_value = holder;
-    string_holder const tHolder = { .is_string_constant = true, .length = strlen(str), .string_value = str };
-    memcpy(holder, &tHolder, sizeof(string_holder));
+    string_holder const t_holder = { .is_string_constant = true, .length = strlen(str), .string_value = str };
+    memcpy(holder, &t_holder, sizeof(string_holder));
     // holder->string_value = str; // assume that string constants will never change
     // holder->length = strlen(str); // TODO: how many characters exactly?
     // holder->is_string_constant = true;
@@ -287,8 +287,8 @@ aobject * __create_string(unsigned char const * const str, aclass const * const 
     int const len = strlen(str);
     unsigned char * const newStr = malloc(len + 1);
     strcpy(newStr, str);
-    string_holder const tHolder = { .is_string_constant = false, .length = len, .string_value = newStr };
-    memcpy(holder, &tHolder, sizeof(string_holder));
+    string_holder const t_holder = { .is_string_constant = false, .length = len, .string_value = newStr };
+    memcpy(holder, &t_holder, sizeof(string_holder));
 //    holder->string_value = newStr;
 //    holder->length = len; // TODO: how many characters exactly?
 //    holder->is_string_constant = false;
@@ -301,8 +301,8 @@ aobject * __create_array(size_t const size, size_t const item_size, aclass const
     array_obj->object_data.value.custom_value = holder;
     size_t const data_size = size * item_size;
 //    unsigned char * const array_data = malloc(data_size);
-    array_holder const tHolder = { .array_data = malloc(data_size), .size = size, .ctype = ctype };
-    memcpy(holder, &tHolder, sizeof(array_holder));
+    array_holder const t_holder = { .array_data = malloc(data_size), .size = size, .ctype = ctype };
+    memcpy(holder, &t_holder, sizeof(array_holder));
 
     // holder->array_data = malloc(data_size);
     // holder->size = size;    
