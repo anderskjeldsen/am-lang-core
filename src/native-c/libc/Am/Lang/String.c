@@ -104,14 +104,14 @@ function_result Am_Lang_String__op__plus_0(aobject * const this, aobject * s)
 		aobject * str_obj = __allocate_object(&Am_Lang_String);
 		string_holder *holder = malloc(sizeof(string_holder));
 		str_obj->object_data.value.custom_value = holder;
-		unsigned char const * new_str = malloc(holder1->length + holder2->length + 1);
+		char const * new_str = malloc(holder1->length + holder2->length + 1);
 //		printf("copy %s\n", holder1->string_value);
 //		printf("append %s\n", holder2->string_value);
 		strcpy(new_str, holder1->string_value);
 	    strcat(new_str, holder2->string_value);
 //		printf("new string: %s\n", newStr);
-		string_holder const t_holder = { .is_string_constant = false, .length = holder1->length + holder2->length, .string_value = new_str };
-		memcpy(holder, &t_holder, sizeof(string_holder));
+		*holder = { .is_string_constant = false, .length = strlen(str), .string_value = new_str };
+//		memcpy(holder, &t_holder, sizeof(string_holder));
 		// holder->string_value = newStr; // assume that string constants will never change
 		// holder->length = holder1->length + holder2->length; // TODO: how many characters exactly?
 		// holder->is_string_constant = false;

@@ -97,17 +97,17 @@ union _value {
 };
 
 struct _string_holder {
-    bool const is_string_constant;
-    unsigned int const length; // length of characters, not "char"/bytes
-    char const * const string_value;
+    bool is_string_constant;
+    unsigned int length; // length of characters, not "char"/bytes
+    char * string_value;
 };
 
 struct _array_holder {
-    size_t const size; // number of items
-    aclass const * const item_class;
-    ctype const ctype;
+    size_t size; // number of items
+    aclass * item_class;
+    ctype ctype;
 //    unsigned char item_size; // size per item
-    char * const array_data;
+    char * array_data;
 };
 
 // rename to: any_value
@@ -211,8 +211,8 @@ bool __is_primitive_nullable(const nullable_value nullable_value);
 void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null);
 bool __is_primitive_null(const nullable_value nullable_value);
 bool __is_primitive(const nullable_value nullable_value);
-aobject * __create_string_constant(unsigned char const * const str, aclass const * const string_class);
-aobject * __create_string(unsigned char const * const str, aclass const * const string_class);
+aobject * __create_string_constant(char const * const str, aclass const * const string_class);
+aobject * __create_string(char const * const str, aclass const * const string_class);
 aobject * __create_array(size_t const size, size_t const item_size, aclass const * const array_class, ctype const ctype);
 void print_allocated_objects();
 
