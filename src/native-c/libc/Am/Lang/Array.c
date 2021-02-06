@@ -31,13 +31,13 @@ function_result Am_Lang_Array__native_release_0(aobject * const this)
 
 	if (ah->ctype == any_type) {
 		nullable_value * const items = (nullable_value *) ah->array_data;
-		for(size_t int i = 0; i < size; i++) {
+		for(size_t i = 0; i < size; i++) {
 			nullable_value const nv = items[i];
 			__decrease_reference_count_nullable_value(nv);			
 		}
 	} else if ( ah->ctype == object_type) {
 		aobject ** const items = (aobject **) ah->array_data;
-		for(size_t int i = 0; i < size; i++) {
+		for(size_t i = 0; i < size; i++) {
 			aobject * const obj = items[i];
 			__decrease_reference_count(obj);
 		}
