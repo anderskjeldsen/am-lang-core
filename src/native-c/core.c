@@ -42,6 +42,7 @@ aobject * __allocate_object(aclass const * const __class) {
     // DEBUG:
     #ifdef DEBUG
     allocations[allocation_index++] = __obj;
+    __obj->object_id = __last_object_id;
     #endif
     aobject __objt = { .class_ptr = __class, .properties = malloc(sizeof(property) * __class->properties_count), .reference_count = 1 };
     memcpy(__obj, &__objt, sizeof(aobject));
