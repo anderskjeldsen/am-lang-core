@@ -272,7 +272,7 @@ aobject * __create_string_constant(char const * const str, aclass const * const 
     aobject * str_obj = __allocate_object(string_class);
     string_holder * const holder = malloc(sizeof(string_holder));
     str_obj->object_data.value.custom_value = holder;
-    *holder = (string_holder) { .is_string_constant = true, .length = strlen(str), .string_value = str };
+    *holder = (string_holder) { .is_string_constant = true, .length = strlen(str), .string_value = (char *) str };
 //    memcpy(holder, &t_holder, sizeof(string_holder));
     // holder->string_value = str; // assume that string constants will never change
     // holder->length = strlen(str); // TODO: how many characters exactly?
