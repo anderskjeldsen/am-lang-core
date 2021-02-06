@@ -138,7 +138,7 @@ struct _aobject {
     aclass const * const class_ptr;
     nullable_value object_data;
     #ifdef DEBUG
-    char * var_id;
+    int object_id;
     #endif
 //    int object_data_size;
     property * properties;

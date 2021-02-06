@@ -31,10 +31,12 @@ void __increase_reference_count(aobject * const __obj) {
     #endif
 }
 
+int __last_object_id = 0;
+
 aobject * __allocate_object(aclass const * const __class) {
     __allocation_count++;
     #ifdef DEBUG
-    printf("Allocate object of type %s (count: %d)\n", __class->name, __allocation_count);
+    printf("Allocate object of type %s (count: %d, object_id: %d) \n", __class->name, __allocation_count), ++__last_object_id;
     #endif
     aobject * __obj = (aobject *) malloc(sizeof(aobject));
     // DEBUG:
@@ -120,7 +122,7 @@ void print_allocated_objects() {
     #ifdef DEBUG
     for(int i = 0; i < 256; i++) {
         if ( allocations[i] != NULL) {
-            printf("Object still alive: %s\n", allocations[i]->class_ptr->name);
+            printf("Object still alive: %s (object_id: %d)\n", allocations[i]->class_ptr->name, allocations[i]->object_id);
         }
     }
     #endif
