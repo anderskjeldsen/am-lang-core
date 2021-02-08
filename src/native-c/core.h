@@ -60,8 +60,27 @@ typedef union _value value;
 typedef struct _nullable_value nullable_value;
 typedef struct _property property;
 typedef struct _string_holder string_holder;
+typedef struct _array_holder array_holder;
 typedef struct _suspend_state suspend_state;
 typedef void (*__suspend_function)(suspend_state *);
+typedef enum _ctype ctype;
+
+enum _ctype { 
+    object_type,
+    long_type,
+    int_type,
+    short_type,
+    char_type,
+    ulong_type,
+    uint_type,
+    ushort_type,
+    uchar_type,
+    float_type,
+    double_type,
+    bool_type,
+    any_type,
+    void_type
+ };
 
 union _value {
         aobject * object_value; // 0
@@ -78,9 +97,17 @@ union _value {
 };
 
 struct _string_holder {
-    unsigned is_string_constant;
+    bool is_string_constant;
     unsigned int length; // length of characters, not "char"/bytes
-    char *string_value;
+    char * string_value;
+};
+
+struct _array_holder {
+    size_t size; // number of items
+    aclass * item_class;
+    ctype ctype;
+//    unsigned char item_size; // size per item
+    char * array_data;
 };
 
 // rename to: any_value
@@ -108,8 +135,11 @@ struct _aclass {
 };
 
 struct _aobject {
-    aclass * class_ptr;
+    aclass const * const class_ptr;
     nullable_value object_data;
+    #ifdef DEBUG
+    int object_id;
+    #endif
 //    int object_data_size;
     property * properties;
     int reference_count;
@@ -166,7 +196,7 @@ void __set_property(aobject * const __obj, int const __index, nullable_value __p
 void __decrease_reference_count_nullable_value(nullable_value __value);
 void __increase_reference_count_nullable_value(nullable_value __value);
 void __deallocate_object(aobject * const __obj);
-aobject * __allocate_object(aclass * const __class);
+aobject * __allocate_object(aclass const * const __class);
 //void * __allocate_object_data(aobject * const __obj, int __size);
 // function_result const __return_int(int const value);
 // function_result const __return_long(long long const value);
@@ -181,8 +211,9 @@ bool __is_primitive_nullable(const nullable_value nullable_value);
 void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null);
 bool __is_primitive_null(const nullable_value nullable_value);
 bool __is_primitive(const nullable_value nullable_value);
-aobject * __create_string_constant(unsigned char * const str, aclass * const string_class);
-aobject * __create_string(unsigned char * const str, aclass * const string_class);
+aobject * __create_string_constant(char const * const str, aclass const * const string_class);
+aobject * __create_string(char const * const str, aclass const * const string_class);
+aobject * __create_array(size_t const size, size_t const item_size, aclass const * const array_class, ctype const ctype);
 void print_allocated_objects();
 
 #endif
