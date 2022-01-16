@@ -107,7 +107,7 @@ void print_allocated_objects() {
     for(int i = 0; i < 256; i++) {
         if ( allocations[i] != NULL) {
             #ifdef DEBUG
-            printf("Object still alive: %s\n", allocations[i]->class_ptr->name);
+            printf("Object still alive: %s (%p)\n", allocations[i]->class_ptr->name, allocations[i]);
             #endif
         }
     }
@@ -205,7 +205,7 @@ void __pass_exception(function_result result, aobject * const stack_trace_item_t
     result.exception_holder->last_stack_trace_item = new_item;
 }
 
-void __deallocate_stack_trade_item_chain(stack_trace_item *first_item) {
+void __deallocate_stack_trace_item_chain(stack_trace_item *first_item) {
     stack_trace_item *current = first_item;
     while(current != NULL) {
         __decrease_reference_count(current->item_text);
@@ -218,7 +218,7 @@ void __deallocate_stack_trade_item_chain(stack_trace_item *first_item) {
 void __deallocate_exception_holder(exception_holder * const holder) {
     __decrease_reference_count(holder->exception);
 
-    __deallocate_stack_trade_item_chain(holder->first_stack_trace_item);
+    __deallocate_stack_trace_item_chain(holder->first_stack_trace_item);
     free(holder);
 }
 
