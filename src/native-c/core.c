@@ -2,47 +2,61 @@
 #define am_lang_core_c
 
 // #include <stdlib.h>
-#include "core.h"
+#include <core.h>
+#include <string.h>
 
 int __allocation_count = 0;
 
+#ifdef DEBUG
+int __last_object_id = 0;
 aobject * allocations[256];
 int allocation_index = 0;
+#endif
 
 void __decrease_reference_count(aobject * const __obj) {
-    __obj->reference_count--;
-    #ifdef DEBUG
-    printf("decrease reference count of object of type %s (address: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->reference_count);
-    #endif
-    if ( __obj->reference_count == 0 ) {
-        __deallocate_object(__obj);
+    if ( __obj != NULL) {
+        __obj->reference_count--;
+        #ifdef DEBUG
+        printf("decrease reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_id, __obj->reference_count);
+        #endif
+        if ( __obj->reference_count == 0 ) {
+            __deallocate_object(__obj);
+        }
     }
 }
 
 void __increase_reference_count(aobject * const __obj) {
     __obj->reference_count++;
     #ifdef DEBUG
-    printf("increase reference count of object of type %s (address: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->reference_count);
+    printf("increase reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_id, __obj->reference_count);
     #endif
 }
 
-aobject * __allocate_object(aclass * const __class) {
+aobject * __allocate_object(aclass const * const __class) {
     __allocation_count++;
     #ifdef DEBUG
-    printf("Allocate object of type %s (count: %d)\n", __class->name, __allocation_count);
+    printf("Allocate object of type %s (count: %d, object_id: %d) \n", __class->name, __allocation_count, ++__last_object_id);
     #endif
     aobject * __obj = (aobject *) malloc(sizeof(aobject));
     // DEBUG:
-    // allocations[allocation_index++] = __obj;
-    memset(__obj, 0, sizeof(aobject));
+    aobject __objt = { .class_ptr = __class, .properties = malloc(sizeof(property) * __class->properties_count), .reference_count = 1 };
+    memcpy(__obj, &__objt, sizeof(aobject));
+    #ifdef DEBUG
+    allocations[allocation_index++] = __obj;
+    __obj->object_id = __last_object_id;
+    #endif
 
-    __obj->class_ptr = __class;
-//    __obj->object_data = NULL;
-//    __obj->object_data_size = 0;
-    __obj->properties = malloc(sizeof(property) * __class->properties_count);
+//    memset(__obj, 0, sizeof(aobject));
+
+//    *__obj = (aobject) ;
+//    __obj->class_ptr = __class;
+
+////    __obj->object_data = NULL;
+////    __obj->object_data_size = 0;
+//    __obj->properties = malloc(sizeof(property) * __class->properties_count);
     memset(__obj->properties, 0, sizeof(property) * __class->properties_count);
 
-    __obj->reference_count = 1;
+//    __obj->reference_count = 1;
     return __obj;
 }
 
@@ -80,7 +94,8 @@ void __deallocate_object(aobject * const __obj) {
 
     if ( __obj->properties != NULL ) {
         for(int i = 0; i < __obj->class_ptr->properties_count; i++) {
-            property * __prop = &__obj->properties[i];
+            property * const __prop = &__obj->properties[i];
+            // TODO: use __decrease_reference_count_nullable_value
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
                 #ifdef DEBUG
                 printf("Detach property:\n");
@@ -93,24 +108,27 @@ void __deallocate_object(aobject * const __obj) {
         __obj->properties = NULL;
     }
 
-// DEBUG:
-    // for(int i = 0; i < 256; i++) {
-    //     if ( allocations[i] == __obj) {
-    //         allocations[i] = NULL;
-    //     }
-    // }
+    #ifdef DEBUG
+    for(int i = 0; i < 256; i++) {
+        if ( allocations[i] == __obj) {
+            allocations[i] = NULL;
+        }
+    }
+    #endif
 
     free(__obj);
 }
 
 void print_allocated_objects() {
+    #ifdef DEBUG
     for(int i = 0; i < 256; i++) {
         if ( allocations[i] != NULL) {
             #ifdef DEBUG
-            printf("Object still alive: %s (%p)\n", allocations[i]->class_ptr->name, allocations[i]);
+            printf("Object still alive: %s (address: %p, object_id: %d)\n", allocations[i]->class_ptr->name, allocations[i], allocations[i]->object_id);
             #endif
         }
     }
+    #endif
 }
 
 void __set_property(aobject * const __obj, int const __index, nullable_value __prop_value) {
@@ -255,27 +273,46 @@ bool __is_primitive_null(const nullable_value nullable_value) {
 }
 
 /* From constant */
-aobject * __create_string_constant(unsigned char * const str, aclass * const string_class) {
+aobject * __create_string_constant(char const * const str, aclass const * const string_class) {
     aobject * str_obj = __allocate_object(string_class);
-    string_holder *holder = malloc(sizeof(string_holder));
+    string_holder * const holder = malloc(sizeof(string_holder));
     str_obj->object_data.value.custom_value = holder;
-    holder->string_value = str; // assume that string constants will never change
-    holder->length = strlen(str); // TODO: how many characters exactly?
-    holder->is_string_constant = true;
+    *holder = (string_holder) { .is_string_constant = true, .length = strlen(str), .string_value = (char *) str };
+//    memcpy(holder, &t_holder, sizeof(string_holder));
+    // holder->string_value = str; // assume that string constants will never change
+    // holder->length = strlen(str); // TODO: how many characters exactly?
+    // holder->is_string_constant = true;
     return str_obj;
 }
 
-aobject * __create_string(unsigned char * const str, aclass * const string_class) {
-    aobject * str_obj = __allocate_object(string_class);
-    string_holder *holder = malloc(sizeof(string_holder));
+aobject * __create_string(char const * const str, aclass const * const string_class) {
+    aobject * const str_obj = __allocate_object(string_class);
+    string_holder * const holder = malloc(sizeof(string_holder));
     str_obj->object_data.value.custom_value = holder;
-    int len = strlen(str);
-    unsigned char *newStr = malloc(len + 1);
+    int const len = strlen(str);
+    char * const newStr = malloc(len + 1);
     strcpy(newStr, str);
-    holder->string_value = newStr;
-    holder->length = len; // TODO: how many characters exactly?
-    holder->is_string_constant = false;
+    *holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = newStr };
+//    memcpy(holder, &t_holder, sizeof(string_holder));
+//    holder->string_value = newStr;
+//    holder->length = len; // TODO: how many characters exactly?
+//    holder->is_string_constant = false;
     return str_obj;
+}
+
+aobject * __create_array(size_t const size, size_t const item_size, aclass const * const array_class, ctype const ctype) {
+    aobject * array_obj = __allocate_object(array_class);
+    array_holder * const holder = malloc(sizeof(array_holder));
+    array_obj->object_data.value.custom_value = holder;
+    size_t const data_size = size * item_size;
+//    unsigned char * const array_data = malloc(data_size);
+    *holder = (array_holder) { .array_data = malloc(data_size), .size = size, .ctype = ctype };
+//    memcpy(holder, &t_holder, sizeof(array_holder));
+
+    // holder->array_data = malloc(data_size);
+    // holder->size = size;    
+    // holder->item_class = item_class;
+    return array_obj;
 }
 
 #endif
