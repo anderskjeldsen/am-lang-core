@@ -193,8 +193,7 @@ void __increase_reference_count_nullable_value(nullable_value __value) {
 stack_trace_item * const __create_stack_trace_item(stack_trace_item * const previous_item, aobject * const item_text) {
     __increase_reference_count(item_text);
 
-    stack_trace_item * const item = (stack_trace_item *) malloc(sizeof(stack_trace_item));
-    memset(item, 0, sizeof(stack_trace_item));
+    stack_trace_item * const item = (stack_trace_item *) calloc(1, sizeof(stack_trace_item));
 
     item->item_text = item_text;
 
@@ -207,8 +206,7 @@ stack_trace_item * const __create_stack_trace_item(stack_trace_item * const prev
 void __throw_exception(function_result result, aobject * const exception, aobject * const stack_trace_item_text) {
     __increase_reference_count(exception);
 
-    exception_holder * const holder = (exception_holder *) malloc(sizeof(exception_holder));
-    memset(holder, 0, sizeof(exception_holder));
+    exception_holder * const holder = (exception_holder *) calloc(1, sizeof(exception_holder));
 
     holder->exception = exception;
     holder->first_stack_trace_item = __create_stack_trace_item(NULL, stack_trace_item_text);
@@ -287,7 +285,7 @@ aobject * __create_string_constant(char const * const str, aclass const * const 
 
 aobject * __create_string(char const * const str, aclass const * const string_class) {
     aobject * const str_obj = __allocate_object(string_class);
-    string_holder * const holder = malloc(sizeof(string_holder));
+    string_holder * const holder = calloc(1, sizeof(string_holder));
     str_obj->object_data.value.custom_value = holder;
     int const len = strlen(str);
     char * const newStr = malloc(len + 1);
@@ -304,9 +302,9 @@ aobject * __create_array(size_t const size, size_t const item_size, aclass const
     aobject * array_obj = __allocate_object(array_class);
     array_holder * const holder = malloc(sizeof(array_holder));
     array_obj->object_data.value.custom_value = holder;
-    size_t const data_size = size * item_size;
+//    size_t const data_size = size * item_size;
 //    unsigned char * const array_data = malloc(data_size);
-    *holder = (array_holder) { .array_data = malloc(data_size), .size = size, .ctype = ctype };
+    *holder = (array_holder) { .array_data = calloc(size, item_size), .size = size, .ctype = ctype };
 //    memcpy(holder, &t_holder, sizeof(array_holder));
 
     // holder->array_data = malloc(data_size);
