@@ -304,7 +304,9 @@ aobject * __create_array(size_t const size, size_t const item_size, aclass const
     array_obj->object_data.value.custom_value = holder;
 //    size_t const data_size = size * item_size;
 //    unsigned char * const array_data = malloc(data_size);
-    *holder = (array_holder) { .array_data = calloc(size, item_size), .size = size, .ctype = ctype };
+    *holder = (array_holder) { .array_data = malloc(size * item_size), .size = size, .ctype = ctype };
+    memset(holder->array_data, 0, size * item_size);
+
 //    memcpy(holder, &t_holder, sizeof(array_holder));
 
     // holder->array_data = malloc(data_size);
