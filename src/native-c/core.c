@@ -143,7 +143,7 @@ void __set_property(aobject * const __obj, int const __index, nullable_value __p
 
     __prop->nullable_value = __prop_value;
 
-    printf("New prop int value: %d\n", __prop->nullable_value.value.int_value);
+//    printf("New prop int value: %d\n", __prop->nullable_value.value.int_value);
 
 //    if (__is_primitive_nullable(__prop->nullable_value)) {
 //        __set_primitive_null(&__prop->nullable_value, __is_primitive_null(__prop_value));
