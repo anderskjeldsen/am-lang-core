@@ -95,7 +95,7 @@ void Am_Threading_Thread__InitTask()
 		{
 //			printf("Thread found\n");
 			aobject * runnable = thread->properties[0].nullable_value.value.object_value;
-			Am_Threading_Runnable_run_0_T rFunc = (Am_Threading_Runnable_run_0_T) runnable->class_ptr->functions[3]; // TODO: Create index constants
+			Am_Lang_Runnable_run_0_T rFunc = (Am_Lang_Runnable_run_0_T) runnable->class_ptr->functions[3]; // TODO: Create index constants
 			rFunc(runnable);
 			Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) thread->object_data.value.custom_value;
 			data->done = true;
