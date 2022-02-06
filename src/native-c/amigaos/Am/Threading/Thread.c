@@ -18,6 +18,12 @@
 #include <proto/dos.h>
 #include <utility/tagitem.h>
 
+typedef struct _Am_Threading_Thread_data Am_Threading_Thread_data;
+struct _Am_Threading_Thread_data {
+	ULONG stack_size;
+	bool done;
+};
+
 function_result Am_Threading_Thread__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
