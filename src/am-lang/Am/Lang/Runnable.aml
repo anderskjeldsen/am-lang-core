@@ -4,7 +4,6 @@ TODO: change from class to interface.
 namespace Am.Lang 
 {
     class Runnable {
-        import MyNamespace2.Test
         fun run() {
 
         }        

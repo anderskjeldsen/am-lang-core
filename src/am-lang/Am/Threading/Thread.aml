@@ -1,0 +1,15 @@
+
+namespace Am.Threading {
+
+    native class Thread(var runnable: Runnable) {
+        import Am.Lang
+        
+        var name: String
+
+        native fun start()
+        native fun join()
+
+        native static fun getCurrent()
+        native static fun sleep(milliseconds: Long)
+    }
+}
