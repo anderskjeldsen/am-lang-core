@@ -7,6 +7,17 @@
 #include <Am/Lang/Long.h>
 #include <Am/Lang/String.h>
 
+#include <amigaos/amiga.h>
+
+#include <exec/types.h>
+#include <dos/dostags.h>
+#include <dos/dos.h>
+#include <exec/exec.h>
+#include <exec/tasks.h>
+#include <proto/exec.h>
+#include <proto/dos.h>
+#include <utility/tagitem.h>
+
 function_result Am_Threading_Thread__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
