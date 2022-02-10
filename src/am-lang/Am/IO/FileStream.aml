@@ -1,0 +1,14 @@
+/*
+TODO: Make it as an interface
+*/
+namespace Am.IO
+{
+    native class FileStream(private var file: File) : Stream
+    {
+        import Am.Lang
+
+        native override fun read(buffer: Byte[], offset: Long, length: Long)
+        native override fun write(buffer: Byte[], offset: Long, length: Long)
+        native override fun seekFromStart(offset: Long)
+    }
+}

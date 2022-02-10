@@ -1,0 +1,23 @@
+/*
+TODO: Make it as an interface
+*/
+namespace Am.IO
+{
+    class Stream()
+    {
+        import Am.Lang
+
+        fun read(buffer: Byte[], offset: Long, length: Long) {
+
+        }
+
+        fun write(buffer: Byte[], offset: Long, length: Long) {
+            
+        }
+
+        fun seekFromStart(offset: Long) {
+            
+        }
+
+    }
+}
