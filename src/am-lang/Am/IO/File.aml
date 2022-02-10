@@ -1,0 +1,14 @@
+namespace Am.IO
+{
+    native class File(private var filename: String)
+    {
+        import Am.Lang
+
+        static native fun getCurrentDirectory(): String
+
+        static fun getCurrentDirectoryFile(): File {
+            return new File(File.getCurrentDirectory())
+        }
+
+    }
+}
