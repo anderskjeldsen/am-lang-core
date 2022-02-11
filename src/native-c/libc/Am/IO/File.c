@@ -4,6 +4,9 @@
 #include <Am/IO/File.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/String.h>
+#include <limits.h>
+#include <stdio.h>
+#include <unistd.h>
 
 function_result Am_IO_File__native_init_0(aobject * const this)
 {

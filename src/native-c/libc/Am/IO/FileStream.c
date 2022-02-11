@@ -8,6 +8,28 @@
 #include <Am/Lang/Byte.h>
 #include <Am/Lang/Long.h>
 
+#include <stdio.h>
+
+typedef struct _file_holder file_holder;
+
+struct _file_holder {
+	FILE *file;
+};
+
+char * const get_file_path(aobject * const this) {
+	aobject * const file = this->properties[Am_IO_FileStream_P_file].nullable_value.value.object_value;
+	if (file != NULL) {
+		aobject * const path = file->properties[Am_IO_File_P_filename].nullable_value.value.object_value;
+		if (path != NULL) {
+			string_holder *holder = path->object_data.value.custom_value;
+			if ( holder != NULL ) {
+				return holder->string_value;
+			}
+		}
+	}
+	return NULL;
+}
+
 function_result Am_IO_FileStream__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
@@ -15,6 +37,14 @@ function_result Am_IO_FileStream__native_init_0(aobject * const this)
 	if (this != NULL) {
 		__increase_reference_count(this);
 	}
+
+	file_holder *holder = malloc(sizeof(file_holder));
+	this->object_data.value.custom_value = holder;
+
+	char * const path = get_file_path(this);
+	holder->file = fopen(path, "rw"); // TODO: Provide access mode
+	// throw exception if not found or any other error
+
 __exit: ;
 	if (this != NULL) {
 		__decrease_reference_count(this);
@@ -26,6 +56,11 @@ function_result Am_IO_FileStream__native_release_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
+
+	file_holder *holder = this->object_data.value.custom_value;
+	fclose(holder->file);
+	free(holder);
+
 __exit: ;
 	return __result;
 };
@@ -37,6 +72,12 @@ function_result Am_IO_FileStream_read_0(aobject * const this, aobject * buffer, 
 	if (this != NULL) {
 		__increase_reference_count(this);
 	}
+
+	file_holder *holder = this->object_data.value.custom_value;
+
+	array_holder *array_holder = buffer->object_data.value.custom_value;
+	fread(array_holder->array_data, offset, length, holder->file);
+
 __exit: ;
 	if (this != NULL) {
 		__decrease_reference_count(this);
@@ -55,7 +96,10 @@ function_result Am_IO_FileStream_write_0(aobject * const this, aobject * buffer,
 		__increase_reference_count(this);
 	}
 
-	
+	file_holder *holder = this->object_data.value.custom_value;
+
+	array_holder *array_holder = buffer->object_data.value.custom_value;
+	fwrite(array_holder->array_data, offset, length, holder->file);
 
 __exit: ;
 	if (this != NULL) {
