@@ -131,4 +131,38 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
+{
+	function_result __result = { .has_return_value = false };
+	bool __returning = false;
+
+	array_holder *array_holder = bytes->object_data.value.custom_value;
+
+	__result.return_value.value.object_value = str_obj;
+/*
+	string_holder *holder1 = this->object_data.value.custom_value;
+	string_holder *holder2 = s->object_data.value.custom_value;
+
+	if ( holder1 != NULL && holder2 != NULL ) {
+		aobject * str_obj = __allocate_object(&Am_Lang_String);
+		string_holder *holder = malloc(sizeof(string_holder));
+		str_obj->object_data.value.custom_value = holder;
+		char * new_str = malloc(holder1->length + holder2->length + 1);
+		strcpy(new_str, holder1->string_value);
+	    strcat(new_str, holder2->string_value);
+		*holder = (string_holder) { .is_string_constant = false, .length = holder1->length + holder2->length, .string_value = new_str };
+
+		__result.return_value.value.object_value = str_obj;
+	}
+*/
+__exit: ;
+	if (bytes != NULL) {
+		__increase_reference_count(bytes);
+	}
+	if (encoding != NULL) {
+		__increase_reference_count(encoding);
+	}
+	return __result;
+};
+
 #endif
