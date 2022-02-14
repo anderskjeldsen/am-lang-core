@@ -16,11 +16,9 @@ platforms:
       - amigaos/amiga.h
     additonalImplementations: 
       - amigaos/amiga.c
+    gccAdditionalOptions:
+      - -noixemul
   - id: linux-x64
     extends: libc
     gccCommand: gcc
-#    additonalHeaders:
-#      - core.h 
-#    additonalImplementations: 
-#      - core.c
     
