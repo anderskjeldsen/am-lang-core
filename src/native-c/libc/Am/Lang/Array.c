@@ -62,8 +62,7 @@ function_result Am_Lang_Array_length_0(aobject * const this)
 	}
 
 	array_holder * ah = (array_holder *) this->object_data.value.custom_value;
-	int const size = ah->size;
-	__result.return_value = (nullable_value) { .value = { .int_value = size }, .flags = 0 };
+	__result.return_value = (nullable_value) { .value = { .long_value = ah->size }, .flags = 0 };
 
 __exit: ;
 	if (this != NULL) {
