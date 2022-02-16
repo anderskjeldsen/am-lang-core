@@ -1,0 +1,45 @@
+namespace Am.Collections {
+
+    class List<T> {
+        import Am.Lang
+
+        private var size: Int = 0
+        var capacity: Int = 0
+        private var items: T[]
+
+        static fun newList<T>(): List<T> {
+            var l: List<T> = new List<T>()
+            l.capacity = 2
+            l.items = new T[l.capacity]
+            return l
+        }
+
+        fun add(item: T) {
+            if (this.size >= this.capacity) {
+                var newCapacity = this.capacity * 150
+                newCapacity = newCapacity / 100
+                var newItems = new T[newCapacity]
+                var x = 0
+                while(x < this.size) {
+                    var s = "copy item" + x.toString()
+                    s.println()
+                    newItems[x] = this.items[x]                    
+                    x++
+                }
+                this.capacity = newCapacity
+                this.items = newItems
+            }
+            if (this.size < this.capacity ) {
+                this.items[this.size] = item
+                this.size++
+            }
+        }
+
+        fun get(index: Int): T {
+            if (index < 0 || index > this.size) {
+                throw new Exception("Index out of bounds: " + index)                
+            }
+            return this.items[index]
+        }
+    }
+}
