@@ -125,4 +125,44 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_IO_FileStream_readByte_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+
+	file_holder *holder = this->object_data.value.custom_value;
+	unsigned char bytes[1];
+	fread(bytes, 1, 1, holder->file);
+	__result.return_value = (nullable_value) { .value = { .int_value = bytes[0] }, .flags = 0 };
+
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	return __result;
+};
+
+function_result Am_IO_FileStream_writeByte_0(aobject * const this, int byte)
+{
+	function_result __result = { .has_return_value = false };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+
+	file_holder *holder = this->object_data.value.custom_value;
+	unsigned char bytes[1];
+	bytes[0] = byte;
+	fwrite(bytes, 1, 1, holder->file);
+
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	return __result;
+};
+
 #endif

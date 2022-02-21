@@ -10,5 +10,7 @@ namespace Am.IO
         native override fun read(buffer: Byte[], offset: Long, length: Long)
         native override fun write(buffer: Byte[], offset: Long, length: Long)
         native override fun seekFromStart(offset: Long)
+        native override fun readByte(): Int
+        native override fun writeByte(byte: Int)
     }
 }

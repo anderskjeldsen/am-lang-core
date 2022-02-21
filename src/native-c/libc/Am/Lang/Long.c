@@ -29,4 +29,35 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_Lang_Long_toShort_0(long long const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+
+	__result.return_value = (nullable_value) { .value = { .short_value = this }, .flags = 0 };
+
+__exit: ;
+	return __result;
+};
+
+function_result Am_Lang_Long_toInt_0(long long const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+
+	__result.return_value = (nullable_value) { .value = { .int_value = this }, .flags = 0 };
+__exit: ;
+	return __result;
+};
+
+function_result Am_Lang_Long_toByte_0(long long const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	__result.return_value = (nullable_value) { .value = { .char_value = this }, .flags = 0 };
+
+__exit: ;
+	return __result;
+};
+
 #endif

@@ -3,6 +3,11 @@ namespace Am.Lang
 {
     primitive native class Long {
         override native fun toString(): String
+
+        native fun toShort(): Short
+        native fun toInt(): Int
+        native fun toByte(): Byte
+
     }
 }
 
