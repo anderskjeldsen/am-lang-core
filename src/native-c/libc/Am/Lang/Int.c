@@ -55,9 +55,56 @@ function_result Am_Lang_Int_toLong_0(int const this)
 	bool __returning = false;
 
 	__result.return_value = (nullable_value) { .value = { .long_value = this }, .flags = 0 };
-	
 __exit: ;
 	return __result;
 };
+
+function_result Am_Lang_Int_toUByte_0(int const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+
+	__result.return_value = (nullable_value) { .value = { .uchar_value = this }, .flags = 0 };
+__exit: ;
+	return __result;
+};
+
+function_result Am_Lang_Int_toUShort_0(int const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	__result.return_value = (nullable_value) { .value = { .ushort_value = this }, .flags = 0 };
+
+__exit: ;
+	return __result;
+};
+
+function_result Am_Lang_Int_toUInt_0(int const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	__result.return_value = (nullable_value) { .value = { .uint_value = this }, .flags = 0 };
+__exit: ;
+	return __result;
+};
+
+function_result Am_Lang_Int_toULong_0(int const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	__result.return_value = (nullable_value) { .value = { .ulong_value = this }, .flags = 0 };
+__exit: ;
+	return __result;
+};
+
+function_result Am_Lang_Int_toBool_0(int const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	__result.return_value = (nullable_value) { .value = { .bool_value = this }, .flags = 0 };
+__exit: ;
+	return __result;
+};
+
 
 #endif

@@ -6,6 +6,11 @@ namespace Am.Lang
         native fun toByte(): Byte
         native fun toShort(): Short
         native fun toLong(): Long
+        native fun toUByte(): UByte
+        native fun toUShort(): UShort
+        native fun toUInt(): UInt
+        native fun toULong(): ULong
+        native fun toBool(): Bool
     }
 }
 
