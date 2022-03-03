@@ -4,12 +4,13 @@
 // #include <stdlib.h>
 #include <core.h>
 #include <string.h>
+#include <Am/Lang/Exception.h>
 
 int __allocation_count = 0;
 
 #ifdef DEBUG
 int __last_object_id = 0;
-aobject * allocations[256];
+aobject * allocations[1024 * 5];
 int allocation_index = 0;
 #endif
 
@@ -190,57 +191,61 @@ void __increase_reference_count_nullable_value(nullable_value __value) {
 //     return res;
 // }
 
-stack_trace_item * const __create_stack_trace_item(stack_trace_item * const previous_item, aobject * const item_text) {
-    __increase_reference_count(item_text);
+// stack_trace_item * const __create_stack_trace_item(stack_trace_item * const previous_item, aobject * const item_text) {
+//     __increase_reference_count(item_text);
 
-    stack_trace_item * const item = (stack_trace_item *) calloc(1, sizeof(stack_trace_item));
+//     stack_trace_item * const item = (stack_trace_item *) calloc(1, sizeof(stack_trace_item));
 
-    item->item_text = item_text;
+//     item->item_text = item_text;
 
-    if (previous_item != NULL) {
-        previous_item->next_item = item;
-    }
-    return item;
-}
+//     if (previous_item != NULL) {
+//         previous_item->next_item = item;
+//     }
+//     return item;
+// }
 
-void __throw_exception(function_result result, aobject * const exception, aobject * const stack_trace_item_text) {
+void __throw_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text) {
+
+//    exception_holder * const holder = (exception_holder *) calloc(1, sizeof(exception_holder));
+//    holder->exception = exception;
+//    holder->first_stack_trace_item = __create_stack_trace_item(NULL, stack_trace_item_text);
+//    holder->last_stack_trace_item  = holder->first_stack_trace_item;
+
+    Am_Lang_Exception_addStackTraceItem_0(exception, stack_trace_item_text);
+
+//    result.has_return_value = 0;
+    result->exception = exception;
     __increase_reference_count(exception);
-
-    exception_holder * const holder = (exception_holder *) calloc(1, sizeof(exception_holder));
-
-    holder->exception = exception;
-    holder->first_stack_trace_item = __create_stack_trace_item(NULL, stack_trace_item_text);
-    holder->last_stack_trace_item  = holder->first_stack_trace_item;
-
-    result.has_return_value = 0;
-    result.exception_holder = holder;
 }
 
-void __pass_exception(function_result result, aobject * const stack_trace_item_text) {
-    stack_trace_item *new_item = __create_stack_trace_item(result.exception_holder->last_stack_trace_item, stack_trace_item_text);
-    result.exception_holder->last_stack_trace_item = new_item;
+void __pass_exception(function_result *result, aobject * const stack_trace_item_text) {
+
+    Am_Lang_Exception_addStackTraceItem_0(result->exception, stack_trace_item_text);
+
+//    stack_trace_item *new_item = __create_stack_trace_item(result.exception_holder->last_stack_trace_item, stack_trace_item_text);
+//    result.exception_holder->last_stack_trace_item = new_item;
 }
 
-void __deallocate_stack_trace_item_chain(stack_trace_item *first_item) {
-    stack_trace_item *current = first_item;
-    while(current != NULL) {
-        __decrease_reference_count(current->item_text);
-        stack_trace_item *next = current->next_item;
-        free(current);
-        current = next;
-    }
-}
+// void __deallocate_stack_trace_item_chain(stack_trace_item *first_item) {
+//     stack_trace_item *current = first_item;
+//     while(current != NULL) {
+//         __decrease_reference_count(current->item_text);
+//         stack_trace_item *next = current->next_item;
+//         free(current);
+//         current = next;
+//     }
+// }
 
-void __deallocate_exception_holder(exception_holder * const holder) {
-    __decrease_reference_count(holder->exception);
+// void __deallocate_exception_holder(exception_holder * const holder) {
+//     __decrease_reference_count(holder->exception);
 
-    __deallocate_stack_trace_item_chain(holder->first_stack_trace_item);
-    free(holder);
-}
+//     __deallocate_stack_trace_item_chain(holder->first_stack_trace_item);
+//     free(holder);
+// }
 
 void __deallocate_function_result(function_result const result) {
-    if (result.exception_holder != NULL) {
-        __deallocate_exception_holder(result.exception_holder);
+    if (result.exception != NULL) {
+        __decrease_reference_count(result.exception);
     }
 }
 

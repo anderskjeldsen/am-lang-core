@@ -53,8 +53,8 @@ BYTE_SIZE_EXP lookup (order: 2,1)
 typedef struct _aobject aobject;
 typedef struct _aclass aclass;
 typedef void (*__anonymous_function)();
-typedef struct _stack_trace_item stack_trace_item;
-typedef struct _exception_holder exception_holder;
+//typedef struct _stack_trace_item stack_trace_item;
+//typedef struct _exception_holder exception_holder;
 typedef struct _function_result function_result;
 typedef union _value value;
 typedef struct _nullable_value nullable_value;
@@ -145,21 +145,21 @@ struct _aobject {
     int reference_count;
 };
 
-struct _stack_trace_item {
-    aobject * item_text;
-    stack_trace_item *next_item;
-};
+// struct _stack_trace_item {
+//     aobject * item_text;
+//     stack_trace_item *next_item;
+// };
 
-struct _exception_holder {
-    aobject * exception;
-    stack_trace_item * first_stack_trace_item;
-    stack_trace_item * last_stack_trace_item;
-};
+// struct _exception_holder {
+//     aobject * exception;
+//     stack_trace_item * first_stack_trace_item;
+//     stack_trace_item * last_stack_trace_item;
+// };
 
 struct _function_result {
     bool has_return_value;
     nullable_value return_value;
-    exception_holder * exception_holder;
+    aobject * exception;
 };
 
 struct _suspend_state {
@@ -202,8 +202,8 @@ aobject * __allocate_object(aclass const * const __class);
 // function_result const __return_long(long long const value);
 // function_result const __return_object(aobject * const value);
 // function_result const __default_return();
-void __throw_exception(function_result result, aobject * const exception, aobject * const stack_trace_item_text);
-void __pass_exception(function_result result, aobject * const stack_trace_item_text);
+void __throw_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text);
+void __pass_exception(function_result *result, aobject * const stack_trace_item_text);
 void __deallocate_function_result(function_result const result);
 typedef function_result (*__release_T)(aobject * const);
 void __set_primitive_nullable(nullable_value * nullable_value, bool is_primitive_nullable);

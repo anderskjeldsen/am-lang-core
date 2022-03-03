@@ -2,6 +2,17 @@
 namespace Am.Lang 
 {
     class Exception(var message: String) {
+        import Am.Collections
+
+        private var stackTrace: List<String> = new List<String>()
+
+        private fun addStackTraceItem(stackTraceItem: String) {
+            this.stackTrace.add(stackTraceItem)
+        }
+
+        fun getStackTrace(): String[] {
+            return this.stackTrace.toArray()
+        }
 
         override fun toString(): String {
             return this.message

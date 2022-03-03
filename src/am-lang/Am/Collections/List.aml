@@ -41,5 +41,15 @@ namespace Am.Collections {
             }
             return this.items[index]
         }
+
+        fun toArray(): T[] {
+            var arr = new T[this.size]
+            var i = 0
+            while(i < this.size) {
+                arr[i] = this.get(i)
+                i++
+            }
+            return arr
+        }
     }
 }
