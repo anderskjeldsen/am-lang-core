@@ -1,0 +1,46 @@
+/*
+TODO: Make it as an interface
+*/
+namespace Am.IO
+{
+    native class BinaryStream(private var stream: Stream) : Stream
+    {
+        import Am.Lang
+
+        override fun read(buffer: Byte[], offset: Long, length: Long) {
+            this.stream.read(buffer, offset, length)
+
+        }
+
+        override fun write(buffer: Byte[], offset: Long, length: Long) {
+            this.stream.write(buffer, offset, length)
+
+        }
+
+        override fun seekFromStart(offset: Long) {
+            this.stream.seekFromStart(offset)
+        }
+
+        override fun readByte(): Int {
+            return this.stream.readByte()
+        }
+
+        override fun writeByte(byte: Int) {
+            this.stream.writeByte(byte)
+        }
+
+        fun readShort(): Short {
+            var s1 = this.readByte()
+            var s2 = this.readByte()
+            return ((s1 << 8) | s2).toShort()
+        }
+
+        fun readInt(): Int {
+            var s1 = this.readShort().toInt()
+            var s2 = this.readShort().toInt()
+            return (s1 << 16) | s2
+        }
+
+
+    }
+}

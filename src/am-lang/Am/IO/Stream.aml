@@ -19,5 +19,13 @@ namespace Am.IO
             
         }
 
+        fun readByte(): Int {
+            return 0
+        }
+
+        fun writeByte(byte: Int) {
+            
+        }
+
     }
 }

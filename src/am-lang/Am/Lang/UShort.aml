@@ -1,17 +1,17 @@
 
 namespace Am.Lang 
 {
-    primitive native class Long {
+    primitive native class UShort {
         override native fun toString(): String
 
+        native fun toByte(): Byte
         native fun toShort(): Short
         native fun toInt(): Int
-        native fun toByte(): Byte
+        native fun toLong(): Long
         native fun toUByte(): UByte
-        native fun toUShort(): UShort
         native fun toUInt(): UInt
         native fun toULong(): ULong
-        native fun toBool(): Bool
+        native fun toBool(): Bool        
     }
 }
 

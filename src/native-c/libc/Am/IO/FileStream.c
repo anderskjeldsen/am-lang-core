@@ -76,7 +76,7 @@ function_result Am_IO_FileStream_read_0(aobject * const this, aobject * buffer, 
 	file_holder *holder = this->object_data.value.custom_value;
 
 	array_holder *array_holder = buffer->object_data.value.custom_value;
-	fread(array_holder->array_data, offset, length, holder->file);
+	fread(array_holder->array_data + offset, 1, length, holder->file);
 
 __exit: ;
 	if (this != NULL) {
@@ -99,7 +99,7 @@ function_result Am_IO_FileStream_write_0(aobject * const this, aobject * buffer,
 	file_holder *holder = this->object_data.value.custom_value;
 
 	array_holder *array_holder = buffer->object_data.value.custom_value;
-	fwrite(array_holder->array_data, offset, length, holder->file);
+	fwrite(array_holder->array_data + offset, 1, length, holder->file);
 
 __exit: ;
 	if (this != NULL) {
@@ -118,6 +118,46 @@ function_result Am_IO_FileStream_seekFromStart_0(aobject * const this, long long
 	if (this != NULL) {
 		__increase_reference_count(this);
 	}
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	return __result;
+};
+
+function_result Am_IO_FileStream_readByte_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+
+	file_holder *holder = this->object_data.value.custom_value;
+	unsigned char bytes[1];
+	fread(bytes, 1, 1, holder->file);
+	__result.return_value = (nullable_value) { .value = { .int_value = bytes[0] }, .flags = 0 };
+
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	return __result;
+};
+
+function_result Am_IO_FileStream_writeByte_0(aobject * const this, int byte)
+{
+	function_result __result = { .has_return_value = false };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+
+	file_holder *holder = this->object_data.value.custom_value;
+	unsigned char bytes[1];
+	bytes[0] = byte;
+	fwrite(bytes, 1, 1, holder->file);
+
 __exit: ;
 	if (this != NULL) {
 		__decrease_reference_count(this);
