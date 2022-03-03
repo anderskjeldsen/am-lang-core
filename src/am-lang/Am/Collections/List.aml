@@ -37,7 +37,7 @@ namespace Am.Collections {
 
         fun get(index: Int): T {
             if (index < 0 || index > this.size) {
-                throw new Exception("Index out of bounds: " + index)                
+                throw new Exception("Index out of bounds: " + index.toString())                
             }
             return this.items[index]
         }
