@@ -123,7 +123,7 @@ struct _property {
 struct _aclass {
     char * name;
 //    int type;
-//    aclass *base;
+    aclass const * const base;
     __anonymous_function release;
     __anonymous_function *functions;
     unsigned int functions_count;
@@ -203,7 +203,7 @@ aobject * __allocate_object(aclass const * const __class);
 // function_result const __return_object(aobject * const value);
 // function_result const __default_return();
 void __throw_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text);
-void __pass_exception(function_result *result, aobject * const stack_trace_item_text);
+void __pass_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text);
 void __deallocate_function_result(function_result const result);
 typedef function_result (*__release_T)(aobject * const);
 void __set_primitive_nullable(nullable_value * nullable_value, bool is_primitive_nullable);
@@ -215,5 +215,6 @@ aobject * __create_string_constant(char const * const str, aclass const * const 
 aobject * __create_string(char const * const str, aclass const * const string_class);
 aobject * __create_array(size_t const size, size_t const item_size, aclass const * const array_class, ctype const ctype);
 void print_allocated_objects();
+bool is_descendant_of(aclass const * const cls, aclass const * const base);
 
 #endif

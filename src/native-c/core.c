@@ -218,9 +218,10 @@ void __throw_exception(function_result *result, aobject * const exception, aobje
     __increase_reference_count(exception);
 }
 
-void __pass_exception(function_result *result, aobject * const stack_trace_item_text) {
+void __pass_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text) {
 
-    Am_Lang_Exception_addStackTraceItem_0(result->exception, stack_trace_item_text);
+    Am_Lang_Exception_addStackTraceItem_0(exception, stack_trace_item_text);
+    result->exception = exception;
 
 //    stack_trace_item *new_item = __create_stack_trace_item(result.exception_holder->last_stack_trace_item, stack_trace_item_text);
 //    result.exception_holder->last_stack_trace_item = new_item;
@@ -318,6 +319,17 @@ aobject * __create_array(size_t const size, size_t const item_size, aclass const
     // holder->size = size;    
     // holder->item_class = item_class;
     return array_obj;
+}
+
+bool is_descendant_of(aclass const * const cls, aclass const * const base) {
+    if (cls == base) {
+        return true;
+    } else {
+        if (cls->base) {
+            return is_descendant_of(cls->base, base);
+        }
+    }
+    return false;
 }
 
 #endif

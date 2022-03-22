@@ -21,4 +21,8 @@ platforms:
   - id: linux-x64
     extends: libc
     gccCommand: gcc
+buildTargets:
+  - id: amigaos_docker_win_anders
+    commands:
+      - docker run -v ${build_dir}:/host -i d931759c3883 make -f amigaos.makefile -C /host all
     
