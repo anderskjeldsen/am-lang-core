@@ -21,19 +21,13 @@ namespace Am.Collections {
                 var newItems = new T[newCapacity]
                 var x = 0
                 while(x < this.size) {
-                    var s = "copy item" + x.toString()
-                    s.println()
                     newItems[x] = this.items[x]                    
                     x++
                 }
                 this.capacity = newCapacity
                 this.items = newItems
             }
-            var ss = "is size " + this.size.toString() + " less than " + this.capacity.toString()
-            ss.println()
             if (this.size < this.capacity ) {
-                ss = "yes"
-                ss.println()
                 this.items[this.size] = item
                 this.size++
             }
