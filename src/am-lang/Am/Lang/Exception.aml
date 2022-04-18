@@ -17,6 +17,16 @@ namespace Am.Lang
         override fun toString(): String {
             return this.message
         }
+
+        fun printWithStackTrace() {
+            this.message.println()
+            var i = 0
+            while(i < this.stackTrace.size) {
+                var s = this.stackTrace[i]
+                s.println()
+                i++
+            }
+        }
     }
 
 }
