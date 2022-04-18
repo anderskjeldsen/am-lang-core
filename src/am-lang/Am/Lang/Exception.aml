@@ -21,7 +21,7 @@ namespace Am.Lang
         fun printWithStackTrace() {
             this.message.println()
             var i = 0
-            var ss = "Stack trace size: " + this.stackTrace.size
+            var ss = "Stack trace size: " + this.stackTrace.size.toString()
             ss.println()
             while(i < this.stackTrace.size) {
                 var s = this.stackTrace.get(i)
