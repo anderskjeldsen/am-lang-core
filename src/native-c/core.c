@@ -33,31 +33,59 @@ void __increase_reference_count(aobject * const __obj) {
     #endif
 }
 
+aobject * __allocate_iface_object(aclass const * const __class, aobject * const implementation_object) {
+    aobject * iface_object = __allocate_object(__class);
+    iface_reference * ref = (iface_reference *) malloc(sizeof(iface_reference));
+
+    __increase_reference_count(implementation_object); // decreased when this iface object is deallocted
+
+    iface_implementation * impl = NULL;
+    for(int i = 0; i < implementation_object->class_ptr->iface_implementation_count; i++) {
+        iface_implementation * impl2 = &implementation_object->class_ptr->iface_implementations[i];
+        if (impl->iface_class == __class) {
+            impl = impl2;
+            break;
+        }
+    }
+
+    iface_reference ref_t = { .implementation_object = implementation_object, .iface_implementation = impl };
+    memcpy(ref, &ref_t, sizeof(iface_reference));
+
+    iface_object->object_data.value.custom_value = ref;
+    return iface_object;
+}
+
 aobject * __allocate_object(aclass const * const __class) {
     __allocation_count++;
     #ifdef DEBUG
     printf("Allocate object of type %s (count: %d, object_id: %d) \n", __class->name, __allocation_count, ++__last_object_id);
     #endif
     aobject * __obj = (aobject *) malloc(sizeof(aobject));
-    // DEBUG:
-    aobject __objt = { .class_ptr = __class, .properties = malloc(sizeof(property) * __class->properties_count), .reference_count = 1 };
+    property * properties = NULL;
+
+    if (__class->type == class && __class->properties_count > 0) {
+        properties = malloc(sizeof(property) * __class->properties_count);
+        memset(properties, 0, sizeof(property) * __class->properties_count);
+    }
+
+    aobject __objt = { .class_ptr = __class, .properties = properties, .reference_count = 1 };
     memcpy(__obj, &__objt, sizeof(aobject));
+
     #ifdef DEBUG
     allocations[allocation_index++] = __obj;
     __obj->object_id = __last_object_id;
     #endif
 
-//    memset(__obj, 0, sizeof(aobject));
+    // memset(__obj, 0, sizeof(aobject));
+    // __obj->class_ptr = __class;
 
-//    *__obj = (aobject) ;
-//    __obj->class_ptr = __class;
+    // if (__class->type == class) {
+    //     __obj->properties = malloc(sizeof(property) * __class->properties_count);
+    //     memset(__obj->properties, 0, sizeof(property) * __class->properties_count);
+    // }
 
-////    __obj->object_data = NULL;
-////    __obj->object_data_size = 0;
-//    __obj->properties = malloc(sizeof(property) * __class->properties_count);
-    memset(__obj->properties, 0, sizeof(property) * __class->properties_count);
+    // __obj->reference_count = 1;
 
-//    __obj->reference_count = 1;
     return __obj;
 }
 
@@ -85,6 +113,17 @@ void __deallocate_object(aobject * const __obj) {
     if ( __obj->class_ptr->release != NULL ) {
         function_result release_result = ((__release_T) __obj->class_ptr->release)(__obj);
         // TODO: handle exceptions
+    }
+
+    if (__obj->class_ptr->type == interface) {
+        iface_reference * ref = __obj->object_data.value.custom_value;
+
+        __decrease_reference_count(ref->implementation_object);
+
+        free(ref);
+        __obj->object_data.value.custom_value = NULL;
+        
+        // interface
     }
 
 // let the native release method handle this

@@ -59,11 +59,14 @@ typedef struct _function_result function_result;
 typedef union _value value;
 typedef struct _nullable_value nullable_value;
 typedef struct _property property;
+typedef struct _iface_implementation iface_implementation;
+typedef struct _iface_reference iface_reference;
 typedef struct _string_holder string_holder;
 typedef struct _array_holder array_holder;
 typedef struct _suspend_state suspend_state;
 typedef void (*__suspend_function)(suspend_state *);
 typedef enum _ctype ctype;
+typedef enum _class_type class_type;
 
 enum _ctype { 
     object_type,
@@ -81,6 +84,12 @@ enum _ctype {
     any_type,
     void_type
  };
+
+enum _class_type {
+    class,
+    interface,
+    function_reference
+};
 
 union _value {
         aobject * object_value; // 0
@@ -122,39 +131,42 @@ struct _property {
 
 struct _aclass {
     char * name;
-//    int type;
+    class_type type;
     aclass const * const base;
     __anonymous_function release;
-    __anonymous_function *functions;
+    __anonymous_function * functions;
+    unsigned int iface_implementation_count;
     unsigned int functions_count;
     unsigned int properties_count;
     unsigned int static_properties_count;
     property * static_properties;    
+    iface_implementation * iface_implementations;
 // meta:
 //    aobject *properties;
 };
 
+struct _iface_implementation {    
+    aclass * iface_class;
+    __anonymous_function * functions;
+//    unsigned int functions_count;
+};
+
+struct _iface_reference {
+    aobject const * const implementation_object;
+    iface_implementation *iface_implementation;
+};
+
 struct _aobject {
     aclass const * const class_ptr;
+    // if class_ptr is an interface, object_data will have a pointer to an iface_reference.
+    // this object will also hold a reference to the implementation object, and will remove that once this has reached 0.
     nullable_value object_data;
     #ifdef DEBUG
     int object_id;
     #endif
-//    int object_data_size;
     property * properties;
     int reference_count;
 };
-
-// struct _stack_trace_item {
-//     aobject * item_text;
-//     stack_trace_item *next_item;
-// };
-
-// struct _exception_holder {
-//     aobject * exception;
-//     stack_trace_item * first_stack_trace_item;
-//     stack_trace_item * last_stack_trace_item;
-// };
 
 struct _function_result {
     bool has_return_value;
