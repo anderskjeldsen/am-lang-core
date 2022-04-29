@@ -152,8 +152,8 @@ struct _iface_implementation {
 };
 
 struct _iface_reference {
-    aobject const * const implementation_object;
-    iface_implementation *iface_implementation;
+    aobject * const implementation_object;
+    iface_implementation const * const iface_implementation;
 };
 
 struct _aobject {
