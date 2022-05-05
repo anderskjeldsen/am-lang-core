@@ -28,12 +28,12 @@ function_result Am_Lang_String__native_release_0(aobject * const this)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 
-	string_holder *holder = this->object_data.value.custom_value;
+	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	if ( !holder->is_string_constant ) {
 		free(holder->string_value);
 	}
 	free(holder);
-	this->object_data.value.custom_value = NULL;
+	this->object_properties.class_object_properties.object_data.value.custom_value = NULL;
 
 __exit: ;
 	return __result;
@@ -47,7 +47,7 @@ function_result Am_Lang_String_getLength_0(aobject * const this)
 		__increase_reference_count(this);
 	}
 	// TODO: implement native function Am_Lang_String_getLength_0
-	string_holder *holder = this->object_data.value.custom_value;
+	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	if ( holder != NULL ) {
 		__result.return_value.value.int_value = holder->length;
 	} else {
@@ -69,7 +69,7 @@ function_result Am_Lang_String_print_0(aobject * const this)
 		__increase_reference_count(this);
 	}
 	// TODO: implement native function Am_Lang_String_print_0
-	string_holder *holder = this->object_data.value.custom_value;
+	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	if ( holder != NULL ) {
 		printf("%s", holder->string_value);
 	} else {
@@ -96,13 +96,13 @@ function_result Am_Lang_String__op__plus_0(aobject * const this, aobject * s)
 	}
 
 
-	string_holder *holder1 = this->object_data.value.custom_value;
-	string_holder *holder2 = s->object_data.value.custom_value;
+	string_holder *holder1 = this->object_properties.class_object_properties.object_data.value.custom_value;
+	string_holder *holder2 = s->object_properties.class_object_properties.object_data.value.custom_value;
 
 	if ( holder1 != NULL && holder2 != NULL ) {
 		aobject * str_obj = __allocate_object(&Am_Lang_String);
 		string_holder *holder = malloc(sizeof(string_holder));
-		str_obj->object_data.value.custom_value = holder;
+		str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
 		char * new_str = malloc(holder1->length + holder2->length + 1);
 //		printf("copy %s\n", holder1->string_value);
 //		printf("append %s\n", holder2->string_value);
@@ -136,7 +136,7 @@ function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 
-	array_holder *array_holder = bytes->object_data.value.custom_value;
+	array_holder *array_holder = bytes->object_properties.class_object_properties.object_data.value.custom_value;
 
 	aobject * new_string = __create_string(array_holder->array_data, &Am_Lang_String);
 

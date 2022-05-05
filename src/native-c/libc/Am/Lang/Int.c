@@ -15,7 +15,7 @@ function_result Am_Lang_Int_toString_0(nullable_value const this)
 
 	aobject * str_obj = __allocate_object(&Am_Lang_String);
 	string_holder *holder = malloc(sizeof(string_holder));
-	str_obj->object_data.value.custom_value = holder;
+	str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
 	int tmp_len = strlen(tmp);
 	char * new_str = malloc(tmp_len + 1);
 	strcpy(new_str, tmp);

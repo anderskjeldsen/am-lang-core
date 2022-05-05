@@ -40,7 +40,7 @@ function_result Am_Threading_Thread__native_init_0(aobject * const this)
 
 	printf("TODO: implement native function Am_Threading_Thread__native_init_0\n");
 	Am_Threading_Thread_data *data = malloc(sizeof(Am_Threading_Thread_data));
-	this->object_data.value.custom_value = data;
+	this->object_properties.class_object_properties.object_data.value.custom_value = data;
 	data->stack_size = 4000 * 1024; // TODO
 	data->done = false;
 
@@ -56,9 +56,9 @@ function_result Am_Threading_Thread__native_release_0(aobject * const this)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 
-    Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) this->object_data.value.custom_value;
+    Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
 	free(data);
-	this->object_data.value.custom_value = NULL;
+	this->object_properties.class_object_properties.object_data.value.custom_value = NULL;
 
 __exit: ;
 	return __result;
@@ -94,10 +94,10 @@ void Am_Threading_Thread__InitTask()
 		if ( thread != NULL )
 		{
 //			printf("Thread found\n");
-			aobject * runnable = thread->properties[0].nullable_value.value.object_value;
+			aobject * runnable = thread->object_properties.class_object_properties.properties[0].nullable_value.value.object_value;
 			Am_Lang_Runnable_run_0_T rFunc = (Am_Lang_Runnable_run_0_T) runnable->class_ptr->functions[3]; // TODO: Create index constants
 			rFunc(runnable);
-			Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) thread->object_data.value.custom_value;
+			Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) thread->object_properties.class_object_properties.object_data.value.custom_value;
 			data->done = true;
 		}
 		else
@@ -121,14 +121,14 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 
 	void (*fptr)() = Am_Threading_Thread__InitTask;
 
-	aobject * name = this->properties[1].nullable_value.value.object_value;
-	string_holder *name_holder = name->object_data.value.custom_value;
+	aobject * name = this->object_properties.class_object_properties.properties[1].nullable_value.value.object_value;
+	string_holder *name_holder = name->object_properties.class_object_properties.object_data.value.custom_value;
 	STRPTR name_strptr = "";
 	if ( name_holder->string_value != NULL ) {
 		name_strptr = name_holder->string_value;
 	}
 
-	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) this->object_data.value.custom_value;
+	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
 
 //	printf("stack_size: %d\n", data->stack_size);
 //	printf("thread name: %s\n", name_holder->string_value);
@@ -173,7 +173,7 @@ function_result Am_Threading_Thread_join_0(aobject * const this)
 	}
 
 	printf("Start Joining...\n");
-	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) this->object_data.value.custom_value;
+	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
 
 	while( !data->done )
 	{

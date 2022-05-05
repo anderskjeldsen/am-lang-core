@@ -67,7 +67,8 @@ typedef struct _suspend_state suspend_state;
 typedef void (*__suspend_function)(suspend_state *);
 typedef enum _ctype ctype;
 typedef enum _class_type class_type;
-
+typedef struct _class_object_properties class_object_properties;
+typedef union _object_properties object_properties;
 enum _ctype { 
     object_type,
     long_type,
@@ -156,16 +157,25 @@ struct _iface_reference {
     iface_implementation const * const iface_implementation;
 };
 
-struct _aobject {
-    aclass const * const class_ptr;
-    // if class_ptr is an interface, object_data will have a pointer to an iface_reference.
-    // this object will also hold a reference to the implementation object, and will remove that once this has reached 0.
+struct _class_object_properties {
     nullable_value object_data;
     #ifdef DEBUG
     int object_id;
     #endif
-    property * properties;
+    property * properties;    
+};
+
+union _object_properties {
+    class_object_properties class_object_properties;
+    iface_reference iface_reference;
+};
+
+struct _aobject {
+    aclass const * const class_ptr;
+    // if class_ptr is an interface, object_properties will contain a iface_implementation
+    // this object will also hold a reference to the implementation object, and will remove that once this has reached 0.
     int reference_count;
+    object_properties object_properties;
 };
 
 struct _function_result {

@@ -49,9 +49,9 @@ aobject * __allocate_iface_object(aclass const * const __class, aobject * const 
     }
 
     iface_reference ref_t = { .implementation_object = implementation_object, .iface_implementation = impl };
-    memcpy(ref, &ref_t, sizeof(iface_reference));
+//    memcpy(ref, &ref_t, sizeof(iface_reference));
 
-    iface_object->object_data.value.custom_value = ref;
+    iface_object->object_properties.iface_reference = ref_t;
     return iface_object;
 }
 
@@ -62,13 +62,15 @@ aobject * __allocate_object(aclass const * const __class) {
     #endif
     aobject * __obj = (aobject *) malloc(sizeof(aobject));
     property * properties = NULL;
+    object_properties = {};
 
     if (__class->type == class && __class->properties_count > 0) {
         properties = malloc(sizeof(property) * __class->properties_count);
         memset(properties, 0, sizeof(property) * __class->properties_count);
+        object_properties.class_object_properties.properties = properties;
     }
 
-    aobject __objt = { .class_ptr = __class, .properties = properties, .reference_count = 1 };
+    aobject __objt = { .class_ptr = __class, .object_properties = object_properties, .reference_count = 1 };
     memcpy(__obj, &__objt, sizeof(aobject));
 
     #ifdef DEBUG
@@ -116,13 +118,13 @@ void __deallocate_object(aobject * const __obj) {
     }
 
     if (__obj->class_ptr->type == interface) {
-        iface_reference * ref = __obj->object_data.value.custom_value;
+        iface_reference const &ref = __obj->object_properties.iface_reference;
 
-        __decrease_reference_count(ref->implementation_object);
+        __decrease_reference_count(ref.implementation_object);
 
-        free(ref);
-        __obj->object_data.value.custom_value = NULL;
-        
+//        free(ref);
+//        __obj->object_data.value.custom_value = NULL;
+
         // interface
     }
 
@@ -132,9 +134,9 @@ void __deallocate_object(aobject * const __obj) {
     //     __obj->object_data.value.custom_value = NULL;
     // }
 
-    if ( __obj->properties != NULL ) {
+    if (__obj->class_ptr->type == class && __obj->object_properties.class_object_properties.properties != NULL ) {
         for(int i = 0; i < __obj->class_ptr->properties_count; i++) {
-            property * const __prop = &__obj->properties[i];
+            property * const __prop = &__obj->object_properties.class_object_properties.properties[i];
             // TODO: use __decrease_reference_count_nullable_value
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
                 #ifdef DEBUG
@@ -144,8 +146,8 @@ void __deallocate_object(aobject * const __obj) {
                 __prop->nullable_value.value.object_value = NULL;
             }
         }
-        free(__obj->properties);
-        __obj->properties = NULL;
+        free(__obj->object_properties.class_object_properties.properties);
+        __obj->object_properties.class_object_properties.properties = NULL;
     }
 
     #ifdef DEBUG
@@ -172,7 +174,7 @@ void print_allocated_objects() {
 }
 
 void __set_property(aobject * const __obj, int const __index, nullable_value __prop_value) {
-    property * __prop = &__obj->properties[__index];
+    property * __prop = &__obj->object_properties.class_object_properties.properties[__index];
     if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
         __decrease_reference_count(__prop->nullable_value.value.object_value);
     }
@@ -319,7 +321,7 @@ bool __is_primitive_null(const nullable_value nullable_value) {
 aobject * __create_string_constant(char const * const str, aclass const * const string_class) {
     aobject * str_obj = __allocate_object(string_class);
     string_holder * const holder = malloc(sizeof(string_holder));
-    str_obj->object_data.value.custom_value = holder;
+    str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
     *holder = (string_holder) { .is_string_constant = true, .length = strlen(str), .string_value = (char *) str };
 //    memcpy(holder, &t_holder, sizeof(string_holder));
     // holder->string_value = str; // assume that string constants will never change
@@ -331,7 +333,7 @@ aobject * __create_string_constant(char const * const str, aclass const * const 
 aobject * __create_string(char const * const str, aclass const * const string_class) {
     aobject * const str_obj = __allocate_object(string_class);
     string_holder * const holder = calloc(1, sizeof(string_holder));
-    str_obj->object_data.value.custom_value = holder;
+    str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
     int const len = strlen(str);
     char * const newStr = malloc(len + 1);
     strcpy(newStr, str);
@@ -346,7 +348,7 @@ aobject * __create_string(char const * const str, aclass const * const string_cl
 aobject * __create_array(size_t const size, size_t const item_size, aclass const * const array_class, ctype const ctype) {
     aobject * array_obj = __allocate_object(array_class);
     array_holder * const holder = malloc(sizeof(array_holder));
-    array_obj->object_data.value.custom_value = holder;
+    array_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
 //    size_t const data_size = size * item_size;
 //    unsigned char * const array_data = malloc(data_size);
     *holder = (array_holder) { .array_data = malloc(size * item_size), .size = size, .ctype = ctype };

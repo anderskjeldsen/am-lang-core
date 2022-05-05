@@ -26,7 +26,7 @@ function_result Am_Lang_Array__native_release_0(aobject * const this)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 
-	array_holder * ah = (array_holder *) this->object_data.value.custom_value;
+	array_holder * ah = (array_holder *) this->object_properties.class_object_properties.object_data.value.custom_value;
 	int const size = ah->size;
 
 	if (ah->ctype == any_type) {
@@ -46,7 +46,7 @@ function_result Am_Lang_Array__native_release_0(aobject * const this)
 	free(ah->array_data);
 	ah->array_data = NULL;
 	free(ah);
-	this->object_data.value.custom_value = NULL;
+	this->object_properties.class_object_properties.object_data.value.custom_value = NULL;
 
 __exit: ;
 	return __result;
@@ -61,7 +61,7 @@ function_result Am_Lang_Array_length_0(aobject * const this)
 		__increase_reference_count(this);
 	}
 
-	array_holder * ah = (array_holder *) this->object_data.value.custom_value;
+	array_holder * ah = (array_holder *) this->object_properties.class_object_properties.object_data.value.custom_value;
 	__result.return_value = (nullable_value) { .value = { .long_value = ah->size }, .flags = 0 };
 
 __exit: ;
