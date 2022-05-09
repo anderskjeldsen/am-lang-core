@@ -162,7 +162,7 @@ struct _class_object_properties {
     #ifdef DEBUG
     int object_id;
     #endif
-    property * properties;    
+    property * properties;
 };
 
 union _object_properties {
@@ -218,6 +218,7 @@ void __set_property(aobject * const __obj, int const __index, nullable_value __p
 void __decrease_reference_count_nullable_value(nullable_value __value);
 void __increase_reference_count_nullable_value(nullable_value __value);
 void __deallocate_object(aobject * const __obj);
+aobject * __allocate_iface_object(aclass const * const __class, aobject * const implementation_object);
 aobject * __allocate_object(aclass const * const __class);
 //void * __allocate_object_data(aobject * const __obj, int __size);
 // function_result const __return_int(int const value);

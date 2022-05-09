@@ -49,9 +49,9 @@ aobject * __allocate_iface_object(aclass const * const __class, aobject * const 
     }
 
     iface_reference ref_t = { .implementation_object = implementation_object, .iface_implementation = impl };
-//    memcpy(ref, &ref_t, sizeof(iface_reference));
+    memcpy(&iface_object->object_properties.iface_reference, &ref_t, sizeof(iface_reference));
 
-    iface_object->object_properties.iface_reference = ref_t;
+//    iface_object->object_properties.iface_reference = ref_t;
     return iface_object;
 }
 
@@ -62,7 +62,8 @@ aobject * __allocate_object(aclass const * const __class) {
     #endif
     aobject * __obj = (aobject *) malloc(sizeof(aobject));
     property * properties = NULL;
-    object_properties = {};
+    object_properties object_properties;
+    memset(&object_properties, 0, sizeof(object_properties));
 
     if (__class->type == class && __class->properties_count > 0) {
         properties = malloc(sizeof(property) * __class->properties_count);
@@ -118,9 +119,9 @@ void __deallocate_object(aobject * const __obj) {
     }
 
     if (__obj->class_ptr->type == interface) {
-        iface_reference const &ref = __obj->object_properties.iface_reference;
+        iface_reference const *ref = &__obj->object_properties.iface_reference;
 
-        __decrease_reference_count(ref.implementation_object);
+        __decrease_reference_count(ref->implementation_object);
 
 //        free(ref);
 //        __obj->object_data.value.custom_value = NULL;

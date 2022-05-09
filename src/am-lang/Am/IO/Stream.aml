@@ -3,7 +3,14 @@ TODO: Make it as an interface
 */
 namespace Am.IO
 {
-    class Stream()
+    class StreamTest {
+        fun test() {
+            var s = new Stream()
+            var is = s as IStream
+        }
+    }
+
+    class Stream() : IStream
     {
         import Am.Lang
 
@@ -27,5 +34,16 @@ namespace Am.IO
             
         }
 
+    }
+
+    interface IStream
+    {
+        import Am.Lang
+
+        fun read(buffer: Byte[], offset: Long, length: Long)
+        fun write(buffer: Byte[], offset: Long, length: Long)
+        fun seekFromStart(offset: Long)
+        fun readByte(): Int
+        fun writeByte(byte: Int)
     }
 }
