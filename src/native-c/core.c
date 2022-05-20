@@ -18,7 +18,7 @@ void __decrease_reference_count(aobject * const __obj) {
     if ( __obj != NULL) {
         __obj->reference_count--;
         #ifdef DEBUG
-        printf("decrease reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_id, __obj->reference_count);
+        printf("decrease reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
         #endif
         if ( __obj->reference_count == 0 ) {
             __deallocate_object(__obj);
@@ -29,7 +29,7 @@ void __decrease_reference_count(aobject * const __obj) {
 void __increase_reference_count(aobject * const __obj) {
     __obj->reference_count++;
     #ifdef DEBUG
-    printf("increase reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_id, __obj->reference_count);
+    printf("increase reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
     #endif
 }
 
@@ -76,7 +76,7 @@ aobject * __allocate_object(aclass const * const __class) {
 
     #ifdef DEBUG
     allocations[allocation_index++] = __obj;
-    __obj->object_id = __last_object_id;
+    __obj->object_properties.class_object_properties.object_id = __last_object_id;
     #endif
 
     // memset(__obj, 0, sizeof(aobject));
@@ -167,7 +167,7 @@ void print_allocated_objects() {
     for(int i = 0; i < 256; i++) {
         if ( allocations[i] != NULL) {
             #ifdef DEBUG
-            printf("Object still alive: %s (address: %p, object_id: %d)\n", allocations[i]->class_ptr->name, allocations[i], allocations[i]->object_id);
+            printf("Object still alive: %s (address: %p, object_id: %d)\n", allocations[i]->class_ptr->name, allocations[i], allocations[i]->object_properties.class_object_properties.object_id);
             #endif
         }
     }
@@ -256,6 +256,9 @@ void __throw_exception(function_result *result, aobject * const exception, aobje
     Am_Lang_Exception_addStackTraceItem_0(exception, stack_trace_item_text);
 
 //    result.has_return_value = 0;
+    if (result->exception) {
+        __decrease_reference_count(result->exception);
+    }
     result->exception = exception;
     __increase_reference_count(exception);
 }
@@ -263,6 +266,9 @@ void __throw_exception(function_result *result, aobject * const exception, aobje
 void __pass_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text) {
 
     Am_Lang_Exception_addStackTraceItem_0(exception, stack_trace_item_text);
+    if (result->exception) {
+        __decrease_reference_count(result->exception);
+    }
     result->exception = exception;
 
 //    stack_trace_item *new_item = __create_stack_trace_item(result.exception_holder->last_stack_trace_item, stack_trace_item_text);
