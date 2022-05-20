@@ -28,4 +28,8 @@ buildTargets:
   - id: amigaos_docker_matebook_anders
     commands:
       - docker run -v ${build_dir}:/host -i 265cc923e013 make -f amigaos.makefile -C /host all
+  - id: amigaos_docker_macm1_anders
+    commands:
+      - make -f linux-x64.makefile
+#      - docker run -v ${build_dir}:/host -i 0205cf669adf make -f amigaos.makefile -C /host all
     
