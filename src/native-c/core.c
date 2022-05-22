@@ -42,7 +42,7 @@ aobject * __allocate_iface_object(aclass const * const __class, aobject * const 
     iface_implementation * impl = NULL;
     for(int i = 0; i < implementation_object->class_ptr->iface_implementation_count; i++) {
         iface_implementation * impl2 = &implementation_object->class_ptr->iface_implementations[i];
-        if (impl->iface_class == __class) {
+        if (impl2->iface_class == __class) {
             impl = impl2;
             break;
         }
