@@ -2,6 +2,7 @@ namespace Am.Collections {
 
     class List<T> {
         import Am.Lang
+        import Am.IO
 
         private var size: Int = 0
         var capacity: Int = 0
@@ -12,6 +13,26 @@ namespace Am.Collections {
             l.capacity = 2
             l.items = new T[l.capacity]
             return l
+        }
+
+        static fun main() {
+            try {
+                var s = new Stream()
+                "line1".println()
+                var is = s as IStream
+                "line2".println()
+                var b = is.readByte()
+                "line3".println()
+                b.toString().println()
+                "line4".println()
+
+
+            } catch(e: Exception) {
+                e.message.println()
+                throw new Exception("hello2")
+            } finally {
+                "finally".println()
+            }
         }
 
         fun add(item: T) {

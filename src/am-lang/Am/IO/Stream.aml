@@ -7,7 +7,7 @@ namespace Am.IO
         fun test() {
             var s = new Stream()
             var is = s as IStream
-            s.readByte()
+            is.readByte()
         }
     }
 

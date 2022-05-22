@@ -30,6 +30,11 @@ buildTargets:
       - docker run -v ${build_dir}:/host -i 265cc923e013 make -f amigaos.makefile -C /host all
   - id: amigaos_docker_macm1_anders
     commands:
+      - docker run -v ${build_dir}:/host -i 0205cf669adf make -f amigaos.makefile -C /host all
+  - id: macos_docker_macm1_anders
+    commands:
       - make -f linux-x64.makefile
-#      - docker run -v ${build_dir}:/host -i 0205cf669adf make -f amigaos.makefile -C /host all
+  - id: windows_docker
+    commands: 
+      - docker run --rm -v "${build_dir}":/usr/src/ -w /usr/src/ gcc:12.1 make -f linux-x64.makefile
     
