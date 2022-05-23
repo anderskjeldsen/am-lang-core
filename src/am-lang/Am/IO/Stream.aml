@@ -1,10 +1,17 @@
 /*
 TODO: Make it as an interface
+
+        fun print(text: String, printer: (String) => String) {
+            printer(text)
+        }
+
 */
 namespace Am.IO
 {
     class StreamTest {
-        fun test() {
+        import Am.Lang
+
+        fun test(func: (String) => String) {
             var s = new Stream()
             var is = s as IStream
             is.readByte()
