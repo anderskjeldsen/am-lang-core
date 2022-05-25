@@ -5,16 +5,24 @@ TODO: Make it as an interface
             printer(text)
         }
 
+            var s = new Stream()
+            var is = s as IStream
+            is.readByte()
+
 */
 namespace Am.IO
 {
     class StreamTest {
         import Am.Lang
 
-        fun test(func: (String) => String) {
-            var s = new Stream()
-            var is = s as IStream
-            is.readByte()
+        fun test(func: (s2: String) => String) {
+            func("hello")
+        }
+
+        fun test2() {
+            this.test((s) => {
+                return s + " world"
+            })
         }
     }
 
