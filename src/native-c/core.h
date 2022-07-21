@@ -69,6 +69,8 @@ typedef enum _ctype ctype;
 typedef enum _class_type class_type;
 typedef struct _class_object_properties class_object_properties;
 typedef union _object_properties object_properties;
+typedef strunct _anonymous_class_state_data anonymous_class_state_data;
+
 enum _ctype { 
     object_type,
     long_type,
@@ -192,6 +194,11 @@ struct _suspend_state {
     unsigned int state_objects_count; // to be used by parent function at re-entry
     nullable_value *state_objects; // to be used by parent function at re-entry
     function_result result; // created by parent, set by child
+};
+
+struct _anonymous_class_state_data {
+    unsigned int state_objects_count; // to be used by parent function at re-entry
+    nullable_value *state_objects; // to be used by parent function at re-entry
 };
 
 /*

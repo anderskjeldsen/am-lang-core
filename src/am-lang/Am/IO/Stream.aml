@@ -11,10 +11,16 @@ namespace Am.IO
     class StreamTest {
         import Am.Lang
 
-        fun test(func: (String) => String) {
+        fun test(func: (s: String) => String) {
             var s = new Stream()
             var is = s as IStream
             is.readByte()
+        }
+
+        fun test2() {
+            this.test((s) => {
+                
+            })            
         }
     }
 
