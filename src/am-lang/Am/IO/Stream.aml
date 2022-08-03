@@ -9,6 +9,11 @@ TODO: Make it as an interface
             var is = s as IStream
             is.readByte()
 
+        fun test2() {
+            this.test((s) => {
+                
+            })            
+        }
 */
 namespace Am.IO
 {
@@ -25,11 +30,7 @@ namespace Am.IO
             })
         }
 
-        fun test2() {
-            this.test((s) => {
-                
-            })            
-        }
+
     }
 
     class Stream() : IStream

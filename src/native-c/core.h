@@ -69,7 +69,7 @@ typedef enum _ctype ctype;
 typedef enum _class_type class_type;
 typedef struct _class_object_properties class_object_properties;
 typedef union _object_properties object_properties;
-typedef strunct _anonymous_class_state_data anonymous_class_state_data;
+typedef struct _anonymous_class_state_data anonymous_class_state_data;
 
 enum _ctype { 
     object_type,

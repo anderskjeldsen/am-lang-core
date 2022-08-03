@@ -1,0 +1,9 @@
+
+namespace Am.Lang 
+{
+    class AnonymousFunction() : FunctionReference {
+
+    }
+
+}
+
