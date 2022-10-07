@@ -25,8 +25,9 @@ namespace Am.IO
         }
 
         fun test2() {
+            var t = "world"
             this.test((s) => {
-                return s + " world"
+                return s + " " + t
             })
         }
 
