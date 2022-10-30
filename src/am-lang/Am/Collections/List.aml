@@ -15,7 +15,7 @@ namespace Am.Collections {
             return l
         }
 
-        static fun main() {
+        static fun main2() {
             try {
                 var s = new Stream()
                 "line1".println()
