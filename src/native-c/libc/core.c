@@ -2,7 +2,7 @@
 #define am_lang_core_c
 
 // #include <stdlib.h>
-#include <core.h>
+#include <libc/core.h>
 #include <string.h>
 #include <Am/Lang/Exception.h>
 
