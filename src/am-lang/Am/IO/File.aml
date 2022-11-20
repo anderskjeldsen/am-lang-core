@@ -10,5 +10,9 @@ namespace Am.IO
             return new File(File.getCurrentDirectory())
         }
 
+        override fun toString() {
+            return this.filename
+        }
+
     }
 }
