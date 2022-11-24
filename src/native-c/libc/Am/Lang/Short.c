@@ -4,6 +4,7 @@
 #include <Am/Lang/Short.h>
 #include <Am/Lang/Any.h>
 #include <Am/Lang/String.h>
+#include <string.h>
 
 function_result Am_Lang_Short_toString_0(nullable_value const this)
 {

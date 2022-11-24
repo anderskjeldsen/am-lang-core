@@ -12,6 +12,7 @@
 #include <Am/Lang/UInt.h>
 #include <Am/Lang/ULong.h>
 #include <Am/Lang/Bool.h>
+#include <string.h>
 
 function_result Am_Lang_UShort_toString_0(nullable_value const this)
 {
