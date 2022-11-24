@@ -17,8 +17,20 @@ function_result Am_Lang_UShort_toString_0(nullable_value const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-__exit: ;
-	return __result;
+	char tmp[6];
+	sprintf(tmp, "%hu", this.value.short_value);
+
+	aobject * str_obj = __allocate_object(&Am_Lang_String);
+	string_holder *holder = malloc(sizeof(string_holder));
+	str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
+	int tmp_len = strlen(tmp);
+	char * new_str = malloc(tmp_len + 1);
+	strcpy(new_str, tmp);
+	holder->string_value = new_str; // assume that string constants will never change
+	holder->length = tmp_len; // TODO: how many characters exactly?
+	holder->is_string_constant = false;
+
+	__result.return_value.value.object_value = str_obj;
 };
 
 function_result Am_Lang_UShort_toByte_0(unsigned short const this)
