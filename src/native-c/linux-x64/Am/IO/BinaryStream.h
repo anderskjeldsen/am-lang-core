@@ -1,6 +1,6 @@
 #ifndef native_linux_x64_aclass_Am_IO_BinaryStream_h
 #define native_linux_x64_aclass_Am_IO_BinaryStream_h
-#include <core.h>
+#include <libc/core.h>
 #include <Am/IO/BinaryStream.h>
 #include <Am/IO/Stream.h>
 #include <Am/Lang/Array.h>
