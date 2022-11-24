@@ -1,6 +1,6 @@
 #ifndef native_libc_aclass_Am_Lang_ULong_h
 #define native_libc_aclass_Am_Lang_ULong_h
-#include <core.h>
+#include <libc/core.h>
 #include <Am/Lang/ULong.h>
 #include <Am/Lang/Any.h>
 #include <Am/Lang/String.h>
