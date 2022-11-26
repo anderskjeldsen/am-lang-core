@@ -369,6 +369,12 @@ aobject * __create_array(size_t const size, size_t const item_size, aclass const
     return array_obj;
 }
 
+aobject * __create_exception(aobject * const message) {
+    aobject *ex = __allocate_object(&Am_Lang_Exception);
+    Am_Lang_Exception_Exception_0(ex, message);
+    return ex;
+}
+
 bool is_descendant_of(aclass const * const cls, aclass const * const base) {
     if (cls == base) {
         return true;
