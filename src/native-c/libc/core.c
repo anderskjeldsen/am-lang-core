@@ -372,6 +372,7 @@ aobject * __create_array(size_t const size, size_t const item_size, aclass const
 aobject * __create_exception(aobject * const message) {
     aobject *ex = __allocate_object(&Am_Lang_Exception);
     Am_Lang_Exception_Exception_0(ex, message);
+    Am_Lang_Exception___init_instance((nullable_value){ .value.object_value = ex });
     return ex;
 }
 
