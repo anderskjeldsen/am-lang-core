@@ -19,7 +19,7 @@ function_result Am_Lang_ULong_toString_0(nullable_value const this)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 	char tmp[21];
-	sprintf(tmp, "%llu", this.value.long_value);
+	sprintf(tmp, "%llu", this.value.ulong_value);
 
 	aobject * str_obj = __allocate_object(&Am_Lang_String);
 	string_holder *holder = malloc(sizeof(string_holder));

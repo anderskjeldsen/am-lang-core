@@ -17,7 +17,7 @@ function_result Am_Lang_UInt_toString_0(nullable_value const this)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 	char tmp[11];
-	sprintf(tmp, "%d", this.value.int_value);
+	sprintf(tmp, "%d", this.value.uint_value);
 
 	aobject * str_obj = __allocate_object(&Am_Lang_String);
 	string_holder *holder = malloc(sizeof(string_holder));
