@@ -19,6 +19,7 @@ function_result Am_Lang_UShort_toString_0(nullable_value const this)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 	char tmp[6];
+	
 	sprintf(tmp, "%u", this.value.ushort_value);
 
 	aobject * str_obj = __allocate_object(&Am_Lang_String);
@@ -32,6 +33,9 @@ function_result Am_Lang_UShort_toString_0(nullable_value const this)
 	holder->is_string_constant = false;
 
 	__result.return_value.value.object_value = str_obj;
+__exit: ;
+	return __result;
+
 };
 
 function_result Am_Lang_UShort_toByte_0(unsigned short const this)
