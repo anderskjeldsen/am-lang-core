@@ -36,21 +36,40 @@ namespace Am.Collections {
         }
 
         fun add(item: T) {
-            if (this.size >= this.capacity) {
-                var newCapacity = this.capacity * 150
-                newCapacity = newCapacity / 100
-                var newItems = new T[newCapacity]
-                var x = 0
-                while(x < this.size) {
-                    newItems[x] = this.items[x]                    
-                    x++
+            if (item !=  null) {
+                if (this.size >= this.capacity) {
+                    var newCapacity = this.capacity * 150
+                    newCapacity = newCapacity / 100
+                    var newItems = new T[newCapacity]
+                    var x = 0
+                    while(x < this.size) {
+                        newItems[x] = this.items[x]                    
+                        x++
+                    }
+                    this.capacity = newCapacity
+                    this.items = newItems
                 }
-                this.capacity = newCapacity
-                this.items = newItems
+                if (this.size < this.capacity ) {
+                    this.items[this.size] = item
+                    this.size++
+                }
             }
-            if (this.size < this.capacity ) {
-                this.items[this.size] = item
-                this.size++
+        }
+
+        fun remove(item: T) {
+            if (item != null) {
+                var i = 0
+                while(i < this.size) {
+                    var x = this.items[i]
+                    if (x == item) {
+                        while(i < this.size) {
+                            this.items[i] = this.items[i + 1]
+                            i++
+                        }
+                        this.size--
+                    }
+                    i++
+                }
             }
         }
 
