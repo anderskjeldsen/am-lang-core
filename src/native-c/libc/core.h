@@ -70,6 +70,7 @@ typedef enum _class_type class_type;
 typedef struct _class_object_properties class_object_properties;
 typedef union _object_properties object_properties;
 typedef struct _anonymous_class_state_data anonymous_class_state_data;
+typedef struct _weak_reference_node weak_reference_node;
 
 enum _ctype { 
     object_type,
@@ -177,6 +178,7 @@ struct _aobject {
     // if class_ptr is an interface, object_properties will contain a iface_implementation
     // this object will also hold a reference to the implementation object, and will remove that once this has reached 0.
     int reference_count;
+    weak_reference_node * first_weak_reference_node;
     object_properties object_properties;
 };
 
@@ -199,6 +201,11 @@ struct _suspend_state {
 struct _anonymous_class_state_data {
     unsigned int state_objects_count; // to be used by parent function at re-entry
     nullable_value *state_objects; // to be used by parent function at re-entry
+};
+
+struct _weak_reference_node {
+    weak_reference_node *next;
+    aobject *object;
 };
 
 /*
@@ -247,5 +254,7 @@ aobject * __create_array(size_t const size, size_t const item_size, aclass const
 aobject * __create_exception(aobject * const message);
 void print_allocated_objects();
 bool is_descendant_of(aclass const * const cls, aclass const * const base);
+void attach_weak_reference_node(weak_reference_node * const node, aobject * const object);
+void detach_weak_reference_node(weak_reference_node * const node) ;
 
 #endif

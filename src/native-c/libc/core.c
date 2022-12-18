@@ -151,6 +151,15 @@ void __deallocate_object(aobject * const __obj) {
         __obj->object_properties.class_object_properties.properties = NULL;
     }
 
+    weak_reference_node *current_weak_reference_node = __obj->first_weak_reference_node;
+    __obj->first_weak_reference_node = NULL;
+    while (current_weak_reference_node != NULL) {
+        weak_reference_node * const next_weak_reference_node = current_weak_reference_node->next;
+        current_weak_reference_node->next = NULL;
+        current_weak_reference_node->object = NULL;
+        current_weak_reference_node = next_weak_reference_node;
+    }
+
     #ifdef DEBUG
     for(int i = 0; i < 256; i++) {
         if ( allocations[i] == __obj) {
@@ -385,6 +394,33 @@ bool is_descendant_of(aclass const * const cls, aclass const * const base) {
         }
     }
     return false;
+}
+
+void attach_weak_reference_node(weak_reference_node * const node, aobject * const object) {
+    node->object = object;
+    weak_reference_node * const first = object->first_weak_reference_node;
+    node->next = first;
+    object->first_weak_reference_node = node;
+}
+
+void detach_weak_reference_node(weak_reference_node * const node) {
+    weak_reference_node * const first = node->object->first_weak_reference_node;
+    weak_reference_node * current = first;
+    if (current == node) {
+        node->object->first_weak_reference_node = node->next;
+        node->next = NULL;
+    } else {
+        while(current != NULL) {
+            if (current->next == node) {
+                current->next = node->next;
+                node->next = NULL;
+                current = NULL;
+            } else {
+                current = current->next;
+            }
+        }
+    }
+    free(node);
 }
 
 #endif
