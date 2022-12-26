@@ -124,7 +124,7 @@ struct _array_holder {
 
 // rename to: any_value
 struct _nullable_value {
-    unsigned char flags; // 1 = nullable primitive (this is a primitive that CAN be set to NULL), 2 = primitive null (this is a primitive that is CURRENTLY NULL)
+    unsigned char flags; // 1 = nullable primitive (this is a primitive that CAN be set to NULL), 2 = primitive null (this is a primitive that is CURRENTLY NULL), 4 = object
     value value;
 };
 // object_data.value.object_value
