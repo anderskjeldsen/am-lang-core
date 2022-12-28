@@ -23,6 +23,16 @@ platforms:
   - id: linux-x64
     extends: libc
     gccCommand: gcc
+  - id: morphos-ppc
+    extends: libc
+    gccCommand: ppc-morphos-gcc
+    additionalHeaders:
+      - morphos.h
+    additionalCSources: 
+      - inputFilename: morphos.c     
+        outputFilename: morphos.o
+    gccAdditionalOptions:
+      - -noixemul
 buildTargets:
   - id: amigaos_docker_win_anders
     commands:
@@ -42,4 +52,7 @@ buildTargets:
   - id: windows_docker
     commands: 
       - docker run --rm -v "${build_dir}":/usr/src/ -w /usr/src/ gcc:12.1 make -f linux-x64.makefile
-    
+  - id: morphos_ppc_docker
+    commands:
+      - docker run --rm -v "${build_dir}":/work -e USER=$( id -u ) -e GROUP=$( id -g ) -it amigadev/crosstools:ppc-morphos make -f morphos_ppc.makefile -C /work all
+  #-v /path/to/extra/ppc-morphos/lib:/tools/usr/lib -v /path/to/extra/ppc-morphos/include:/tools/usr/include
