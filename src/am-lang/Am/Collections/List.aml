@@ -36,10 +36,7 @@ namespace Am.Collections {
         }
 
         fun add(item: T) {
-            /*
-//            if (item != null) {
-
-    */
+//            if (item !=  null) {
                 if (this.size >= this.capacity) {
                     var newCapacity = this.capacity * 150
                     newCapacity = newCapacity / 100
