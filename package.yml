@@ -55,4 +55,10 @@ buildTargets:
   - id: morphos_ppc_docker
     commands:
       - docker run --rm -v "${build_dir}":/work -e USER=$( id -u ) -e GROUP=$( id -g ) -it amigadev/crosstools:ppc-morphos make -f morphos_ppc.makefile -C /work all
-  #-v /path/to/extra/ppc-morphos/lib:/tools/usr/lib -v /path/to/extra/ppc-morphos/include:/tools/usr/include
+  - id: morphos_ppc_docker_win
+    commands:
+      - docker run --rm -v "${build_dir}":/work -e -it amigadev/crosstools:ppc-morphos make -f morphos-ppc.makefile -C /work all
+  - id: aros_x86_64_docker_win
+    commands: 
+      - docker run --rm -v "${build_dir}":/work -it amigadev/crosstools:x86_64-aros bash
+      #-v /path/to/extra/ppc-morphos/lib:/tools/usr/lib -v /path/to/extra/ppc-morphos/include:/tools/usr/include
