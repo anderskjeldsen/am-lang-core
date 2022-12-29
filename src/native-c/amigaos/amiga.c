@@ -1,5 +1,5 @@
-#ifndef amiga_c
-#define amiga_c
+#pragma once
+
 #include <libc/core.h>
 #include <amigaos/amiga.h>
 #include <exec/types.h>
@@ -52,4 +52,3 @@ void __release_libraries() {
 	}	
 }
 
-#endif

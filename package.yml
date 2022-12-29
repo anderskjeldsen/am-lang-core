@@ -33,6 +33,16 @@ platforms:
         outputFilename: morphos.o
     gccAdditionalOptions:
       - -noixemul
+  - id: aros-x86-64
+    extends: libc
+    gccCommand: gcc
+    additionalHeaders:
+      - aros.h
+    additionalCSources: 
+      - inputFilename: aros.c     
+        outputFilename: aros.o
+    gccAdditionalOptions:
+      - -noixemul
 buildTargets:
   - id: amigaos_docker_win_anders
     commands:
@@ -57,8 +67,8 @@ buildTargets:
       - docker run --rm -v "${build_dir}":/work -e USER=$( id -u ) -e GROUP=$( id -g ) -it amigadev/crosstools:ppc-morphos make -f morphos_ppc.makefile -C /work all
   - id: morphos_ppc_docker_win
     commands:
-      - docker run --rm -v "${build_dir}":/work -e -it amigadev/crosstools:ppc-morphos make -f morphos-ppc.makefile -C /work all
+      - docker run --rm -v "${build_dir}":/work -e -i amigadev/crosstools:ppc-morphos make -f morphos-ppc.makefile -C /work all
   - id: aros_x86_64_docker_win
     commands: 
-      - docker run --rm -v "${build_dir}":/work -it amigadev/crosstools:x86_64-aros bash
+      - docker run --rm -v "${build_dir}":/work -i amigadev/crosstools:x86_64-aros make aros-x86-64.makefile all
       #-v /path/to/extra/ppc-morphos/lib:/tools/usr/lib -v /path/to/extra/ppc-morphos/include:/tools/usr/include

@@ -1,5 +1,5 @@
-#ifndef amiga_h
-#define amiga_h
+#pragma once
+
 #include <exec/types.h>
 #include <proto/exec.h>
 #include <string.h>
@@ -16,5 +16,3 @@ struct _lib_node {
 void __ensure_exec();
 void * __ensure_library(unsigned char * __lib_name, unsigned int version);
 void __release_libraries();
-
-#endif
