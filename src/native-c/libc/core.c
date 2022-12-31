@@ -1,6 +1,3 @@
-#ifndef am_lang_core_c
-#define am_lang_core_c
-
 // #include <stdlib.h>
 #include <libc/core.h>
 #include <string.h>
@@ -422,5 +419,3 @@ void detach_weak_reference_node(weak_reference_node * const node) {
     }
     free(node);
 }
-
-#endif

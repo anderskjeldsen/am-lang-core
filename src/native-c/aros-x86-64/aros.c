@@ -1,5 +1,3 @@
-#pragma once
-
 #include <libc/core.h>
 #include <aros-x86-64/aros.h>
 #include <exec/types.h>

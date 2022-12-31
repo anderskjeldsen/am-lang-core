@@ -1,5 +1,3 @@
-#pragma once
-
 #include <libc/core.h>
 #include <amigaos/amiga.h>
 #include <exec/types.h>

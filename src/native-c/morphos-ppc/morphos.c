@@ -1,5 +1,3 @@
-#pragma once
-
 #include <libc/core.h>
 #include <morphos-ppc/morphos.h>
 #include <exec/types.h>
