@@ -17,7 +17,7 @@ function_result Am_Lang_Weak__native_init_0(aobject * const this)
 	if (this != NULL) {
 		__increase_reference_count(this);
 	}
-	weak_reference_node * const node = malloc(sizeof(weak_reference_node));
+	weak_reference_node * const node = calloc(1, sizeof(weak_reference_node));
 	this->object_properties.class_object_properties.object_data.value.custom_value = node;
 __exit: ;
 	if (this != NULL) {

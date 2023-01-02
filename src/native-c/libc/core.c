@@ -33,7 +33,7 @@ void __increase_reference_count(aobject * const __obj) {
 
 aobject * __allocate_iface_object(aclass const * const __class, aobject * const implementation_object) {
     aobject * iface_object = __allocate_object(__class);
-    iface_reference * ref = (iface_reference *) malloc(sizeof(iface_reference));
+//    iface_reference * ref = (iface_reference *) malloc(sizeof(iface_reference)); // TODO: Uhm, what is this actually used for?
 
     __increase_reference_count(implementation_object); // decreased when this iface object is deallocted
 
