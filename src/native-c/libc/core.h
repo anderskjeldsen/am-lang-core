@@ -252,6 +252,7 @@ aobject * __create_string_constant(char const * const str, aclass const * const 
 aobject * __create_string(char const * const str, aclass const * const string_class);
 aobject * __create_array(size_t const size, size_t const item_size, aclass const * const array_class, ctype const ctype);
 aobject * __create_exception(aobject * const message);
+void clear_allocated_objects();
 void print_allocated_objects();
 bool is_descendant_of(aclass const * const cls, aclass const * const base);
 void attach_weak_reference_node(weak_reference_node * const node, aobject * const object);
