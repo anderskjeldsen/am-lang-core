@@ -4,10 +4,11 @@
 #include <Am/Lang/Exception.h>
 
 int __allocation_count = 0;
+#define MAX_ALLOCATIONS 1024 * 5
 
 #ifdef DEBUG
 int __last_object_id = 0;
-aobject * allocations[1024 * 5];
+aobject * allocations[MAX_ALLOCATIONS];
 int allocation_index = 0;
 #endif
 
@@ -135,10 +136,10 @@ void __deallocate_object(aobject * const __obj) {
     if (__obj->class_ptr->type == class && __obj->object_properties.class_object_properties.properties != NULL ) {
         for(int i = 0; i < __obj->class_ptr->properties_count; i++) {
             property * const __prop = &__obj->object_properties.class_object_properties.properties[i];
-            // TODO: use __decrease_reference_count_nullable_value
+            // TODO: use __decrease_reference_count_nullable_value            
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
                 #ifdef DEBUG
-                printf("Detach property:\n");
+                printf("Detach property %s:\n", __prop->nullable_value.value.object_value->class_ptr->name);
                 #endif
                 __decrease_reference_count(__prop->nullable_value.value.object_value);
                 __prop->nullable_value.value.object_value = NULL;
@@ -158,7 +159,7 @@ void __deallocate_object(aobject * const __obj) {
     }
 
     #ifdef DEBUG
-    for(int i = 0; i < 256; i++) {
+    for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         if ( allocations[i] == __obj) {
             allocations[i] = NULL;
         }
@@ -170,12 +171,20 @@ void __deallocate_object(aobject * const __obj) {
 
 void print_allocated_objects() {
     #ifdef DEBUG
-    for(int i = 0; i < 256; i++) {
+    for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         if ( allocations[i] != NULL) {
             #ifdef DEBUG
             printf("Object still alive: %s (address: %p, object_id: %d)\n", allocations[i]->class_ptr->name, allocations[i], allocations[i]->object_properties.class_object_properties.object_id);
             #endif
         }
+    }
+    #endif
+}
+
+void clear_allocated_objects() {
+    #ifdef DEBUG
+    for(int i = 0; i < MAX_ALLOCATIONS; i++) {
+        allocations[i] = NULL;
     }
     #endif
 }
