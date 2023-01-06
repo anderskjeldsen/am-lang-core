@@ -20,6 +20,16 @@ platforms:
         outputFilename: amiga.o
     gccAdditionalOptions:
       - -noixemul
+  - id: m68k-ataritos
+    extends: libc
+    gccCommand: m68k-ataritos-gcc
+#    additionalHeaders:
+#      - atari.h
+#    additionalCSources: 
+#      - inputFilename: atari.c     
+#        outputFilename: atari.o
+    gccAdditionalOptions:
+#      - -noixemul
   - id: linux-x64
     extends: libc
     gccCommand: gcc
@@ -62,13 +72,19 @@ buildTargets:
   - id: windows_docker
     commands: 
       - docker run --rm -v "${build_dir}":/usr/src/ -w /usr/src/ gcc:12.1 make -f linux-x64.makefile
-  - id: morphos_ppc_docker
+  - id: morphos-ppc_docker
+    platform: morphos-ppc
     commands:
       - docker run --rm -v "${build_dir}":/work -e USER=$( id -u ) -e GROUP=$( id -g ) -it amigadev/crosstools:ppc-morphos make -f morphos_ppc.makefile -C /work all
-  - id: morphos_ppc_docker_win
+  - id: morphos-ppc_docker_win
     commands:
       - docker run --rm -v "${build_dir}":/work -e -i amigadev/crosstools:ppc-morphos make -f morphos-ppc.makefile -C /work all
-  - id: aros_x86_64_docker_win
+  - id: aros-x86-64_docker_win
     commands: 
       - docker run --rm -v "${build_dir}":/work -i amigadev/crosstools:x86_64-aros make aros-x86-64.makefile all
       #-v /path/to/extra/ppc-morphos/lib:/tools/usr/lib -v /path/to/extra/ppc-morphos/include:/tools/usr/include
+  #-v /path/to/extra/ppc-morphos/lib:/tools/usr/lib -v /path/to/extra/ppc-morphos/include:/tools/usr/include
+  - id: m68k-ataritos_docker:
+    platform: m68k-ataritos
+    commands:
+      - docker run -v ${build_dir}:/host -i nokturnaldock/atari_development:latest make -f m68k-ataritos.makefile -C /host all
