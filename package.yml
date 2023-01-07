@@ -55,18 +55,23 @@ platforms:
       - -noixemul
 buildTargets:
   - id: amigaos_docker_win_anders
+    platform: amigaos
     commands:
       - docker run -v ${build_dir}:/host -i d931759c3883 make -f amigaos.makefile -C /host all
   - id: amigaos_docker_matebook_anders
+    platform: amigaos
     commands:
       - docker run -v ${build_dir}:/host -i 265cc923e013 make -f amigaos.makefile -C /host all
   - id: amigaos_docker_macm1_anders
+    platform: amigaos
     commands:
       - docker run -v ${build_dir}:/host -i 0205cf669adf make -f amigaos.makefile -C /host all
   - id: macos
+    platform: linux-x64
     commands:
       - make -f linux-x64.makefile
-  - id: linux_x64
+  - id: linux-x64
+    platform: linux-x64
     commands:
       - make -f linux-x64.makefile
   - id: windows_docker
@@ -77,14 +82,16 @@ buildTargets:
     commands:
       - docker run --rm -v "${build_dir}":/work -e USER=$( id -u ) -e GROUP=$( id -g ) -it amigadev/crosstools:ppc-morphos make -f morphos_ppc.makefile -C /work all
   - id: morphos-ppc_docker_win
+    platform: morphos-ppc
     commands:
       - docker run --rm -v "${build_dir}":/work -e -i amigadev/crosstools:ppc-morphos make -f morphos-ppc.makefile -C /work all
   - id: aros-x86-64_docker_win
+    platform: aros-x86-64
     commands: 
       - docker run --rm -v "${build_dir}":/work -i amigadev/crosstools:x86_64-aros make aros-x86-64.makefile all
       #-v /path/to/extra/ppc-morphos/lib:/tools/usr/lib -v /path/to/extra/ppc-morphos/include:/tools/usr/include
   #-v /path/to/extra/ppc-morphos/lib:/tools/usr/lib -v /path/to/extra/ppc-morphos/include:/tools/usr/include
-  - id: m68k-ataritos_docker:
+  - id: m68k-ataritos_docker_linux
     platform: m68k-ataritos
     commands:
       - docker run -v ${build_dir}:/host -i nokturnaldock/atari_development:latest make -f m68k-ataritos.makefile -C /host all
