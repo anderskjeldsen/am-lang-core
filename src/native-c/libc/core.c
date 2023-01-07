@@ -391,6 +391,16 @@ aobject * __create_exception(aobject * const message) {
     return ex;
 }
 
+void __throw_simple_exception(const char * const message, const char * const stack_trace_item_text, function_result * const result) {
+    aobject * ex_msg = __create_string_constant(message, &Am_Lang_String);
+    aobject * stit = __create_string_constant(stack_trace_item_text, &Am_Lang_String);
+    aobject * ex = __create_exception(ex_msg);
+    __throw_exception(result, ex, stit);
+    __decrease_reference_count(ex_msg); // it's in the exception stack trace list now, we don't need it anymore.
+    __decrease_reference_count(stit); // it's in the exception stack trace list now, we don't need it anymore.
+    __decrease_reference_count(ex); // it's in the exception stack trace list now, we don't need it anymore.
+}
+
 bool is_descendant_of(aclass const * const cls, aclass const * const base) {
     if (cls == base) {
         return true;

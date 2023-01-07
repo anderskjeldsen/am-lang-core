@@ -241,6 +241,7 @@ aobject * __allocate_object(aclass const * const __class);
 // function_result const __default_return();
 void __throw_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text);
 void __pass_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text);
+void __throw_simple_exception(const char * const message, const char * const stack_trace_item_text, function_result * const result);
 void __deallocate_function_result(function_result const result);
 typedef function_result (*__release_T)(aobject * const);
 void __set_primitive_nullable(nullable_value * nullable_value, bool is_primitive_nullable);
