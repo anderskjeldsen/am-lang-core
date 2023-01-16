@@ -1,0 +1,91 @@
+
+namespace Am.IO.Networking
+{
+    class AddressFamily(private var value2: Int) {
+        import Am.Lang
+
+//        var value: Int
+
+        fun getValue(): Int {
+            return this.value2
+        }
+
+        static var none: AddressFamily = new AddressFamily(1)
+        static var unix: AddressFamily = new AddressFamily(2)
+
+/*        
+Unix(1);
+InterNetwork(2);
+ImpLink(3);
+Pup(4);
+Chaos(5);
+NS(6);
+Ipx(NS);
+Iso(7);
+Osi(Iso);
+Ecma(8);
+DataKit(9);
+CCitt(10);
+Sna(11);
+DecNet(12);
+Dli(13);
+Lat(14);
+HyperChannel(15);
+AppleTalk(16);
+NetBios(17);
+VoiceView(18);
+FireFox(19);
+Unknown1(20);
+Ban(21);
+Atm(22);
+InterNetwork6(23);
+Cluster(24);
+Ieee12844(25);
+Irda(26);
+NetworkDesigners(28);
+TcnProcess(29);
+TcnMessage(30);
+Iclfxbm(31);
+Max(32);
+*/
+    }
+
+
+
+    native class Socket
+    {
+        import Am.Lang
+
+        static fun create(addressFamily: AddressFamily): Socket {
+            var socket = new Socket()
+
+            return socket
+        }
+
+
+    }
+}
+
+/*
+
+GSocket::GSocket(const GAddressFamily &AddressFamily, const GSocketType &SocketType, const GProtocolType &ProtocolType) : Socket(-1), Key(-1)
+{ 
+	Init(AddressFamily, SocketType, ProtocolType);
+}
+
+void GSocket::Init(const GAddressFamily &AddressFamily, const GSocketType &SocketType, const GProtocolType &ProtocolType)
+{
+	if ( !WSAver ) 
+	{ 
+		WSAver = MAKEWORD(2, 2); 
+		WSAStartup(WSAver, &WSAdata); 
+		Sockets++;
+	}
+
+	Socket = socket(AddressFamily.Value, SocketType.Value, ProtocolType.Value); 
+	if ( Socket < 0 )
+	{
+		throw GException("Could not create socket");
+	}
+}
+*/
