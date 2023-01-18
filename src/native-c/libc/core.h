@@ -229,6 +229,7 @@ aclass Long = {
 void __decrease_reference_count(aobject * const __obj);
 void __increase_reference_count(aobject * const __obj);
 void __set_property(aobject * const __obj, int const __index, nullable_value __prop_value);
+void __set_static_property(aclass * const __class, int const __index, nullable_value __prop_value) {
 void __decrease_reference_count_nullable_value(nullable_value __value);
 void __increase_reference_count_nullable_value(nullable_value __value);
 void __deallocate_object(aobject * const __obj);
