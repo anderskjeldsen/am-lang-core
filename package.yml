@@ -91,7 +91,7 @@ buildTargets:
       - docker run --rm -v "${build_dir}":/work -i amigadev/crosstools:x86_64-aros make aros-x86-64.makefile all
       #-v /path/to/extra/ppc-morphos/lib:/tools/usr/lib -v /path/to/extra/ppc-morphos/include:/tools/usr/include
   #-v /path/to/extra/ppc-morphos/lib:/tools/usr/lib -v /path/to/extra/ppc-morphos/include:/tools/usr/include
-  - id: m68k-ataritos_docker_linux
-    platform: m68k-ataritos
-    commands:
-      - docker run -v ${build_dir}:/host -i nokturnaldock/atari_development:latest make -f m68k-ataritos.makefile -C /host all
+  # - id: m68k-ataritos_docker_linux
+  #   platform: m68k-ataritos
+  #   commands:
+  #     - docker run -v ${build_dir}:/host -i nokturnaldock/atari_development:latest make -f m68k-ataritos.makefile -C /host all
