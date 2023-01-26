@@ -352,6 +352,47 @@ bool __is_primitive_null(const nullable_value nullable_value) {
     return nullable_value.flags & PRIMITIVE_NULL;
 }
 
+bool anyEqual(const nullable_value a, const nullable_value b) {
+    if (__is_primitive_nullable(a)) {
+        if (__is_primitive_nullable(b)) {
+            // both nullable
+            if (__is_primitive_null(a)) {
+                if (__is_primitive_null(b)) {
+                    return true;
+                } else {
+                    return false;
+                }
+            } else {
+                if (__is_primitive_null(b)) {
+                    return false;
+                } else {
+                    return memcmp(&a.value, &b.value, sizeof(value)); // TODO: let's hope there's no garbage here
+                }
+            }
+        } else {
+            // a nullable primitive, b not - can't be the same.
+            return false;
+        }
+    } else {
+        if (__is_primitive_nullable(b)) {
+            // b nullable, a not - can't be the same
+            return false;
+        } else {
+            // both are objects
+            if (a.value.object_value == b.value.object_value) {
+                return true;
+            } else if (a.value.object_value != NULL && b.value.object_value != NULL) {
+                // both not null
+               function_result res = Am_Lang_Object_equals_0(a.value.object_value, b.value.object_value);
+               return res.return_value.value.bool_value;
+            } else {
+                return false;
+                // one is null, the other not
+            }
+        }
+    }
+}
+
 /* From constant */
 aobject * __create_string_constant(char const * const str, aclass const * const string_class) {
     aobject * str_obj = __allocate_object(string_class);

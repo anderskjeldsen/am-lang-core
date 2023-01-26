@@ -250,6 +250,7 @@ bool __is_primitive_nullable(const nullable_value nullable_value);
 void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null);
 bool __is_primitive_null(const nullable_value nullable_value);
 bool __is_primitive(const nullable_value nullable_value);
+bool anyEqual(const nullable_value a, const nullable_value b);
 aobject * __create_string_constant(char const * const str, aclass const * const string_class);
 aobject * __create_string(char const * const str, aclass const * const string_class);
 aobject * __create_array(size_t const size, size_t const item_size, aclass const * const array_class, ctype const ctype);

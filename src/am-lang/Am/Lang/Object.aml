@@ -1,9 +1,17 @@
 namespace Am.Lang 
 {
-   class Object 
+    native class ObjectHelper {
+        static native fun equals(a: Object, b: Object): Bool
+    }
+
+    class Object 
     {
         override fun toString(): String {
             return "Object"
+        }
+
+        fun equals(other: Object): Bool {
+            return ObjectHelper.equals(this, other)
         }
     }
 }
