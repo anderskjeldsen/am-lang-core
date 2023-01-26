@@ -53,6 +53,16 @@ platforms:
         outputFilename: aros.o
     gccAdditionalOptions:
       - -noixemul
+#  - id: msdos-x86
+#    extends: libc
+#    gccCommand: gcc
+#    additionalHeaders:
+#      - aros.h
+#    additionalCSources: 
+#      - inputFilename: aros.c     
+#        outputFilename: aros.o
+#    gccAdditionalOptions:
+#      - -noixemul
 buildTargets:
   - id: amigaos_docker_win_anders
     platform: amigaos
@@ -91,7 +101,11 @@ buildTargets:
       - docker run --rm -v "${build_dir}":/work -i amigadev/crosstools:x86_64-aros make aros-x86-64.makefile all
       #-v /path/to/extra/ppc-morphos/lib:/tools/usr/lib -v /path/to/extra/ppc-morphos/include:/tools/usr/include
   #-v /path/to/extra/ppc-morphos/lib:/tools/usr/lib -v /path/to/extra/ppc-morphos/include:/tools/usr/include
-  # - id: m68k-ataritos_docker_linux
-  #   platform: m68k-ataritos
-  #   commands:
-  #     - docker run -v ${build_dir}:/host -i nokturnaldock/atari_development:latest make -f m68k-ataritos.makefile -C /host all
+#  - id: m68k-ataritos_docker_linux
+#    platform: m68k-ataritos
+#    commands:
+#      - docker run -v ${build_dir}:/host -i nokturnaldock/atari_development:latest make -f m68k-ataritos.makefile -C /host all
+#  - id: msdos-x86_docker_linux
+#    platform: msdos-x86
+#    commands:
+#      - docker run --platform linux/amd64 -v ${build_dir}:/workspace -i anibali/djgpp:latest make -f msdos-x86.makefile -C /host all
