@@ -352,7 +352,11 @@ bool __is_primitive_null(const nullable_value nullable_value) {
     return nullable_value.flags & PRIMITIVE_NULL;
 }
 
-bool anyEqual(const nullable_value a, const nullable_value b) {
+bool __any_has_flags(const nullable_value *nv, unsigned short flags) {
+    return (nv->flags & flags) == flags;
+}
+
+bool __any_equals(const nullable_value a, const nullable_value b) {
     if (__is_primitive_nullable(a)) {
         if (__is_primitive_nullable(b)) {
             // both nullable
@@ -383,14 +387,18 @@ bool anyEqual(const nullable_value a, const nullable_value b) {
                 return true;
             } else if (a.value.object_value != NULL && b.value.object_value != NULL) {
                 // both not null
-               function_result res = Am_Lang_Object_equals_0(a.value.object_value, b.value.object_value);
-               return res.return_value.value.bool_value;
+                return __object_equals(a.value.object_value, b.value.object_value);
             } else {
                 return false;
                 // one is null, the other not
             }
         }
     }
+}
+
+bool __object_equals(aobject * const a, aobject * const b) {
+    function_result res = Am_Lang_Object_equals_0(a, b);
+    return res.return_value.value.bool_value;
 }
 
 /* From constant */

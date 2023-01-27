@@ -73,8 +73,8 @@ typedef struct _anonymous_class_state_data anonymous_class_state_data;
 typedef struct _weak_reference_node weak_reference_node;
 
 enum _ctype { 
-    object_type,
-    long_type,
+    object_type, // 0
+    long_type, // 1
     int_type,
     short_type,
     char_type,
@@ -125,7 +125,13 @@ struct _array_holder {
 
 // rename to: any_value
 struct _nullable_value {
-    unsigned char flags; // 1 = nullable primitive (this is a primitive that CAN be set to NULL), 2 = primitive null (this is a primitive that is CURRENTLY NULL)
+    // Flags
+    // 1: nullable (only applies to primitives)
+    // 2: null (only applies to primitives, meaning primitive is null)
+    // 4: object type (1 << (ctype enum + 2))
+    // 8: long type (1 + 1 << 3)
+
+    unsigned short flags; // 1 = nullable primitive (this is a primitive that CAN be set to NULL), 2 = primitive null (this is a primitive that is CURRENTLY NULL)
     value value;
 };
 // object_data.value.object_value
@@ -250,7 +256,9 @@ bool __is_primitive_nullable(const nullable_value nullable_value);
 void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null);
 bool __is_primitive_null(const nullable_value nullable_value);
 bool __is_primitive(const nullable_value nullable_value);
-bool anyEqual(const nullable_value a, const nullable_value b);
+bool __any_has_flags(const nullable_value *nv, unsigned short flags);
+bool __any_equals(const nullable_value a, const nullable_value b);
+bool __object_equals(aobject * const a, aobject * const b);
 aobject * __create_string_constant(char const * const str, aclass const * const string_class);
 aobject * __create_string(char const * const str, aclass const * const string_class);
 aobject * __create_array(size_t const size, size_t const item_size, aclass const * const array_class, ctype const ctype);
