@@ -5,6 +5,7 @@
 #include <Am/IO/Networking/AddressFamily.h>
 
 #include <sys/socket.h>
+#include <netinet/in.h>
 
 struct _socket_holder {
 	int socket;

@@ -45,7 +45,11 @@ namespace Am.IO.Networking
 
         private native fun createSocket(addressFamily: AddressFamily, socketType: SocketType, protocolFamily: ProtocolFamily)
 
+        fun connect(hostName: String, port: Int) {
+            this.connectNative(hostName, port, this.addressFamily)
+        }
 
+        private native fun connectNative(hostName: String, port: Int, addressFamily: Int)
     }
 }
 
