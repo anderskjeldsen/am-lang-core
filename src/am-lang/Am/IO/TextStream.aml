@@ -30,12 +30,25 @@ namespace Am.IO
 
         fun readString(): String {
             var read = this.read(this.buffer, 0L, this.buffer.length().toUInt())
+            "step 1".println()
             var list = List<UByte>.newList<Byte>()
+            "step 2".println()
+
             while(read > 0UI) {
-                list.addArray(this.buffer.subArray(0L, read.toLong()))
+                ("step 3 - " + read.toString()).println()
+                var subArray = this.buffer.subArray(0L, read.toLong())
+                            "step 3a".println()
+                list.addArray(subArray)
+                            "step 3b".println()
+
                 read = this.read(this.buffer, 0L, this.buffer.length().toUInt())
+                            "step 4".println()                
             }
+                        "step 5".println()
+
             var array = list.toArray()
+                        "step 6".println()
+
             return String.fromBytes(array, "UTF-8")
         }
 
