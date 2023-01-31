@@ -9,6 +9,19 @@ namespace Am.Lang
     native class Array<T>()
     {
         import Am.Lang
-        native fun length(): Long
+        native fun length(): Long // TODO: Change to Int?
+
+        fun subArray(offset: Long, length: Long): Array<T> {
+            var newArray = new T[length]
+            var i = offset
+            var j = 0
+            var end = offset + length
+            while(i < end) {
+                newArray[j] = this[i]
+                j++
+                i++
+            }
+            return newArray
+        }
     }
 }

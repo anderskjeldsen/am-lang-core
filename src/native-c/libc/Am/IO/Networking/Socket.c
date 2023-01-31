@@ -4,6 +4,7 @@
 #include <Am/Lang/Object.h>
 #include <Am/IO/Networking/AddressFamily.h>
 
+#include <string.h>
 
 function_result Am_IO_Networking_Socket__native_init_0(aobject * const this)
 {
@@ -35,7 +36,9 @@ function_result Am_IO_Networking_Socket_createSocket_0(aobject * const this, int
 		__increase_reference_count(this);
 	}
 
+	printf("create socket %d, %d, %d\n", addressFamily, socketType, protocolFamily);
 	int s = socket(addressFamily, socketType, protocolFamily); 
+	printf("newsocket %d\n", s);
 	if ( s < 0 )
 	{
 		__throw_simple_exception("Unable to create socket", "in Am_IO_Networking_Socket_createSocket_0", &__result);
@@ -66,17 +69,19 @@ function_result Am_IO_Networking_Socket_connectNative_0(aobject * const this, ao
 	long ipadd;
 	struct sockaddr_in peer_addr;
 
-	string_holder *host_name_holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+	string_holder *host_name_holder = hostName->object_properties.class_object_properties.object_data.value.custom_value;
 
+	printf("host name: %s\n", host_name_holder->string_value);
 	struct hostent * hostent = gethostbyname(host_name_holder->string_value);
 	if (hostent)
 	{
+		printf("host: %d\n", *(int *)hostent->h_addr_list[0]);
 		peer_addr.sin_addr = *(struct in_addr *) hostent->h_addr_list[0];
 		peer_addr.sin_family = addressFamily; 
 		peer_addr.sin_port =  htons(port); 
 
-
-		int s = this->object_properties.class_object_properties.object_data.value.int_value;
+		int s = this->object_properties.class_object_properties.object_data.value.int_value;				
+		printf("socket %d\n", s);
 		result = connect(s, (struct sockaddr *) &peer_addr, sizeof(struct sockaddr_in)); 
 		if ( result != 0 )
 		{
@@ -95,7 +100,92 @@ __exit: ;
 		__decrease_reference_count(this);
 	}
 	if (hostName != NULL) {
-		__increase_reference_count(hostName);
+		__decrease_reference_count(hostName);
 	}
 	return __result;
 };
+
+function_result Am_IO_Networking_Socket_send_0(aobject * const this, aobject * bytes, const int length)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+	if (bytes != NULL) {
+		__increase_reference_count(bytes);
+	}
+
+	int s = this->object_properties.class_object_properties.object_data.value.int_value;				
+	if ( s < 0 )
+	{
+		__throw_simple_exception("Socket not created", "in Am_IO_Networking_Socket_send_0", &__result);
+		goto __exit;
+	}
+
+	array_holder *array_holder = bytes->object_properties.class_object_properties.object_data.value.custom_value;
+
+	if (length > array_holder->size) {
+		__throw_simple_exception("Send length is bigger than array", "in Am_IO_Networking_Socket_send_0", &__result);
+		goto __exit;
+	}
+
+	char data[200];
+	memcpy(data, array_holder->array_data, 15);
+	data[15] = 0;
+	printf("Sending %s\n", data);
+	int sent = send(s, array_holder->array_data, length, 0);
+	__result.return_value.value.int_value = sent;
+	__result.return_value.flags = PRIMITIVE_INT;
+	__returning = true;
+
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	if (bytes != NULL) {
+		__decrease_reference_count(bytes);
+	}
+	return __result;
+};
+
+function_result Am_IO_Networking_Socket_receive_0(aobject * const this, aobject * bytes, const int length)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+	if (bytes != NULL) {
+		__increase_reference_count(bytes);
+	}
+
+	int s = this->object_properties.class_object_properties.object_data.value.int_value;				
+	if ( s < 0 )
+	{
+		__throw_simple_exception("Socket not created", "in Am_IO_Networking_Socket_send_0", &__result);
+		goto __exit;
+	}
+
+	array_holder *array_holder = bytes->object_properties.class_object_properties.object_data.value.custom_value;
+
+	if (length > array_holder->size) {
+		__throw_simple_exception("Receive length is bigger than array", "in Am_IO_Networking_Socket_send_0", &__result);
+		goto __exit;
+	}
+
+	int received = recv(s, array_holder->array_data, length, 0);
+	__result.return_value.value.int_value = received;
+	__result.return_value.flags = PRIMITIVE_INT;
+	__returning = true;
+
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	if (bytes != NULL) {
+		__decrease_reference_count(bytes);
+	}
+	return __result;
+};
+

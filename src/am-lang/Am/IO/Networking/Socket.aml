@@ -23,7 +23,7 @@ namespace Am.IO.Networking
 
     enum ProtocolFamily {        
         import Am.Lang
-        none = 0
+        unspecified = 0
     }
 
     native class Socket
@@ -40,6 +40,8 @@ namespace Am.IO.Networking
             socket.socketType = socketType
             socket.protocolFamily = protocolFamily
 
+            socket.createSocket(addressFamily, socketType, protocolFamily)
+
             return socket
         }
 
@@ -50,7 +52,38 @@ namespace Am.IO.Networking
         }
 
         private native fun connectNative(hostName: String, port: Int, addressFamily: Int)
+
+        native fun send(bytes: Byte[], length: Int): Int
+        native fun receive(bytes: Byte[], length: Int): Int
     }
+
+
+    class SocketStream(private var socket: Socket) : Stream
+    {
+        import Am.Lang
+        import Am.IO
+
+        fun read(buffer: Byte[], offset: Long, length: Int): Int {
+            return this.socket.receive(buffer, length)
+        }
+
+        fun write(buffer: Byte[], offset: Long, length: Int) {
+            this.socket.send(buffer, length)
+        }
+
+        fun seekFromStart(offset: Long) {
+            throw new Exception("Not supported")            
+        }
+
+        fun readByte(): Int {
+            throw new Exception("Not supported")
+            return 0 // TODO: fix
+        }
+
+        fun writeByte(byte: Int) {
+            throw new Exception("Not supported")
+        }
+    }    
 }
 
 /*

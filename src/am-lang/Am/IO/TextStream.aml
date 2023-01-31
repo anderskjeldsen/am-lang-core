@@ -1,0 +1,51 @@
+
+namespace Am.IO
+{
+    native class TextStream(private var stream: Stream) : Stream
+    {
+        import Am.Lang
+        import Am.Collections
+
+        private var buffer: Byte[] = new Byte[1024]        
+
+        fun read(buffer: Byte[], offset: Long, length: UInt): UInt {
+            return this.stream.read(buffer, offset, length)
+        }
+
+        fun write(buffer: Byte[], offset: Long, length: UInt) {
+            this.stream.write(buffer, offset, length)
+        }
+
+        fun seekFromStart(offset: Long) {
+            this.stream.seekFromStart(offset)
+        }
+
+        fun readByte(): Int {
+            return this.stream.readByte()
+        }
+
+        fun writeByte(byte: Int) {
+            this.stream.writeByte(byte)
+        }
+
+        fun readString(): String {
+            var read = this.read(this.buffer, 0L, this.buffer.length().toUInt())
+            var list = List<UByte>.newList<Byte>()
+            while(read > 0UI) {
+                list.addArray(this.buffer.subArray(0L, read.toLong()))
+                read = this.read(this.buffer, 0L, this.buffer.length().toUInt())
+            }
+            var array = list.toArray()
+            return String.fromBytes(array, "UTF-8")
+        }
+
+        fun writeString(string: String) {
+            var bytes = string.toBytes("UTF-8")
+            this.write(bytes, 0L, bytes.length().toUInt())
+        }
+/*
+        native fun readString(): String
+        native fun writeString(string: String)
+        */
+    }
+}

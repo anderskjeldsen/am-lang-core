@@ -17,6 +17,7 @@ TODO: Make it as an interface
 */
 namespace Am.IO
 {
+    /*
     class StreamTest {
         import Am.Lang
 
@@ -33,7 +34,9 @@ namespace Am.IO
 
 
     }
+    */
 
+/*
     class Stream() : IStream
     {
         import Am.Lang
@@ -57,15 +60,15 @@ namespace Am.IO
         fun writeByte(byte: Int) {
             
         }
-
     }
+    */
 
-    interface IStream
+    interface Stream
     {
         import Am.Lang
 
-        fun read(buffer: Byte[], offset: Long, length: Long)
-        fun write(buffer: Byte[], offset: Long, length: Long)
+        fun read(buffer: Byte[], offset: Long, length: UInt): UInt
+        fun write(buffer: Byte[], offset: Long, length: UInt)
         fun seekFromStart(offset: Long)
         fun readByte(): Int
         fun writeByte(byte: Int)

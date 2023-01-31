@@ -7,10 +7,10 @@ namespace Am.IO
     {
         import Am.Lang
 
-        native override fun read(buffer: Byte[], offset: Long, length: Long)
-        native override fun write(buffer: Byte[], offset: Long, length: Long)
-        native override fun seekFromStart(offset: Long)
-        native override fun readByte(): Int
-        native override fun writeByte(byte: Int)
+        native fun read(buffer: Byte[], offset: Long, length: UInt): UInt
+        native fun write(buffer: Byte[], offset: Long, length: UInt)
+        native fun seekFromStart(offset: Long)
+        native fun readByte(): Int
+        native fun writeByte(byte: Int)
     }
 }

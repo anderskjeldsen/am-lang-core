@@ -7,25 +7,24 @@ namespace Am.IO
     {
         import Am.Lang
 
-        override fun read(buffer: Byte[], offset: Long, length: Long) {
-            this.stream.read(buffer, offset, length)
-
+        fun read(buffer: Byte[], offset: Long, length: UInt): UInt {
+            return this.stream.read(buffer, offset, length)
         }
 
-        override fun write(buffer: Byte[], offset: Long, length: Long) {
+        fun write(buffer: Byte[], offset: Long, length: UInt) {
             this.stream.write(buffer, offset, length)
 
         }
 
-        override fun seekFromStart(offset: Long) {
+        fun seekFromStart(offset: Long) {
             this.stream.seekFromStart(offset)
         }
 
-        override fun readByte(): Int {
+        fun readByte(): Int {
             return this.stream.readByte()
         }
 
-        override fun writeByte(byte: Int) {
+        fun writeByte(byte: Int) {
             this.stream.writeByte(byte)
         }
 

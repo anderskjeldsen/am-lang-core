@@ -68,7 +68,7 @@ __exit: ;
 		__decrease_reference_count(this);
 	}
 	if (t != NULL) {
-		__increase_reference_count(t);
+		__decrease_reference_count(t);
 	}
 	return __result;
 };

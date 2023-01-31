@@ -65,9 +65,9 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_IO_FileStream_read_0(aobject * const this, aobject * buffer, long long offset, long long length)
+function_result Am_IO_FileStream_read_0(aobject * const this, aobject * buffer, long long offset, unsigned int length)
 {
-	function_result __result = { .has_return_value = false };
+	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 	if (this != NULL) {
 		__increase_reference_count(this);
@@ -83,12 +83,12 @@ __exit: ;
 		__decrease_reference_count(this);
 	}
 	if (buffer != NULL) {
-		__increase_reference_count(buffer);
+		__decrease_reference_count(buffer);
 	}
 	return __result;
 };
 
-function_result Am_IO_FileStream_write_0(aobject * const this, aobject * buffer, long long offset, long long length)
+function_result Am_IO_FileStream_write_0(aobject * const this, aobject * buffer, long long offset, unsigned int length)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
@@ -106,7 +106,7 @@ __exit: ;
 		__decrease_reference_count(this);
 	}
 	if (buffer != NULL) {
-		__increase_reference_count(buffer);
+		__decrease_reference_count(buffer);
 	}
 	return __result;
 };

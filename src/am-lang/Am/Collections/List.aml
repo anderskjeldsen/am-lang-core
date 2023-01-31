@@ -1,8 +1,34 @@
 namespace Am.Collections {
 
-    class List<T> {
+    class CoreStartup {
         import Am.Lang
         import Am.IO
+        import Am.IO.Networking
+
+        static fun main() {
+            "connect to localhost".println()
+            var s = Socket.create(AddressFamily.inet, SocketType.stream, ProtocolFamily.unspecified)
+            s.connect("localhost", 9030)
+            "connected".println()
+
+            var socketStream = new SocketStream(s)
+            var istream = socketStream as Stream
+            var ts = new TextStream(istream)
+            ts.writeString("GET / HTTP/1.1\r\nHost:localhost\r\n\r\n")
+
+            var rs = ts.readString()
+            /*
+            var bytes = new Byte[1024]
+            var read = s.receive(bytes, 1024)
+            var rs = String.fromBytes(bytes, "UTF-8")
+            */
+            rs.println()
+        }
+
+    }
+
+    class List<T> {
+        import Am.Lang
 
         private var size: Int = 0
         var capacity: Int = 0
@@ -15,23 +41,11 @@ namespace Am.Collections {
             return l
         }
 
-        static fun main2() {
-            try {
-                var s = new Stream()
-                "line1".println()
-                var is = s as IStream
-                "line2".println()
-                var b = is.readByte()
-                "line3".println()
-                b.toString().println()
-                "line4".println()
-
-
-            } catch(e: Exception) {
-                e.message.println()
-                throw new Exception("hello2")
-            } finally {
-                "finally".println()
+        fun addArray(items: T[]) {
+            var x = 0
+            while(x < items.length()) {
+                this.add(items[x])
+                x++
             }
         }
 

@@ -1,5 +1,3 @@
-#ifndef native_libc_aclass_Am_Lang_String_c
-#define native_libc_aclass_Am_Lang_String_c
 #include <libc/core.h>
 #include <Am/Lang/String.h>
 #include <Am/Lang/Object.h>
@@ -133,7 +131,7 @@ __exit: ;
 
 function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
 {
-	function_result __result = { .has_return_value = false };
+	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
 	array_holder *array_holder = bytes->object_properties.class_object_properties.object_data.value.custom_value;
@@ -141,15 +139,39 @@ function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
 	aobject * new_string = __create_string(array_holder->array_data, &Am_Lang_String);
 
 	__result.return_value.value.object_value = new_string;
+	__result.return_value.flags = 0;
 
 __exit: ;
 	if (bytes != NULL) {
 		__increase_reference_count(bytes);
 	}
 	if (encoding != NULL) {
-		__increase_reference_count(encoding);
+		__decrease_reference_count(encoding);
 	}
 	return __result;
 };
 
-#endif
+function_result Am_Lang_String_toBytes_0(aobject * const this, aobject * encoding)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+	if (encoding != NULL) {
+		__increase_reference_count(encoding);
+	}
+	string_holder *holder1 = this->object_properties.class_object_properties.object_data.value.custom_value;
+	aobject *array = __create_array(holder1->length, 1, &Am_Lang_Array, uchar_type);
+	__result.return_value.flags = 0;
+	__result.return_value.value.object_value = array;
+
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	if (encoding != NULL) {
+		__decrease_reference_count(encoding);
+	}
+	return __result;
+};
