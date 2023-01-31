@@ -120,6 +120,7 @@ function_result Am_IO_Networking_Socket_send_0(aobject * const this, aobject * b
 	if ( s < 0 )
 	{
 		__throw_simple_exception("Socket not created", "in Am_IO_Networking_Socket_send_0", &__result);
+		__returning = true;
 		goto __exit;
 	}
 
@@ -127,18 +128,14 @@ function_result Am_IO_Networking_Socket_send_0(aobject * const this, aobject * b
 
 	if (length > array_holder->size) {
 		__throw_simple_exception("Send length is bigger than array", "in Am_IO_Networking_Socket_send_0", &__result);
+		__returning = true;
 		goto __exit;
 	}
 
-	char data[200];
-	memcpy(data, array_holder->array_data, 15);
-	data[15] = 0;
-	printf("Sending %s\n", data);
+	printf("Sending: %s\n", array_holder->array_data);
 	int sent = send(s, array_holder->array_data, length, 0);
 	__result.return_value.value.int_value = sent;
-	__result.return_value.flags = PRIMITIVE_INT;
-	__returning = true;
-
+	__result.return_value.flags = PRIMITIVE_UINT;
 __exit: ;
 	if (this != NULL) {
 		__decrease_reference_count(this);
@@ -175,6 +172,8 @@ function_result Am_IO_Networking_Socket_receive_0(aobject * const this, aobject 
 	}
 
 	int received = recv(s, array_holder->array_data, length, 0);
+	printf("Received %d bytes\n", received);
+	printf("Received data: %s\n", array_holder->array_data);
 	__result.return_value.value.int_value = received;
 	__result.return_value.flags = PRIMITIVE_INT;
 	__returning = true;
