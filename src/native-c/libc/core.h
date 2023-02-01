@@ -119,7 +119,7 @@ struct _array_holder {
     size_t size; // number of items
     aclass * item_class;
     ctype ctype;
-//    unsigned char item_size; // size per item
+    unsigned char item_size; // size per item
     char * array_data;
 };
 

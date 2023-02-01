@@ -136,9 +136,18 @@ function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
 
 	array_holder *array_holder = bytes->object_properties.class_object_properties.object_data.value.custom_value;
 
-	aobject * new_string = __create_string(array_holder->array_data, &Am_Lang_String);
+    aobject * const str_obj = __allocate_object(&Am_Lang_String);
+    string_holder * const holder = calloc(1, sizeof(string_holder));
+    str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
+    int const len = array_holder->size; // TODO: support different character sizes
+    char * const newStr = malloc(len + 1);
+    strncpy(newStr, array_holder->array_data, len);
+	newStr[len] = 0;
+    *holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = newStr };
 
-	__result.return_value.value.object_value = new_string;
+//	aobject * new_string = __create_string(array_holder->array_data, &Am_Lang_String);
+
+	__result.return_value.value.object_value = str_obj;
 	__result.return_value.flags = 0;
 
 __exit: ;

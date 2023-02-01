@@ -8,7 +8,7 @@ namespace Am.Collections {
         static fun main() {
             "connect to localhost".println()
             var s = Socket.create(AddressFamily.inet, SocketType.stream, ProtocolFamily.unspecified)
-            s.connect("localhost", 9030)
+            s.connect("172.22.7.165", 30951)
             "connected".println()
 
             var socketStream = new SocketStream(s)
@@ -17,11 +17,6 @@ namespace Am.Collections {
             ts.writeString("GET / HTTP/1.1\r\nHost:localhost\r\n\r\n")
 
             var rs = ts.readString()
-            /*
-            var bytes = new Byte[1024]
-            var read = s.receive(bytes, 1024)
-            var rs = String.fromBytes(bytes, "UTF-8")
-            */
             rs.println()
         }
 

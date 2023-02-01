@@ -71,4 +71,30 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_Lang_Array_createEmptyArrayOfSameType_0(aobject * const this, long long length)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+
+	array_holder * ah = (array_holder *) this->object_properties.class_object_properties.object_data.value.custom_value;
+
+	aobject *new_array = __create_array(length, ah->item_size, &Am_Lang_Array, ah->ctype);
+
+	// int item_size = ah->item_size;
+	// void * src = ah->array_data + (offset * item_size);
+	// void * dest = new_array->array_data;
+	// for(long long i = 0; i < length; i++) {
+	// }
+
+	__result.return_value = (nullable_value) { .value = { .object_value = new_array }, .flags = 0 };
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	return __result;
+};
+
 #endif

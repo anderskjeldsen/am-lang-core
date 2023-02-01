@@ -30,7 +30,7 @@ platforms:
 #    additionalCSources: 
 #      - inputFilename: atari.c     
 #        outputFilename: atari.o
-    gccAdditionalOptions:
+#    gccAdditionalOptions:
 #      - -noixemul
   - id: linux-x64
     extends: libc
