@@ -6,13 +6,13 @@ namespace Am.IO
         import Am.Lang
         import Am.Collections
 
-        private var buffer: Byte[] = new Byte[1024]        
+        private var buffer: UByte[] = new UByte[1024]        
 
-        fun read(buffer: Byte[], offset: Long, length: UInt): UInt {
+        fun read(buffer: UByte[], offset: Long, length: UInt): UInt {
             return this.stream.read(buffer, offset, length)
         }
 
-        fun write(buffer: Byte[], offset: Long, length: UInt) {
+        fun write(buffer: UByte[], offset: Long, length: UInt) {
             this.stream.write(buffer, offset, length)
         }
 
@@ -30,16 +30,20 @@ namespace Am.IO
 
         fun readString(): String {
             var read = this.read(this.buffer, 0L, this.buffer.length().toUInt())
-            "step 1".println()
-            var list = List<UByte>.newList<Byte>()
-            "step 2".println()
+            var list = List<UByte>.newList<UByte>()
 
             while(read > 0UI) {
-                ("step 3 - " + read.toString()).println()
-                var subArray = this.buffer.subArray(0L, read.toLong())
-                            "step 3a".println()
+                var subArray = new UByte[read]
+                var i = 0UI
+                while(i < read) {
+                    subArray[i] = this.buffer[i]
+                    i++
+                }
+
+//                var subArray = this.buffer.subArray(0L, read.toLong())
+//                            "step 3a".println()
                 list.addArray(subArray)
-                            "step 3b".println()
+                "step 3b".println()
 
                 read = this.read(this.buffer, 0L, this.buffer.length().toUInt())
                             "step 4".println()                

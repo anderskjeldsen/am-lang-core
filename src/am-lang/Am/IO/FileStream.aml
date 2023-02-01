@@ -7,8 +7,8 @@ namespace Am.IO
     {
         import Am.Lang
 
-        native fun read(buffer: Byte[], offset: Long, length: UInt): UInt
-        native fun write(buffer: Byte[], offset: Long, length: UInt)
+        native fun read(buffer: UByte[], offset: Long, length: UInt): UInt
+        native fun write(buffer: UByte[], offset: Long, length: UInt)
         native fun seekFromStart(offset: Long)
         native fun readByte(): Int
         native fun writeByte(byte: Int)

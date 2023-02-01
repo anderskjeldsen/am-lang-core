@@ -7,11 +7,11 @@ namespace Am.IO
     {
         import Am.Lang
 
-        fun read(buffer: Byte[], offset: Long, length: UInt): UInt {
+        fun read(buffer: UByte[], offset: Long, length: UInt): UInt {
             return this.stream.read(buffer, offset, length)
         }
 
-        fun write(buffer: Byte[], offset: Long, length: UInt) {
+        fun write(buffer: UByte[], offset: Long, length: UInt) {
             this.stream.write(buffer, offset, length)
 
         }

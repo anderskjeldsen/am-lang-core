@@ -67,8 +67,8 @@ namespace Am.IO
     {
         import Am.Lang
 
-        fun read(buffer: Byte[], offset: Long, length: UInt): UInt
-        fun write(buffer: Byte[], offset: Long, length: UInt)
+        fun read(buffer: UByte[], offset: Long, length: UInt): UInt
+        fun write(buffer: UByte[], offset: Long, length: UInt)
         fun seekFromStart(offset: Long)
         fun readByte(): Int
         fun writeByte(byte: Int)
