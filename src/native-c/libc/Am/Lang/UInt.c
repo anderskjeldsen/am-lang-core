@@ -1,5 +1,4 @@
-#ifndef native_libc_aclass_Am_Lang_UInt_c
-#define native_libc_aclass_Am_Lang_UInt_c
+
 #include <libc/core.h>
 #include <Am/Lang/UInt.h>
 #include <Am/Lang/Any.h>
@@ -107,4 +106,3 @@ __exit: ;
 	return __result;
 };
 
-#endif

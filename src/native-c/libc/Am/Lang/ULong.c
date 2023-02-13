@@ -1,5 +1,3 @@
-#ifndef native_libc_aclass_Am_Lang_ULong_c
-#define native_libc_aclass_Am_Lang_ULong_c
 #include <libc/core.h>
 #include <Am/Lang/ULong.h>
 #include <Am/Lang/Any.h>
@@ -108,5 +106,3 @@ function_result Am_Lang_ULong_toBool_0(unsigned long long const this)
 __exit: ;
 	return __result;
 };
-
-#endif

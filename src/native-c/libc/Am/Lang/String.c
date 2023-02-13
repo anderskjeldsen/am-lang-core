@@ -171,7 +171,7 @@ function_result Am_Lang_String_toBytes_0(aobject * const this, aobject * encodin
 		__increase_reference_count(encoding);
 	}
 	string_holder *string_holder = this->object_properties.class_object_properties.object_data.value.custom_value;
-	aobject *array = __create_array(string_holder->length, 1, &Am_Lang_Array, uchar_type);
+	aobject *array = __create_array(string_holder->length, 1, &Am_Lang_Array_v_uchar, uchar_type);
 
 	array_holder *array_holder = array->object_properties.class_object_properties.object_data.value.custom_value;
 	strcpy(array_holder->array_data, string_holder->string_value);

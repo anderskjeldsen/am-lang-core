@@ -1,5 +1,3 @@
-#ifndef native_libc_aclass_Am_Lang_Array_c
-#define native_libc_aclass_Am_Lang_Array_c
 #include <libc/core.h>
 #include <Am/Lang/Array.h>
 #include <Am/Lang/Object.h>
@@ -54,14 +52,15 @@ __exit: ;
 
 function_result Am_Lang_Array_length_0(aobject * const this)
 {
+	printf("get length\n");
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 	// Add reference count for this in Array.length
 	if (this != NULL) {
 		__increase_reference_count(this);
 	}
-
 	array_holder * ah = (array_holder *) this->object_properties.class_object_properties.object_data.value.custom_value;
+	printf("get length %ld\n", ah->size);
 	__result.return_value = (nullable_value) { .value = { .long_value = ah->size }, .flags = 0 };
 
 __exit: ;
@@ -71,7 +70,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_Lang_Array_createEmptyArrayOfSameType_0(aobject * const this, long long length)
+function_result Am_Lang_Array_createEmptyArrayOfSameType_internal(aobject * const this, long long length)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -81,15 +80,9 @@ function_result Am_Lang_Array_createEmptyArrayOfSameType_0(aobject * const this,
 
 	array_holder * ah = (array_holder *) this->object_properties.class_object_properties.object_data.value.custom_value;
 
-	aobject *new_array = __create_array(length, ah->item_size, &Am_Lang_Array, ah->ctype);
+	aobject *new_array = __create_array(length, ah->item_size, this->class_ptr, ah->ctype);
 
-	// int item_size = ah->item_size;
-	// void * src = ah->array_data + (offset * item_size);
-	// void * dest = new_array->array_data;
-	// for(long long i = 0; i < length; i++) {
-	// }
-
-	__result.return_value = (nullable_value) { .value = { .object_value = new_array }, .flags = 0 };
+	__result.return_value.value.object_value = new_array;
 __exit: ;
 	if (this != NULL) {
 		__decrease_reference_count(this);
@@ -97,4 +90,17 @@ __exit: ;
 	return __result;
 };
 
-#endif
+function_result Am_Lang_Array_createEmptyArrayOfSameType_0_uchar(aobject * const this, long long length)
+{
+	return Am_Lang_Array_createEmptyArrayOfSameType_internal(this, length);
+};
+
+function_result Am_Lang_Array_createEmptyArrayOfSameType_0_char(aobject * const this, long long length)
+{
+	return Am_Lang_Array_createEmptyArrayOfSameType_internal(this, length);
+};
+
+function_result Am_Lang_Array_createEmptyArrayOfSameType_0_object(aobject * const this, long long length)
+{
+	return Am_Lang_Array_createEmptyArrayOfSameType_internal(this, length);
+};

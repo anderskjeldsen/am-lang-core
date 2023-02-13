@@ -1,5 +1,5 @@
-#ifndef native_libc_aclass_Am_Lang_Long_h
-#define native_libc_aclass_Am_Lang_Long_h
+#pragma once
+
 #include <libc/core.h>
 #include <Am/Lang/Long.h>
 #include <Am/Lang/Any.h>
@@ -13,4 +13,4 @@
 #include <Am/Lang/ULong.h>
 #include <Am/Lang/Bool.h>
 
-#endif
+
