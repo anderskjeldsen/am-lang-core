@@ -1,5 +1,3 @@
-#ifndef native_libc_aclass_Am_Lang_UShort_c
-#define native_libc_aclass_Am_Lang_UShort_c
 #include <libc/core.h>
 #include <Am/Lang/UShort.h>
 #include <Am/Lang/Any.h>
@@ -110,4 +108,3 @@ __exit: ;
 	return __result;
 };
 
-#endif

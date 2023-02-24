@@ -1,5 +1,5 @@
-#ifndef native_libc_aclass_Am_Lang_String_h
-#define native_libc_aclass_Am_Lang_String_h
+#pragma once
+
 #include <libc/core.h>
 #include <Am/Lang/String.h>
 #include <Am/Lang/Object.h>
@@ -7,4 +7,4 @@
 #include <Am/Lang/Array.h>
 #include <Am/Lang/UByte.h>
 
-#endif
+

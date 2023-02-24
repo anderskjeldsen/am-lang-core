@@ -1,5 +1,3 @@
-#ifndef native_libc_aclass_Am_Lang_Weak_c
-#define native_libc_aclass_Am_Lang_Weak_c
 #include <libc/core.h>
 #include <Am/Lang/Weak.h>
 #include <libc/Am/Lang/Weak.h>
@@ -94,4 +92,3 @@ __exit: ;
 	return __result;
 };
 
-#endif
