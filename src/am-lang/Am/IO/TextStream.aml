@@ -1,7 +1,7 @@
 
 namespace Am.IO
 {
-    native class TextStream(private var stream: Stream) : Stream
+    class TextStream(private var stream: Stream) : Stream
     {
         import Am.Lang
         import Am.Collections
