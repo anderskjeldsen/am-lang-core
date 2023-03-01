@@ -1,5 +1,5 @@
 namespace Am.Collections {
-
+/*
     class CoreStartup {
         import Am.Lang
         import Am.IO
@@ -21,6 +21,7 @@ namespace Am.Collections {
         }
 
     }
+    */
 
     class List<T> {
         import Am.Lang
@@ -62,7 +63,7 @@ namespace Am.Collections {
                     this.items[this.size] = item
                     this.size++
                 }
-//            }
+//           }
         }
 
         fun remove(item: T) {
