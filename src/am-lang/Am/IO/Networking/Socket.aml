@@ -55,6 +55,8 @@ namespace Am.IO.Networking
 
         native fun send(bytes: Byte[], length: Int): Int
         native fun receive(bytes: Byte[], length: Int): Int
+
+        native fun close()
     }
 
 

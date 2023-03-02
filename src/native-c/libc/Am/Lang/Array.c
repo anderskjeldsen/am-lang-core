@@ -52,7 +52,7 @@ __exit: ;
 
 function_result Am_Lang_Array_length_0(aobject * const this)
 {
-	printf("get length\n");
+//	printf("get length\n");
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 	// Add reference count for this in Array.length
@@ -60,7 +60,7 @@ function_result Am_Lang_Array_length_0(aobject * const this)
 		__increase_reference_count(this);
 	}
 	array_holder * ah = (array_holder *) this->object_properties.class_object_properties.object_data.value.custom_value;
-	printf("get length %ld\n", ah->size);
+//	printf("get length %ld\n", ah->size);
 	__result.return_value = (nullable_value) { .value = { .long_value = ah->size }, .flags = 0 };
 
 __exit: ;

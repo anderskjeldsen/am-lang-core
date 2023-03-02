@@ -4,6 +4,7 @@
 #include <Am/Lang/Object.h>
 #include <Am/IO/Networking/AddressFamily.h>
 
+#include <unistd.h>
 #include <string.h>
 
 function_result Am_IO_Networking_Socket__native_init_0(aobject * const this)
@@ -173,7 +174,7 @@ function_result Am_IO_Networking_Socket_receive_0(aobject * const this, aobject 
 
 	int received = recv(s, array_holder->array_data, length, 0);
 	printf("Received %d bytes\n", received);
-	printf("Received data: %s\n", array_holder->array_data);
+//	printf("Received data: %s\n", array_holder->array_data);
 	__result.return_value.value.int_value = received;
 	__result.return_value.flags = PRIMITIVE_INT;
 	__returning = true;
@@ -187,4 +188,31 @@ __exit: ;
 	}
 	return __result;
 };
+
+function_result Am_IO_Networking_Socket_close_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = false };
+	bool __returning = false;
+	// Add reference count for this in Socket.close
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+
+	int s = this->object_properties.class_object_properties.object_data.value.int_value;				
+	if ( s < 0 )
+	{
+		__throw_simple_exception("Socket not created", "in Am_IO_Networking_Socket_send_0", &__result);
+		goto __exit;
+	}
+
+	close(s);
+	this->object_properties.class_object_properties.object_data.value.int_value = -1;
+
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	return __result;
+};
+
 

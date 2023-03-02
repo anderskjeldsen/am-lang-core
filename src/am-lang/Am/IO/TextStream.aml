@@ -43,15 +43,17 @@ namespace Am.IO
 //                var subArray = this.buffer.subArray(0L, read.toLong())
 //                            "step 3a".println()
                 list.addArray(subArray)
-                "step 3b".println()
 
-                read = this.read(this.buffer, 0L, this.buffer.length().toUInt())
-                            "step 4".println()                
+                var exp = read == this.buffer.length().toUInt()
+                if (exp) {
+                    read = this.read(this.buffer, 0L, this.buffer.length().toUInt())
+                } 
+                if (!exp) {
+                    read = 0UI
+                }
             }
-                        "step 5".println()
 
             var array = list.toArray()
-                        "step 6".println()
 
             return String.fromBytes(array, "UTF-8")
         }
