@@ -51,7 +51,7 @@ namespace Am.IO.Networking
             this.connectNative(hostName, port, this.addressFamily)
         }
 
-        private native fun connectNative(hostName: String, port: Int, addressFamily: Int)
+        private native fun connectNative(hostName: String, port: Int, addressFamily: AddressFamily)
 
         native fun send(bytes: Byte[], length: Int): Int
         native fun receive(bytes: Byte[], length: Int): Int
