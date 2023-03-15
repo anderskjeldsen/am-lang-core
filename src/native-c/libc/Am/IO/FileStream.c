@@ -72,6 +72,9 @@ function_result Am_IO_FileStream_read_0(aobject * const this, aobject * buffer, 
 	if (this != NULL) {
 		__increase_reference_count(this);
 	}
+	if (buffer != NULL) {
+		__increase_reference_count(buffer);
+	}
 
 	file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 
@@ -94,6 +97,9 @@ function_result Am_IO_FileStream_write_0(aobject * const this, aobject * buffer,
 	bool __returning = false;
 	if (this != NULL) {
 		__increase_reference_count(this);
+	}
+	if (buffer != NULL) {
+		__increase_reference_count(buffer);
 	}
 
 	file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
