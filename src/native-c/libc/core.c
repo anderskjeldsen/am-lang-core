@@ -498,5 +498,5 @@ void detach_weak_reference_node(weak_reference_node * const node) {
             }
         }
     }
-    free(node);
+//    free(node); We do this when Weak is released in native/Weak.c
 }
