@@ -1,0 +1,7 @@
+namespace Am.Collections {
+    interface Iterable<T> {
+        import Am.Lang
+
+        fun iterator(): Iterator<T>
+    }
+}

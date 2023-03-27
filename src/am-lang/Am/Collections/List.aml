@@ -6,6 +6,13 @@ namespace Am.Collections {
         import Am.IO.Networking
 
         static fun main() {
+            var list = List<String>.newList<String>()
+            list.add("hello")
+            list.add("world")
+            each(list.iterator(), i) {
+                i.println()
+            }
+
             "connect to localhost".println()
             var s = Socket.create(AddressFamily.inet, SocketType.stream, ProtocolFamily.unspecified)
 //            s.connect("172.22.7.165", 30951)
@@ -23,9 +30,9 @@ namespace Am.Collections {
         }
 
     }
-    */
+*/
 
-    class List<T> {
+    class List<T>: Iterable<T> {
         import Am.Lang
 
         private var size: Int = 0
@@ -104,6 +111,10 @@ namespace Am.Collections {
                 i++
             }
             return arr
+        }
+
+        fun iterator(): Iterator<T> {
+            return new ListIterator<T>(this)
         }
     }
 }

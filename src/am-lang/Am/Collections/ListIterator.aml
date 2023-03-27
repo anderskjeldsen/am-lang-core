@@ -1,0 +1,16 @@
+namespace Am.Collections {
+    class ListIterator<T>(private var list: List<T>) {
+        import Am.Lang
+        private var index: Int = 0
+
+        fun hasNext(): Bool {
+            return index < this.list.size
+        }
+
+        fun next(): T {
+            var t = this.list.get(this.index)
+            this.index++
+            return t
+        }
+    }
+}

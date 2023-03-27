@@ -1,0 +1,9 @@
+namespace Am.Collections {
+    interface Iterator<T> {
+        import Am.Lang
+
+        fun hasNext(): Bool
+
+        fun next(): T
+    }
+}
