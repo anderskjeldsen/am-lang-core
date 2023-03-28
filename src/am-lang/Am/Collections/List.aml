@@ -1,5 +1,5 @@
 namespace Am.Collections {
-/*
+
     class CoreStartup {
         import Am.Lang
         import Am.IO
@@ -12,7 +12,9 @@ namespace Am.Collections {
             each(list.iterator(), i) {
                 i.println()
             }
+        }
 
+        static fun main2() {
             "connect to localhost".println()
             var s = Socket.create(AddressFamily.inet, SocketType.stream, ProtocolFamily.unspecified)
 //            s.connect("172.22.7.165", 30951)
@@ -30,7 +32,6 @@ namespace Am.Collections {
         }
 
     }
-*/
 
     class List<T>: Iterable<T> {
         import Am.Lang
