@@ -7,9 +7,10 @@ namespace Am.Collections {
 
         static fun main() {
             var list = List<String>.newList<String>()
+            var listIterable = list as Iterable<String>
             list.add("hello")
             list.add("world")
-            each(list.iterator(), i) {
+            each(listIterable.iterator(), i) {
                 i.println()
             }
         }
