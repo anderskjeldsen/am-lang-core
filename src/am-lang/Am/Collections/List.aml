@@ -7,11 +7,9 @@ namespace Am.Collections {
 
         static fun main3() {
             var list = List<String>.newList<String>()
-
-            var listIterable = list as Iterable<String>
             list.add("hello")
             list.add("world")
-            each(listIterable, i) {
+            each(list, i) {
                 i.println()
             }
         }
@@ -19,7 +17,6 @@ namespace Am.Collections {
         static fun main2() {
             "connect to localhost".println()
             var s = Socket.create(AddressFamily.inet, SocketType.stream, ProtocolFamily.unspecified)
-//            s.connect("172.22.7.165", 30951)
             s.connect("localhost", 9030)
             "connected".println()
 
@@ -117,7 +114,9 @@ namespace Am.Collections {
         }
 
         fun iterator(): Iterator<T> {
-            return new ListIterator<T>(this)
+            var x = new ListIterator<T>(this)
+            var y = x as Iterator<T>
+            return y
         }
     }
 }
