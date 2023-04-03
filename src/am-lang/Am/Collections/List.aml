@@ -7,6 +7,7 @@ namespace Am.Collections {
 
         static fun main() {
             var list = List<String>.newList<String>()
+/*
             var listIterator: ListIterator<String> = null
             if (false) {
                 var iteratorTmp = list.iterator()
@@ -16,6 +17,7 @@ namespace Am.Collections {
                 listIterator.next()
                 
             }
+            */
             var listIterable = list as Iterable<String>
             list.add("hello")
             list.add("world")
