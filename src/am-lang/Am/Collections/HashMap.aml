@@ -11,10 +11,26 @@ namespace Am.Collections {
         private var hashItemsArray: HashItems<T, U>[]
 
         fun getSize(): Int {
-            return 0
+            return size
         }
 
         fun get(key: T): U {
+            var hash = key.hash()
+            var index = hash % this.hashItemsArray.length()
+            var hashItems = this.hashItemsArray[index]
+            if (hashItems == null) {
+                throw new Exception("Key not found " + key.toString())
+            }
+            var found = false
+            each(hashItems.items, i) {
+                if (!found) {
+                    var entryHash = i.key.hash()
+                    if (entryHash == hash) {
+                        return i.value
+                    }
+                }
+            }
+            throw new Exception("Key not found " + key.toString())
             return null
         }
 
@@ -33,13 +49,35 @@ namespace Am.Collections {
                         this.privateSet(hi.key, hi.value)
                     }
                     i++
-                }
+                }                
                 // create new array and re-add items
             }
+            this.privateSet(key, value)
         }
 
         fun privateSet(key: T, value: U) {
-//            var hash = key.
+            var hash = key.hash()
+            var index = hash % this.hashItemsArray.length()
+            var hashItems = this.hashItemsArray[index]
+            if (hashItems == null) {
+                hashItems = new HashItems<T, U>()
+            }
+            var found = false
+            each(hashItems.items, i) {
+                if (!found) {
+                    var entryHash = i.key.hash()
+                    if (entryHash == hash) {
+                        if (i.key == key) {
+                            i.value = value
+                        }
+                        found = true
+                        // TODO: break
+                    }
+                }
+            }
+            if (!found) {
+                hashItems.items.add(new MapEntry<T, U>(key, value))
+            }
         }
     }
 }
