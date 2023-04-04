@@ -5,19 +5,9 @@ namespace Am.Collections {
         import Am.IO
         import Am.IO.Networking
 
-        static fun main() {
+        static fun main3() {
             var list = List<String>.newList<String>()
-/*
-            var listIterator: ListIterator<String> = null
-            if (false) {
-                var iteratorTmp = list.iterator()
-                iteratorTmp.hasNext()
-                iteratorTmp.next()
-                listIterator.hasNext()
-                listIterator.next()
-                
-            }
-            */
+
             var listIterable = list as Iterable<String>
             list.add("hello")
             list.add("world")
