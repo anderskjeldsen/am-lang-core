@@ -3,7 +3,7 @@ namespace Am.Lang
 {
     primitive native class UShort {
         override native fun toString(): String
-
+        override native fun hash(): Int
         native fun toByte(): Byte
         native fun toShort(): Short
         native fun toInt(): Int

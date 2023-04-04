@@ -34,3 +34,18 @@ function_result Am_Lang_ObjectHelper_equals_0(aobject * a, aobject * b)
 	return __result;
 };
 
+function_result Am_Lang_ObjectHelper_hash_0(aobject * o)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	// Add reference count for o in ObjectHelper.hash
+	if (o != NULL) {
+		__increase_reference_count(o);
+	}
+	__result.return_value = (nullable_value) { .value = { .int_value = (int) o }, .flags = 0 };
+__exit: ;
+	if (o != NULL) {
+		__decrease_reference_count(o);
+	}
+	return __result;
+};

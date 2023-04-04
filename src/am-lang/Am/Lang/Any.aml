@@ -5,5 +5,9 @@ namespace Am.Lang
         primitive fun toString(): String {
             return "Any"
         }
+
+        primitive fun hash(): Int {
+            return 0
+        }
     }
 }

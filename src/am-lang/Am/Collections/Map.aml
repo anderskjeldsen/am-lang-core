@@ -1,0 +1,14 @@
+namespace Am.Collections {
+
+    class MapEntry<T, U>(var key: T, var value: U) {
+        
+    }
+
+    interface Map<T, U> {
+        import Am.Lang
+
+        fun getSize(): Int
+        fun get(key: T): U
+        fun set(key: T, value: U)
+    }
+}

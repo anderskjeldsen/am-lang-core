@@ -36,6 +36,16 @@ __exit: ;
 
 };
 
+function_result Am_Lang_UShort_hash_0(nullable_value const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	__result.return_value = (nullable_value) { .value = { .int_value = this.value.ushort_value }, .flags = 0 };
+
+__exit: ;
+	return __result;
+};
+
 function_result Am_Lang_UShort_toByte_0(unsigned short const this)
 {
 	function_result __result = { .has_return_value = true };

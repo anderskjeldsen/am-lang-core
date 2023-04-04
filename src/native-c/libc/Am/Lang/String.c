@@ -37,6 +37,36 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_Lang_String_hash_0(nullable_value const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	// Add reference count for this in String.hash
+	__increase_reference_count_nullable_value(this);
+
+	string_holder *holder = this.value.object_value->object_properties.class_object_properties.object_data.value.custom_value;
+	if ( holder != NULL ) {
+		int hash = 0;
+		unsigned char *str = holder->string_value;
+		int bit = 3;
+		while(*str != 0) {
+			hash += (*str >> bit);
+			bit += 3;
+			bit &= 0x1f;
+			str++;
+		}
+		__result.return_value = (nullable_value) { .value = { .int_value = hash }, .flags = 0 };
+		printf("%s", holder->string_value);
+	} else {
+		__result.return_value = (nullable_value) { .value = { .int_value = 0 }, .flags = 0 };
+	}
+
+
+__exit: ;
+	__decrease_reference_count_nullable_value(this);
+	return __result;
+};
+
 function_result Am_Lang_String_getLength_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
@@ -66,7 +96,6 @@ function_result Am_Lang_String_print_0(aobject * const this)
 	if (this != NULL) {
 		__increase_reference_count(this);
 	}
-	// TODO: implement native function Am_Lang_String_print_0
 	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	if ( holder != NULL ) {
 		printf("%s", holder->string_value);

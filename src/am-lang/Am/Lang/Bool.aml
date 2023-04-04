@@ -8,6 +8,13 @@ namespace Am.Lang
             }
             return false
         }
+
+        override fun hash(): Int {
+            if (this) {
+                return 1
+            } // should work: else {
+            return 0
+        }
     }
 
 }

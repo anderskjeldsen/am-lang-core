@@ -2,6 +2,7 @@ namespace Am.Lang
 {
     native class ObjectHelper {
         static native fun equals(a: Object, b: Object): Bool
+        static native fun hash(o: Object): Int
     }
 
     class Object 
@@ -9,6 +10,11 @@ namespace Am.Lang
         override fun toString(): String {
             return "Object"
         }
+
+        override fun hash(): Int {
+            return ObjectHelper.hash(this)
+        }
+
 
         fun equals(other: Object): Bool {
             return ObjectHelper.equals(this, other)

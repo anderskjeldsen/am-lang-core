@@ -35,6 +35,17 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_Lang_ULong_hash_0(nullable_value const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	unsigned long long const v = this.value.ulong_value;
+
+	__result.return_value = (nullable_value) { .value = { .int_value = (v & 0xffffffff) ^ (v >> 32) }, .flags = 0 };
+__exit: ;
+	return __result;
+};
+
 function_result Am_Lang_ULong_toByte_0(unsigned long long const this)
 {
 	function_result __result = { .has_return_value = true };

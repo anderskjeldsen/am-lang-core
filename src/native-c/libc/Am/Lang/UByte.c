@@ -27,6 +27,15 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_Lang_UByte_hash_0(nullable_value const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	__result.return_value = (nullable_value) { .value = { .int_value = this.value.uchar_value }, .flags = 0 };
+__exit: ;
+	return __result;
+};
+
 function_result Am_Lang_UByte_toShort_0(unsigned char const this)
 {
 	function_result __result = { .has_return_value = true };

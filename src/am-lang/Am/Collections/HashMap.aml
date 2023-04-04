@@ -1,0 +1,45 @@
+namespace Am.Collections {
+
+    class HashItems<T, U> {
+        var items: List<MapEntry<T, U>> = List<MapEntry<T, U>>.newList<MapEntry<T, U>>()
+    }
+
+    class HashMap<T, U>: Map<T, U> {
+        import Am.Lang
+
+        private var size: Int
+        private var hashItemsArray: HashItems<T, U>[]
+
+        fun getSize(): Int {
+            return 0
+        }
+
+        fun get(key: T): U {
+            return null
+        }
+
+        fun set(key: T, value: U) {
+            if (this.hashItemsArray == null) {
+                this.hashItemsArray = new HashItems<T, U>[20]
+            }
+            if (this.size > (this.hashItemsArray.length() * 5)) {
+                var oldItems = this.hashItemsArray
+                this.hashItemsArray = new HashItems<T, U>[this.hashItemsArray.length() * 5]
+
+                var i = 0
+                while(i < oldItems.length()) {
+                    var hashItems = oldItems[i]
+                    each(hashItems.items, hi) {
+                        this.privateSet(hi.key, hi.value)
+                    }
+                    i++
+                }
+                // create new array and re-add items
+            }
+        }
+
+        fun privateSet(key: T, value: U) {
+//            var hash = key.
+        }
+    }
+}

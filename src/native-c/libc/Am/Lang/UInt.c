@@ -34,6 +34,15 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_Lang_UInt_hash_0(nullable_value const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	__result.return_value = (nullable_value) { .value = { .int_value = this.value.uint_value }, .flags = 0 };
+__exit: ;
+	return __result;
+};
+
 function_result Am_Lang_UInt_toByte_0(unsigned int const this)
 {
 	function_result __result = { .has_return_value = true };
