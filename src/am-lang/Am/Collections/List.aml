@@ -5,6 +5,15 @@ namespace Am.Collections {
         import Am.IO
         import Am.IO.Networking
 
+        static fun main() {
+            var map = new HashMap<String, String>()
+            map.set("hello", "world")
+            map.set("anders", "kjeldsen")
+            map.set("amiga", "rules")
+            var s = map.get("amiga")
+            ("Amiga? ... " + s).println()
+        }
+
         static fun main3() {
             var list = List<String>.newList<String>()
             list.add("hello")

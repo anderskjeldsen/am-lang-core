@@ -3,6 +3,9 @@ namespace Am.Lang
 {
     native class String {
         override native fun hash(): Int
+        override fun toString(): String {
+            return this
+        }
         native fun getLength(): Int
         native fun print()
         native op + (s: String): String

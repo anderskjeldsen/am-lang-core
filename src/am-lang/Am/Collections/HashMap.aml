@@ -11,10 +11,11 @@ namespace Am.Collections {
         private var hashItemsArray: HashItems<T, U>[]
 
         fun getSize(): Int {
-            return size
+            return this.size
         }
 
         fun get(key: T): U {
+            ("get Key " + key.toString()).println()
             var hash = key.hash()
             var index = hash % this.hashItemsArray.length()
             var hashItems = this.hashItemsArray[index]
@@ -34,7 +35,9 @@ namespace Am.Collections {
             return null
         }
 
-        fun set(key: T, value: U) {
+        fun set(key: T, value2: U) {
+            ("set Key " + key.toString()).println()
+
             if (this.hashItemsArray == null) {
                 this.hashItemsArray = new HashItems<T, U>[20]
             }
@@ -52,23 +55,27 @@ namespace Am.Collections {
                 }                
                 // create new array and re-add items
             }
-            this.privateSet(key, value)
+            this.privateSet(key, value2)
         }
 
-        fun privateSet(key: T, value: U) {
+        private fun privateSet(key: T, value2: U) {
             var hash = key.hash()
             var index = hash % this.hashItemsArray.length()
+            ("index " + index.toString()).println()
             var hashItems = this.hashItemsArray[index]
             if (hashItems == null) {
+                "Create HashItems".println()
                 hashItems = new HashItems<T, U>()
+                this.hashItemsArray[index] = hashItems
             }
             var found = false
             each(hashItems.items, i) {
                 if (!found) {
                     var entryHash = i.key.hash()
                     if (entryHash == hash) {
+
                         if (i.key == key) {
-                            i.value = value
+                            i.value = value2
                         }
                         found = true
                         // TODO: break
@@ -76,7 +83,7 @@ namespace Am.Collections {
                 }
             }
             if (!found) {
-                hashItems.items.add(new MapEntry<T, U>(key, value))
+                hashItems.items.add(new MapEntry<T, U>(key, value2))
             }
         }
     }

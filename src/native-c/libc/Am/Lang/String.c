@@ -50,13 +50,13 @@ function_result Am_Lang_String_hash_0(nullable_value const this)
 		unsigned char *str = holder->string_value;
 		int bit = 3;
 		while(*str != 0) {
-			hash += (*str >> bit);
+			hash += (*str << bit);
 			bit += 3;
 			bit &= 0x1f;
 			str++;
 		}
 		__result.return_value = (nullable_value) { .value = { .int_value = hash }, .flags = 0 };
-		printf("%s", holder->string_value);
+		printf("string hash for '%s': %d\n", holder->string_value, hash);
 	} else {
 		__result.return_value = (nullable_value) { .value = { .int_value = 0 }, .flags = 0 };
 	}
