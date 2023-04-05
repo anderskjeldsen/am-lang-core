@@ -56,7 +56,7 @@ function_result Am_Lang_String_hash_0(nullable_value const this)
 			str++;
 		}
 		__result.return_value = (nullable_value) { .value = { .int_value = hash }, .flags = 0 };
-		printf("string hash for '%s': %d\n", holder->string_value, hash);
+//		printf("string hash for '%s': %d\n", holder->string_value, hash);
 	} else {
 		__result.return_value = (nullable_value) { .value = { .int_value = 0 }, .flags = 0 };
 	}
@@ -107,6 +107,45 @@ function_result Am_Lang_String_print_0(aobject * const this)
 __exit: ;
 	if (this != NULL) {
 		__decrease_reference_count(this);
+	}
+	return __result;
+};
+
+function_result Am_Lang_String_equals_0(aobject * const this, aobject * other)
+{	
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+	if (other != NULL) {
+		__increase_reference_count(other);
+	}
+
+	if (other == NULL) {
+		__result.return_value = (nullable_value) { .value.bool_value = false, .flags = PRIMITIVE_BOOL };
+		goto __exit;
+	}
+
+	if (other->class_ptr != &Am_Lang_String) {
+		__result.return_value = (nullable_value) { .value.bool_value = false, .flags = PRIMITIVE_BOOL };
+		goto __exit;
+	}
+
+	string_holder *holder1 = this->object_properties.class_object_properties.object_data.value.custom_value;
+	string_holder *holder2 = other->object_properties.class_object_properties.object_data.value.custom_value;
+
+//	printf("compare strings %s vs %s\n", holder1->string_value, holder2->string_value);
+
+	bool res = strcmp(holder1->string_value, holder2->string_value) == 0;
+	__result.return_value = (nullable_value) { .value.bool_value = res, .flags = PRIMITIVE_BOOL };
+
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	if (other != NULL) {
+		__decrease_reference_count(other);
 	}
 	return __result;
 };

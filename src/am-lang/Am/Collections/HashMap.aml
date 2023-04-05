@@ -22,11 +22,10 @@ namespace Am.Collections {
             if (hashItems == null) {
                 throw new Exception("Key not found " + key.toString())
             }
-            var found = false
             each(hashItems.items, i) {
-                if (!found) {
-                    var entryHash = i.key.hash()
-                    if (entryHash == hash) {
+                var entryHash = i.key.hash()
+                if (entryHash == hash) {
+                    if (i.key == key) {
                         return i.value
                     }
                 }
@@ -35,36 +34,43 @@ namespace Am.Collections {
             return null
         }
 
-        fun set(key: T, value2: U) {
-            ("set Key " + key.toString()).println()
+        fun set(key: T, value: U) {
+//            ("set Key " + key.toString()).println()
 
             if (this.hashItemsArray == null) {
                 this.hashItemsArray = new HashItems<T, U>[20]
             }
-            if (this.size > (this.hashItemsArray.length() * 5)) {
+            if (this.size > (this.hashItemsArray.length() * 10)) {
+                "create new list in hashmap".println()
                 var oldItems = this.hashItemsArray
                 this.hashItemsArray = new HashItems<T, U>[this.hashItemsArray.length() * 5]
+                this.size = 0
+                "load new list in hashmap".println()
 
                 var i = 0
                 while(i < oldItems.length()) {
                     var hashItems = oldItems[i]
-                    each(hashItems.items, hi) {
-                        this.privateSet(hi.key, hi.value)
+                    if (hashItems != null) {
+                        each(hashItems.items, hi) {
+                            this.privateSet(hi.key, hi.value)
+                        }
                     }
                     i++
-                }                
+                }       
+                "loaded new list in hashmap".println()
+         
                 // create new array and re-add items
             }
-            this.privateSet(key, value2)
+            this.privateSet(key, value)
         }
 
         private fun privateSet(key: T, value2: U) {
             var hash = key.hash()
             var index = hash % this.hashItemsArray.length()
-            ("index " + index.toString()).println()
+//            ("key " + key.toString() + ", index " + index.toString()).println()
             var hashItems = this.hashItemsArray[index]
             if (hashItems == null) {
-                "Create HashItems".println()
+//                "Create HashItems".println()
                 hashItems = new HashItems<T, U>()
                 this.hashItemsArray[index] = hashItems
             }
@@ -84,6 +90,7 @@ namespace Am.Collections {
             }
             if (!found) {
                 hashItems.items.add(new MapEntry<T, U>(key, value2))
+                this.size++
             }
         }
     }

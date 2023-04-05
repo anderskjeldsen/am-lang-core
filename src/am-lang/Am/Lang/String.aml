@@ -8,6 +8,7 @@ namespace Am.Lang
         }
         native fun getLength(): Int
         native fun print()
+        native override fun equals(other: Object): Bool
         native op + (s: String): String
         native static fun fromBytes(bytes: UByte[], encoding: String): String
         native fun toBytes(encoding: String): UByte[]

@@ -7,11 +7,28 @@ namespace Am.Collections {
 
         static fun main() {
             var map = new HashMap<String, String>()
-            map.set("hello", "world")
-            map.set("anders", "kjeldsen")
-            map.set("amiga", "rules")
-            var s = map.get("amiga")
-            ("Amiga? ... " + s).println()
+
+            var i = 1
+            "Adding 1000 key-value pairs to a hash map on an emulated 020".println()
+            while(i <= 1000) {                
+                var key = i.toString()
+                var value = (i + 1).toString()
+                map.set(key, value)
+                if (i % 100 == 0) {
+                    "Added another 100".println()
+                }
+                i++
+            }
+
+            CoreStartup.printValue(map, "213")
+            CoreStartup.printValue(map, "500")
+            CoreStartup.printValue(map, "750")
+            CoreStartup.printValue(map, "1000")
+        }
+
+        static fun printValue(map: HashMap<String, String>, key: String) {
+            var s = map.get(key)
+            ("Value of key " + key + ", should be " + key + "+1: " + s).println()
         }
 
         static fun main3() {
