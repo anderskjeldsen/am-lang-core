@@ -5,7 +5,50 @@ namespace Am.Collections {
         import Am.IO
         import Am.IO.Networking
 
+        static fun main6() {
+            var entry = new HashSetEntry<String>("a")
+            entry.next = new HashSetEntry<String>("b")
+            entry = CoreStartup.bla(entry)
+            if (entry != null) {
+                entry.value.toString().println()
+            }
+        }
+
+        static fun bla(entry: HashSetEntry<String>): HashSetEntry<String> {
+            while(entry != null) {
+                var prev = entry
+                entry = entry.next
+                if (prev.value == "b") {
+                    return prev
+                }
+            }
+            return null
+        }
+
         static fun main() {
+            var set = new HashSet<String>()
+
+            var i = 1
+            "Adding 1000 key-value pairs to a HashSet on an emulated 020".println()
+            while(i <= 1000) {                
+                var value = i.toString()
+                set.add(value)
+                if (i % 100 == 0) {
+//                    "Added another 100".println()
+                }
+                i++
+            }
+            var testVal = "4"
+            var hasValue = set.has(testVal)
+
+            if (hasValue) {
+                "found".println()
+            } else {
+                "not found".println()
+            }
+        }
+
+        static fun main4() {
             var map = new HashMap<String, String>()
 
             var i = 1

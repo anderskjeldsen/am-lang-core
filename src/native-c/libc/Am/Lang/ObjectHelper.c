@@ -49,3 +49,24 @@ __exit: ;
 	}
 	return __result;
 };
+
+function_result Am_Lang_ObjectHelper_printDebug_0(aobject * o)
+{
+	function_result __result = { .has_return_value = false };
+	bool __returning = false;
+	if (o != NULL) {
+		__increase_reference_count(o);
+	}
+	printf("==========================\n");
+	printf("Object info\n");
+	printf("Ptr: %p\n", o);
+	printf("Class: %s\n", o->class_ptr->name);
+	printf("Ref count: %d\n", o->reference_count);
+	printf("==========================\n");
+
+__exit: ;
+	if (o != NULL) {
+		__decrease_reference_count(o);
+	}
+	return __result;
+};

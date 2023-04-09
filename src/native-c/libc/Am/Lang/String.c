@@ -47,10 +47,11 @@ function_result Am_Lang_String_hash_0(nullable_value const this)
 	string_holder *holder = this.value.object_value->object_properties.class_object_properties.object_data.value.custom_value;
 	if ( holder != NULL ) {
 		int hash = 0;
-		unsigned char *str = holder->string_value;
-		int bit = 3;
+		char *str = holder->string_value;
+		int bit = 0;
 		while(*str != 0) {
-			hash += (*str << bit);
+			int c = (int) *str;
+			hash += (c << bit);
 			bit += 3;
 			bit &= 0x1f;
 			str++;

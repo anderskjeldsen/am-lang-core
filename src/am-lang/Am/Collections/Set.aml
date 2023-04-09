@@ -1,0 +1,10 @@
+namespace Am.Collections {
+
+    interface Set<T> {
+        import Am.Lang
+
+        fun getSize(): Int
+        fun has(item: T): Bool
+        fun add(item: T)
+    }
+}

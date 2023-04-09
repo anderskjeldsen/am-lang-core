@@ -1,0 +1,100 @@
+namespace Am.Collections {
+
+    class HashSetEntry<T>(var value: T) {
+        var next: HashSetEntry<T>
+    }
+
+    class HashSet<T>: Set<T> {
+        import Am.Lang
+
+        private var size: Int
+        private var bucket: HashSetEntry<T>[]
+
+        fun getSize(): Int {
+            return this.size
+        }
+
+        fun has(value: T): Bool {
+            if (this.bucket == null) {
+                return false
+            }
+            var hash = value.hash()
+            var index = hash % this.bucket.length()
+            var entry = this.bucket[index]
+            var x = this.findEntry(entry, value)
+//            ObjectHelper.printDebug(x)
+            if (x != null) {
+                return true
+            }
+            return false
+
+        }
+
+        private fun findEntry(entry: HashSetEntry<T>, value: T): HashSetEntry<T> {
+            while(entry != null) {
+                if (entry.value == value) {
+//                    ObjectHelper.printDebug(entry)
+                    return entry
+                }
+                entry = entry.next
+            }
+            return null
+        }
+
+        fun add(value: T) {
+            if (this.bucket == null) {
+                this.bucket = new HashSetEntry<T>[20]
+            }
+            if (this.size > (this.bucket.length() * 10)) {
+//                "create new bucket in HashSet".println()
+                var oldBucket = this.bucket
+                this.bucket = new HashSetEntry<T>[this.bucket.length() * 5]
+                this.size = 0
+//                "load new bucket in HashSet".println()
+
+                var i = 0
+                while(i < oldBucket.length()) {
+                    var entry = oldBucket[i]                    
+                    while (entry != null) {                        
+                        this.privateSet(entry.value)
+                        entry = entry.next
+                    }
+                    i++
+                }       
+//                "loaded new list in hashmap".println()         
+            }
+            this.privateSet(value)
+        }
+
+        private fun privateSet(value: T) {
+            var hash = value.hash()
+            var index = hash % this.bucket.length()
+            var entry = this.bucket[index]
+            if (entry == null) {
+                entry = new HashSetEntry<T>(value)
+                this.bucket[index] = entry
+                this.size++
+            } 
+            else {
+//            if (entry != null) {
+                var found = false
+                var previous = entry
+                while((entry != null) && (found == false)) {
+                    previous = entry
+//                    ("compare " + value.toString() + " vs " + entry.value.toString()).println()
+                    if (value == entry.value) {
+//                        ("found " + value.toString()).println()
+                        found = true
+                    }
+                    entry = entry.next
+                }
+                if (!found) {
+//                    ("add " + value.toString()).println()
+                    previous.next = new HashSetEntry<T>(value)
+                    this.size++
+                }
+            }
+
+        }
+    }
+}
