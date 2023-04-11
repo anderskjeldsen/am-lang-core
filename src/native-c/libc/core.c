@@ -2,9 +2,10 @@
 #include <libc/core.h>
 #include <string.h>
 #include <Am/Lang/Exception.h>
+#include <Am/Lang/Object.h>
 
 int __allocation_count = 0;
-#define MAX_ALLOCATIONS 1024 * 5
+#define MAX_ALLOCATIONS 1024 * 50
 
 #ifdef DEBUG
 int __last_object_id = 0;
@@ -397,8 +398,13 @@ bool __any_equals(const nullable_value a, const nullable_value b) {
 }
 
 bool __object_equals(aobject * const a, aobject * const b) {
-    function_result res = Am_Lang_Object_equals_0(a, b);
-    return res.return_value.value.bool_value;
+    if (a != NULL) {
+        Am_Lang_Object_equals_0_T af = (Am_Lang_Object_equals_0_T) a->class_ptr->functions[Am_Lang_Object_equals_0_index];
+        function_result res = af(a, b);
+        // Am_Lang_Object_equals_0(a, b);
+        return res.return_value.value.bool_value;
+    }
+    return a == b;
 }
 
 /* From constant */
