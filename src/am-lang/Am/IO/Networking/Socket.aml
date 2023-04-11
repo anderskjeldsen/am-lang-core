@@ -88,26 +88,3 @@ namespace Am.IO.Networking
     }    
 }
 
-/*
-
-GSocket::GSocket(const GAddressFamily &AddressFamily, const GSocketType &SocketType, const GProtocolType &ProtocolType) : Socket(-1), Key(-1)
-{ 
-	Init(AddressFamily, SocketType, ProtocolType
-}
-
-void GSocket::Init(const GAddressFamily &AddressFamily, const GSocketType &SocketType, const GProtocolType &ProtocolType)
-{
-	if ( !WSAver ) 
-	{ 
-		WSAver = MAKEWORD(2, 2 
-		WSAStartup(WSAver, &WSAdata 
-		Sockets++;
-	}
-
-	Socket = socket(AddressFamily.Value, SocketType.Value, ProtocolType.Value 
-	if ( Socket < 0 )
-	{
-		throw GException("Could not create socket"
-	}
-}
-*/

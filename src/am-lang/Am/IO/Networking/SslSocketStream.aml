@@ -1,0 +1,31 @@
+
+namespace Am.IO.Networking
+{
+
+    native class SslSocketStream(private var socket: Socket) : Stream
+    {
+        import Am.Lang
+        import Am.IO
+
+        fun read(buffer: Byte[], offset: Long, length: Int): Int {
+            return this.socket.receive(buffer, length)
+        }
+
+        fun write(buffer: Byte[], offset: Long, length: Int) {
+            this.socket.send(buffer, length)
+        }
+
+        fun seekFromStart(offset: Long) {
+            throw new Exception("Not supported")            
+        }
+
+        fun readByte(): Int {
+            throw new Exception("Not supported")
+            return 0 // TODO: fix
+        }
+
+        fun writeByte(byte: Int) {
+            throw new Exception("Not supported")
+        }
+    }    
+}

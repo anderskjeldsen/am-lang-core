@@ -15,6 +15,7 @@ namespace Am.Collections {
         }
 
         fun has(value: T): Bool {
+            "has value".println()
             if (this.bucket == null) {
                 return false
             }
