@@ -32,10 +32,26 @@ function_result Am_IO_Networking_SslSocketStream__native_init_0(aobject * const 
 		goto __exit;
     }
 
-	if (SSL_CTX_load_verify_locations(ssl_ctx, "cacert.pem", NULL) != 1) {
+/*
+	// get cert object
+	aobject * const cert_object = this->object_properties.class_object_properties.properties[Am_IO_Networking_SslSocketStream_P_cert].nullable_value.value.object_value;
+	// get host name string_holder
+	string_holder * const cert_object_string_holder = cert_object->object_properties.class_object_properties.object_data.value.custom_value;
+
+	if (SSL_CTX_load_verify_mem(ssl_ctx, cert_object_string_holder->string_value, cert_object_string_holder->length) != 1) {
 		__throw_simple_exception("Failed to load cacert.pem", "in Am_IO_Networking_SslSocketStream__native_init_0", &__result);
 		goto __fail2;
 	}
+	*/
+
+	SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER, NULL);
+
+	// Load default trusted CA certificates
+	if (!SSL_CTX_set_default_verify_paths(ssl_ctx)) {
+		__throw_simple_exception("Failed to set default verify paths", "in Am_IO_Networking_SslSocketStream__native_init_0", &__result);
+		goto __fail2;
+	}
+
 
     SSL *ssl = SSL_new(ssl_ctx);
     if (ssl == NULL) {
@@ -120,3 +136,76 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_IO_Networking_SslSocketStream_read_0(aobject * const this, aobject * buffer, long long offset, int length)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+	if (buffer != NULL) {
+		__increase_reference_count(buffer);
+	}
+	ssl_socket_stream_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+
+	if (holder != NULL) {
+				array_holder *array_holder = buffer->object_properties.class_object_properties.object_data.value.custom_value;
+
+		if (length > array_holder->size) {
+			__throw_simple_exception("Receive length is bigger than array", "in Am_IO_Networking_Socket_send_0", &__result);
+			goto __exit;
+		}
+
+		int received = SSL_read(holder->ssl, array_holder->array_data, length);
+//		printf("Received %d bytes\n", received);
+		//	printf("Received data: %s\n", array_holder->array_data);
+		__result.return_value.value.int_value = received;
+		__result.return_value.flags = PRIMITIVE_INT;
+		__returning = true;
+	}
+
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	if (buffer != NULL) {
+		__decrease_reference_count(buffer);
+	}
+	return __result;
+};
+
+function_result Am_IO_Networking_SslSocketStream_write_0(aobject * const this, aobject * buffer, long long offset, int length)
+{
+	function_result __result = { .has_return_value = false };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+	if (buffer != NULL) {
+		__increase_reference_count(buffer);
+	}
+	ssl_socket_stream_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+
+	if (holder != NULL) {
+		array_holder *array_holder = buffer->object_properties.class_object_properties.object_data.value.custom_value;
+
+		if (length > array_holder->size) {
+			__throw_simple_exception("Send length is bigger than array", "in Am_IO_Networking_Socket_send_0", &__result);
+			__returning = true;
+			goto __exit;
+		}
+
+//		printf("Sending: %s\n", array_holder->array_data);
+		int sent = SSL_write(holder->ssl, array_holder->array_data, length);
+		__result.return_value.value.int_value = sent;
+		__result.return_value.flags = PRIMITIVE_UINT;
+	}
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	if (buffer != NULL) {
+		__decrease_reference_count(buffer);
+	}
+	return __result;
+};

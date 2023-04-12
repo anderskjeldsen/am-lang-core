@@ -38,13 +38,16 @@ function_result Am_IO_FileStream__native_init_0(aobject * const this)
 		__increase_reference_count(this);
 	}
 
-	file_holder *holder = malloc(sizeof(file_holder));
-	this->object_properties.class_object_properties.object_data.value.custom_value = holder;
-
 	char * const path = get_file_path(this);
-	holder->file = fopen(path, "rw"); // TODO: Provide access mode
+	FILE *f = fopen(path, "rw"); // TODO: Provide access mode
 	// throw exception if not found or any other error
-
+	if (f == NULL) {
+		__throw_simple_exception("Failed to create SSL context", "in Am_IO_Networking_SslSocketStream__native_init_0", &__result);
+		goto __exit;
+    }
+	file_holder *holder = calloc(1, sizeof(file_holder));
+	this->object_properties.class_object_properties.object_data.value.custom_value = holder;
+	holder->file = f;
 __exit: ;
 	if (this != NULL) {
 		__decrease_reference_count(this);
@@ -58,8 +61,10 @@ function_result Am_IO_FileStream__native_release_0(aobject * const this)
 	bool __returning = false;
 
 	file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
-	fclose(holder->file);
-	free(holder);
+	if (holder != NULL) {
+		fclose(holder->file);
+		free(holder);
+	}
 
 __exit: ;
 	return __result;
@@ -141,8 +146,12 @@ function_result Am_IO_FileStream_readByte_0(aobject * const this)
 
 	file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	unsigned char bytes[1];
-	fread(bytes, 1, 1, holder->file);
-	__result.return_value = (nullable_value) { .value = { .int_value = bytes[0] }, .flags = 0 };
+	size_t bytes_read = fread(bytes, 1, 1, holder->file);
+	if (bytes_read == 0) {
+		__result.return_value = (nullable_value) { .value = { .int_value = -1 }, .flags = 0 };
+	} else {
+		__result.return_value = (nullable_value) { .value = { .int_value = bytes[0] }, .flags = 0 };
+	}
 
 __exit: ;
 	if (this != NULL) {

@@ -133,7 +133,7 @@ function_result Am_IO_Networking_Socket_send_0(aobject * const this, aobject * b
 		goto __exit;
 	}
 
-	printf("Sending: %s\n", array_holder->array_data);
+//	printf("Sending: %s\n", array_holder->array_data);
 	int sent = send(s, array_holder->array_data, length, 0);
 	__result.return_value.value.int_value = sent;
 	__result.return_value.flags = PRIMITIVE_UINT;
@@ -173,7 +173,7 @@ function_result Am_IO_Networking_Socket_receive_0(aobject * const this, aobject 
 	}
 
 	int received = recv(s, array_holder->array_data, length, 0);
-	printf("Received %d bytes\n", received);
+//	printf("Received %d bytes\n", received);
 //	printf("Received data: %s\n", array_holder->array_data);
 	__result.return_value.value.int_value = received;
 	__result.return_value.flags = PRIMITIVE_INT;
