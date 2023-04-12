@@ -34,7 +34,6 @@ namespace Am.IO
             var list = List<UByte>.newList<UByte>()
 
             while(read > 0UI) {
-  //              ("We read " + read.toString() + " bytes").println()
                 var subArray = new UByte[read]
                 var i = 0UI
                 while(i < read) {
@@ -42,10 +41,7 @@ namespace Am.IO
                     i++
                 }
 
-//                var subArray = this.buffer.subArray(0L, read.toLong())
-//                            "step 3a".println()
                 list.addArray(subArray)
-//                "step 3b".println()
 
                 var exp = read == this.buffer.length().toUInt()
                 if (exp) {
@@ -58,7 +54,10 @@ namespace Am.IO
 
             var array = list.toArray()
 
-            return String.fromBytes(array, "UTF-8")
+//            ("array len: " + array.length().toString()).println()
+
+            var str = String.fromBytes(array, "UTF-8")
+            return str
         }
 
         fun writeString(string: String) {
@@ -67,9 +66,14 @@ namespace Am.IO
         }
 
         // TODO: implement properly, now it doesn't work.
+        /*
         fun readLine(): String {
             var read = this.read(this.buffer, 0L, this.buffer.length().toUInt())
             var list = List<UByte>.newList<UByte>()
+
+            if (read == 0) {
+                return null
+            }
 
             while(read > 0UI) {
                 var subArray = new UByte[read]
@@ -80,6 +84,7 @@ namespace Am.IO
                 }
 
                 list.addArray(subArray)
+                read = this.read(this.buffer, 0L, this.buffer.length().toUInt())
                 "step 3b".println()
             }
 
@@ -87,10 +92,6 @@ namespace Am.IO
 
             return String.fromBytes(array, "UTF-8")
         }
-
-/*
-        native fun readString(): String
-        native fun writeString(string: String)
-        */
+*/
     }
 }

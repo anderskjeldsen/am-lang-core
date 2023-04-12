@@ -6,11 +6,27 @@ namespace Am.IO
     native class FileStream(private var file: File) : Stream
     {
         import Am.Lang
+        import Am.Collections
 
         native fun read(buffer: UByte[], offset: Long, length: UInt): UInt
         native fun write(buffer: UByte[], offset: Long, length: UInt)
         native fun seekFromStart(offset: Long)
         native fun readByte(): Int
         native fun writeByte(byte: Int)
+
+        fun readAll(): UByte[] {
+            var data = List<UByte>.newList<UByte>()
+            var go = true
+            while(go) {
+                var b = this.readByte()
+                if (b >= 0) {
+                    var ub = b.toUByte()
+                    data.add(ub)
+                } else {
+                    go = false
+                }
+            }
+            return data.toArray()
+        }
     }
 }

@@ -35,6 +35,36 @@ platforms:
   - id: linux-x64
     extends: libc
     gccCommand: gcc
+#    additionalIncludePaths:
+#      - /opt/homebrew/opt/openssl@3/include
+#    gccLibraryPaths:
+#      - /opt/homebrew/opt/openssl@3/lib
+  - id: macos
+    extends: libc
+    gccCommand: gcc
+    additionalIncludePaths:
+      - /opt/homebrew/opt/openssl@3/include
+    gccLibraryPaths:
+      - /opt/homebrew/opt/openssl@3/lib
+    gccAdditionalOptions:
+      - -DOPENSSL_SSL_LIBRARY=/opt/homebrew/opt/openssl@3/lib/libssl.dylib -DOPENSSL_CRYPTO_LIBRARY=/opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib
+  - id: macos-arm
+    extends: macos
+    gccCommand: gcc
+    additionalIncludePaths:
+      - /opt/homebrew/opt/openssl@3/include
+    gccAdditionalLibraries:
+      - ssl
+      - crypto
+    gccLibraryPaths:
+      - /opt/homebrew/opt/openssl@3/lib
+    gccAdditionalOptions:
+      - -DOPENSSL_SSL_LIBRARY=/opt/homebrew/opt/openssl@3/lib/libssl.dylib -DOPENSSL_CRYPTO_LIBRARY=/opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib
+
+#    additionalIncludePaths:
+#      - /opt/homebrew/opt/openssl@3/include
+#    gccLibraryPaths:
+#      - /opt/homebrew/opt/openssl@3/lib
   - id: morphos-ppc
     extends: libc
     gccCommand: ppc-morphos-gcc
@@ -83,6 +113,10 @@ buildTargets:
     platform: linux-x64
     commands:
       - make -f linux-x64.makefile
+  - id: macos-arm
+    platform: macos-arm
+    commands:
+      - make -f macos-arm.makefile
   - id: linux-x64
     platform: linux-x64
     commands:

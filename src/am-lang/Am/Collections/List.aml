@@ -5,7 +5,7 @@ namespace Am.Collections {
         import Am.IO
         import Am.IO.Networking
 
-        static fun main4() {
+        static fun main6() {
             var set = new HashSet<String>()
 
             var i = 1
@@ -75,6 +75,27 @@ namespace Am.Collections {
             var rs = ts.readString()
             rs.println()        
             s.close()    
+        }
+
+        static fun main() {
+            var host = "www.kelson.no"
+            ("connect to " + host).println()
+            var s = Socket.create(AddressFamily.inet, SocketType.stream, ProtocolFamily.unspecified)
+            s.connect(host, 443)
+            "connected".println()
+
+            var sslCert = SslCert.load("cacert.pem")
+
+            var socketStream = new SslSocketStream(s, host, sslCert)
+            var istream = socketStream as Stream
+            var ts = new TextStream(istream)
+            ts.writeString("GET / HTTP/1.1\r\nHost: " + host + "\r\n\r\n")
+
+            var rs = ts.readString()
+            "data read".println()
+            rs.println()        
+            s.close()    
+            "closed".println()
         }
 
     }

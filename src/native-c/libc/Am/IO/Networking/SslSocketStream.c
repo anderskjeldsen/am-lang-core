@@ -10,6 +10,7 @@
 #include <Am/Lang/Long.h>
 #include <Am/Lang/Exception.h>
 #include <Am/Lang/String.h>
+#include <libc/Am/IO/Networking/SslSocketStream.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
@@ -25,11 +26,16 @@ function_result Am_IO_Networking_SslSocketStream__native_init_0(aobject * const 
 	SSL_library_init();
     SSL_load_error_strings();
 
-	SSL_CTX *ssl_ctx = SSL_CTX_new(TLSv1_2_client_method());
+	SSL_CTX *ssl_ctx = SSL_CTX_new(TLS_client_method());
     if (ssl_ctx == NULL) {
 		__throw_simple_exception("Failed to create SSL context", "in Am_IO_Networking_SslSocketStream__native_init_0", &__result);
 		goto __exit;
     }
+
+	if (SSL_CTX_load_verify_locations(ssl_ctx, "cacert.pem", NULL) != 1) {
+		__throw_simple_exception("Failed to load cacert.pem", "in Am_IO_Networking_SslSocketStream__native_init_0", &__result);
+		goto __fail2;
+	}
 
     SSL *ssl = SSL_new(ssl_ctx);
     if (ssl == NULL) {
@@ -37,7 +43,7 @@ function_result Am_IO_Networking_SslSocketStream__native_init_0(aobject * const 
 		goto __fail2;
     }
 
-	// get socket class
+	// get socket object
 	aobject * const socket = this->object_properties.class_object_properties.properties[Am_IO_Networking_SslSocketStream_P_socket].nullable_value.value.object_value;
 	// get socket fd
 	int s = socket->object_properties.class_object_properties.object_data.value.int_value;
@@ -46,6 +52,16 @@ function_result Am_IO_Networking_SslSocketStream__native_init_0(aobject * const 
 		__throw_simple_exception("Failed to set SSL file descriptor", "in Am_IO_Networking_SslSocketStream__native_init_0", &__result);
 		goto __fail3;
     }	
+
+	// get host name
+	aobject * const host_name = this->object_properties.class_object_properties.properties[Am_IO_Networking_SslSocketStream_P_hostName].nullable_value.value.object_value;
+	// get host name string_holder
+	string_holder * const host_name_string_holder = host_name->object_properties.class_object_properties.object_data.value.custom_value;
+
+	if (!SSL_set_tlsext_host_name(ssl, host_name_string_holder->string_value)) {
+		__throw_simple_exception("Failed to set SSL host name", "in Am_IO_Networking_SslSocketStream__native_init_0", &__result);
+		goto __fail4;
+	}
 
     if (SSL_connect(ssl) != 1) {
 		__throw_simple_exception("Failed to do SSL handshake", "in Am_IO_Networking_SslSocketStream__native_init_0", &__result);
@@ -93,10 +109,12 @@ function_result Am_IO_Networking_SslSocketStream__native_release_0(aobject * con
 
 	ssl_socket_stream_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 
-    X509_free(holder->cert);
-    SSL_shutdown(holder->ssl);
-    SSL_free(holder->ssl);
-    SSL_CTX_free(holder->ssl_ctx);
+	if (holder != NULL) {
+		X509_free(holder->cert);
+		SSL_shutdown(holder->ssl);
+		SSL_free(holder->ssl);
+		SSL_CTX_free(holder->ssl_ctx);
+	}
 
 __exit: ;
 	return __result;
