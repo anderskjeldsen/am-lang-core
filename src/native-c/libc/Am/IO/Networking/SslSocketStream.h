@@ -10,14 +10,8 @@
 #include <Am/Lang/Long.h>
 #include <Am/Lang/Exception.h>
 #include <Am/Lang/String.h>
-
-#ifdef AMIGA
-#include <amissl/ssl.h>
-#include <amissl/err.h>
-#else
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-#endif
 
 struct _ssl_socket_stream_holder {
     SSL_CTX *ssl_ctx;
