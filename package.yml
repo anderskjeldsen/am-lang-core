@@ -13,6 +13,10 @@ platforms:
   - id: amigaos
     extends: libc
     gccCommand: m68k-amigaos-gcc
+    additionalIncludePaths:
+      - c-libs/amissl/include
+    gccLibraryPaths:
+      - c-libs/amissl/lib/AmigaOS3      
     additionalHeaders:
       - amiga.h
     additionalCSources: 
@@ -20,10 +24,10 @@ platforms:
         outputFilename: amiga.o
     gccAdditionalOptions:
       - -noixemul
-      - -DAMIGA=1
     gccAdditionalLibraries:
       - socket
-      - amissl
+      - amisslstubs
+      - amisslauto
 #  - id: m68k-ataritos
 #    extends: libc
 #    gccCommand: m68k-ataritos-gcc
