@@ -11,8 +11,6 @@
 #include <Am/Lang/Exception.h>
 #include <Am/Lang/String.h>
 #include <libc/Am/IO/Networking/SslSocketStream.h>
-#include <openssl/ssl.h>
-#include <openssl/err.h>
 
 function_result Am_IO_Networking_SslSocketStream__native_init_0(aobject * const this)
 {

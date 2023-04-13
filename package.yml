@@ -20,8 +20,10 @@ platforms:
         outputFilename: amiga.o
     gccAdditionalOptions:
       - -noixemul
+      - -DAMIGA=1
     gccAdditionalLibraries:
       - socket
+      - amissl
 #  - id: m68k-ataritos
 #    extends: libc
 #    gccCommand: m68k-ataritos-gcc
