@@ -14,9 +14,9 @@ platforms:
     extends: libc
     gccCommand: m68k-amigaos-gcc
     additionalIncludePaths:
-      - c-libs/amissl/include
+      - c-libs/AmiSSL/Developer/include
     gccLibraryPaths:
-      - c-libs/amissl/lib/AmigaOS3      
+      - c-libs/AmiSSL/Developer/lib/AmigaOS3      
     additionalHeaders:
       - amiga.h
     additionalCSources: 
