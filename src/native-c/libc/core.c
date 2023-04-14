@@ -57,7 +57,7 @@ aobject * __allocate_iface_object(aclass const * const __class, aobject * const 
 unsigned int __string_hash(const char * const str) {
     unsigned int hash = 0;
     unsigned int bit = 0;
-    const unsigned char *str2 = str;
+    const char *str2 = str;
     bool x = strlen(str2) < 2;
     while(*str2 != 0) {
         unsigned int c = (unsigned int) *str2;

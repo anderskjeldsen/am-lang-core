@@ -5,11 +5,11 @@ namespace Am.Collections {
         import Am.IO
         import Am.IO.Networking
 
-        static fun main() {
+        static fun main7() {
             var set = new HashSet<String>()
 
             var i = 1
-            var max = 10000000
+            var max = 1000
             ("Adding " + max.toString() + " key-value pairs to a HashSet on an emulated 020").println()
             while(i <= max) {                
                 var value = i.toString()
@@ -27,30 +27,44 @@ namespace Am.Collections {
             }
         }
 
-        static fun main4() {
+        static fun main() {
+            "main".println()
             var map = new HashMap<String, String>()
 
+            var startDate = Date.now()
             var i = 1
-            "Adding 1000 key-value pairs to a hash map on an emulated 020".println()
-            while(i <= 1000) {                
+            var max = 5000000
+            ("Adding " + max.toString() + " key-value pairs to a HashSet on an emulated 020").println()
+            while(i <= max) {                
                 var key = i.toString()
                 var value = (i + 1).toString()
                 map.set(key, value)
+/*
                 if (i % 100 == 0) {
                     "Added another 100".println()
                 }
+                */
                 i++
             }
+            var endDate = Date.now()
+
+            ("Time: " + (endDate.getValue() - startDate.getValue()).toString() + "ms").println()
 
             CoreStartup.printValue(map, "213")
+            /*
             CoreStartup.printValue(map, "500")
             CoreStartup.printValue(map, "750")
             CoreStartup.printValue(map, "1000")
+            */
         }
 
         static fun printValue(map: HashMap<String, String>, key: String) {
             var s = map.get(key)
-            ("Value of key " + key + ", should be " + key + "+1: " + s).println()
+            if (s != null) {
+                ("Value of key " + key + ", should be " + key + "+1: " + s).println()
+            } else {
+                "null".println()
+            }
         }
 
         static fun main3() {

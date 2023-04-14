@@ -1,0 +1,34 @@
+
+namespace Am.Lang 
+{
+    native class Date {
+        private var value: ULong
+
+        fun getValue(): ULong {
+            return this.value
+        }
+
+        override fun hash(): UInt {
+            return this.value.toUInt()
+        }
+
+        override fun toString(): String {
+            return this.value.toString()
+        }
+
+        static fun now(): Date {
+            var d = new Date()
+            d.value = Date.getMillis()
+            return d
+        }
+/*
+        override fun equals(other: Object): Bool {
+            var o = other as Date
+            return false
+        }
+        */
+
+        private static native fun getMillis(): ULong
+    }
+}
+

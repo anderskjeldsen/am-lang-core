@@ -1,97 +1,117 @@
 namespace Am.Collections {
 
-    class HashItems<T, U> {
-        var items: List<MapEntry<T, U>> = List<MapEntry<T, U>>.newList<MapEntry<T, U>>()
+    class HashMapEntry<K, V>(var key: K, var value: V): MapEntry<K, V> {
+        var next: HashMapEntry<K, V>
+        fun getKey(): K {
+            return this.key
+        }
+        fun getValue(): V {
+            return this.value
+        }
     }
 
-    class HashMap<T, U>: Map<T, U> {
+    class HashMap<K, V>: Map<K, V> {
         import Am.Lang
 
         private var size: Int
-        private var hashItemsArray: HashItems<T, U>[]
+        private var bucket: HashMapEntry<K, V>[]
 
         fun getSize(): Int {
             return this.size
         }
 
-        fun get(key: T): U {
-            ("get Key " + key.toString()).println()
+        fun get(key: K): V {
+            if (this.bucket == null) {
+                return false
+            }
             var hash = key.hash()
-            var index = hash % this.hashItemsArray.length()
-            var hashItems = this.hashItemsArray[index]
-            if (hashItems == null) {
-                throw new Exception("Key not found " + key.toString())
+            var index = hash % this.bucket.length()
+
+            var entry = this.bucket[index]
+            var res = this.findEntry(entry, key)
+            if (res != null) {
+                return res.value
             }
-            each(hashItems.items, i) {
-                var entryHash = i.key.hash()
-                if (entryHash == hash) {
-                    if (i.key == key) {
-                        return i.value
-                    }
-                }
-            }
-            throw new Exception("Key not found " + key.toString())
             return null
         }
 
-        fun set(key: T, value: U) {
-//            ("set Key " + key.toString()).println()
-
-            if (this.hashItemsArray == null) {
-                this.hashItemsArray = new HashItems<T, U>[20]
+        private fun findEntry(entry: HashMapEntry<K, V>, key: K): HashMapEntry<K, V> {
+            while(entry != null) {
+                if (entry.key == key) {
+                    return entry
+                }
+                entry = entry.next
             }
-            if (this.size > (this.hashItemsArray.length() * 10)) {
-                "create new list in hashmap".println()
-                var oldItems = this.hashItemsArray
-                this.hashItemsArray = new HashItems<T, U>[this.hashItemsArray.length() * 5]
-                this.size = 0
-                "load new list in hashmap".println()
+            return null
+        }
+
+        fun set(key: K, value: V) {
+            if (this.bucket == null) {
+                this.bucket = new HashMapEntry<K, V>[20]
+            }
+
+            if (this.size > (this.bucket.length())) {
+                var oldBucket = this.bucket
+                this.bucket = new HashMapEntry<K, V>[this.bucket.length() * 10]
+                ("create new bucket in HashMap: " + this.bucket.length().toString()).println()
 
                 var i = 0
-                while(i < oldItems.length()) {
-                    var hashItems = oldItems[i]
-                    if (hashItems != null) {
-                        each(hashItems.items, hi) {
-                            this.privateSet(hi.key, hi.value)
-                        }
+                var n: HashMapEntry<K, V> = null
+                while(i < oldBucket.length()) {
+                    var entry = oldBucket[i]
+                    while (entry != null) {    
+                        var next = entry.next
+                        entry.next = n
+                        this.privateSetEntry(entry)
+                        entry = next
                     }
                     i++
                 }       
-                "loaded new list in hashmap".println()
-         
-                // create new array and re-add items
             }
+
             this.privateSet(key, value)
         }
 
-        private fun privateSet(key: T, value2: U) {
-            var hash = key.hash()
-            var index = hash % this.hashItemsArray.length()
-//            ("key " + key.toString() + ", index " + index.toString()).println()
-            var hashItems = this.hashItemsArray[index]
-            if (hashItems == null) {
-//                "Create HashItems".println()
-                hashItems = new HashItems<T, U>()
-                this.hashItemsArray[index] = hashItems
-            }
-            var found = false
-            each(hashItems.items, i) {
-                if (!found) {
-                    var entryHash = i.key.hash()
-                    if (entryHash == hash) {
+        private fun privateSetEntry(entry: HashMapEntry<K, V>) {
+            var hash = entry.key.hash()
+            var index = hash % this.bucket.length()
 
-                        if (i.key == key) {
-                            i.value = value2
-                        }
+            var bEntry = this.bucket[index]
+            if (bEntry == null) {
+                this.bucket[index] = entry
+            } 
+            else {                
+                this.bucket[index] = entry
+                entry.next = bEntry
+            }
+        }
+
+        private fun privateSet(key: K, value: V) {
+            var hash = key.hash()
+            var index = hash % this.bucket.length()
+
+            var entry = this.bucket[index]
+            if (entry == null) {
+                entry = new HashMapEntry<K, V>(key, value)
+                this.bucket[index] = entry
+                this.size++
+            } 
+            else {
+                var found = false
+                var previous = entry
+                while((entry != null) && (found == false)) {
+                    previous = entry
+                    if (key == entry.key) {
                         found = true
-                        // TODO: break
                     }
+                    entry = entry.next
+                }
+                if (!found) {
+                    previous.next = new HashMapEntry<K, V>(key, value)
+                    this.size++
                 }
             }
-            if (!found) {
-                hashItems.items.add(new MapEntry<T, U>(key, value2))
-                this.size++
-            }
+
         }
     }
 }

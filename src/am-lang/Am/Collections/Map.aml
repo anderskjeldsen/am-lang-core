@@ -1,7 +1,8 @@
 namespace Am.Collections {
 
-    class MapEntry<T, U>(var key: T, var value: U) {
-        
+    interface MapEntry<K, V> {
+        fun getKey(): K
+        fun getValue(): V
     }
 
     interface Map<T, U> {
