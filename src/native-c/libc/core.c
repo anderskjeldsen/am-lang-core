@@ -54,6 +54,21 @@ aobject * __allocate_iface_object(aclass const * const __class, aobject * const 
     return iface_object;
 }
 
+unsigned int __string_hash(const char * const str) {
+    unsigned int hash = 0;
+    unsigned int bit = 0;
+    const unsigned char *str2 = str;
+    bool x = strlen(str2) < 2;
+    while(*str2 != 0) {
+        unsigned int c = (unsigned int) *str2;
+        hash += (c << bit);
+        bit += 3;
+        bit &= 0x1f;
+        str2++;
+    }
+    return hash;
+}
+
 aobject * __allocate_object(aclass const * const __class) {
     __allocation_count++;
     #ifdef DEBUG
@@ -412,7 +427,8 @@ aobject * __create_string_constant(char const * const str, aclass const * const 
     aobject * str_obj = __allocate_object(string_class);
     string_holder * const holder = malloc(sizeof(string_holder));
     str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
-    *holder = (string_holder) { .is_string_constant = true, .length = strlen(str), .string_value = (char *) str };
+    int hash = __string_hash(str);
+    *holder = (string_holder) { .is_string_constant = true, .length = strlen(str), .string_value = (char *) str, .hash = hash };
 //    memcpy(holder, &t_holder, sizeof(string_holder));
     // holder->string_value = str; // assume that string constants will never change
     // holder->length = strlen(str); // TODO: how many characters exactly?
@@ -427,7 +443,8 @@ aobject * __create_string(char const * const str, aclass const * const string_cl
     int const len = strlen(str);
     char * const newStr = malloc(len + 1);
     strcpy(newStr, str);
-    *holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = newStr };
+    int hash = __string_hash(str);
+    *holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = newStr, .hash = hash };
 //    memcpy(holder, &t_holder, sizeof(string_holder));
 //    holder->string_value = newStr;
 //    holder->length = len; // TODO: how many characters exactly?

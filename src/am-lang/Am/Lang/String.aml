@@ -2,7 +2,7 @@
 namespace Am.Lang 
 {
     native class String {
-        override native fun hash(): Int
+        override native fun hash(): UInt
         override fun toString(): String {
             return this
         }

@@ -20,6 +20,7 @@ function_result Am_Lang_Byte_toString_0(nullable_value const this)
 	holder->string_value = new_str; // assume that string constants will never change
 	holder->length = tmp_len; // TODO: how many characters exactly?
 	holder->is_string_constant = false;
+	holder->hash = __string_hash(new_str);
 
 	__result.return_value.value.object_value = str_obj;
 

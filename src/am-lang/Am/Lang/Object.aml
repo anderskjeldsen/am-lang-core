@@ -12,7 +12,7 @@ namespace Am.Lang
             return "Object"
         }
 
-        override fun hash(): Int {
+        override fun hash(): UInt {
             return ObjectHelper.hash(this)
         }
 

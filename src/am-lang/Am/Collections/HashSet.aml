@@ -46,30 +46,54 @@ namespace Am.Collections {
             if (this.bucket == null) {
                 this.bucket = new HashSetEntry<T>[20]
             }
-            if (this.size > (this.bucket.length() * 10)) {
-//                "create new bucket in HashSet".println()
+
+            if (this.size > (this.bucket.length())) {
                 var oldBucket = this.bucket
-                this.bucket = new HashSetEntry<T>[this.bucket.length() * 5]
-                this.size = 0
+                this.bucket = new HashSetEntry<T>[this.bucket.length() * 10]
+                ("create new bucket in HashSet: " + this.bucket.length().toString()).println()
+//                this.size = 0
 //                "load new bucket in HashSet".println()
 
                 var i = 0
+                var n: HashSetEntry<T> = null
                 while(i < oldBucket.length()) {
-                    var entry = oldBucket[i]                    
-                    while (entry != null) {                        
-                        this.privateSet(entry.value)
-                        entry = entry.next
+                    var entry = oldBucket[i]
+                    while (entry != null) {    
+                        var next = entry.next
+                        entry.next = n
+                        this.privateSetEntry(entry)
+                        entry = next
                     }
                     i++
                 }       
 //                "loaded new list in hashmap".println()         
             }
+
             this.privateSet(value)
+        }
+
+        private fun privateSetEntry(entry: HashSetEntry<T>) {
+            var hash = entry.value.hash()
+            var index = hash % this.bucket.length()
+//            ("value: " + entry.value.toString() + ", hash: " + hash.toString() + ", index: " + index.toString()).println()
+
+            var bEntry = this.bucket[index]
+            if (bEntry == null) {
+                this.bucket[index] = entry
+//                this.size++
+            } 
+            else {                
+                this.bucket[index] = entry
+                entry.next = bEntry
+//                this.size++
+            }
         }
 
         private fun privateSet(value: T) {
             var hash = value.hash()
             var index = hash % this.bucket.length()
+//            ("value: " + value.toString() + ", hash: " + hash.toString() + ", index: " + index.toString()).println()
+
             var entry = this.bucket[index]
             if (entry == null) {
                 entry = new HashSetEntry<T>(value)

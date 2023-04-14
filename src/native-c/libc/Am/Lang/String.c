@@ -46,7 +46,8 @@ function_result Am_Lang_String_hash_0(nullable_value const this)
 
 	string_holder *holder = this.value.object_value->object_properties.class_object_properties.object_data.value.custom_value;
 	if ( holder != NULL ) {
-		int hash = 0;
+		/*
+		unsigned int hash = 0;
 		char *str = holder->string_value;
 		int bit = 0;
 		while(*str != 0) {
@@ -56,10 +57,11 @@ function_result Am_Lang_String_hash_0(nullable_value const this)
 			bit &= 0x1f;
 			str++;
 		}
-		__result.return_value = (nullable_value) { .value = { .int_value = hash }, .flags = 0 };
+		*/
+		__result.return_value = (nullable_value) { .value = { .uint_value = holder->hash }, .flags = 0 };
 //		printf("string hash for '%s': %d\n", holder->string_value, hash);
 	} else {
-		__result.return_value = (nullable_value) { .value = { .int_value = 0 }, .flags = 0 };
+		__result.return_value = (nullable_value) { .value = { .uint_value = 0 }, .flags = 0 };
 	}
 
 
@@ -138,7 +140,7 @@ function_result Am_Lang_String_equals_0(aobject * const this, aobject * other)
 
 //	printf("compare strings %s vs %s\n", holder1->string_value, holder2->string_value);
 
-	bool res = strcmp(holder1->string_value, holder2->string_value) == 0;
+	bool res = holder1->hash == holder2->hash && strcmp(holder1->string_value, holder2->string_value) == 0;
 	__result.return_value = (nullable_value) { .value.bool_value = res, .flags = PRIMITIVE_BOOL };
 
 __exit: ;
@@ -176,7 +178,8 @@ function_result Am_Lang_String__op__plus_0(aobject * const this, aobject * s)
 		strcpy(new_str, holder1->string_value);
 	    strcat(new_str, holder2->string_value);
 //		printf("new string: %s\n", newStr);
-		*holder = (string_holder) { .is_string_constant = false, .length = holder1->length + holder2->length, .string_value = new_str };
+		unsigned int hash = __string_hash(new_str);
+		*holder = (string_holder) { .is_string_constant = false, .length = holder1->length + holder2->length, .string_value = new_str, .hash = hash };
 //		memcpy(holder, &t_holder, sizeof(string_holder));
 		// holder->string_value = newStr; // assume that string constants will never change
 		// holder->length = holder1->length + holder2->length; // TODO: how many characters exactly?
@@ -209,10 +212,11 @@ function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
     string_holder * const holder = calloc(1, sizeof(string_holder));
     str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
     int const len = array_holder->size; // TODO: support different character sizes
-    char * const newStr = malloc(len + 1);
-    strncpy(newStr, array_holder->array_data, len);
-	newStr[len] = 0;
-    *holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = newStr };
+    char * const new_str = malloc(len + 1);
+    strncpy(new_str, array_holder->array_data, len);
+	new_str[len] = 0;
+	unsigned int hash = __string_hash(new_str);
+    *holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = new_str, .hash = hash };
 
 //	aobject * new_string = __create_string(array_holder->array_data, &Am_Lang_String);
 

@@ -113,6 +113,7 @@ struct _string_holder {
     bool is_string_constant;
     unsigned int length; // length of characters, not "char"/bytes
     char * string_value;
+    unsigned int hash;
 };
 
 struct _array_holder {
@@ -268,5 +269,5 @@ void print_allocated_objects();
 bool is_descendant_of(aclass const * const cls, aclass const * const base);
 void attach_weak_reference_node(weak_reference_node * const node, aobject * const object);
 void detach_weak_reference_node(weak_reference_node * const node) ;
-
+unsigned int __string_hash(const char * const str);
 #endif

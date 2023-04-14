@@ -5,12 +5,13 @@ namespace Am.Collections {
         import Am.IO
         import Am.IO.Networking
 
-        static fun main6() {
+        static fun main() {
             var set = new HashSet<String>()
 
             var i = 1
-            "Adding 1000 key-value pairs to a HashSet on an emulated 020".println()
-            while(i <= 1000) {                
+            var max = 10000000
+            ("Adding " + max.toString() + " key-value pairs to a HashSet on an emulated 020").println()
+            while(i <= max) {                
                 var value = i.toString()
                 set.add(value)
                 i++
@@ -76,8 +77,8 @@ namespace Am.Collections {
             rs.println()        
             s.close()    
         }
-
-        static fun main() {
+/*
+        static fun main6() {
             var host = "www.kelson.no"
             ("connect to " + host).println()
             var s = Socket.create(AddressFamily.inet, SocketType.stream, ProtocolFamily.unspecified)
@@ -97,9 +98,9 @@ namespace Am.Collections {
             s.close()    
             "closed".println()
         }
+*/
 
     }
-
     class List<T>: Iterable<T> {
         import Am.Lang
 

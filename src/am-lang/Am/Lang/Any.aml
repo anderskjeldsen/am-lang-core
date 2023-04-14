@@ -6,8 +6,8 @@ namespace Am.Lang
             return "Any"
         }
 
-        primitive fun hash(): Int {
-            return 0
+        primitive fun hash(): UInt {
+            return 0UI
         }
     }
 }

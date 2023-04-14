@@ -16,7 +16,7 @@ function_result Am_Lang_UInt_toString_0(nullable_value const this)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 	char tmp[11];
-	sprintf(tmp, "%d", this.value.uint_value);
+	sprintf(tmp, "%u", this.value.uint_value);
 
 	aobject * str_obj = __allocate_object(&Am_Lang_String);
 	string_holder *holder = malloc(sizeof(string_holder));
@@ -27,6 +27,7 @@ function_result Am_Lang_UInt_toString_0(nullable_value const this)
 	holder->string_value = new_str; // assume that string constants will never change
 	holder->length = tmp_len; // TODO: how many characters exactly?
 	holder->is_string_constant = false;
+	holder->hash = __string_hash(new_str);
 
 	__result.return_value.value.object_value = str_obj;
 
