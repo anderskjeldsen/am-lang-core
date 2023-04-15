@@ -29,13 +29,10 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_Lang_Date_getMillis_0(aobject * const this)
+function_result Am_Lang_Date_getMillis_0()
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	struct timeval tv;
     gettimeofday(&tv, NULL);
@@ -43,9 +40,6 @@ function_result Am_Lang_Date_getMillis_0(aobject * const this)
 	__result.return_value.value.ulong_value = milliseconds;
 //	__result.return_value.flags = PRIMITIVE_ULONG;
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
