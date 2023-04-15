@@ -3,3 +3,4 @@ builds/*
 *.o
 .DS_Store
 c-libs/AmiSSL*
+c-libs/openssl

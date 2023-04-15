@@ -74,19 +74,17 @@ aobject * __allocate_object(aclass const * const __class) {
     #ifdef DEBUG
     printf("Allocate object of type %s (count: %d, object_id: %d) \n", __class->name, __allocation_count, ++__last_object_id);
     #endif
-    aobject * __obj = (aobject *) malloc(sizeof(aobject));
-    property * properties = NULL;
-    object_properties object_properties;
-    memset(&object_properties, 0, sizeof(object_properties));
+
+    size_t size_with_properties = sizeof(aobject) + (sizeof(property) * __class->properties_count);
+
+    aobject * __obj = (aobject *) calloc(1, size_with_properties);
 
     if (__class->type == class && __class->properties_count > 0) {
-        properties = malloc(sizeof(property) * __class->properties_count);
-        memset(properties, 0, sizeof(property) * __class->properties_count);
-        object_properties.class_object_properties.properties = properties;
+        __obj->object_properties.class_object_properties.properties = (property *) (__obj + 1);;
     }
 
-    aobject __objt = { .class_ptr = __class, .object_properties = object_properties, .reference_count = 1 };
-    memcpy(__obj, &__objt, sizeof(aobject));
+    __obj->class_ptr = __class;
+    __obj->reference_count = 1;
 
     #ifdef DEBUG
     allocations[allocation_index++] = __obj;
@@ -152,7 +150,7 @@ void __deallocate_object(aobject * const __obj) {
     if (__obj->class_ptr->type == class && __obj->object_properties.class_object_properties.properties != NULL ) {
         for(int i = 0; i < __obj->class_ptr->properties_count; i++) {
             property * const __prop = &__obj->object_properties.class_object_properties.properties[i];
-            // TODO: use __decrease_reference_count_nullable_value            
+            // TODO: use __decrease_reference_count_nullable_value
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
                 #ifdef DEBUG
                 printf("Detach property %s:\n", __prop->nullable_value.value.object_value->class_ptr->name);
@@ -161,7 +159,6 @@ void __deallocate_object(aobject * const __obj) {
                 __prop->nullable_value.value.object_value = NULL;
             }
         }
-        free(__obj->object_properties.class_object_properties.properties);
         __obj->object_properties.class_object_properties.properties = NULL;
     }
 

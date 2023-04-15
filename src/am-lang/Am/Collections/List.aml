@@ -5,17 +5,22 @@ namespace Am.Collections {
         import Am.IO
         import Am.IO.Networking
 
-        static fun main7() {
+        static fun main() {
             var set = new HashSet<String>()
-
+            var startDate = Date.now()
             var i = 1
-            var max = 1000
+            var max = 10000000
             ("Adding " + max.toString() + " key-value pairs to a HashSet on an emulated 020").println()
             while(i <= max) {                
                 var value = i.toString()
                 set.add(value)
                 i++
             }
+
+            var endDate = Date.now()
+
+            ("Time: " + (endDate.getValue() - startDate.getValue()).toString() + "ms").println()
+
             var testVal = "4"
             var iset = set as Set<String>
             var hasValue = iset.has(testVal)
@@ -27,23 +32,17 @@ namespace Am.Collections {
             }
         }
 
-        static fun main() {
-            "main".println()
+        static fun main8() {
             var map = new HashMap<String, String>()
-
             var startDate = Date.now()
             var i = 1
-            var max = 5000000
+            var max = 10000000
             ("Adding " + max.toString() + " key-value pairs to a HashSet on an emulated 020").println()
+
             while(i <= max) {                
                 var key = i.toString()
                 var value = (i + 1).toString()
                 map.set(key, value)
-/*
-                if (i % 100 == 0) {
-                    "Added another 100".println()
-                }
-                */
                 i++
             }
             var endDate = Date.now()
