@@ -47,13 +47,13 @@ platforms:
 #      - /opt/homebrew/opt/openssl@3/lib
   - id: macos
     extends: libc
-    gccCommand: gcc
+    gccCommand: gcc -O3
     additionalIncludePaths:
-      - /c-libs/openssl/include
+      - c-libs/openssl/include
     gccLibraryPaths:
-      - /c-libs/openssl/lib
+      - c-libs/openssl/lib
     gccAdditionalOptions:
-      - -DOPENSSL_SSL_LIBRARY=/c-libs/openssl/lib/libssl.dylib -DOPENSSL_CRYPTO_LIBRARY=/c-libs/openssl/lib/libcrypto.3.dylib
+      - -DOPENSSL_SSL_LIBRARY=c-libs/openssl/lib/libssl.dylib -DOPENSSL_CRYPTO_LIBRARY=c-libs/openssl/lib/libcrypto.3.dylib
     gccAdditionalLibraries:
       - ssl
       - crypto
@@ -62,11 +62,11 @@ platforms:
     extends: macos
     gccCommand: gcc
     additionalIncludePaths:
-      - /c-libs/openssl/include
+      - c-libs/openssl/include
     gccLibraryPaths:
-      - /c-libs/openssl/lib
+      - c-libs/openssl/lib
     gccAdditionalOptions:
-      - -DOPENSSL_SSL_LIBRARY=/c-libs/openssl/lib/libssl.dylib -DOPENSSL_CRYPTO_LIBRARY=/c-libs/openssl/lib/libcrypto.3.dylib
+      - -DOPENSSL_SSL_LIBRARY=c-libs/openssl/lib/libssl.dylib -DOPENSSL_CRYPTO_LIBRARY=c-libs/openssl/lib/libcrypto.3.dylib
     gccAdditionalLibraries:
       - ssl
       - crypto
