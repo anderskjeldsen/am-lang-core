@@ -13,10 +13,6 @@ platforms:
   - id: amigaos
     extends: libc
     gccCommand: m68k-amigaos-gcc
-    additionalIncludePaths:
-      - c-libs/AmiSSL/Developer/include
-    gccLibraryPaths:
-      - c-libs/AmiSSL/Developer/lib/AmigaOS3      
     additionalHeaders:
       - amiga.h
     additionalCSources: 
@@ -26,55 +22,34 @@ platforms:
       - -noixemul
     gccAdditionalLibraries:
       - socket
-      - amisslstubs
-      - amisslauto
-#  - id: m68k-ataritos
-#    extends: libc
-#    gccCommand: m68k-ataritos-gcc
-#    additionalHeaders:
-#      - atari.h
-#    additionalCSources: 
-#      - inputFilename: atari.c     
-#        outputFilename: atari.o
-#    gccAdditionalOptions:
-#      - -noixemul
   - id: linux-x64
     extends: libc
     gccCommand: gcc
-#    additionalIncludePaths:
-#      - /opt/homebrew/opt/openssl@3/include
-#    gccLibraryPaths:
-#      - /opt/homebrew/opt/openssl@3/lib
   - id: macos
     extends: libc
     gccCommand: gcc -O3
-    additionalIncludePaths:
-      - c-libs/openssl/include
-    gccLibraryPaths:
-      - c-libs/openssl/lib
-    gccAdditionalOptions:
-      - -DOPENSSL_SSL_LIBRARY=c-libs/openssl/lib/libssl.dylib -DOPENSSL_CRYPTO_LIBRARY=c-libs/openssl/lib/libcrypto.3.dylib
-    gccAdditionalLibraries:
-      - ssl
-      - crypto
+    # additionalIncludePaths:
+    #   - c-libs/openssl/include
+    # gccLibraryPaths:
+    #   - c-libs/openssl/lib
+    # gccAdditionalOptions:
+    #   - -DOPENSSL_SSL_LIBRARY=c-libs/openssl/lib/libssl.dylib -DOPENSSL_CRYPTO_LIBRARY=c-libs/openssl/lib/libcrypto.3.dylib
+    # gccAdditionalLibraries:
+    #   - ssl
+    #   - crypto
 
   - id: macos-arm
     extends: macos
     gccCommand: gcc
-    additionalIncludePaths:
-      - c-libs/openssl/include
-    gccLibraryPaths:
-      - c-libs/openssl/lib
-    gccAdditionalOptions:
-      - -DOPENSSL_SSL_LIBRARY=c-libs/openssl/lib/libssl.dylib -DOPENSSL_CRYPTO_LIBRARY=c-libs/openssl/lib/libcrypto.3.dylib
-    gccAdditionalLibraries:
-      - ssl
-      - crypto
-
-#    additionalIncludePaths:
-#      - /opt/homebrew/opt/openssl@3/include
-#    gccLibraryPaths:
-#      - /opt/homebrew/opt/openssl@3/lib
+    # additionalIncludePaths:
+    #   - c-libs/openssl/include
+    # gccLibraryPaths:
+    #   - c-libs/openssl/lib
+    # gccAdditionalOptions:
+    #   - -DOPENSSL_SSL_LIBRARY=c-libs/openssl/lib/libssl.dylib -DOPENSSL_CRYPTO_LIBRARY=c-libs/openssl/lib/libcrypto.3.dylib
+    # gccAdditionalLibraries:
+    #   - ssl
+    #   - crypto
   - id: morphos-ppc
     extends: libc
     gccCommand: ppc-morphos-gcc
