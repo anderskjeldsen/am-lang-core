@@ -16,19 +16,15 @@ function_result Am_Lang_UShort_toString_0(nullable_value const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	char tmp[6];
-	
-	sprintf(tmp, "%u", this.value.ushort_value);
 
-	int tmp_len = strlen(tmp);
-	aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + tmp_len + 1);
+	aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + 6);
 	string_holder *holder = (string_holder *) (str_obj + 1);
 	str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
 	char * new_str = (char *) (holder + 1);
+	int len = sprintf(new_str, "%u", this.value.ushort_value);
 
-	strcpy(new_str, tmp);
 	holder->string_value = new_str; // assume that string constants will never change
-	holder->length = tmp_len; // TODO: how many characters exactly?
+	holder->length = len; // TODO: how many characters exactly?
 	holder->is_string_constant = false;
 	holder->hash = __string_hash(new_str);
 
