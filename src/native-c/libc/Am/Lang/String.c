@@ -28,9 +28,9 @@ function_result Am_Lang_String__native_release_0(aobject * const this)
 
 	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	if ( !holder->is_string_constant ) {
-		free(holder->string_value);
+//		free(holder->string_value);
 	}
-	free(holder);
+//	free(holder);
 	this->object_properties.class_object_properties.object_data.value.custom_value = NULL;
 
 __exit: ;
@@ -169,10 +169,10 @@ function_result Am_Lang_String__op__plus_0(aobject * const this, aobject * s)
 	string_holder *holder2 = s->object_properties.class_object_properties.object_data.value.custom_value;
 
 	if ( holder1 != NULL && holder2 != NULL ) {
-		aobject * str_obj = __allocate_object(&Am_Lang_String);
-		string_holder *holder = malloc(sizeof(string_holder));
+		aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + holder1->length + holder2->length + 1);
+		string_holder *holder = (string_holder *) (str_obj + 1);
 		str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
-		char * new_str = malloc(holder1->length + holder2->length + 1);
+		char * new_str = (char *) (holder + 1);
 //		printf("copy %s\n", holder1->string_value);
 //		printf("append %s\n", holder2->string_value);
 		strcpy(new_str, holder1->string_value);
@@ -208,11 +208,16 @@ function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
 
 	array_holder *array_holder = bytes->object_properties.class_object_properties.object_data.value.custom_value;
 
-    aobject * const str_obj = __allocate_object(&Am_Lang_String);
-    string_holder * const holder = calloc(1, sizeof(string_holder));
-    str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
     int const len = array_holder->size; // TODO: support different character sizes
-    char * const new_str = malloc(len + 1);
+	aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + len + 1);
+	string_holder *holder = (string_holder *) (str_obj + 1);
+	str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
+	char * new_str = (char *) (holder + 1);
+
+    // aobject * const str_obj = __allocate_object(&Am_Lang_String);
+    // string_holder * const holder = calloc(1, sizeof(string_holder));
+    // str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
+    // char * const new_str = malloc(len + 1);
     strncpy(new_str, array_holder->array_data, len);
 	new_str[len] = 0;
 	unsigned int hash = __string_hash(new_str);

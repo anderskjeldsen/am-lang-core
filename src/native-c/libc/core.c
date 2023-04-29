@@ -70,6 +70,10 @@ unsigned int __string_hash(const char * const str) {
 }
 
 aobject * __allocate_object(aclass const * const __class) {
+    return __allocate_object_with_extra_size(__class, 0);
+}
+
+aobject * __allocate_object_with_extra_size(aclass const * const __class, size_t extra_size) {
     __allocation_count++;
     #ifdef DEBUG
     printf("Allocate object of type %s (count: %d, object_id: %d) \n", __class->name, __allocation_count, ++__last_object_id);
@@ -77,7 +81,7 @@ aobject * __allocate_object(aclass const * const __class) {
 
     size_t size_with_properties = sizeof(aobject) + (sizeof(property) * __class->properties_count);
 
-    aobject * __obj = (aobject *) calloc(1, size_with_properties);
+    aobject * __obj = (aobject *) calloc(1, size_with_properties + extra_size);
 
     if (__class->type == class && __class->properties_count > 0) {
         __obj->object_properties.class_object_properties.properties = (property *) (__obj + 1);;
@@ -421,11 +425,17 @@ bool __object_equals(aobject * const a, aobject * const b) {
 
 /* From constant */
 aobject * __create_string_constant(char const * const str, aclass const * const string_class) {
-    aobject * str_obj = __allocate_object(string_class);
-    string_holder * const holder = malloc(sizeof(string_holder));
+    size_t len = strlen(str);
+    aobject * str_obj = __allocate_object_with_extra_size(string_class, sizeof(string_holder));
+    string_holder * const holder = (string_holder *) (str_obj + 1);
     str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
     int hash = __string_hash(str);
-    *holder = (string_holder) { .is_string_constant = true, .length = strlen(str), .string_value = (char *) str, .hash = hash };
+    holder->is_string_constant = true;
+    holder->length = len;
+    holder->string_value = (char *) str;
+    holder->hash = hash;
+
+//    *holder = (string_holder) { .is_string_constant = true, .length = strlen(str), .string_value = (char *) str, .hash = hash };
 //    memcpy(holder, &t_holder, sizeof(string_holder));
     // holder->string_value = str; // assume that string constants will never change
     // holder->length = strlen(str); // TODO: how many characters exactly?
@@ -434,14 +444,18 @@ aobject * __create_string_constant(char const * const str, aclass const * const 
 }
 
 aobject * __create_string(char const * const str, aclass const * const string_class) {
-    aobject * const str_obj = __allocate_object(string_class);
-    string_holder * const holder = calloc(1, sizeof(string_holder));
+    size_t len = strlen(str);
+    aobject * str_obj = __allocate_object_with_extra_size(string_class, sizeof(string_holder) + len + 1);
+    string_holder * const holder = (string_holder *) (str_obj + 1);
     str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
-    int const len = strlen(str);
-    char * const newStr = malloc(len + 1);
+    char * const newStr = (char * const) (holder + 1);
     strcpy(newStr, str);
     int hash = __string_hash(str);
-    *holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = newStr, .hash = hash };
+    holder->is_string_constant = false;
+    holder->length = len;
+    holder->string_value = newStr;
+    holder->hash = hash;
+//    *holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = newStr, .hash = hash };
 //    memcpy(holder, &t_holder, sizeof(string_holder));
 //    holder->string_value = newStr;
 //    holder->length = len; // TODO: how many characters exactly?

@@ -242,6 +242,7 @@ void __increase_reference_count_nullable_value(nullable_value __value);
 void __deallocate_object(aobject * const __obj);
 aobject * __allocate_iface_object(aclass const * const __class, aobject * const implementation_object);
 aobject * __allocate_object(aclass const * const __class);
+aobject * __allocate_object_with_extra_size(aclass const * const __class, size_t extra_size);
 //void * __allocate_object_data(aobject * const __obj, int __size);
 // function_result const __return_int(int const value);
 // function_result const __return_long(long long const value);

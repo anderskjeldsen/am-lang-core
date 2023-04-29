@@ -12,11 +12,12 @@ function_result Am_Lang_Int_toString_0(nullable_value const this)
 	char tmp[11];
 	sprintf(tmp, "%d", this.value.int_value);
 
-	aobject * str_obj = __allocate_object(&Am_Lang_String);
-	string_holder *holder = malloc(sizeof(string_holder));
-	str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
 	int tmp_len = strlen(tmp);
-	char * new_str = malloc(tmp_len + 1);
+	aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + tmp_len + 1);
+	string_holder *holder = (string_holder *) (str_obj + 1);
+	str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
+	char * new_str = (char *) (holder + 1);
+
 	strcpy(new_str, tmp);
 	holder->string_value = new_str; // assume that string constants will never change
 	holder->length = tmp_len; // TODO: how many characters exactly?
