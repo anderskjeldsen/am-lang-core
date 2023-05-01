@@ -1,7 +1,16 @@
 
 #include <memory_pools.h>
+/*
+memory_pool
+  - bank 1
+    - node 1
+    - node 2
+  - bank 2
+    -node 3
+    -node 4
+*/
 
-memory_pool * create_memory_pool(size_t list_size) {
+memory_pool * create_memory_pool(size_t unit_size) {
     memory_pool *pool = calloc(1, sizeof(memory_pool));
     pool_bank *bank = calloc(1, sizeof(pool_bank));
     pool->first_bank = bank;

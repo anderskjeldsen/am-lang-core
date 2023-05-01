@@ -15,7 +15,7 @@ create memory_pool_list
 
 struct _memory_pool {
     node_list *node_lists;
-    size_t list_size;
+    size_t unit_size;
     pool_bank *first_bank;
 }; // node_lists starts here
 
@@ -27,10 +27,11 @@ struct _node_list {
 };
 
 struct _pool_bank {
-    size_t size;
-    size_t position;
+    size_t units;
+    size_t unit_position;
+    size_t reserved_units; // when 0, release bank?
     pool_bank *prev;
-    pool_bank *next;    
+    pool_bank *next;
 };
 
 struct _pool_node {
