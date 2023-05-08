@@ -1,0 +1,7 @@
+namespace Am.Lang.Annotations 
+{
+    class UseMemoryPool 
+    {
+        // This class does nothing. When applying this annotation to a class, the compiler knows to use memory pooling for this class.
+    }
+}

@@ -1,6 +1,7 @@
 namespace Am.Collections {
 
-    class HashSetEntry<T>(var value: T) {
+    @Am.Lang.Annotations.UseMemoryPool
+    class HashSetEntry<T>(var value: T) {        
         var next: HashSetEntry<T>
     }
 
