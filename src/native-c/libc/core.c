@@ -79,6 +79,12 @@ aobject * __allocate_object_with_extra_size(aclass const * const __class, size_t
     printf("Allocate object of type %s (count: %d, object_id: %d) \n", __class->name, __allocation_count, ++__last_object_id);
     #endif
 
+    for(int i = 0; i < __class->annotations_count; i++) {
+        if (strcmp(__class->annotations[i]->class_ptr->name, "UseMemoryPool") == 0) {
+//            printf("Use memory pool for %s", __class->name);
+        }
+    }
+
     size_t size_with_properties = sizeof(aobject) + (sizeof(property) * __class->properties_count);
 
     aobject * __obj = (aobject *) calloc(1, size_with_properties + extra_size);

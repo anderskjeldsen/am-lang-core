@@ -150,6 +150,8 @@ struct _aclass {
     unsigned int functions_count;
     unsigned int properties_count;
     unsigned int static_properties_count;
+    unsigned char annotations_count;
+    aobject ** annotations;
     property * static_properties;    
     iface_implementation * iface_implementations;
 // meta:

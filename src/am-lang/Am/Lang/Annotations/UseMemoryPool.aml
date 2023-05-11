@@ -1,7 +1,8 @@
 namespace Am.Lang.Annotations 
 {
-    class UseMemoryPool 
+    class UseMemoryPool(var bankSize: Int) : Annotation
     {
+        import Am.Lang
         // This class does nothing. When applying this annotation to a class, the compiler knows to use memory pooling for this class.
     }
 }
