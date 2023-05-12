@@ -33,7 +33,7 @@ void __increase_reference_count(aobject * const __obj) {
     #endif
 }
 
-aobject * __allocate_iface_object(aclass const * const __class, aobject * const implementation_object) {
+aobject * __allocate_iface_object(aclass * const __class, aobject * const implementation_object) {
     aobject * iface_object = __allocate_object(__class);
 //    iface_reference * ref = (iface_reference *) malloc(sizeof(iface_reference)); // TODO: Uhm, what is this actually used for?
 
@@ -70,11 +70,11 @@ unsigned int __string_hash(const char * const str) {
     return hash;
 }
 
-aobject * __allocate_object(aclass const * const __class) {
+aobject * __allocate_object(aclass * const __class) {
     return __allocate_object_with_extra_size(__class, 0);
 }
 
-aobject * __allocate_object_with_extra_size(aclass const * const __class, size_t extra_size) {
+aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra_size) {
     __allocation_count++;
     #ifdef DEBUG
     printf("Allocate object of type %s (count: %d, object_id: %d) \n", __class->name, __allocation_count, ++__last_object_id);
@@ -96,6 +96,7 @@ aobject * __allocate_object_with_extra_size(aclass const * const __class, size_t
         __obj = alloc_from_pool(__class->memory_pool);
     } else {
         __obj = (aobject *) calloc(1, size_with_properties + extra_size);
+//        __obj = (aobject *) malloc(size_with_properties + extra_size);
     }
 
     if (__class->type == class && __class->properties_count > 0) {
@@ -200,7 +201,7 @@ void __deallocate_object(aobject * const __obj) {
 
     if (__obj->class_ptr->memory_pool != NULL) {
         free_from_pool(__obj->class_ptr->memory_pool, __obj);
-    } ekse {
+    } else {
         free(__obj);
     }
 }
@@ -443,7 +444,7 @@ bool __object_equals(aobject * const a, aobject * const b) {
 }
 
 /* From constant */
-aobject * __create_string_constant(char const * const str, aclass const * const string_class) {
+aobject * __create_string_constant(char const * const str, aclass * const string_class) {
     size_t len = strlen(str);
     aobject * str_obj = __allocate_object_with_extra_size(string_class, sizeof(string_holder));
     string_holder * const holder = (string_holder *) (str_obj + 1);
@@ -462,7 +463,7 @@ aobject * __create_string_constant(char const * const str, aclass const * const 
     return str_obj;
 }
 
-aobject * __create_string(char const * const str, aclass const * const string_class) {
+aobject * __create_string(char const * const str, aclass * const string_class) {
     size_t len = strlen(str);
     aobject * str_obj = __allocate_object_with_extra_size(string_class, sizeof(string_holder) + len + 1);
     string_holder * const holder = (string_holder *) (str_obj + 1);
@@ -482,7 +483,7 @@ aobject * __create_string(char const * const str, aclass const * const string_cl
     return str_obj;
 }
 
-aobject * __create_array(size_t const size, size_t const item_size, aclass const * const array_class, ctype const ctype) {
+aobject * __create_array(size_t const size, size_t const item_size, aclass * const array_class, ctype const ctype) {
     aobject * array_obj = __allocate_object(array_class);
     array_holder * const holder = malloc(sizeof(array_holder));
     array_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;

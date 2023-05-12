@@ -1,11 +1,10 @@
-#ifndef am_lang_core_h
-#define am_lang_core_h
+#pragma once
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
-#include "memory_pools.h"
+#include <libc/memory_pools.h>
 
 //#define CLASS_TYPE_PRIMITIVE 1
 //#define CLASS_TYPE_NORMAL 0
@@ -245,9 +244,9 @@ void __set_static_property(aclass * const __class, int const __index, nullable_v
 void __decrease_reference_count_nullable_value(nullable_value __value);
 void __increase_reference_count_nullable_value(nullable_value __value);
 void __deallocate_object(aobject * const __obj);
-aobject * __allocate_iface_object(aclass const * const __class, aobject * const implementation_object);
-aobject * __allocate_object(aclass const * const __class);
-aobject * __allocate_object_with_extra_size(aclass const * const __class, size_t extra_size);
+aobject * __allocate_iface_object(aclass * const __class, aobject * const implementation_object);
+aobject * __allocate_object(aclass * const __class);
+aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra_size);
 //void * __allocate_object_data(aobject * const __obj, int __size);
 // function_result const __return_int(int const value);
 // function_result const __return_long(long long const value);
@@ -266,9 +265,9 @@ bool __is_primitive(const nullable_value nullable_value);
 bool __any_has_flags(const nullable_value *nv, unsigned short flags);
 bool __any_equals(const nullable_value a, const nullable_value b);
 bool __object_equals(aobject * const a, aobject * const b);
-aobject * __create_string_constant(char const * const str, aclass const * const string_class);
-aobject * __create_string(char const * const str, aclass const * const string_class);
-aobject * __create_array(size_t const size, size_t const item_size, aclass const * const array_class, ctype const ctype);
+aobject * __create_string_constant(char const * const str, aclass * const string_class);
+aobject * __create_string(char const * const str, aclass * const string_class);
+aobject * __create_array(size_t const size, size_t const item_size, aclass * const array_class, ctype const ctype);
 aobject * __create_exception(aobject * const message);
 void clear_allocated_objects();
 void print_allocated_objects();
@@ -276,4 +275,3 @@ bool is_descendant_of(aclass const * const cls, aclass const * const base);
 void attach_weak_reference_node(weak_reference_node * const node, aobject * const object);
 void detach_weak_reference_node(weak_reference_node * const node) ;
 unsigned int __string_hash(const char * const str);
-#endif

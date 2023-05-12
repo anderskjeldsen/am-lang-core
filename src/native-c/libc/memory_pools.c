@@ -1,5 +1,5 @@
 
-#include <memory_pools.h>
+#include <libc/memory_pools.h>
 /*
 
 Let some classes have its own mem pool since their object size is the same for each object. For example HashMapEntry. 
@@ -14,17 +14,20 @@ memory_pool
 */
 
 memory_pool * create_memory_pool(size_t unit_size) {
+//    printf("create memory_pool with unit_size %lu \n", unit_size);
     memory_pool *pool = calloc(1, sizeof(memory_pool));
     pool->unit_size = unit_size;
 
-    pool_bank *bank = create_pool_bank(pool, 64); // calloc(1, sizeof(pool_bank));
+    pool_bank *bank = create_pool_bank(pool, 256); // calloc(1, sizeof(pool_bank));
 
     return pool;
 }
 
 pool_bank *create_pool_bank(memory_pool *pool, size_t units) {
+//    printf("create pool_bank with units %lu \n", units);
+
     size_t extra_size = (sizeof(pool_node) + pool->unit_size) * units;
-    pool_bank *bank = calloc(1, sizeof(pool_bank) + extra_size);
+    pool_bank *bank = malloc(sizeof(pool_bank) + extra_size);
     bank->units = units;
     bank->unit_position = 0;
     bank->used_units = 0;
@@ -56,22 +59,26 @@ void *alloc_from_pool(memory_pool *pool) {
         node->bank->used_units++;
         return (void *) (node + 1);
     } else {
-        pool_bank *bank = pool->first_bank;
+        pool_bank * bank = pool->first_bank;
         if (bank->unit_position >= bank->units) {
-            pool_bank *new_bank = create_pool_bank(pool, bank->units * 2);
+            pool_bank * new_bank = create_pool_bank(pool, bank->units * 4);
             pool->first_bank = new_bank;
             new_bank->next = bank;
             bank->prev = new_bank;
             bank = new_bank;
         }
+
         unsigned char * bank_data = (unsigned char *) (bank + 1);
-        pool_node *node = (pool_node *) bank_data[bank->unit_position * (pool->unit_size + sizeof(pool_node))];
+        pool_node * node = (pool_node *) &bank_data[bank->unit_position * (pool->unit_size + sizeof(pool_node))];
         bank->unit_position++;
-        pool_node *next_node = pool->first_used_node;
+        pool_node * next_node = pool->first_used_node;
         pool->first_used_node = node;
         node->next = next_node;
         node->prev = NULL;
-        next_node->prev = node;
+        if (next_node != NULL) {
+            next_node->prev = node;
+        }
+
         return (void *) (node + 1);
     }
 }
