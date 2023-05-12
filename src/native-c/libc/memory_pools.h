@@ -45,3 +45,9 @@ struct _pool_node {
 //    pool_node *next_in_bank;
     bool used;
 };
+
+memory_pool * create_memory_pool(size_t unit_size);
+pool_bank *create_pool_bank(memory_pool *pool, size_t units);
+void free_pool_bank(memory_pool *pool, pool_bank *bank);
+void *alloc_from_pool(memory_pool *pool);
+void free_from_pool(memory_pool *pool, void *data);

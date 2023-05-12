@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#include "memory_pools.h"
+
 //#define CLASS_TYPE_PRIMITIVE 1
 //#define CLASS_TYPE_NORMAL 0
 
@@ -154,6 +156,7 @@ struct _aclass {
     aobject ** annotations;
     property * static_properties;    
     iface_implementation * iface_implementations;
+    memory_pool * memory_pool;
 // meta:
 //    aobject *properties;
 };

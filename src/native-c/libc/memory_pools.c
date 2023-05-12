@@ -17,7 +17,7 @@ memory_pool * create_memory_pool(size_t unit_size) {
     memory_pool *pool = calloc(1, sizeof(memory_pool));
     pool->unit_size = unit_size;
 
-    pool_bank *bank = calloc(1, sizeof(pool_bank));
+    pool_bank *bank = create_pool_bank(pool, 64); // calloc(1, sizeof(pool_bank));
 
     return pool;
 }
@@ -46,7 +46,7 @@ void free_pool_bank(memory_pool *pool, pool_bank *bank) {
     free(bank);
 }
 
-void *alloc_from_pool(memory_pool *pool, size_t size) {
+void *alloc_from_pool(memory_pool *pool) {
     if (pool->first_free_node != NULL) {
         pool_node *node = pool->first_free_node;
         pool->first_free_node = node->next;

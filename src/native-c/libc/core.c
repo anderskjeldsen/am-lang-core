@@ -3,6 +3,7 @@
 #include <string.h>
 #include <Am/Lang/Exception.h>
 #include <Am/Lang/Object.h>
+#include <Am/Lang/Annotations/UseMemoryPool.h>
 
 int __allocation_count = 0;
 #define MAX_ALLOCATIONS 1024 * 50
@@ -79,15 +80,23 @@ aobject * __allocate_object_with_extra_size(aclass const * const __class, size_t
     printf("Allocate object of type %s (count: %d, object_id: %d) \n", __class->name, __allocation_count, ++__last_object_id);
     #endif
 
-    for(int i = 0; i < __class->annotations_count; i++) {
-        if (strcmp(__class->annotations[i]->class_ptr->name, "UseMemoryPool") == 0) {
-//            printf("Use memory pool for %s", __class->name);
-        }
-    }
-
     size_t size_with_properties = sizeof(aobject) + (sizeof(property) * __class->properties_count);
 
-    aobject * __obj = (aobject *) calloc(1, size_with_properties + extra_size);
+    aobject * __obj = NULL;
+
+    if (__class->memory_pool == NULL) {
+        for(int i = 0; i < __class->annotations_count; i++) {
+            if (__class->annotations[i]->class_ptr == &Am_Lang_Annotations_UseMemoryPool) {
+                __class->memory_pool = create_memory_pool(size_with_properties + extra_size);
+    //            printf("Use memory pool for %s", __class->name);
+            }
+        }
+    }
+    if (__class->memory_pool != NULL) {
+        __obj = alloc_from_pool(__class->memory_pool);
+    } else {
+        __obj = (aobject *) calloc(1, size_with_properties + extra_size);
+    }
 
     if (__class->type == class && __class->properties_count > 0) {
         __obj->object_properties.class_object_properties.properties = (property *) (__obj + 1);;
@@ -189,7 +198,11 @@ void __deallocate_object(aobject * const __obj) {
     }
     #endif
 
-    free(__obj);
+    if (__obj->class_ptr->memory_pool != NULL) {
+        free_from_pool(__obj->class_ptr->memory_pool, __obj);
+    } ekse {
+        free(__obj);
+    }
 }
 
 void print_allocated_objects() {
