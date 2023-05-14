@@ -23,6 +23,16 @@ memory_pool * create_memory_pool(size_t unit_size) {
     return pool;
 }
 
+void free_memory_pool(memory_pool *pool) {
+    pool_bank *current = pool->first_bank;
+    while(current != NULL) {
+        pool_bank *next = current->next;
+        free(current);
+        current = next;
+    }
+    free(pool);
+}
+
 pool_bank *create_pool_bank(memory_pool *pool, size_t units) {
 //    printf("create pool_bank with units %lu \n", units);
 

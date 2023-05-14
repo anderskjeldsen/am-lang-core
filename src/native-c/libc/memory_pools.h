@@ -47,6 +47,7 @@ struct _pool_node {
 };
 
 memory_pool * create_memory_pool(size_t unit_size);
+void free_memory_pool(memory_pool *pool);
 pool_bank *create_pool_bank(memory_pool *pool, size_t units);
 void free_pool_bank(memory_pool *pool, pool_bank *bank);
 void *alloc_from_pool(memory_pool *pool);
