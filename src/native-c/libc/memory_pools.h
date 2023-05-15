@@ -13,6 +13,7 @@ extern memory_pool * small_object_memory_pool;
 struct _memory_pool {
     size_t unit_size;
     pool_bank *first_bank;
+    pool_bank *first_bank_with_free_nodes;
     pool_node *first_used_node;
 //    pool_node *first_free_node;
 

@@ -19,6 +19,7 @@ memory_pool
 memory_pool _small_object_memory_pool = {
     .unit_size SMALL_OBJECT_MAX_SIZE,
     .first_bank = NULL,
+    .first_bank_with_free_nodes = NULL,
 //    .first_free_node = NULL,
     .first_used_node = NULL,
 };
@@ -31,6 +32,7 @@ memory_pool * create_memory_pool(size_t unit_size) {
     pool->unit_size = unit_size;
 
     pool_bank *bank = create_pool_bank(pool, 256); // calloc(1, sizeof(pool_bank));
+    pool->first_bank_with_free_nodes = NULL;
 
     return pool;
 }
@@ -68,7 +70,7 @@ pool_bank *create_pool_bank(memory_pool *pool, size_t units) {
 }
 
 void free_pool_bank(memory_pool *pool, pool_bank *bank) {
-    printf("free pool bank, size %lu\n", bank->units);
+//    printf("free pool bank, size %lu\n", bank->units);
     if (bank->prev != NULL) {
         bank->prev->next = bank->next;
     } else {
@@ -84,21 +86,17 @@ void free_pool_bank(memory_pool *pool, pool_bank *bank) {
 int allocated_objects = 0;
 
 pool_node *extract_free_node(memory_pool  *pool) {
-    return NULL;
-    /*
-    pool_bank *bank = pool->first_bank;
-    while(bank != NULL) {
-        pool_node *node = bank->first_free_node;
-        if (node != NULL) {
-            bank->first_free_node = node->next;
-            bank->used_units++;
-            node->next = NULL;
-            return node;
-        }
-        bank = bank->next;
+    pool_bank *bank = pool->first_bank_with_free_nodes;
+    if (bank == NULL) {
+        return NULL;
     }
-    return NULL;
-    */
+    pool_node *node = bank->first_free_node;
+    if (node != NULL) {
+        bank->first_free_node = node->next;
+        bank->used_units++;
+        node->next = NULL;
+    }
+    return node;
 }
 
 void *alloc_from_pool(memory_pool *pool) {
@@ -107,62 +105,51 @@ void *alloc_from_pool(memory_pool *pool) {
         printf("Allocated another 1000000 objects: %d\n", allocated_objects);
     }
 
-    pool_node *node = extract_free_node(pool);
-    if (node != NULL) {
-        node->next = pool->first_used_node;
-        pool->first_used_node = node;
-//        node->bank->used_units++;
-        return (void *) (node + 1);
-    } else {
-        pool_bank * bank = pool->first_bank;
-        if (bank->unit_position >= bank->units) {
-            int new_bank_units = bank->units * 4;
-            if (new_bank_units > MAX_BANK_UNITS) new_bank_units = MAX_BANK_UNITS;
-            bank = create_pool_bank(pool, new_bank_units);
-//            pool->first_bank = new_bank;
-//            new_bank->next = bank;
-//            bank->prev = new_bank;
-//            bank = new_bank;
+    pool_bank * bank = pool->first_bank;
+    if (bank->unit_position >= bank->units) {
+        pool_node *node2 = extract_free_node(pool);
+        if ( node2 != NULL) {
+            node2->next = pool->first_used_node;
+            pool->first_used_node = node2;
+            return (void *) (node2 + 1);
         }
+        int new_bank_units = bank->units * 4;
+        if (new_bank_units > MAX_BANK_UNITS) new_bank_units = MAX_BANK_UNITS;
+        bank = create_pool_bank(pool, new_bank_units);
+    }
 
-        unsigned char * bank_data = (unsigned char *) (bank + 1);
-        pool_node * node = (pool_node *) &bank_data[bank->unit_position * (pool->unit_size + sizeof(pool_node))];
-        node->bank = bank;
-        bank->used_units++;
+    unsigned char * bank_data = (unsigned char *) (bank + 1);
+    pool_node * node = (pool_node *) &bank_data[bank->unit_position * (pool->unit_size + sizeof(pool_node))];
+    node->bank = bank;
+    bank->used_units++;
 //        node->used = true;
 
-        bank->unit_position++;        
-        pool_node * next_node = pool->first_used_node;
-        pool->first_used_node = node;
-        node->next = next_node;
-        node->prev = NULL;
-        if (next_node != NULL) {
-            next_node->prev = node;
-        }
-
-        return (void *) (node + 1);
+    bank->unit_position++;        
+    pool_node * next_node = pool->first_used_node;
+    pool->first_used_node = node;
+    node->next = next_node;
+    node->prev = NULL;
+    if (next_node != NULL) {
+        next_node->prev = node;
     }
+
+    return (void *) (node + 1);
 }
 
-/*
 void move_bank_up(memory_pool *pool, pool_bank *bank) {
-    pool_bank *prev = bank->prev;
-    if (prev != NULL) {
-        if (bank->first_free_node != NULL && prev->first_free_node == NULL) {
-            pool_bank *prev_prev = prev->prev;
-            if (prev_prev != NULL) {
+    if (bank != pool->first_bank) return;
 
-            } else {
-                pool->first_bank = bank;
-                
-                bank->next = prev;
+    if (bank->first_free_node != NULL && pool->first_bank->first_free_node == NULL) {
 
-            }
-        }
+        bank->prev->next = bank->next;
+        bank->next->prev = bank->prev;
+
+        bank->next = pool->first_bank;
+        bank->prev = NULL;
+        pool->first_bank = bank; 
     }
-
+    
 }
-*/
 
 int freed_objects = 0;
 
@@ -194,5 +181,7 @@ void free_from_pool(memory_pool *pool, void *data) {
 
     if (node->bank->used_units == 0) {        
         free_pool_bank(pool, node->bank);
+    } else {
+        move_bank_up(pool, node->bank);
     }
 }
