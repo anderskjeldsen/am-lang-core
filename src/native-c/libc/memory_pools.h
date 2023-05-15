@@ -14,7 +14,7 @@ struct _memory_pool {
     size_t unit_size;
     pool_bank *first_bank;
     pool_node *first_used_node;
-    pool_node *first_free_node;
+//    pool_node *first_free_node;
 
 }; // node_lists starts here
 
@@ -32,6 +32,7 @@ struct _pool_bank {
     size_t used_units; // when 0, release bank?
     pool_bank *prev;
     pool_bank *next;
+    pool_node *first_free_node;
 };
 
 struct _pool_node {
@@ -40,7 +41,7 @@ struct _pool_node {
     pool_bank *bank;
 //    pool_node *prev_in_bank;
 //    pool_node *next_in_bank;
-    bool used;
+//    bool used;
 };
 
 memory_pool * create_memory_pool(size_t unit_size);

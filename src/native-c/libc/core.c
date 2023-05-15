@@ -60,13 +60,13 @@ unsigned int __string_hash(const char * const str) {
     unsigned int hash = 0;
     unsigned int bit = 0;
     const char *str2 = str;
-    bool x = strlen(str2) < 2;
+    bool x = 0; //strlen(str2) < 2;
     while(*str2 != 0) {
-        unsigned int c = (unsigned int) *str2;
+        unsigned int c = (unsigned int) *str2++;
         hash += (c << bit);
-        bit += 3;
+        bit += 5;
         bit &= 0x1f;
-        str2++;
+//        str2++;
     }
     return hash;
 }
@@ -176,7 +176,7 @@ void __deallocate_object(aobject * const __obj) {
     //     __obj->object_data.value.custom_value = NULL;
     // }
 
-    if (__obj->class_ptr->type == class && __obj->object_properties.class_object_properties.properties != NULL ) {
+    if (__obj->class_ptr->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
         for(int i = 0; i < __obj->class_ptr->properties_count; i++) {
             property * const __prop = &__obj->object_properties.class_object_properties.properties[i];
             // TODO: use __decrease_reference_count_nullable_value
