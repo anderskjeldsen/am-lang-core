@@ -4,6 +4,7 @@
 #include <Am/Lang/Exception.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/Annotations/UseMemoryPool.h>
+#include <libc/memory_pools.h>
 
 int __allocation_count = 0;
 #define MAX_ALLOCATIONS 1024 * 50
@@ -80,22 +81,30 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
     printf("Allocate object of type %s (count: %d, object_id: %d) \n", __class->name, __allocation_count, ++__last_object_id);
     #endif
 
-    size_t size_with_properties = sizeof(aobject) + (sizeof(property) * __class->properties_count);
+    size_t size_with_properties = sizeof(aobject) + (sizeof(property) * __class->properties_count) + extra_size;
 
     aobject * __obj = NULL;
 
     if (__class->memory_pool == NULL) {
         for(int i = 0; i < __class->annotations_count; i++) {
             if (__class->annotations[i]->class_ptr == &Am_Lang_Annotations_UseMemoryPool) {
-                __class->memory_pool = create_memory_pool(size_with_properties + extra_size);
-    //            printf("Use memory pool for %s", __class->name);
+                __class->memory_pool = create_memory_pool(size_with_properties);
             }
         }
     }
+
     if (__class->memory_pool != NULL) {
         __obj = alloc_from_pool(__class->memory_pool);
+        __obj->memory_pooled = false;
+    } else if (size_with_properties <= small_object_memory_pool->unit_size) {
+        if (small_object_memory_pool->first_bank == NULL) {
+            small_object_memory_pool->first_bank = create_pool_bank(small_object_memory_pool, 256); // calloc(1, sizeof(pool_bank));
+        }
+        __obj = alloc_from_pool(small_object_memory_pool);
+        __obj->memory_pooled = true;
     } else {
-        __obj = (aobject *) calloc(1, size_with_properties + extra_size);
+        __obj = (aobject *) calloc(1, size_with_properties);
+        __obj->memory_pooled = false;
 //        __obj = (aobject *) malloc(size_with_properties + extra_size);
     }
 
@@ -201,6 +210,8 @@ void __deallocate_object(aobject * const __obj) {
 
     if (__obj->class_ptr->memory_pool != NULL) {
         free_from_pool(__obj->class_ptr->memory_pool, __obj);
+    } else if (__obj->memory_pooled) {
+        free_from_pool(small_object_memory_pool, __obj);
     } else {
         free(__obj);
     }
@@ -268,6 +279,14 @@ void __decrease_reference_count_nullable_value(nullable_value __value) {
 void __increase_reference_count_nullable_value(nullable_value __value) {
     if ( !__is_primitive(__value) && __value.value.object_value != NULL ) {
         __increase_reference_count(__value.value.object_value);
+    }
+}
+
+void deallocate_annotations(aclass * const __class) {
+    for(int i = 0; i < __class->annotations_count; i++) {
+        aobject * const a = __class->annotations[i];
+        __decrease_reference_count(a);
+        __class->annotations[i] = NULL;
     }
 }
 

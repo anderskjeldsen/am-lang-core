@@ -5,11 +5,11 @@ namespace Am.Collections {
         import Am.IO
         import Am.IO.Networking
 
-        static fun main() {
+        static fun main9() {
             var set = new HashSet<Int>()
             var startDate = Date.now()
             var i = 1
-            var max = 100 // 10000000
+            var max = 10000000
             ("Adding " + max.toString() + " key-value pairs to a HashSet on an emulated 020").println()
             while(i <= max) {                
                 set.add(i)
@@ -33,11 +33,11 @@ namespace Am.Collections {
             */
         }
 
-        static fun main7() {
+        static fun main() {
             var set = new HashSet<String>()
             var startDate = Date.now()
             var i = 1
-            var max = 10000000
+            var max = 2 // 10000000
             ("Adding " + max.toString() + " key-value pairs to a HashSet on an emulated 020").println()
             while(i <= max) {                
                 var value = i.toString()

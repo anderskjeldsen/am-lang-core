@@ -189,6 +189,7 @@ struct _aobject {
     // if class_ptr is an interface, object_properties will contain a iface_implementation
     // this object will also hold a reference to the implementation object, and will remove that once this has reached 0.
     int reference_count;
+    bool memory_pooled;
     weak_reference_node * first_weak_reference_node;
     object_properties object_properties;
 };
@@ -275,3 +276,4 @@ bool is_descendant_of(aclass const * const cls, aclass const * const base);
 void attach_weak_reference_node(weak_reference_node * const node, aobject * const object);
 void detach_weak_reference_node(weak_reference_node * const node) ;
 unsigned int __string_hash(const char * const str);
+void deallocate_annotations(aclass * const __class);

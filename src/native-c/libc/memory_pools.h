@@ -7,11 +7,8 @@
 typedef struct _memory_pool memory_pool;
 typedef struct _pool_node pool_node;
 typedef struct _pool_bank pool_bank;
-//typedef struct _node_list node_list;
 
-/*
-create memory_pool_list
-*/
+extern memory_pool * small_object_memory_pool;
 
 struct _memory_pool {
     size_t unit_size;
@@ -48,6 +45,7 @@ struct _pool_node {
 
 memory_pool * create_memory_pool(size_t unit_size);
 void free_memory_pool(memory_pool *pool);
+void free_pool_banks(memory_pool *pool);
 pool_bank *create_pool_bank(memory_pool *pool, size_t units);
 void free_pool_bank(memory_pool *pool, pool_bank *bank);
 void *alloc_from_pool(memory_pool *pool);

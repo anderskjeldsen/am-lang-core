@@ -42,8 +42,8 @@ platforms:
     #   - crypto
 
   - id: macos-arm
-    extends: macos
-    gccCommand: gcc
+    extends: libc
+    gccCommand: gcc -O3
     # additionalIncludePaths:
     #   - c-libs/openssl/include
     # gccLibraryPaths:
