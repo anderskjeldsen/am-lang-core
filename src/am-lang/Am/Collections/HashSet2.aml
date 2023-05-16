@@ -1,0 +1,105 @@
+namespace Am.Collections {
+
+    class HashSet2<T>: Set<T> {
+        import Am.Lang
+
+        private var size: Int
+        private var currentValueIndex: Int
+        private var nextIndexes: Int[]
+        private var valueIndexes: Int[]
+        private var values: T[] 
+        private var bucketSize: Int
+        private var currentIndex: Int
+
+        fun getSize(): Int {
+            return this.size
+        }
+
+        fun has(value: T): Bool {
+            "has value".println()
+            if (this.valueIndexes == null) {
+                return false
+            }
+            var hash = value.hash()
+            var index = hash % this.bucketSize
+//            var entry = this.valueIndexes[index]
+            var x = this.findEntry(index, value)
+//            ObjectHelper.printDebug(x)
+            if (x >= 0) {
+                return true
+            }
+            return false
+        }
+
+        private fun findEntry(index: Int, value: T): Int {
+            while(index > -1) {
+                var valueIndex = this.valueIndexes[index]
+                var value2 = this.values[valueIndex]
+                if (value2 == value) {
+                    return valueIndex
+                }
+                index = this.nextIndexes[index] - 1
+            }
+            return -1
+        }
+
+        fun add(value: T) {
+            if (this.nextIndexes == null) {
+                this.bucketSize = 20
+                this.nextIndexes = new Int[this.bucketSize * 2]
+                this.values = new T[this.bucketSize]
+                this.valueIndexes = new Int[this.bucketSize * 2]
+                this.currentIndex = this.bucketSize
+            }
+
+            if (this.size * 2 > this.bucketSize || this.currentIndex >= (this.bucketSize * 2)) {
+                var oldNextIndexes = this.nextIndexes
+                var oldValues = this.values
+                var oldValueIndexes = this.valueIndexes
+                var newBucketSize = this.bucketSize * 10
+
+                this.nextIndexes = new Int[newBucketSize * 2]
+                this.values = new T[newBucketSize]
+                this.valueIndexes = new Int[newBucketSize * 2]
+                this.bucketSize = newBucketSize
+                this.currentValueIndex = 0
+                this.currentIndex = newBucketSize
+                ("create new bucket in HashSet: " + this.bucketSize.toString()).println()
+
+                var i = 0
+                while(i < oldValues.length()) {
+                    var oldValue = oldValues[i]
+                    if (oldValue != null) {    
+                        this.privateSetValue(oldValue)
+                    }
+                    i++
+                }       
+            }
+
+            this.privateSetValue(value)
+        }
+
+        private fun privateSetValue(value: T) {
+            var hash = value.hash()
+            var index = hash % this.bucketSize
+//            ("value: " + entry.value.toString() + ", hash: " + hash.toString() + ", index: " + index.toString()).println()
+
+            this.values[this.currentValueIndex] = value
+
+            var valueIndex = this.valueIndexes[index] - 1
+            if (valueIndex < 0) {
+                this.valueIndexes[index] = this.currentValueIndex + 1 // cause all are initially set to 0, then a real 0 will be 1
+                this.nextIndexes[index] = 0
+            } 
+            else {                
+                this.valueIndexes[this.currentIndex] = valueIndex
+                this.nextIndexes[this.currentIndex] = this.nextIndexes[index]
+
+                this.valueIndexes[index] = this.currentValueIndex + 1
+                this.nextIndexes[index] = this.currentIndex + 1
+                this.currentIndex++
+            }
+            this.currentValueIndex++
+        }
+    }
+}
