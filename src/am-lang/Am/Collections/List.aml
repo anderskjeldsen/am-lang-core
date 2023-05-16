@@ -34,10 +34,10 @@ namespace Am.Collections {
         }
 
         static fun main() {
-            var set = new HashSet<String>()
+            var set = new HashSet2<String>()
             var startDate = Date.now()
             var i = 1
-            var max = 10000000
+            var max = 1000
             ("Adding " + max.toString() + " key-value pairs to a HashSet on an emulated 020").println()
             while(i <= max) {                
                 var value = i.toString()
