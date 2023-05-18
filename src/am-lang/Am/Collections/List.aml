@@ -5,8 +5,8 @@ namespace Am.Collections {
         import Am.IO
         import Am.IO.Networking
 
-        static fun main9() {
-            var set = new HashSet<Int>()
+        static fun main() {
+            var set = new HashSet2<Int>()
             var startDate = Date.now()
             var i = 1
             var max = 10000000
@@ -33,11 +33,11 @@ namespace Am.Collections {
             */
         }
 
-        static fun main() {
+        static fun main9() {
             var set = new HashSet2<String>()
             var startDate = Date.now()
             var i = 1
-            var max = 1000
+            var max = 10000000
             ("Adding " + max.toString() + " key-value pairs to a HashSet on an emulated 020").println()
             while(i <= max) {                
                 var value = i.toString()
@@ -58,7 +58,7 @@ namespace Am.Collections {
             } else {
                 "not found".println()
             }
-        }
+        }       
 
         static fun main8() {
             var map = new HashMap<String, String>()

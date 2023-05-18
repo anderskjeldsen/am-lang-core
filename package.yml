@@ -27,7 +27,7 @@ platforms:
       - socket
   - id: linux-x64
     extends: libc
-    gccCommand: gcc
+    gccCommand: gcc -O3
   - id: macos
     extends: libc
     gccCommand: gcc -O3
