@@ -147,7 +147,7 @@ function_result Am_IO_Networking_SslSocketStream_read_0(aobject * const this, ao
 	ssl_socket_stream_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 
 	if (holder != NULL) {
-				array_holder *array_holder = buffer->object_properties.class_object_properties.object_data.value.custom_value;
+		array_holder *array_holder = (array_holder *) &buffer[1]; // buffer->object_properties.class_object_properties.object_data.value.custom_value;
 
 		if (length > array_holder->size) {
 			__throw_simple_exception("Receive length is bigger than array", "in Am_IO_Networking_Socket_send_0", &__result);
@@ -185,7 +185,7 @@ function_result Am_IO_Networking_SslSocketStream_write_0(aobject * const this, a
 	ssl_socket_stream_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 
 	if (holder != NULL) {
-		array_holder *array_holder = buffer->object_properties.class_object_properties.object_data.value.custom_value;
+		array_holder *array_holder = (array_holder *) &buffer[1]; // buffer->object_properties.class_object_properties.object_data.value.custom_value;
 
 		if (length > array_holder->size) {
 			__throw_simple_exception("Send length is bigger than array", "in Am_IO_Networking_Socket_send_0", &__result);

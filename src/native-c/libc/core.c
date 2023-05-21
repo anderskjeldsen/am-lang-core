@@ -503,13 +503,21 @@ aobject * __create_string(char const * const str, aclass * const string_class) {
 }
 
 aobject * __create_array(size_t const size, size_t const item_size, aclass * const array_class, ctype const ctype) {
-    aobject * array_obj = __allocate_object(array_class);
-    array_holder * const holder = malloc(sizeof(array_holder));
+    size_t extra_size = sizeof(array_holder) + (size * item_size);
+    aobject * array_obj = __allocate_object_with_extra_size(array_class, extra_size);
+//    array_holder * const holder = malloc(sizeof(array_holder));
+    array_holder * const holder = (array_holder *) &array_obj[1];
+    void *array_data = (void *) (holder + 1);
     array_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
 //    size_t const data_size = size * item_size;
 //    unsigned char * const array_data = malloc(data_size);
-    *holder = (array_holder) { .array_data = malloc(size * item_size), .size = size, .ctype = ctype, .item_size = item_size };
-    memset(holder->array_data, 0, size * item_size);
+    holder->array_data = array_data;
+    holder->ctype = ctype;
+    holder->item_class = array_class;
+    holder->item_size = item_size;
+    holder->size = size;    
+//    *holder = (array_holder) { .array_data = malloc(size * item_size), .size = size, .ctype = ctype, .item_size = item_size };
+//    memset(holder->array_data, 0, size * item_size);
 
 //    memcpy(holder, &t_holder, sizeof(array_holder));
 

@@ -206,9 +206,9 @@ function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	array_holder *array_holder = bytes->object_properties.class_object_properties.object_data.value.custom_value;
+	array_holder *a_holder = (array_holder *) &bytes[1]; // bytes->object_properties.class_object_properties.object_data.value.custom_value;
 
-    int const len = array_holder->size; // TODO: support different character sizes
+    int const len = a_holder->size; // TODO: support different character sizes
 	aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + len + 1);
 	string_holder *holder = (string_holder *) (str_obj + 1);
 	str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
@@ -218,7 +218,7 @@ function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
     // string_holder * const holder = calloc(1, sizeof(string_holder));
     // str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
     // char * const new_str = malloc(len + 1);
-    strncpy(new_str, array_holder->array_data, len);
+    strncpy(new_str, a_holder->array_data, len);
 	new_str[len] = 0;
 	unsigned int hash = __string_hash(new_str);
     *holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = new_str, .hash = hash };
@@ -251,8 +251,8 @@ function_result Am_Lang_String_toBytes_0(aobject * const this, aobject * encodin
 	string_holder *string_holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	aobject *array = __create_array(string_holder->length, 1, &Am_Lang_Array_v_uchar, uchar_type);
 
-	array_holder *array_holder = array->object_properties.class_object_properties.object_data.value.custom_value;
-	strcpy(array_holder->array_data, string_holder->string_value);
+	array_holder *a_holder = (array_holder *) &array[1]; // array->object_properties.class_object_properties.object_data.value.custom_value;
+	strcpy(a_holder->array_data, string_holder->string_value);
 	__result.return_value.flags = 0;
 	__result.return_value.value.object_value = array;
 

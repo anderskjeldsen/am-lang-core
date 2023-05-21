@@ -185,7 +185,7 @@ union _object_properties {
 };
 
 struct _aobject {
-    aclass const * class_ptr;
+    aclass * class_ptr;
     // if class_ptr is an interface, object_properties will contain a iface_implementation
     // this object will also hold a reference to the implementation object, and will remove that once this has reached 0.
     int reference_count;

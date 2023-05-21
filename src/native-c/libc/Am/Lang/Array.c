@@ -24,7 +24,7 @@ function_result Am_Lang_Array__native_release_0(aobject * const this)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 
-	array_holder * ah = (array_holder *) this->object_properties.class_object_properties.object_data.value.custom_value;
+	array_holder * ah = (array_holder *) &this[1]; // this->object_properties.class_object_properties.object_data.value.custom_value;
 	int const size = ah->size;
 
 	if (ah->ctype == any_type) {
@@ -41,10 +41,10 @@ function_result Am_Lang_Array__native_release_0(aobject * const this)
 		}
 	}
 
-	free(ah->array_data);
-	ah->array_data = NULL;
-	free(ah);
-	this->object_properties.class_object_properties.object_data.value.custom_value = NULL;
+//	free(ah->array_data);
+//	ah->array_data = NULL;
+//	free(ah);
+//	this->object_properties.class_object_properties.object_data.value.custom_value = NULL;
 
 __exit: ;
 	return __result;
@@ -59,7 +59,7 @@ function_result Am_Lang_Array_length_0(aobject * const this)
 	if (this != NULL) {
 		__increase_reference_count(this);
 	}
-	array_holder * ah = (array_holder *) this->object_properties.class_object_properties.object_data.value.custom_value;
+	array_holder * ah = (array_holder *) &this[1]; // this->object_properties.class_object_properties.object_data.value.custom_value;
 //	printf("get length %ld\n", ah->size);
 	__result.return_value = (nullable_value) { .value = { .long_value = ah->size }, .flags = 0 };
 
@@ -78,7 +78,7 @@ function_result Am_Lang_Array_createEmptyArrayOfSameType_internal(aobject * cons
 		__increase_reference_count(this);
 	}
 
-	array_holder * ah = (array_holder *) this->object_properties.class_object_properties.object_data.value.custom_value;
+	array_holder * ah = (array_holder *) &this[1]; // this->object_properties.class_object_properties.object_data.value.custom_value;
 
 	aobject *new_array = __create_array(length, ah->item_size, this->class_ptr, ah->ctype);
 

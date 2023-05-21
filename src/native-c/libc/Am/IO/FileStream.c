@@ -83,8 +83,8 @@ function_result Am_IO_FileStream_read_0(aobject * const this, aobject * buffer, 
 
 	file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 
-	array_holder *array_holder = buffer->object_properties.class_object_properties.object_data.value.custom_value;
-	fread(array_holder->array_data + offset, 1, length, holder->file);
+	array_holder *a_holder = (array_holder *) &buffer[1]; // buffer->object_properties.class_object_properties.object_data.value.custom_value;
+	fread(a_holder->array_data + offset, 1, length, holder->file);
 
 __exit: ;
 	if (this != NULL) {
@@ -109,8 +109,9 @@ function_result Am_IO_FileStream_write_0(aobject * const this, aobject * buffer,
 
 	file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 
-	array_holder *array_holder = buffer->object_properties.class_object_properties.object_data.value.custom_value;
-	fwrite(array_holder->array_data + offset, 1, length, holder->file);
+	array_holder *a_holder = (array_holder *) &buffer[1]; 
+	// buffer->object_properties.class_object_properties.object_data.value.custom_value;
+	fwrite(a_holder->array_data + offset, 1, length, holder->file);
 
 __exit: ;
 	if (this != NULL) {
