@@ -9,6 +9,8 @@
 #include <Am/Lang/Long.h>
 #include <Am/Lang/Int.h>
 #include <Am/Lang/String.h>
+#include <libc/core_inline_functions.h>
+
 
 function_result Am_IO_TextStream__native_init_0(aobject * const this)
 {

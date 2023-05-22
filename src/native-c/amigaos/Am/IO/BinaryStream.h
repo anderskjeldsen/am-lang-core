@@ -8,5 +8,6 @@
 #include <Am/Lang/Long.h>
 #include <Am/Lang/Int.h>
 #include <Am/Lang/Short.h>
+#include <libc/core_inline_functions.h>
 
 #endif

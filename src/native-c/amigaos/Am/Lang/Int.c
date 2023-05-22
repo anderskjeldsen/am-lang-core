@@ -1,8 +1,5 @@
-#ifndef native_amigaos_aclass_Am_Lang_Int_c
-#define native_amigaos_aclass_Am_Lang_Int_c
 #include <libc/core.h>
 #include <Am/Lang/Int.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/String.h>
-
-#endif
+#include <libc/core_inline_functions.h>

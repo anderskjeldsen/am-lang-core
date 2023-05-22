@@ -1,5 +1,3 @@
-#ifndef native_aros_x86_64_aclass_Am_Lang_Byte_c
-#define native_aros_x86_64_aclass_Am_Lang_Byte_c
 #include <libc/core.h>
 #include <Am/Lang/Byte.h>
 #include <aros-x86-64/Am/Lang/Byte.h>
@@ -13,5 +11,4 @@
 #include <Am/Lang/UInt.h>
 #include <Am/Lang/ULong.h>
 #include <Am/Lang/Bool.h>
-
-#endif
+#include <libc/core_inline_functions.h>

@@ -1,5 +1,3 @@
-#ifndef native_morphos_ppc_aclass_Am_Threading_Thread_c
-#define native_morphos_ppc_aclass_Am_Threading_Thread_c
 #include <libc/core.h>
 #include <Am/Threading/Thread.h>
 #include <morphos-ppc/Am/Threading/Thread.h>
@@ -7,6 +5,7 @@
 #include <Am/Lang/Runnable.h>
 #include <Am/Lang/Long.h>
 #include <Am/Lang/String.h>
+#include <libc/core_inline_functions.h>
 
 #include <amigaos/amiga.h>
 
@@ -223,4 +222,3 @@ function_result Am_Threading_Thread_sleep_0(long long milliseconds)
 __exit: ;
 	return __result;
 };
-#endif

@@ -1,5 +1,3 @@
-#ifndef native_libc_aclass_Am_IO_FileStream_c
-#define native_libc_aclass_Am_IO_FileStream_c
 #include <libc/core.h>
 #include <Am/IO/FileStream.h>
 #include <Am/IO/Stream.h>
@@ -7,6 +5,7 @@
 #include <Am/Lang/Array.h>
 #include <Am/Lang/Byte.h>
 #include <Am/Lang/Long.h>
+#include <libc/core_inline_functions.h>
 
 #include <stdio.h>
 
@@ -84,7 +83,7 @@ function_result Am_IO_FileStream_read_0(aobject * const this, aobject * buffer, 
 	file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 
 	array_holder *a_holder = (array_holder *) &buffer[1]; // buffer->object_properties.class_object_properties.object_data.value.custom_value;
-	fread(a_holder->array_data + offset, 1, length, holder->file);
+	__result.return_value.value.uint_value = fread(a_holder->array_data + offset, 1, length, holder->file);
 
 __exit: ;
 	if (this != NULL) {
@@ -181,4 +180,3 @@ __exit: ;
 	return __result;
 };
 
-#endif

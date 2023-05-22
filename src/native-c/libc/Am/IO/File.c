@@ -1,5 +1,3 @@
-#ifndef native_libc_aclass_Am_IO_File_c
-#define native_libc_aclass_Am_IO_File_c
 #include <libc/core.h>
 #include <Am/IO/File.h>
 #include <Am/Lang/Object.h>
@@ -7,6 +5,7 @@
 #include <limits.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <libc/core_inline_functions.h>
 
 function_result Am_IO_File__native_init_0(aobject * const this)
 {
@@ -49,4 +48,3 @@ __exit: ;
 	return __result;
 };
 
-#endif

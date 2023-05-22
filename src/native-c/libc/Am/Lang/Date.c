@@ -6,6 +6,7 @@
 #include <Am/Lang/String.h>
 #include <Am/Lang/Bool.h>
 #include <Am/Lang/ULong.h>
+#include <libc/core_inline_functions.h>
 
 function_result Am_Lang_Date__native_init_0(aobject * const this)
 {

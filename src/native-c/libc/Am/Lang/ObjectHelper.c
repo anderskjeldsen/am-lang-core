@@ -3,6 +3,7 @@
 #include <libc/Am/Lang/ObjectHelper.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/Bool.h>
+#include <libc/core_inline_functions.h>
 
 function_result Am_Lang_ObjectHelper__native_init_0(aobject * const this)
 {

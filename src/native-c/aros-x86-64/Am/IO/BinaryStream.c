@@ -1,5 +1,3 @@
-#ifndef native_aros_x86_64_aclass_Am_IO_BinaryStream_c
-#define native_aros_x86_64_aclass_Am_IO_BinaryStream_c
 #include <libc/core.h>
 #include <Am/IO/BinaryStream.h>
 #include <aros-x86-64/Am/IO/BinaryStream.h>
@@ -9,5 +7,4 @@
 #include <Am/Lang/Long.h>
 #include <Am/Lang/Int.h>
 #include <Am/Lang/Short.h>
-
-#endif
+#include <libc/core_inline_functions.h>

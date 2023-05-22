@@ -2,6 +2,7 @@
 #include <Am/Lang/Weak.h>
 #include <libc/Am/Lang/Weak.h>
 #include <Am/Lang/Object.h>
+#include <libc/core_inline_functions.h>
 
 weak_reference_node * get_weak_reference_node(aobject * const this) {
 	return (weak_reference_node *) this->object_properties.class_object_properties.object_data.value.custom_value;

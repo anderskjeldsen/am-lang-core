@@ -1,11 +1,10 @@
-#ifndef native_linux_x64_aclass_Am_Threading_Thread_c
-#define native_linux_x64_aclass_Am_Threading_Thread_c
 #include <libc/core.h>
 #include <Am/Threading/Thread.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/Runnable.h>
 #include <Am/Lang/Long.h>
 #include <Am/Lang/String.h>
+#include <libc/core_inline_functions.h>
 
 function_result Am_Threading_Thread__native_init_0(aobject * const this)
 {
@@ -81,5 +80,3 @@ function_result Am_Threading_Thread_sleep_0(long long milliseconds)
 __exit: ;
 	return __result;
 };
-
-#endif

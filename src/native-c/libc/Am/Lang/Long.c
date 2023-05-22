@@ -4,6 +4,7 @@
 #include <Am/Lang/Any.h>
 #include <Am/Lang/String.h>
 #include <string.h>
+#include <libc/core_inline_functions.h>
 
 function_result Am_Lang_Long_toString_0(nullable_value const this)
 {

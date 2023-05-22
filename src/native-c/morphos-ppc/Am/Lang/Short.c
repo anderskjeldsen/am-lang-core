@@ -1,5 +1,3 @@
-#ifndef native_morphos_ppc_aclass_Am_Lang_Short_c
-#define native_morphos_ppc_aclass_Am_Lang_Short_c
 #include <libc/core.h>
 #include <Am/Lang/Short.h>
 #include <morphos-ppc/Am/Lang/Short.h>
@@ -13,5 +11,4 @@
 #include <Am/Lang/UInt.h>
 #include <Am/Lang/ULong.h>
 #include <Am/Lang/Bool.h>
-
-#endif
+#include <libc/core_inline_functions.h>

@@ -3,6 +3,7 @@
 #include <libc/Am/IO/Networking/Socket.h>
 #include <Am/Lang/Object.h>
 #include <Am/IO/Networking/AddressFamily.h>
+#include <libc/core_inline_functions.h>
 
 #include <unistd.h>
 #include <string.h>

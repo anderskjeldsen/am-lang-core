@@ -11,4 +11,5 @@
 #include <Am/Lang/UShort.h>
 #include <Am/Lang/UInt.h>
 #include <Am/Lang/Bool.h>
+#include <libc/core_inline_functions.h>
 

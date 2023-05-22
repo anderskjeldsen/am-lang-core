@@ -9,4 +9,5 @@
 #include <Am/Lang/Int.h>
 #include <Am/Lang/Array.h>
 #include <Am/Lang/Byte.h>
+#include <libc/core_inline_functions.h>
 

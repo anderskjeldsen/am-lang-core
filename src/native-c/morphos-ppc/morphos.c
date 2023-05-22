@@ -3,6 +3,7 @@
 #include <exec/types.h>
 #include <proto/exec.h>
 #include <string.h>
+#include <libc/core_inline_functions.h>
 
 lib_node *__first_lib_node = NULL;
 

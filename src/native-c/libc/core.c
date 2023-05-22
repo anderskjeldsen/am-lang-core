@@ -5,6 +5,7 @@
 #include <Am/Lang/Object.h>
 #include <Am/Lang/Annotations/UseMemoryPool.h>
 #include <libc/memory_pools.h>
+#include <libc/core_inline_functions.h>
 
 int __allocation_count = 0;
 #define MAX_ALLOCATIONS 1024 * 50
@@ -14,25 +15,6 @@ int __last_object_id = 0;
 aobject * allocations[MAX_ALLOCATIONS];
 int allocation_index = 0;
 #endif
-
-void __decrease_reference_count(aobject * const __obj) {
-    if ( __obj != NULL) {
-        __obj->reference_count--;
-        #ifdef DEBUG
-        printf("decrease reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
-        #endif
-        if ( __obj->reference_count == 0 ) {
-            __deallocate_object(__obj);
-        }
-    }
-}
-
-void __increase_reference_count(aobject * const __obj) {
-    __obj->reference_count++;
-    #ifdef DEBUG
-    printf("increase reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
-    #endif
-}
 
 aobject * __allocate_iface_object(aclass * const __class, aobject * const implementation_object) {
     aobject * iface_object = __allocate_object(__class);
@@ -69,10 +51,6 @@ unsigned int __string_hash(const char * const str) {
 //        str2++;
     }
     return hash;
-}
-
-aobject * __allocate_object(aclass * const __class) {
-    return __allocate_object_with_extra_size(__class, 0);
 }
 
 aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra_size) {
@@ -237,51 +215,6 @@ void clear_allocated_objects() {
     #endif
 }
 
-void __set_property(aobject * const __obj, int const __index, nullable_value __prop_value) {
-    property * __prop = &__obj->object_properties.class_object_properties.properties[__index];
-    if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
-        __decrease_reference_count(__prop->nullable_value.value.object_value);
-    }
-
-    if ( !__is_primitive(__prop_value) && __prop_value.value.object_value != NULL ) {
-        __increase_reference_count(__prop_value.value.object_value);
-    }
-
-    __prop->nullable_value = __prop_value;
-
-//    printf("New prop int value: %d\n", __prop->nullable_value.value.int_value);
-
-//    if (__is_primitive_nullable(__prop->nullable_value)) {
-//        __set_primitive_null(&__prop->nullable_value, __is_primitive_null(__prop_value));
-//    }
-//    __prop->nullable_value.value = __prop_value.value;
-}
-
-void __set_static_property(aclass * const __class, int const __index, nullable_value __prop_value) {
-    property * __prop = &__class->static_properties[__index];
-    if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
-        __decrease_reference_count(__prop->nullable_value.value.object_value);
-    }
-
-    if ( !__is_primitive(__prop_value) && __prop_value.value.object_value != NULL ) {
-        __increase_reference_count(__prop_value.value.object_value);
-    }
-
-    __prop->nullable_value = __prop_value;
-}
-
-void __decrease_reference_count_nullable_value(nullable_value __value) {
-    if ( !__is_primitive(__value) && __value.value.object_value != NULL ) {
-        __decrease_reference_count(__value.value.object_value);
-    }
-}
-
-void __increase_reference_count_nullable_value(nullable_value __value) {
-    if ( !__is_primitive(__value) && __value.value.object_value != NULL ) {
-        __increase_reference_count(__value.value.object_value);
-    }
-}
-
 void deallocate_annotations(aclass * const __class) {
     for(int i = 0; i < __class->annotations_count; i++) {
         aobject * const a = __class->annotations[i];
@@ -289,47 +222,6 @@ void deallocate_annotations(aclass * const __class) {
         __class->annotations[i] = NULL;
     }
 }
-
-// function_result const __default_return() {
-//     function_result res;
-//     res.has_return_value = 0;
-//     return res;
-// }
-
-// function_result const __return_int(int const value) {
-//     function_result res;
-//     res.has_return_value = 1;
-//     res.return_value.int_value = value;
-//     return res;
-// }
-
-// function_result const __return_long(long long const value) {
-//     function_result res;
-//     res.has_return_value = 1;
-//     res.return_value.long_value = value;
-//     return res;
-// }
-
-// function_result const __return_object(aobject * const value) {
-//     function_result res;
-//     res.has_return_value = 1;
-//     res.return_value.object_value = value;
-//     return res;
-// }
-
-// stack_trace_item * const __create_stack_trace_item(stack_trace_item * const previous_item, aobject * const item_text) {
-//     __increase_reference_count(item_text);
-
-//     stack_trace_item * const item = (stack_trace_item *) calloc(1, sizeof(stack_trace_item));
-
-//     item->item_text = item_text;
-
-//     if (previous_item != NULL) {
-//         previous_item->next_item = item;
-//     }
-//     return item;
-// }
-
 void __throw_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text) {
 
 //    exception_holder * const holder = (exception_holder *) calloc(1, sizeof(exception_holder));
@@ -357,59 +249,6 @@ void __pass_exception(function_result *result, aobject * const exception, aobjec
 
 //    stack_trace_item *new_item = __create_stack_trace_item(result.exception_holder->last_stack_trace_item, stack_trace_item_text);
 //    result.exception_holder->last_stack_trace_item = new_item;
-}
-
-// void __deallocate_stack_trace_item_chain(stack_trace_item *first_item) {
-//     stack_trace_item *current = first_item;
-//     while(current != NULL) {
-//         __decrease_reference_count(current->item_text);
-//         stack_trace_item *next = current->next_item;
-//         free(current);
-//         current = next;
-//     }
-// }
-
-// void __deallocate_exception_holder(exception_holder * const holder) {
-//     __decrease_reference_count(holder->exception);
-
-//     __deallocate_stack_trace_item_chain(holder->first_stack_trace_item);
-//     free(holder);
-// }
-
-void __deallocate_function_result(function_result const result) {
-    if (result.exception != NULL) {
-        __decrease_reference_count(result.exception);
-    }
-}
-
-void __set_primitive_nullable(nullable_value * nullable_value, bool is_primitive_nullable) {
-    unsigned char f = nullable_value->flags;
-    f &= ~PRIMITIVE_NULLABLE;
-    f |= is_primitive_nullable ? PRIMITIVE_NULLABLE : 0;
-    nullable_value->flags = f; 
-}
-
-bool __is_primitive_nullable(const nullable_value nullable_value) {
-    return nullable_value.flags & PRIMITIVE_NULLABLE;
-}
-
-bool __is_primitive(const nullable_value nullable_value) {
-    return nullable_value.flags != 0;
-}
-
-void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null) {
-    unsigned char f = nullable_value->flags;
-    f &= ~PRIMITIVE_NULL;
-    f |= is_primitive_null ? PRIMITIVE_NULL : 0;
-    nullable_value->flags = f; 
-}
-
-bool __is_primitive_null(const nullable_value nullable_value) {
-    return nullable_value.flags & PRIMITIVE_NULL;
-}
-
-bool __any_has_flags(const nullable_value *nv, unsigned short flags) {
-    return (nv->flags & flags) == flags;
 }
 
 bool __any_equals(const nullable_value a, const nullable_value b) {
@@ -450,16 +289,6 @@ bool __any_equals(const nullable_value a, const nullable_value b) {
             }
         }
     }
-}
-
-bool __object_equals(aobject * const a, aobject * const b) {
-    if (a != NULL) {
-        Am_Lang_Object_equals_0_T af = (Am_Lang_Object_equals_0_T) a->class_ptr->functions[Am_Lang_Object_equals_0_index];
-        function_result res = af(a, b);
-        // Am_Lang_Object_equals_0(a, b);
-        return res.return_value.value.bool_value;
-    }
-    return a == b;
 }
 
 /* From constant */
@@ -555,29 +384,3 @@ bool is_descendant_of(aclass const * const cls, aclass const * const base) {
     return false;
 }
 
-void attach_weak_reference_node(weak_reference_node * const node, aobject * const object) {
-    node->object = object;
-    weak_reference_node * const first = object->first_weak_reference_node;
-    node->next = first;
-    object->first_weak_reference_node = node;
-}
-
-void detach_weak_reference_node(weak_reference_node * const node) {
-    weak_reference_node * const first = node->object->first_weak_reference_node;
-    weak_reference_node * current = first;
-    if (current == node) {
-        node->object->first_weak_reference_node = node->next;
-        node->next = NULL;
-    } else {
-        while(current != NULL) {
-            if (current->next == node) {
-                current->next = node->next;
-                node->next = NULL;
-                current = NULL;
-            } else {
-                current = current->next;
-            }
-        }
-    }
-//    free(node); We do this when Weak is released in native/Weak.c
-}

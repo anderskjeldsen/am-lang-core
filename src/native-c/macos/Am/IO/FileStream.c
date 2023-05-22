@@ -11,4 +11,5 @@
 #include <Am/Lang/Int.h>
 #include <Am/Collections/List.h>
 #include <Am/Lang/Bool.h>
+#include <libc/core_inline_functions.h>
 

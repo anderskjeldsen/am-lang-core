@@ -2,6 +2,7 @@
 #include <Am/Lang/Array.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/Long.h>
+#include <libc/core_inline_functions.h>
 
 function_result Am_Lang_Array__native_init_0(aobject * const this)
 {

@@ -57,7 +57,7 @@ namespace Am.Collections {
             if ( this.size * 4 >= this.bucketSize * 3 || this.currentIndex >= (this.bucketSize * 2) ) {
                 var valueLastIndex = this.currentValueIndex
                 var oldValues = this.values
-                var newBucketSize = this.bucketSize * 5
+                var newBucketSize = this.bucketSize * 10
                 this.bucketSize = newBucketSize
                 this.currentIndex = newBucketSize
                 this.currentValueIndex = 0

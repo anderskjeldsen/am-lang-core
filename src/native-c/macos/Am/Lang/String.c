@@ -6,4 +6,5 @@
 #include <Am/Lang/Bool.h>
 #include <Am/Lang/Array.h>
 #include <Am/Lang/UByte.h>
+#include <libc/core_inline_functions.h>
 

@@ -10,6 +10,7 @@
 #include <Am/Lang/ULong.h>
 #include <Am/Lang/Bool.h>
 #include <string.h>
+#include <libc/core_inline_functions.h>
 
 function_result Am_Lang_UInt_toString_0(nullable_value const this)
 {

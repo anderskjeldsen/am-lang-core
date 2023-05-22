@@ -3,6 +3,7 @@
 #include <Am/Lang/Object.h>
 #include <Am/Lang/Int.h>
 #include <string.h>
+#include <libc/core_inline_functions.h>
 
 function_result Am_Lang_String__native_init_0(aobject * const this)
 {
