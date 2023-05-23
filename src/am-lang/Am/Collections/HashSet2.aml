@@ -22,39 +22,36 @@ namespace Am.Collections {
             }
             var hash = value.hash()
             var index = hash % this.bucketSize
-            var x = this.findEntry(index, value)
+            var valueIndex = this.valueIndexes[index] - 1
+            var x = this.findEntry(valueIndex, value)
             if (x >= 0) {
                 return true
             }
             return false
         }
 
-        private fun findEntry(index: Int, value: T): Int {
-            while(index > -1) {
-//                ("check index " + index.toString()).println()
-                var valueIndex = this.valueIndexes[index] - 1
-//                ("value index: " + valueIndex.toString()).println()
+        private fun findEntry(valueIndex: Int, value: T): Int {
+            while(valueIndex > -1) {
+//                var valueIndex = this.valueIndexes[index] - 1
                 var value2 = this.values[valueIndex]
-//                ("value: " + value2.toString()).println()
                 if (value2 == value) {
-//                    "found it".println()
                     return valueIndex
                 }
-                index = this.nextIndexes[index] - 1                
+                valueIndex = this.nextIndexes[valueIndex] - 1                
             }
             return -1
         }
 
         fun add(value: T) {
             if (this.nextIndexes == null) {
-                this.bucketSize = 20
-                this.nextIndexes = new Int[this.bucketSize * 2]
+                this.bucketSize = 100
+                this.nextIndexes = new Int[this.bucketSize]
                 this.values = new T[this.bucketSize]
                 this.valueIndexes = new Int[this.bucketSize * 2]
                 this.currentIndex = this.bucketSize
             }
 
-            if ( this.size * 4 >= this.bucketSize * 3 || this.currentIndex >= (this.bucketSize * 2) ) {
+            if ( this.size * 4 >= this.bucketSize * 2 || this.currentIndex >= (this.bucketSize * 2) ) {
                 var valueLastIndex = this.currentValueIndex
                 var oldValues = this.values
                 var newBucketSize = this.bucketSize * 10
@@ -63,10 +60,10 @@ namespace Am.Collections {
                 this.currentValueIndex = 0
                 this.size = 0
 
-                this.nextIndexes = new Int[newBucketSize * 2]
+                this.nextIndexes = new Int[newBucketSize]
                 this.values = new T[newBucketSize]
                 this.valueIndexes = new Int[newBucketSize * 2]
-//                ("create new bucket in HashSet: " + this.bucketSize.toString() + ", copy " + valueLastIndex.toString() + " items").println()
+                ("create new bucket in HashSet: " + this.bucketSize.toString() + ", copy " + valueLastIndex.toString() + " items").println()
 
                 var i = 0
                 while(i < valueLastIndex) {
@@ -82,31 +79,25 @@ namespace Am.Collections {
         private fun privateSetValue(value: T) {
             var hash = value.hash()
             var index = hash % this.bucketSize
-//            ("value: " + value.toString() + ", hash: " + hash.toString() + ", index: " + index.toString()).println()
 
-//            ("set 1b" + this.currentValueIndex.toString()).println()
             this.values[this.currentValueIndex] = value
+//            this.nextIndexes[this.currentValueIndex] = 0
 
-            var valueIndex = this.valueIndexes[index] - 1
+            var valueIndex = this.valueIndexes[index] - 1 // index of values and next arrays
 
             if (valueIndex < 0) {
-//                "make new hash entry".println()
-
                 this.valueIndexes[index] = this.currentValueIndex + 1 // cause all are initially set to 0, then a real 0 will be 1
-                this.nextIndexes[index] = 0
+                this.nextIndexes[this.currentValueIndex] = 0
                 this.size++            
             } 
-            else {                  
-//                ("push old hash entry: " + value.toString()).println()
-//                ("push old valueIndex: " + valueIndex.toString()).println()
-                this.valueIndexes[this.currentIndex] = valueIndex + 1 // append new index to the value at the end
-//                ("push old nextIndex: " + this.nextIndexes[index].toString()).println()
-                this.nextIndexes[this.currentIndex] = this.nextIndexes[index] // append new index to the next value at the end
+            else {        
+//                {v: x, n: 0}          
+//              {v: y, n: x}
+//                this.valueIndexes[this.currentIndex] = valueIndex + 1 // append new index to the value at the end
+//                this.nextIndexes[this.currentValueIndex] = this.nextIndexes[valueIndex] // append new index to the next value at the end
 
-//                ("set new valueIndex: " + (this.currentValueIndex + 1).toString()).println()
                 this.valueIndexes[index] = this.currentValueIndex + 1
-//                ("set new nextIndex: " + (this.currentIndex + 1).toString()).println()
-                this.nextIndexes[index] = this.currentIndex + 1
+                this.nextIndexes[this.currentValueIndex] = valueIndex + 1 // old value
                 this.currentIndex++
                 this.size++
             }

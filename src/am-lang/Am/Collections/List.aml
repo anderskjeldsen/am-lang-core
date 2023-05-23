@@ -20,7 +20,6 @@ namespace Am.Collections {
 
             ("Time: " + (endDate.getValue() - startDate.getValue()).toString() + "ms").println()
 
-/*
             var testVal = 4
             var iset = set as Set<Int>
             var hasValue = iset.has(testVal)
@@ -30,7 +29,6 @@ namespace Am.Collections {
             } else {
                 "not found".println()
             }
-            */
         }
 
         static fun main9() {
