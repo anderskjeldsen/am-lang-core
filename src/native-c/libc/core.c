@@ -196,12 +196,11 @@ void __deallocate_object(aobject * const __obj) {
 }
 
 void print_allocated_objects() {
+    printf("Allocated objects %d\n", __allocation_count);
     #ifdef DEBUG
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         if ( allocations[i] != NULL) {
-            #ifdef DEBUG
             printf("Object still alive: %s (address: %p, object_id: %d)\n", allocations[i]->class_ptr->name, allocations[i], allocations[i]->object_properties.class_object_properties.object_id);
-            #endif
         }
     }
     #endif

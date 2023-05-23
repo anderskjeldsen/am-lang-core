@@ -14,7 +14,7 @@ memory_pool
 */
 
 #define MAX_BANK_UNITS (32 * 1024)
-#define SMALL_OBJECT_MAX_SIZE = 0 // 128
+#define SMALL_OBJECT_MAX_SIZE = 128
 
 memory_pool _small_object_memory_pool = {
     .unit_size SMALL_OBJECT_MAX_SIZE,
@@ -28,7 +28,7 @@ memory_pool * small_object_memory_pool = &_small_object_memory_pool;
 
 memory_pool * create_memory_pool(size_t unit_size) {
 //    printf("create memory_pool with unit_size %lu \n", unit_size);
-    memory_pool *pool = calloc(1, sizeof(memory_pool));
+    memory_pool *pool = malloc(sizeof(memory_pool));
     pool->unit_size = unit_size;
 
     pool_bank *bank = create_pool_bank(pool, 256); // calloc(1, sizeof(pool_bank));
@@ -45,6 +45,9 @@ void free_memory_pool(memory_pool *pool) {
 void free_pool_banks(memory_pool *pool) {
     pool_bank *current = pool->first_bank;
     while(current != NULL) {
+        if (current->used_units > 0) {
+            printf("Pool bank still used\n");
+        }
         pool_bank *next = current->next;
         free(current);
         current = next;
@@ -60,7 +63,7 @@ pool_bank *create_pool_bank(memory_pool *pool, size_t units) {
     bank->units = units;
     bank->unit_position = 0;
     bank->used_units = 0;
-    pool_bank *old = pool->first_bank;    
+    pool_bank *old = pool->first_bank;
     bank->next = old;
     pool->first_bank = bank;
     if (old != NULL) {
@@ -70,7 +73,7 @@ pool_bank *create_pool_bank(memory_pool *pool, size_t units) {
 }
 
 void free_pool_bank(memory_pool *pool, pool_bank *bank) {
-//    printf("free pool bank, size %lu\n", bank->units);
+    printf("free pool bank, size %lu\n", bank->units);
     if (bank->prev != NULL) {
         bank->prev->next = bank->next;
     } else {
@@ -79,8 +82,12 @@ void free_pool_bank(memory_pool *pool, pool_bank *bank) {
     if (bank->next != NULL) {
         bank->next->prev = bank->prev;
     }
+    if (pool->first_bank_with_free_nodes == bank) {
+        pool->first_bank_with_free_nodes = NULL;
+    }
 
     free(bank);
+    printf("Freed\n");
 }
 
 int allocated_objects = 0;
@@ -179,7 +186,7 @@ void free_from_pool(memory_pool *pool, void *data) {
         node->next->prev = node;
     }
 
-    if (node->bank->used_units == 0) {        
+    if (node->bank->used_units == 0) {                
         free_pool_bank(pool, node->bank);
     } else {
         move_bank_up(pool, node->bank);

@@ -1,0 +1,7 @@
+namespace Am.Lang.Diagnostics
+{
+    native class Arc 
+    {
+        native static fun printAllocatedObjects()
+    }
+}
