@@ -14,7 +14,7 @@ memory_pool
 */
 
 #define MAX_BANK_UNITS (32 * 1024)
-#define SMALL_OBJECT_MAX_SIZE = 128
+#define SMALL_OBJECT_MAX_SIZE = 0 // 128 - currently disabled
 
 memory_pool _small_object_memory_pool = {
     .unit_size SMALL_OBJECT_MAX_SIZE,
