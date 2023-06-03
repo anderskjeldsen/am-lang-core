@@ -5,7 +5,7 @@ namespace Am.Collections {
         import Am.IO
         import Am.IO.Networking
 
-        static fun main9() {
+        static fun main10() {
             var set = new HashSet2<Int>()
             var startDate = Date.now()
             var i = 1
