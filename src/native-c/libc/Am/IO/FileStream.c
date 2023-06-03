@@ -41,7 +41,7 @@ function_result Am_IO_FileStream__native_init_0(aobject * const this)
 	FILE *f = fopen(path, "rw"); // TODO: Provide access mode
 	// throw exception if not found or any other error
 	if (f == NULL) {
-		__throw_simple_exception("Failed to create SSL context", "in Am_IO_Networking_SslSocketStream__native_init_0", &__result);
+		__throw_simple_exception("Failed to open file", "in Am_IO_FileStream__native_init_0", &__result);
 		goto __exit;
     }
 	file_holder *holder = calloc(1, sizeof(file_holder));
