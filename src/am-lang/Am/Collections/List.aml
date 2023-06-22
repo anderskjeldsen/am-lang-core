@@ -1,5 +1,10 @@
 namespace Am.Collections {
 
+    struct MyStruct {
+        import Am.Lang
+        var x: Int
+    }
+    
     class CoreStartup {
         import Am.Lang
         import Am.Lang.Diagnostics
