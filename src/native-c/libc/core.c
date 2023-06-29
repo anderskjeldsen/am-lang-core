@@ -187,7 +187,7 @@ void __deallocate_object(aobject * const __obj) {
     #endif
 
     if (__obj->class_ptr->memory_pool != NULL) {
-        free_from_pool(__obj->class_ptr->memory_pool, __obj);
+//        free_from_pool(__obj->class_ptr->memory_pool, __obj);
     } else if (__obj->memory_pooled) {
         free_from_pool(small_object_memory_pool, __obj);
     } else {

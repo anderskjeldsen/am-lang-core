@@ -1,5 +1,6 @@
 
 #include <libc/memory_pools.h>
+#include <stdarg.h>
 /*
 
 Let some classes have its own mem pool since their object size is the same for each object. For example HashMapEntry. 
@@ -15,6 +16,18 @@ memory_pool
 
 #define MAX_BANK_UNITS (32 * 1024)
 #define SMALL_OBJECT_MAX_SIZE = 128
+
+int allocated_banks = 0;
+int debug_on = false;
+
+debug(char *str, ...) {
+    if (debug_on) {
+        va_list args;
+        va_start(args, str);
+        vprintf(str, args);
+        va_end(args);
+    }
+}
 
 memory_pool _small_object_memory_pool = {
     .unit_size SMALL_OBJECT_MAX_SIZE,
@@ -33,11 +46,13 @@ memory_pool * create_memory_pool(size_t unit_size) {
 
     pool_bank *bank = create_pool_bank(pool, 256); // calloc(1, sizeof(pool_bank));
     pool->first_bank_with_free_nodes = NULL;
+    pool->first_bank_to_free = NULL;
 
     return pool;
 }
 
 void free_memory_pool(memory_pool *pool) {
+    printf("Free memory pool\n");
     free_pool_banks(pool);
     free(pool);
 }
@@ -52,10 +67,20 @@ void free_pool_banks(memory_pool *pool) {
         free(current);
         current = next;
     }
+
+    current = pool->first_bank_to_free;
+    while(current != NULL) {
+        if (current->used_units > 0) {
+            printf("Pool bank still used\n");
+        }
+        pool_bank *next = current->next;
+        free(current);
+        current = next;
+    }
 }
 
 pool_bank *create_pool_bank(memory_pool *pool, size_t units) {
-//    printf("create pool_bank with units %lu \n", units);
+    debug("create pool_bank with units %lu \n", units);
 
     size_t extra_size = (sizeof(pool_node) + pool->unit_size) * units;
     pool_bank *bank = malloc(sizeof(pool_bank) + extra_size);
@@ -69,11 +94,13 @@ pool_bank *create_pool_bank(memory_pool *pool, size_t units) {
     if (old != NULL) {
         old->prev = bank;
     }
+    allocated_banks++;
     return bank;
 }
 
 void free_pool_bank(memory_pool *pool, pool_bank *bank) {
     printf("free pool bank, size %lu\n", bank->units);
+/*
     if (bank->prev != NULL) {
         bank->prev->next = bank->next;
     } else {
@@ -86,8 +113,19 @@ void free_pool_bank(memory_pool *pool, pool_bank *bank) {
         pool->first_bank_with_free_nodes = NULL;
     }
 
-    free(bank);
-    printf("Freed\n");
+    pool_bank *next = pool->first_bank_to_free;
+    pool->first_bank_to_free = bank;
+    bank->next = next;
+    */
+//    free(bank);
+    allocated_banks--;
+    if (allocated_banks == 291) {
+        debug_on = true;
+        printf("debugon\n");
+        debug("on!\n");
+    }
+
+    printf("Banks left %d\n", allocated_banks);
 }
 
 int allocated_objects = 0;
@@ -107,6 +145,7 @@ pool_node *extract_free_node(memory_pool  *pool) {
 }
 
 void *alloc_from_pool(memory_pool *pool) {
+    debug("allocate from pool\n");
     allocated_objects++;
     if (allocated_objects % 1000000 == 0) {
         printf("Allocated another 1000000 objects: %d\n", allocated_objects);
@@ -114,12 +153,21 @@ void *alloc_from_pool(memory_pool *pool) {
 
     pool_bank * bank = pool->first_bank;
     if (bank->unit_position >= bank->units) {
+//        printf("extract_free_node\n");
+/*
         pool_node *node2 = extract_free_node(pool);
         if ( node2 != NULL) {
-            node2->next = pool->first_used_node;
+            pool_node *next = pool->first_used_node;
+            next->prev = node2;
+
+            node2->next = next;            
+            node2->prev = NULL;
+
             pool->first_used_node = node2;
+
             return (void *) (node2 + 1);
         }
+        */
         int new_bank_units = bank->units * 4;
         if (new_bank_units > MAX_BANK_UNITS) new_bank_units = MAX_BANK_UNITS;
         bank = create_pool_bank(pool, new_bank_units);
@@ -127,11 +175,12 @@ void *alloc_from_pool(memory_pool *pool) {
 
     unsigned char * bank_data = (unsigned char *) (bank + 1);
     pool_node * node = (pool_node *) &bank_data[bank->unit_position * (pool->unit_size + sizeof(pool_node))];
+    bank->unit_position++;        
+
     node->bank = bank;
     bank->used_units++;
 //        node->used = true;
 
-    bank->unit_position++;        
     pool_node * next_node = pool->first_used_node;
     pool->first_used_node = node;
     node->next = next_node;
@@ -161,12 +210,13 @@ void move_bank_up(memory_pool *pool, pool_bank *bank) {
 int freed_objects = 0;
 
 void free_from_pool(memory_pool *pool, void *data) {
+    debug("0\n");
     if (data == NULL) return;
     freed_objects++;
     if (freed_objects % 1000000 == 0) {
         printf("Freed another 1000000 objects: %d\n", freed_objects);
     }
-
+    debug("1\n");
     pool_node *node = data - sizeof(pool_node);
     node->bank->used_units--;
     if (node->prev != NULL) {
@@ -174,21 +224,25 @@ void free_from_pool(memory_pool *pool, void *data) {
     } else {
         pool->first_used_node = node->next;
     }
+    debug("2\n");
 
     if (node->next != NULL) {
         node->next->prev = node->prev;
     }
 
     node->prev = NULL;
-    node->next = node->bank->first_free_node;
-    node->bank->first_free_node = node;
-    if (node->next != NULL) {
-        node->next->prev = node;
+    pool_node *next = node->bank->first_free_node;
+    node->next = next;
+    if (next != NULL) {
+        next->prev = node;
     }
+    node->bank->first_free_node = node;
+    debug("3\n");
 
     if (node->bank->used_units == 0) {                
         free_pool_bank(pool, node->bank);
+        debug("4\n");
     } else {
-        move_bank_up(pool, node->bank);
+//        move_bank_up(pool, node->bank);
     }
 }

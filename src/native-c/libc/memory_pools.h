@@ -14,6 +14,7 @@ struct _memory_pool {
     size_t unit_size;
     pool_bank *first_bank;
     pool_bank *first_bank_with_free_nodes;
+    pool_bank *first_bank_to_free;
     pool_node *first_used_node;
 //    pool_node *first_free_node;
 
