@@ -2,6 +2,7 @@ namespace Am.Collections {
 
     class CoreStartup {
         import Am.Lang
+        import Am.Lang.Diagnostics
         import Am.IO
         import Am.IO.Networking
 
@@ -9,7 +10,7 @@ namespace Am.Collections {
             var set = new HashSet2<Int>()
             var startDate = Date.now()
             var i = 1
-            var max = 10000000
+            var max = 100000000
             ("Adding " + max.toString() + " key-value pairs to a HashSet on an emulated 020").println()
             while(i <= max) {                
                 set.add(i)
@@ -31,7 +32,7 @@ namespace Am.Collections {
             }
         }
 
-        static fun main9() {
+        static fun main() {
             var set = new HashSet2<String>()
             var startDate = Date.now()
             var i = 1
@@ -56,6 +57,7 @@ namespace Am.Collections {
             } else {
                 "not found".println()
             }
+            Arc.printAllocatedObjects()
         }       
 
         static fun main8() {
