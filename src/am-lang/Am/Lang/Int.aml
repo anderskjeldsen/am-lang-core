@@ -12,6 +12,21 @@ namespace Am.Lang
         native fun toUInt(): UInt
         native fun toULong(): ULong
         native fun toBool(): Bool
+
+        static fun min(a: Int, b: Int): Int {
+            if (a < b) {
+                return a
+            }
+            return b
+        }
+
+        static fun max(a: Int, b: Int): Int {
+            if (a > b) {
+                return a
+            }
+            return b
+        }
+
     }
 }
 

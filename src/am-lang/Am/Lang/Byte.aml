@@ -13,6 +13,20 @@ namespace Am.Lang
         native fun toULong(): ULong
         native fun toBool(): Bool
 
+        static fun min(a: Byte, b: Byte): Byte {
+            if (a < b) {
+                return a
+            }
+            return b
+        }
+
+        static fun max(a: Byte, b: Byte): Byte {
+            if (a > b) {
+                return a
+            }
+            return b
+        }
+
     }
 }
 

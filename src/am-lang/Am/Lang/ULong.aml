@@ -12,6 +12,20 @@ namespace Am.Lang
         native fun toUShort(): UShort
         native fun toUInt(): UInt
         native fun toBool(): Bool
+
+        static fun min(a: ULong, b: ULong): ULong {
+            if (a < b) {
+                return a
+            }
+            return b
+        }
+
+        static fun max(a: ULong, b: ULong): ULong {
+            if (a > b) {
+                return a
+            }
+            return b
+        }        
     }
 }
 
