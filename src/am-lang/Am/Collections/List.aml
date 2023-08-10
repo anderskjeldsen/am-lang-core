@@ -211,8 +211,9 @@ namespace Am.Collections {
 //            }
         }
 
-        fun removeAt(index: Int) {
+        fun removeAt(index: Int): T {
             var i = index
+            var value = this.items[i]
             this.items[i] = null
             while(i < this.size) {
                 var j = i + 1
@@ -222,6 +223,7 @@ namespace Am.Collections {
                 i++
             }
             this.size--
+            return value
         }
 
         fun get(index: Int): T {
@@ -246,5 +248,11 @@ namespace Am.Collections {
             var y = x as Iterator<T>
             return y
         }
+
+/*
+        fun filter(predicate: (t: T) => Bool) {
+
+        }
+        */
     }
 }
