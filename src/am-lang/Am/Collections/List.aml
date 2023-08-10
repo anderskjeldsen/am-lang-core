@@ -211,6 +211,19 @@ namespace Am.Collections {
 //            }
         }
 
+        fun removeAt(index: Int) {
+            var i = index
+            this.items[i] = null
+            while(i < this.size) {
+                var j = i + 1
+                if (j < this.size) {
+                    this.items[i] = this.items[j]
+                }
+                i++
+            }
+            this.size--
+        }
+
         fun get(index: Int): T {
             if (index < 0 || index > this.size) {
                 throw new Exception("Index out of bounds: " + index.toString())                
