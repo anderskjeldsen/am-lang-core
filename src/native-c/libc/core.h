@@ -237,12 +237,12 @@ aclass Long = {
 };
 */
 
-inline void __decrease_reference_count(aobject * const __obj);
-inline void __increase_reference_count(aobject * const __obj);
-inline void __set_property(aobject * const __obj, int const __index, nullable_value __prop_value);
-inline void __set_static_property(aclass * const __class, int const __index, nullable_value __prop_value);
-inline void __decrease_reference_count_nullable_value(nullable_value __value);
-inline void __increase_reference_count_nullable_value(nullable_value __value);
+static inline void __decrease_reference_count(aobject * const __obj);
+static inline void __increase_reference_count(aobject * const __obj);
+static inline void __set_property(aobject * const __obj, int const __index, nullable_value __prop_value);
+static inline void __set_static_property(aclass * const __class, int const __index, nullable_value __prop_value);
+static inline void __decrease_reference_count_nullable_value(nullable_value __value);
+static inline void __increase_reference_count_nullable_value(nullable_value __value);
 void __deallocate_object(aobject * const __obj);
 aobject * __allocate_iface_object(aclass * const __class, aobject * const implementation_object);
 //aobject * __allocate_object(aclass * const __class);
@@ -257,12 +257,12 @@ void __pass_exception(function_result *result, aobject * const exception, aobjec
 void __throw_simple_exception(const char * const message, const char * const stack_trace_item_text, function_result * const result);
 //void __deallocate_function_result(function_result const result);
 typedef function_result (*__release_T)(aobject * const);
-inline void __set_primitive_nullable(nullable_value * nullable_value, bool is_primitive_nullable);
-inline bool __is_primitive_nullable(const nullable_value nullable_value);
-inline void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null);
-inline bool __is_primitive_null(const nullable_value nullable_value);
-inline bool __is_primitive(const nullable_value nullable_value);
-inline bool __any_has_flags(const nullable_value *nv, unsigned short flags);
+static inline void __set_primitive_nullable(nullable_value * nullable_value, bool is_primitive_nullable);
+static inline bool __is_primitive_nullable(const nullable_value nullable_value);
+static inline void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null);
+static inline bool __is_primitive_null(const nullable_value nullable_value);
+static inline bool __is_primitive(const nullable_value nullable_value);
+static inline bool __any_has_flags(const nullable_value *nv, unsigned short flags);
 bool __any_equals(const nullable_value a, const nullable_value b);
 //bool __object_equals(aobject * const a, aobject * const b);
 aobject * __create_string_constant(char const * const str, aclass * const string_class);
@@ -272,8 +272,8 @@ aobject * __create_exception(aobject * const message);
 void clear_allocated_objects();
 void print_allocated_objects();
 bool is_descendant_of(aclass const * const cls, aclass const * const base);
-inline void attach_weak_reference_node(weak_reference_node * const node, aobject * const object);
-inline void detach_weak_reference_node(weak_reference_node * const node) ;
+static inline void attach_weak_reference_node(weak_reference_node * const node, aobject * const object);
+static inline void detach_weak_reference_node(weak_reference_node * const node) ;
 unsigned int __string_hash(const char * const str);
 void deallocate_annotations(aclass * const __class);
 

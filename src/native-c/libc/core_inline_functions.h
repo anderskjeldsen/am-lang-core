@@ -15,41 +15,41 @@ extern function_result Am_Lang_Object_equals_0(aobject * const this, aobject * v
 typedef function_result (*Am_Lang_Object_equals_0_T)(aobject * const this, aobject *);
 extern Am_Lang_Object_equals_0_index;
 */
-inline void __set_primitive_nullable(nullable_value * nullable_value, bool is_primitive_nullable) {
+static inline void __set_primitive_nullable(nullable_value * nullable_value, bool is_primitive_nullable) {
     unsigned char f = nullable_value->flags;
     f &= ~PRIMITIVE_NULLABLE;
     f |= is_primitive_nullable ? PRIMITIVE_NULLABLE : 0;
     nullable_value->flags = f; 
 }
 
-inline void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null) {
+static inline void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null) {
     unsigned char f = nullable_value->flags;
     f &= ~PRIMITIVE_NULL;
     f |= is_primitive_null ? PRIMITIVE_NULL : 0;
     nullable_value->flags = f; 
 }
 
-inline bool __is_primitive_null(const nullable_value nullable_value) {
+static inline bool __is_primitive_null(const nullable_value nullable_value) {
     return nullable_value.flags & PRIMITIVE_NULL;
 }
 
-inline bool __is_primitive_nullable(const nullable_value nullable_value) {
+static inline bool __is_primitive_nullable(const nullable_value nullable_value) {
     return nullable_value.flags & PRIMITIVE_NULLABLE;
 }
 
-inline bool __is_primitive(const nullable_value nullable_value) {
+static inline bool __is_primitive(const nullable_value nullable_value) {
     return nullable_value.flags != 0;
 }
 
-inline bool __any_has_flags(const nullable_value *nv, unsigned short flags) {
+static inline bool __any_has_flags(const nullable_value *nv, unsigned short flags) {
     return (nv->flags & flags) == flags;
 }
 
-inline aobject * __allocate_object(aclass * const __class) {
+static inline aobject * __allocate_object(aclass * const __class) {
     return __allocate_object_with_extra_size(__class, 0);
 }
 
-inline void __decrease_reference_count(aobject * const __obj) {
+static inline void __decrease_reference_count(aobject * const __obj) {
     if ( __obj != NULL) {
         __obj->reference_count--;
         #ifdef DEBUG
@@ -61,14 +61,14 @@ inline void __decrease_reference_count(aobject * const __obj) {
     }
 }
 
-inline void __increase_reference_count(aobject * const __obj) {
+static inline void __increase_reference_count(aobject * const __obj) {
     __obj->reference_count++;
     #ifdef DEBUG
     printf("increase reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
     #endif
 }
 
-inline void __set_property(aobject * const __obj, int const __index, nullable_value __prop_value) {
+static inline void __set_property(aobject * const __obj, int const __index, nullable_value __prop_value) {
     property * __prop = &__obj->object_properties.class_object_properties.properties[__index];
     if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
         __decrease_reference_count(__prop->nullable_value.value.object_value);
@@ -81,7 +81,7 @@ inline void __set_property(aobject * const __obj, int const __index, nullable_va
     __prop->nullable_value = __prop_value;
 }
 
-inline void __set_static_property(aclass * const __class, int const __index, nullable_value __prop_value) {
+static inline void __set_static_property(aclass * const __class, int const __index, nullable_value __prop_value) {
     property * __prop = &__class->static_properties[__index];
     if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
         __decrease_reference_count(__prop->nullable_value.value.object_value);
@@ -94,13 +94,13 @@ inline void __set_static_property(aclass * const __class, int const __index, nul
     __prop->nullable_value = __prop_value;
 }
 
-inline void __decrease_reference_count_nullable_value(nullable_value __value) {
+static inline void __decrease_reference_count_nullable_value(nullable_value __value) {
     if ( !__is_primitive(__value) && __value.value.object_value != NULL ) {
         __decrease_reference_count(__value.value.object_value);
     }
 }
 
-inline void __increase_reference_count_nullable_value(nullable_value __value) {
+static inline void __increase_reference_count_nullable_value(nullable_value __value) {
     if ( !__is_primitive(__value) && __value.value.object_value != NULL ) {
         __increase_reference_count(__value.value.object_value);
     }
@@ -126,14 +126,14 @@ inline void __pass_exception(function_result *result, aobject * const exception,
     result->exception = exception;
 }
 */
-inline void __deallocate_function_result(function_result const result) {
+static inline void __deallocate_function_result(function_result const result) {
     if (result.exception != NULL) {
         __decrease_reference_count(result.exception);
     }
 }
 
 
-inline bool __object_equals(aobject * const a, aobject * const b) {
+static inline bool __object_equals(aobject * const a, aobject * const b) {
     if (a != NULL) {
         Am_Lang_Object_equals_0_T af = (Am_Lang_Object_equals_0_T) a->class_ptr->functions[Am_Lang_Object_equals_0_index];
         function_result res = af(a, b);
@@ -160,14 +160,14 @@ inline void __throw_simple_exception(const char * const message, const char * co
     __decrease_reference_count(ex); // it's in the exception stack trace list now, we don't need it anymore.
 }
 */
-inline void attach_weak_reference_node(weak_reference_node * const node, aobject * const object) {
+static inline void attach_weak_reference_node(weak_reference_node * const node, aobject * const object) {
     node->object = object;
     weak_reference_node * const first = object->first_weak_reference_node;
     node->next = first;
     object->first_weak_reference_node = node;
 }
 
-inline void detach_weak_reference_node(weak_reference_node * const node) {
+static inline void detach_weak_reference_node(weak_reference_node * const node) {
     weak_reference_node * const first = node->object->first_weak_reference_node;
     weak_reference_node * current = first;
     if (current == node) {
