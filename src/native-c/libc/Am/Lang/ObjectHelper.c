@@ -43,7 +43,7 @@ function_result Am_Lang_ObjectHelper_hash_0(aobject * o)
 	if (o != NULL) {
 		__increase_reference_count(o);
 	}
-	__result.return_value = (nullable_value) { .value = { .uint_value = (unsigned int) o }, .flags = 0 };
+	__result.return_value = (nullable_value) { .value = { .uint_value = (unsigned int) (size_t) o }, .flags = 0 };
 __exit: ;
 	if (o != NULL) {
 		__decrease_reference_count(o);

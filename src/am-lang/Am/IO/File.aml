@@ -3,12 +3,32 @@ namespace Am.IO
     native class File(private var filename: String)
     {
         import Am.Lang
+        import Am.Collections
 
         static native fun getCurrentDirectory(): String
 
         static fun getCurrentDirectoryFile(): File {
             return new File(File.getCurrentDirectory())
         }
+
+        fun listFiles(): File[] {
+            var filenames = this.list()
+            var files = new File[filenames.length()]
+            var i = 0
+            while(i < filenames.length()) {
+                files[i] = new File(filenames[i])
+                i++
+            }
+            return files
+        }
+
+        fun list(): String[] {
+            var l = List<String>.newList<String>()
+            this.listNative(this.filename, l)
+            return l.toArray()
+        }
+
+        private native fun listNative(folderFilename: String, list: List<String>)
 
         override fun toString() {
             return this.filename
