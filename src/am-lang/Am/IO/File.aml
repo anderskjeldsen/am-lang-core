@@ -30,6 +30,8 @@ namespace Am.IO
 
         private native fun listNative(folderFilename: String, list: List<String>)
 
+        native fun isDirectory(): Bool
+
         override fun toString() {
             return this.filename
         }

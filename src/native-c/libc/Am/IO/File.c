@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <sys/stat.h>
 #include <libc/core_inline_functions.h>
 
 function_result Am_IO_File__native_init_0(aobject * const this)
@@ -76,7 +77,7 @@ function_result Am_IO_File_listNative_0(aobject * const this, aobject * folderFi
 	while ((dir = readdir(d)) != NULL) {
 		aobject *filename_str = __create_string(dir->d_name, &Am_Lang_String);
 		Am_Collections_List_add_0_object(list, filename_str);
-		printf("%s\n", dir->d_name);
+//		printf("%s\n", dir->d_name);
 	}
 	closedir(d);
 
@@ -92,4 +93,32 @@ __exit: ;
 	}
 	return __result;
 };
+
+function_result Am_IO_File_isDirectory_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+
+	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
+	string_holder *filename_string_holder = (string_holder *) (filename + 1);
+	
+	struct stat s;
+
+	if (stat(filename_string_holder->string_value, &s) == 0) {
+		__result.return_value.value.bool_value = S_ISDIR(s.st_mode);		
+    } else {
+		__throw_simple_exception("Failed to check if file is directory", "in Am_IO_File_isDirectory_0", &__result);
+		goto __exit;
+    }
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	return __result;
+};
+
+
 
