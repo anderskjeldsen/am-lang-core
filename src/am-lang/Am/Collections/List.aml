@@ -11,6 +11,14 @@ namespace Am.Collections {
         import Am.IO
         import Am.IO.Networking
 
+        static fun main() {
+            var sb = new StringBuilder()
+            sb.add("hello").add(" ").add("world")
+//            ((sb + "hello") + " ") + "world"
+            var str = sb.toString()
+            str.println()
+        }
+
         static fun main10() {
             var set = new HashSet2<Int>()
             var startDate = Date.now()

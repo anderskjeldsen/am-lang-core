@@ -1,0 +1,43 @@
+
+namespace Am.Lang 
+{
+    class StringBuilder {
+
+        import Am.Collections
+        
+        private var encoding: String = "UTF-8"
+        private var buffer: List<UByte> = List<UByte>.newList<UByte>()
+
+        override fun toString(): String {
+            var byteArray = this.buffer.toArray()
+            return String.fromBytes(byteArray, this.encoding)
+        }
+
+//        native fun getLength(): Int
+        op + (s: String): StringBuilder {
+            var bytes = s.toBytes(this.encoding)
+            var i = 0
+            var len = bytes.length()
+            var buf = this.buffer
+            while(i < len) {
+                buf.add(bytes[i])
+                i++
+            }
+            return this
+        }
+
+        fun add(s: String): StringBuilder {
+            var bytes = s.toBytes(this.encoding)
+            var i = 0
+            var len = bytes.length()
+            var buf = this.buffer
+            while(i < len) {
+                buf.add(bytes[i])
+                i++
+            }
+            return this
+        }
+
+    }
+}
+

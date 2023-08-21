@@ -24,8 +24,13 @@ namespace Am.IO
 
         fun list(): String[] {
             var l = List<String>.newList<String>()
+            var l2 = List<String>.newList<String>()
             this.listNative(this.filename, l)
-            return l.toArray()
+            each(l, name) {
+                l2.add(this.filename + "/" + name)
+            }
+
+            return l2.toArray()
         }
 
         private native fun listNative(folderFilename: String, list: List<String>)
