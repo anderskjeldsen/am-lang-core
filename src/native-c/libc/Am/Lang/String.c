@@ -378,17 +378,21 @@ function_result Am_Lang_String_substring_0(aobject * const this, unsigned int st
 		__throw_simple_exception("End index can't be higher than string length", "in Am_Lang_String_substring_0", &__result);
 		goto __exit;
 	}
+	printf("substr2\n");
 
 	aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + len + 1);
 	if (str_obj = NULL) {
 		__throw_simple_exception("Out of memory", "in Am_Lang_String_substring_0", &__result);
 		goto __exit;
 	}
+	printf("substr2\n");
 
 	string_holder *substr_holder = (string_holder *) (str_obj + 1);
 	str_obj->object_properties.class_object_properties.object_data.value.custom_value = substr_holder;
 	unsigned char * new_str = (unsigned char *) (substr_holder + 1);
+	printf("substr2\n");
 	strncpy(new_str, &holder->string_value[start], len);
+	new_str[len - 1] = 0;
 	printf("hash\n");
 	unsigned int hash = __string_hash(new_str);
 	*holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = new_str, .hash = hash };
