@@ -381,7 +381,7 @@ function_result Am_Lang_String_substring_0(aobject * const this, unsigned int st
 	printf("substr2\n");
 
 	aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + len + 1);
-	if (str_obj = NULL) {
+	if (str_obj == NULL) {
 		__throw_simple_exception("Out of memory", "in Am_Lang_String_substring_0", &__result);
 		goto __exit;
 	}
