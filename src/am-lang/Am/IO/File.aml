@@ -47,7 +47,7 @@ namespace Am.IO
 
         fun getName(): String {
             var index = this.filename.lastIndexOf("/")
-            if (index >= 0) {
+            if (index < 0) {
                 index = this.filename.lastIndexOf(":")
             }
             if (index >= 0) {
