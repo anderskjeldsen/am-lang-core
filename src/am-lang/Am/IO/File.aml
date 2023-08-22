@@ -26,8 +26,16 @@ namespace Am.IO
             var l = List<String>.newList<String>()
             var l2 = List<String>.newList<String>()
             this.listNative(this.filename, l)
-            each(l, name) {
-                l2.add(this.filename + "/" + name)
+            var endsWithColon = (this.filename.endsWith(":"))
+            var endsWithSlash = (this.filename.endsWith("/"))
+            if (endsWithColon || endsWithSlash) {
+                each(l, name) {
+                    l2.add(this.filename + name)
+                }
+            } else {
+                each(l, name) {
+                    l2.add(this.filename + "/" + name)
+                }
             }
 
             return l2.toArray()
