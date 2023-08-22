@@ -362,6 +362,8 @@ function_result Am_Lang_String_substring_0(aobject * const this, unsigned int st
 
 	string_holder *sh1 = this->object_properties.class_object_properties.object_data.value.custom_value;
 	int len = end - start;
+
+	printf("substr %d to %d of %d", start, end, sh1->length);
 	if (len < 0) {
 		__throw_simple_exception("End index can't be lower than start index", "in Am_Lang_String_substring_0", &__result);
 		goto __exit;
