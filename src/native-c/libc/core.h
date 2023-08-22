@@ -112,7 +112,7 @@ union _value {
 struct _string_holder {
     bool is_string_constant;
     unsigned int length; // length of characters, not "char"/bytes
-    char * string_value;
+    unsigned char * string_value;
     unsigned int hash;
 };
 
