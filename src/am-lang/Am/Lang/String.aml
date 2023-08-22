@@ -15,6 +15,7 @@ namespace Am.Lang
         native fun characterAt: Short
         native fun indexOf(s: String): Int
         native fun lastIndexOf(s: String): Int
+        native fun substring(start: UInt, end: UInt): String
 
         fun endsWith(s: String): Bool {
             return this.lastIndexOf(s) == (this.getLength() - s.getLength()).toUInt()

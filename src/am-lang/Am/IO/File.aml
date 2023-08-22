@@ -45,6 +45,17 @@ namespace Am.IO
 
         native fun isDirectory(): Bool
 
+        fun getName(): String {
+            var index = this.filename.lastIndexOf("/")
+            if (index >= 0) {
+                index = this.filename.lastIndexOf(":")
+            }
+            if (index >= 0) {
+                return this.filename.substring(index.toUInt(), this.filename.getLength() - index.toUInt())
+            }
+            return this.filename
+        }
+
         override fun toString() {
             return this.filename
         }

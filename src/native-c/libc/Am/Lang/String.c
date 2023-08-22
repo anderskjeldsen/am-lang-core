@@ -352,3 +352,49 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_Lang_String_substring_0(aobject * const this, unsigned int start, unsigned int end)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+
+	string_holder *sh1 = this->object_properties.class_object_properties.object_data.value.custom_value;
+	int len = end - start;
+	if (len < 0) {
+		__throw_simple_exception("End index can't be lower than start index", "in Am_Lang_String_substring_0", &__result);
+		goto __exit;
+	}
+
+	if (start > sh1->length) {
+		__throw_simple_exception("Start index can't be higher than string length", "in Am_Lang_String_substring_0", &__result);
+		goto __exit;
+	}
+
+	if (end > sh1->length) {
+		__throw_simple_exception("End index can't be higher than string length", "in Am_Lang_String_substring_0", &__result);
+		goto __exit;
+	}
+
+	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+
+	aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + len + 1);
+	if (str_obj = NULL) {
+		__throw_simple_exception("Out of memory", "in Am_Lang_String_substring_0", &__result);
+	}
+	string_holder *substr_holder = (string_holder *) (str_obj + 1);
+	str_obj->object_properties.class_object_properties.object_data.value.custom_value = substr_holder;
+	unsigned char * new_str = (char *) (substr_holder + 1);
+	strncpy(new_str, &holder->string_value[start], len);
+	unsigned int hash = __string_hash(new_str);
+	*holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = new_str, .hash = hash };
+	__result.return_value.value.object_value = str_obj;
+
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	return __result;
+};
+
