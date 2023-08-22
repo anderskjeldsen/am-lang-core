@@ -374,7 +374,7 @@ function_result Am_Lang_String_substring_0(aobject * const this, unsigned int st
 		goto __exit;
 	}
 
-	if (end >= holder->length) {
+	if (end > holder->length) { // end char isn't included
 		__throw_simple_exception("End index can't be higher than string length", "in Am_Lang_String_substring_0", &__result);
 		goto __exit;
 	}
@@ -384,11 +384,12 @@ function_result Am_Lang_String_substring_0(aobject * const this, unsigned int st
 		__throw_simple_exception("Out of memory", "in Am_Lang_String_substring_0", &__result);
 		goto __exit;
 	}
-	
+
 	string_holder *substr_holder = (string_holder *) (str_obj + 1);
 	str_obj->object_properties.class_object_properties.object_data.value.custom_value = substr_holder;
 	unsigned char * new_str = (unsigned char *) (substr_holder + 1);
 	strncpy(new_str, &holder->string_value[start], len);
+	printf("hash\n");
 	unsigned int hash = __string_hash(new_str);
 	*holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = new_str, .hash = hash };
 	__result.return_value.value.object_value = str_obj;
