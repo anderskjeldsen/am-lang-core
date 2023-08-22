@@ -388,7 +388,7 @@ function_result Am_Lang_String_substring_0(aobject * const this, unsigned int st
 	str_obj->object_properties.class_object_properties.object_data.value.custom_value = substr_holder;
 	unsigned char * new_str = (unsigned char *) (substr_holder + 1);
 	strncpy(new_str, &holder->string_value[start], len);
-	new_str[len - 1] = 0;
+	new_str[len] = 0;
 	unsigned int hash = __string_hash(new_str);
 	*substr_holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = new_str, .hash = hash };
 	__result.return_value.value.object_value = str_obj;
