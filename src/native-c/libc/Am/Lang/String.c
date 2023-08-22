@@ -266,3 +266,89 @@ __exit: ;
 	}
 	return __result;
 };
+
+function_result Am_Lang_String_characterAt_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+
+	string_holder *string_holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+//	__result.return_value.value.ushort_value = string_holder->string_value[...]
+
+
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	return __result;
+};
+
+function_result Am_Lang_String_indexOf_0(aobject * const this, aobject * s)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+	if (s != NULL) {
+		__increase_reference_count(s);
+	}
+
+	string_holder *sh1 = this->object_properties.class_object_properties.object_data.value.custom_value;
+	string_holder *sh2 = s->object_properties.class_object_properties.object_data.value.custom_value;
+
+	unsigned char *strpos = strstr(sh1->string_value, sh2->string_value);
+	if (strpos != NULL) {
+		__result.return_value.value.int_value = strpos - sh1->string_value;
+	} else {
+		__result.return_value.value.int_value = -1;
+	}
+
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	if (s != NULL) {
+		__decrease_reference_count(s);
+	}
+	return __result;
+};
+
+function_result Am_Lang_String_lastIndexOf_0(aobject * const this, aobject * s)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+	if (s != NULL) {
+		__increase_reference_count(s);
+	}
+
+	int last_index = -1;
+
+	string_holder *sh1 = this->object_properties.class_object_properties.object_data.value.custom_value;
+	string_holder *sh2 = s->object_properties.class_object_properties.object_data.value.custom_value;
+
+	for(int i = 0; i < sh1->length; i++) {
+		unsigned char *strpos = strstr(&sh1->string_value[i], sh2->string_value);
+		if (strpos != NULL) {
+			last_index = strpos - sh1->string_value;
+			i = last_index + 1;
+		}
+	}
+	__result.return_value.value.int_value = last_index;
+
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	if (s != NULL) {
+		__decrease_reference_count(s);
+	}
+	return __result;
+};
+

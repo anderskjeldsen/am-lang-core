@@ -12,6 +12,14 @@ namespace Am.Lang
         native op + (s: String): String
         native static fun fromBytes(bytes: UByte[], encoding: String): String
         native fun toBytes(encoding: String): UByte[]
+        native fun characterAt: Short
+        native fun indexOf(s: String): Int
+        native fun lastIndexOf(s: String): Int
+
+        fun endsWith(s: String): Bool {
+            return this.lastIndexOf(s) == (this.getLength() - 1).toUInt()
+        }
+
         fun println() {
             var s = this + "\n"
             s.print()
