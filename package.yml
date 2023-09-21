@@ -54,6 +54,32 @@ platforms:
     # gccAdditionalLibraries:
     #   - ssl
     #   - crypto
+  - id: rpi-pico-arm
+    extends: libc
+    gccCommand: arm-none-eabi-gcc -O3
+    gccAdditionalOptions:
+      - -DPICO_STDIO_USB
+    additionalHeaders:
+      - rpi-pico-arm.h 
+    additionalCSources: 
+      - inputFilename: rpi-pico-arm.c     
+        outputFilename: rpi-pico-arm.o
+    additionalIncludePaths:
+      - c-libs/pico-sdk/include
+      - /usr/share/pico_sdk/src/common/pico_base/include
+      - /usr/share/pico_sdk/src/common/pico_stdlib/include 
+      - /usr/share/pico_sdk/src/common/pico_time/include 
+      - /usr/share/pico_sdk/src/rp2_common/hardware_base/include 
+      - /usr/share/pico_sdk/src/rp2_common/hardware_timer/include 
+      - /usr/share/pico_sdk/src/rp2_common/hardware_gpio/include 
+      - /usr/share/pico_sdk/src/rp2_common/hardware_uart/include 
+      - /usr/share/pico_sdk/src/rp2_common/hardware_irq/include 
+      - /usr/share/pico_sdk/src/rp2_common/pico_stdio/include 
+      - /usr/share/pico_sdk/src/rp2_common/pico_stdio_usb/include/
+      - /usr/share/pico_sdk/src/rp2_common/pico_platform/include 
+      - /usr/share/pico_sdk/src/rp2040/hardware_regs/include 
+      - /usr/share/pico_sdk/src/rp2040/hardware_structs/include 
+      - /usr/share/pico_sdk/lib/tinyusb/src
   - id: morphos-ppc
     extends: libc
     gccCommand: ppc-morphos-gcc
@@ -125,6 +151,11 @@ buildTargets:
     platform: aros-x86-64
     commands: 
       - docker run --rm -v "${build_dir}":/work -i amigadev/crosstools:x86_64-aros make aros-x86-64.makefile all
+  - id: rpi-pico_docker
+    platform: rpi-pico-arm
+    commands: 
+      - docker run -v ${build_dir}:/home/dev/build -i lukstep/raspberry-pi-pico-sdk:latest make -f rpi-pico-arm.makefile -C /home/dev/build all
+
       #-v /path/to/extra/ppc-morphos/lib:/tools/usr/lib -v /path/to/extra/ppc-morphos/include:/tools/usr/include
   #-v /path/to/extra/ppc-morphos/lib:/tools/usr/lib -v /path/to/extra/ppc-morphos/include:/tools/usr/include
 #  - id: m68k-ataritos_docker_linux
