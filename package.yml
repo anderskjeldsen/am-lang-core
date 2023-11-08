@@ -89,11 +89,14 @@ buildTargets:
     platform: amigaos
     commands:
       - docker run -v ${build_dir}:/host -i d931759c3883 make -f amigaos.makefile -C /host all
-  - id: amigaos_docker_matebook_anders
+  - id: amigaos_docker_unix-x64
     platform: amigaos
     commands:
       - docker run -v ${build_dir}:/host kjeldsenanders/dnf-dev:initial-x86 make -f amigaos.makefile -C /host ${make_target}
-#      - docker run -v ${build_dir}:/host -i 265cc923e013 make -f amigaos.makefile -C /host all
+  - id: amigaos_docker_unix-arm
+    platform: amigaos
+    commands:
+      - docker run -v ${build_dir}:/host kjeldsenanders/dnf-dev:initial make -f amigaos.makefile -C /host ${make_target}
   - id: amigaos_docker_macm1_anders
     platform: amigaos
     commands:
@@ -117,6 +120,10 @@ buildTargets:
     platform: morphos-ppc
     commands:
       - docker run --rm -v "${build_dir}":/work -e USER=$( id -u ) -e GROUP=$( id -g ) -it amigadev/crosstools:ppc-morphos make -f morphos_ppc.makefile -C /work all
+  - id: morphos-ppc_docker_mac
+    platform: morphos-ppc
+    commands:
+      - docker run --rm -v "${build_dir}":/work -i amigadev/crosstools:ppc-morphos make -f morphos-ppc.makefile -C /work all
   - id: morphos-ppc_docker_win
     platform: morphos-ppc
     commands:
