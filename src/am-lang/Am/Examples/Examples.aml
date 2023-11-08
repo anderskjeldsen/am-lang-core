@@ -21,7 +21,7 @@ namespace Am.Examples {
         }
 
         // main10
-        static fun main() {
+        static fun main10() {
             var set = new HashSet2<Int>()
             var startDate = Date.now()
             var i = 1
