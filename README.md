@@ -45,39 +45,39 @@ Binary will end up in builds/bin/amigaos/ as a file called "app". Copy the "app"
 
 The following code fills up a HashSet2 (will be renamed to HashSet) and times it.
 
-namespace Am.Examples {    
+    namespace Am.Examples {    
 
-    class CoreStartup {
-        import Am.Lang
-        import Am.Lang.Diagnostics
-        import Am.IO
-        import Am.IO.Networking
-        import Am.Collections
+        class CoreStartup {
+            import Am.Lang
+            import Am.Lang.Diagnostics
+            import Am.IO
+            import Am.IO.Networking
+            import Am.Collections
 
-        static fun main() {
-            var set = new HashSet2<Int>()
-            var startDate = Date.now()
-            var i = 1
-            var max = 1000000
-            ("Adding " + max.toString() + " key-value pairs to a HashSet on an emulated 020").println()
-            while(i <= max) {                
-                set.add(i)
-                i++
-            }
+            static fun main() {
+                var set = new HashSet2<Int>()
+                var startDate = Date.now()
+                var i = 1
+                var max = 1000000
+                ("Adding " + max.toString() + " key-value pairs to a HashSet on an emulated 020").println()
+                while(i <= max) {                
+                    set.add(i)
+                    i++
+                }
 
-            var endDate = Date.now()
+                var endDate = Date.now()
 
-            ("Time: " + (endDate.getValue() - startDate.getValue()).toString() + "ms").println()
+                ("Time: " + (endDate.getValue() - startDate.getValue()).toString() + "ms").println()
 
-            var testVal = 4
-            var iset = set as Set<Int>
-            var hasValue = iset.has(testVal)
+                var testVal = 4
+                var iset = set as Set<Int>
+                var hasValue = iset.has(testVal)
 
-            if (hasValue) {
-                "found".println()
-            } else {
-                "not found".println()
+                if (hasValue) {
+                    "found".println()
+                } else {
+                    "not found".println()
+                }
             }
         }
     }
-}
