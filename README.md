@@ -1,5 +1,10 @@
 # am-lang-core
 
+Requirements:
+- Java 11+
+- Docker
+- Windows, MacOS, Linux
+
 Quick start (for AmigaOS3):
 
 There is no "main" function in this library, but there are some examples in src/Am/Examples/Examples.aml - just rename for example main12() to main() and build.
