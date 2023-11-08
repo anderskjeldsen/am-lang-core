@@ -1,6 +1,6 @@
 # am-lang-core
 
-Quick start (for AmigaOS3): \n
+Quick start (for AmigaOS3):
 
 There is no "main" function in this library, but there are some examples in src/Am/Examples/Examples.aml - just rename for example main12() to main() and build.
 
