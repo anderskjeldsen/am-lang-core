@@ -81,3 +81,8 @@ The following code fills up a HashSet2 (will be renamed to HashSet) and times it
             }
         }
     }
+
+
+# Try AmLang for yourself
+We've made a web-based playground (IDE) that you can try here: https://www.kelson.no/tools/amlangide
+
