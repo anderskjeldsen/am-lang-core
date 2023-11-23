@@ -31,15 +31,19 @@ There are still some major features missing, like for example for-loops. I have 
 There is no "main" function in this library, but there are some examples in src/Am/Examples/Examples.aml - just rename for example main12() to main() and build.
 
 build for AmigaOS (3.x): \
-java -jar amlc-1.jar . -bt amigaos_docker_unix-x64
+java -jar amlc-1.jar . -acmd -bt amigaos_docker_unix-x64
 
 add more runtime logging: \
-java -jar amlc-1.jar . -bt amigaos_docker_unix-x64 -rl
+java -jar amlc-1.jar . -acmd -bt amigaos_docker_unix-x64 -rl
 
 add more comments in the code: \
-java -jar amlc-1.jar . -bt amigaos_docker_unix-x64 -rdc
+java -jar amlc-1.jar . -acmd -bt amigaos_docker_unix-x64 -rdc
 
 Binary will end up in builds/bin/amigaos/ as a file called "app". Copy the "app" file to an Amiga environment and execute it. 
+
+The option "-acmd" means that you allow the compiler to run commands from the package.yml file. 
+
+The option "-bt" specifies which build target (from package.yml) you want to use (which platform to build for and how to build)
 
 # Code example
 
