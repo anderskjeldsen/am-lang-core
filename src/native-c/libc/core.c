@@ -16,6 +16,34 @@ aobject * allocations[MAX_ALLOCATIONS];
 int allocation_index = 0;
 #endif
 
+aobject *__first_object;
+
+void mark_object(aobject * const obj) {
+    if (obj != NULL) {
+        obj->marked = true;
+    }
+}
+
+void sweep_unmarked_objects() {
+    aobject * current = __first_object;
+    while(current != NULL) {
+        aobject * next = current->next;
+        sweep_object(current);
+        current = next;
+    }
+}
+
+void sweep_object(aobject * const obj) {
+    if (obj != NULL) {
+        if (obj->marked) {
+            obj->marked = false;
+        } else {
+            __deallocate_object_from_sweep(obj);
+        }
+    }
+}
+
+
 aobject * __allocate_iface_object(aclass * const __class, aobject * const implementation_object) {
     aobject * iface_object = __allocate_object(__class);
 //    iface_reference * ref = (iface_reference *) malloc(sizeof(iface_reference)); // TODO: Uhm, what is this actually used for?
@@ -108,6 +136,16 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
 
     // __obj->reference_count = 1;
 
+    __obj->next = __first_object;
+    __obj->prev = NULL;
+
+    if (__first_object != NULL) {
+        __first_object->prev = __obj;
+        __first_object = __obj;
+    } else {
+        __first_object = __obj
+    }
+
     return __obj;
 }
 
@@ -125,6 +163,40 @@ void * __allocate_object_data(aobject * const __obj, int __size) {
     return __data;
 }
 */
+
+void __deallocate_object_from_sweep(aobject * const __obj) {
+    __allocation_count--;
+    if ( __obj->class_ptr->release != NULL ) {
+        function_result release_result = ((__release_T) __obj->class_ptr->release)(__obj);
+        // TODO: handle exceptions
+    }
+
+    if (__obj->class_ptr->type == interface) {
+        iface_reference const *ref = &__obj->object_properties.iface_reference;
+
+        __decrease_reference_count(ref->implementation_object);
+    }
+
+    #ifdef DEBUG
+    for(int i = 0; i < 256; i++) {
+        if ( allocations[i] == __obj) {
+            allocations[i] = NULL;
+        }
+    }
+    #endif
+
+    if (__obj == __first_object) {
+        __first_object = __obj->next;
+        __obj->prev = NULL;
+    } else {        
+        __obj->prev->next = __obj->next;
+        if (__obj->next != NULL) {
+            __obj->next->prev = __obj->prev;
+        }
+    }
+
+    free(__obj);
+}
 
 void __deallocate_object(aobject * const __obj) {
     __allocation_count--;
@@ -185,6 +257,16 @@ void __deallocate_object(aobject * const __obj) {
         }
     }
     #endif
+
+    if (__obj == __first_object) {
+        __first_object = __obj->next;
+        __obj->prev = NULL;
+    } else {        
+        __obj->prev->next = __obj->next;
+        if (__obj->next != NULL) {
+            __obj->next->prev = __obj->prev;
+        }
+    }
 
     if (__obj->class_ptr->memory_pool != NULL) {
         free_from_pool(__obj->class_ptr->memory_pool, __obj);

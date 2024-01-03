@@ -191,6 +191,9 @@ struct _aobject {
     bool memory_pooled;
     weak_reference_node * first_weak_reference_node;
     object_properties object_properties;
+    bool marked;
+    aobject *prev;
+    aobject *next;
 };
 
 struct _function_result {
