@@ -270,7 +270,7 @@ void __pass_exception(function_result *result, aobject * const exception, aobjec
 void __throw_simple_exception(const char * const message, const char * const stack_trace_item_text, function_result * const result);
 //void __deallocate_function_result(function_result const result);
 typedef function_result (*__release_T)(aobject * const);
-typedef function_result (*__mark_object_T)(aobject * const);
+typedef function_result (*__mark_children_T)(aobject * const);
 static inline void __set_primitive_nullable(nullable_value * nullable_value, bool is_primitive_nullable);
 static inline bool __is_primitive_nullable(const nullable_value nullable_value);
 static inline void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null);
@@ -292,8 +292,10 @@ unsigned int __string_hash(const char * const str);
 void deallocate_annotations(aclass * const __class);
 
 // Mark & Sweep (GC)
+void __mark_root_objects();
 void __mark_object(aobject * const obj);
 void __sweep_unmarked_objects();
 void __sweep_object(aobject * const obj);
 void __deallocate_object_from_sweep(aobject * const obj);
 static inline void __mark_nullable_value(nullable_value __value);
+void __mark_static_properties(aclass * const __class);
