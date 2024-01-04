@@ -16,24 +16,45 @@ aobject * allocations[MAX_ALLOCATIONS];
 int allocation_index = 0;
 #endif
 
-aobject *__first_object;
+aobject * __first_object;
+aclass * __first_class;
 
-void mark_object(aobject * const obj) {
-    if (obj != NULL) {
-        obj->marked = true;
+void __mark_root_objects() {
+    aclass *current = __first_class;
+    while(current != NULL) {
+        if (current->type == class) {
+            __mark_static_properties(current);
+        }
+        current = current->next;
     }
 }
 
-void sweep_unmarked_objects() {
+void __mark_object(aobject * const obj) {
+    if (obj != NULL) {
+        obj->marked = true;
+        if (obj->class_ptr->mark_children != NULL) {
+            ((__mark_children_T) obj->class_ptr->mark_children)(obj);
+        }
+
+        for(int i = 0; i < obj->class_ptr->properties_count; i++) {
+            property * const __prop = &obj->object_properties.class_object_properties.properties[i];
+            if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
+                __mark_object(__prop->nullable_value.value.object_value);
+            }
+        }
+    }
+}
+
+void __sweep_unmarked_objects() {
     aobject * current = __first_object;
     while(current != NULL) {
         aobject * next = current->next;
-        sweep_object(current);
+        __sweep_object(current);
         current = next;
     }
 }
 
-void sweep_object(aobject * const obj) {
+void __sweep_object(aobject * const obj) {
     if (obj != NULL) {
         if (obj->marked) {
             obj->marked = false;
@@ -43,6 +64,10 @@ void sweep_object(aobject * const obj) {
     }
 }
 
+void __register_class(aclass * const __class) {
+    __class->next = __first_class;
+    __first_class = __class;
+}
 
 aobject * __allocate_iface_object(aclass * const __class, aobject * const implementation_object) {
     aobject * iface_object = __allocate_object(__class);
@@ -141,10 +166,9 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
 
     if (__first_object != NULL) {
         __first_object->prev = __obj;
-        __first_object = __obj;
-    } else {
-        __first_object = __obj
     }
+    __first_object = __obj;
+
 
     return __obj;
 }
@@ -274,6 +298,31 @@ void __deallocate_object(aobject * const __obj) {
         free_from_pool(small_object_memory_pool, __obj);
     } else {
         free(__obj);
+    }
+}
+
+void __dereference_static_properties(aclass * const __class) {
+    if (__class->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
+        for(int i = 0; i < __class->static_properties_count; i++) {
+            property * const __prop = &__class->static_properties[i];
+            // TODO: use __decrease_reference_count_nullable_value
+            if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
+                __decrease_reference_count(__prop->nullable_value.value.object_value);
+                __prop->nullable_value.value.object_value = NULL;
+            }
+        }
+    }
+}
+
+void __mark_static_properties(aclass * const __class) {
+    if (__class->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
+        for(int i = 0; i < __class->static_properties_count; i++) {
+            property * const __prop = &__class->static_properties[i];
+            // TODO: use __decrease_reference_count_nullable_value
+            if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
+                __mark_object(__prop->nullable_value.value.object_value);
+            }
+        }
     }
 }
 

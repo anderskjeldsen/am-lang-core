@@ -51,6 +51,34 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_Lang_Array__native_mark_children_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = false };
+	bool __returning = false;
+
+	array_holder * ah = (array_holder *) &this[1]; // this->object_properties.class_object_properties.object_data.value.custom_value;
+	int const size = ah->size;
+
+	if (ah->ctype == any_type) {
+		nullable_value * const items = (nullable_value *) ah->array_data;
+		for(size_t i = 0; i < size; i++) {
+			nullable_value const nv = items[i];
+			__decrease_reference_count_nullable_value(nv);			
+		}
+	} else if ( ah->ctype == object_type) {
+		aobject ** const items = (aobject **) ah->array_data;
+		for(size_t i = 0; i < size; i++) {
+			aobject * const obj = items[i];
+			if (obj != NULL) {
+				__mark_object(obj);
+			}
+		}
+	}
+
+__exit: ;
+	return __result;
+};
+
 function_result Am_Lang_Array_length_0(aobject * const this)
 {
 //	printf("get length\n");

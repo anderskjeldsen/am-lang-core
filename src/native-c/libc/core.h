@@ -112,7 +112,7 @@ union _value {
 struct _string_holder {
     bool is_string_constant;
     unsigned int length; // length of characters, not "char"/bytes
-    unsigned char * string_value;
+    char * string_value;
     unsigned int hash;
 };
 
@@ -145,6 +145,7 @@ struct _aclass {
     class_type type;
     aclass const * const base;
     __anonymous_function release;
+    __anonymous_function mark_children;
     __anonymous_function * functions;
     unsigned int iface_implementation_count;
     unsigned int functions_count;
@@ -155,6 +156,7 @@ struct _aclass {
     property * static_properties;    
     iface_implementation * iface_implementations;
     memory_pool * memory_pool;
+    aclass *next;
 // meta:
 //    aobject *properties;
 };
@@ -240,6 +242,14 @@ aclass Long = {
 };
 */
 
+// variables
+extern aclass * __first_class;
+
+
+// functions
+void __register_class(aclass * const __class);
+void __dereference_static_properties(aclass * const __class);
+
 static inline void __decrease_reference_count(aobject * const __obj);
 static inline void __increase_reference_count(aobject * const __obj);
 static inline void __set_property(aobject * const __obj, int const __index, nullable_value __prop_value);
@@ -260,6 +270,7 @@ void __pass_exception(function_result *result, aobject * const exception, aobjec
 void __throw_simple_exception(const char * const message, const char * const stack_trace_item_text, function_result * const result);
 //void __deallocate_function_result(function_result const result);
 typedef function_result (*__release_T)(aobject * const);
+typedef function_result (*__mark_object_T)(aobject * const);
 static inline void __set_primitive_nullable(nullable_value * nullable_value, bool is_primitive_nullable);
 static inline bool __is_primitive_nullable(const nullable_value nullable_value);
 static inline void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null);
@@ -276,7 +287,13 @@ void clear_allocated_objects();
 void print_allocated_objects();
 bool is_descendant_of(aclass const * const cls, aclass const * const base);
 static inline void attach_weak_reference_node(weak_reference_node * const node, aobject * const object);
-static inline void detach_weak_reference_node(weak_reference_node * const node) ;
+static inline void detach_weak_reference_node(weak_reference_node * const node);
 unsigned int __string_hash(const char * const str);
 void deallocate_annotations(aclass * const __class);
 
+// Mark & Sweep (GC)
+void __mark_object(aobject * const obj);
+void __sweep_unmarked_objects();
+void __sweep_object(aobject * const obj);
+void __deallocate_object_from_sweep(aobject * const obj);
+static inline void __mark_nullable_value(nullable_value __value);

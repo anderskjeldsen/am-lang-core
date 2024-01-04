@@ -100,6 +100,13 @@ static inline void __decrease_reference_count_nullable_value(nullable_value __va
     }
 }
 
+
+static inline void __mark_nullable_value(nullable_value __value) {
+    if ( !__is_primitive(__value) && __value.value.object_value != NULL ) {
+        __mark_object(__value.value.object_value);
+    }
+}
+
 static inline void __increase_reference_count_nullable_value(nullable_value __value) {
     if ( !__is_primitive(__value) && __value.value.object_value != NULL ) {
         __increase_reference_count(__value.value.object_value);

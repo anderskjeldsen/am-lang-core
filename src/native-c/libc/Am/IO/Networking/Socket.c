@@ -30,6 +30,14 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_IO_Networking_Socket__native_mark_children_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = false };
+	bool __returning = false;
+__exit: ;
+	return __result;
+};
+
 function_result Am_IO_Networking_Socket_createSocket_0(aobject * const this, int addressFamily, int socketType, int protocolFamily)
 {
 	function_result __result = { .has_return_value = false };

@@ -26,6 +26,14 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_Lang_Diagnostics_Arc__native_mark_children_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = false };
+	bool __returning = false;
+__exit: ;
+	return __result;
+};
+
 function_result Am_Lang_Diagnostics_Arc_printAllocatedObjects_0()
 {
 	function_result __result = { .has_return_value = false };

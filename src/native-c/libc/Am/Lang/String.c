@@ -38,6 +38,14 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_Lang_String__native_mark_children_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = false };
+	bool __returning = false;
+__exit: ;
+	return __result;
+};
+
 function_result Am_Lang_String_hash_0(nullable_value const this)
 {
 	function_result __result = { .has_return_value = true };
@@ -300,7 +308,7 @@ function_result Am_Lang_String_indexOf_0(aobject * const this, aobject * s)
 	string_holder *sh1 = this->object_properties.class_object_properties.object_data.value.custom_value;
 	string_holder *sh2 = s->object_properties.class_object_properties.object_data.value.custom_value;
 
-	unsigned char *strpos = strstr(sh1->string_value, sh2->string_value);
+	char *strpos = strstr(sh1->string_value, sh2->string_value);
 	if (strpos != NULL) {
 		__result.return_value.value.int_value = strpos - sh1->string_value;
 	} else {
@@ -334,7 +342,7 @@ function_result Am_Lang_String_lastIndexOf_0(aobject * const this, aobject * s)
 	string_holder *sh2 = s->object_properties.class_object_properties.object_data.value.custom_value;
 
 	for(int i = 0; i < sh1->length; i++) {
-		unsigned char *strpos = strstr(&sh1->string_value[i], sh2->string_value);
+		char *strpos = strstr(&sh1->string_value[i], sh2->string_value);
 		if (strpos != NULL) {
 			last_index = strpos - sh1->string_value;
 			i = last_index + 1;
@@ -386,7 +394,7 @@ function_result Am_Lang_String_substring_0(aobject * const this, unsigned int st
 
 	string_holder *substr_holder = (string_holder *) (str_obj + 1);
 	str_obj->object_properties.class_object_properties.object_data.value.custom_value = substr_holder;
-	unsigned char * new_str = (unsigned char *) (substr_holder + 1);
+	char * new_str = (char *) (substr_holder + 1);
 	strncpy(new_str, &holder->string_value[start], len);
 	new_str[len] = 0;
 	unsigned int hash = __string_hash(new_str);
