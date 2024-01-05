@@ -15,7 +15,6 @@ namespace Am.Examples {
         static fun main12() {
             var sb = new StringBuilder()
             sb.add("hello").add(" ").add("world")
-//            ((sb + "hello") + " ") + "world"
             var str = sb.toString()
             str.println()
         }
