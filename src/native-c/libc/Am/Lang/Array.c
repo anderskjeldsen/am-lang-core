@@ -25,6 +25,7 @@ function_result Am_Lang_Array__native_release_0(aobject * const this)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 
+/*
 	array_holder * ah = (array_holder *) &this[1]; // this->object_properties.class_object_properties.object_data.value.custom_value;
 	int const size = ah->size;
 
@@ -41,6 +42,7 @@ function_result Am_Lang_Array__native_release_0(aobject * const this)
 			__decrease_reference_count(obj);
 		}
 	}
+*/
 
 //	free(ah->array_data);
 //	ah->array_data = NULL;
