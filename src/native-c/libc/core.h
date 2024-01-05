@@ -295,7 +295,9 @@ void deallocate_annotations(aclass * const __class);
 void __mark_root_objects();
 void __mark_object(aobject * const obj);
 void __sweep_unmarked_objects();
-void __sweep_object(aobject * const obj);
+bool __sweep_object(aobject * const obj);
 void __deallocate_object_from_sweep(aobject * const obj);
 static inline void __mark_nullable_value(nullable_value __value);
 void __mark_static_properties(aclass * const __class);
+void __clear_marks();
+

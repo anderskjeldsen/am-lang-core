@@ -19,7 +19,7 @@ int allocation_index = 0;
 aobject * __first_object;
 aclass * __first_class;
 
-void __mark_root_objects() {
+void __mark_root_objects() {    
     aclass *current = __first_class;
     while(current != NULL) {
         if (current->type == class) {
@@ -31,6 +31,8 @@ void __mark_root_objects() {
 
 void __mark_object(aobject * const obj) {
     if (obj != NULL) {
+        printf("Mark object %s\n", obj->class_ptr->name);
+
         obj->marked = true;
         if (obj->class_ptr->mark_children != NULL) {
             ((__mark_children_T) obj->class_ptr->mark_children)(obj);
@@ -46,27 +48,57 @@ void __mark_object(aobject * const obj) {
 }
 
 void __sweep_unmarked_objects() {
-    aobject * current = __first_object;
-    while(current != NULL) {
-        aobject * next = current->next;
-        __sweep_object(current);
-        current = next;
+    int old_count = 1;
+    int new_count = 0;
+
+    while(old_count != new_count) {
+        old_count = new_count;
+        new_count = 0;
+        aobject * current = __first_object;
+        while(current != NULL) {
+            aobject * next = current->next;
+            if (__sweep_object(current)) {
+                new_count++;
+            }
+            current = next;
+        }
     }
+    __clear_marks();
+
 }
 
-void __sweep_object(aobject * const obj) {
+void __clear_marks() {
+    printf("clear marks\n");
+    aobject * current = __first_object;
+    while(current != NULL) {
+        if (current->marked) {
+            current->marked = false;
+        }   
+        current = current->next;
+    }
+    printf("clear marks DONE\n");
+}
+
+bool __sweep_object(aobject * const obj) {
     if (obj != NULL) {
         if (obj->marked) {
-            obj->marked = false;
+//            obj->marked = false;
+            printf("Don't sweep marked object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
         } else {
             if (obj->reference_count == 0) {
+                printf("Sweep object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
                 __deallocate_object_from_sweep(obj);
+                return true;
+            } else {
+                printf("Don't sweep referenced object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
             }
         }
     }
+    return false;
 }
 
 void __register_class(aclass * const __class) {
+    printf("Register class %s\n", __class->name);
     __class->next = __first_class;
     __first_class = __class;
 }
@@ -304,6 +336,8 @@ void __deallocate_object(aobject * const __obj) {
 }
 
 void __dereference_static_properties(aclass * const __class) {
+    printf("Dereference static properties of class %s\n", __class->name);
+
     if (__class->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
         for(int i = 0; i < __class->static_properties_count; i++) {
             property * const __prop = &__class->static_properties[i];
@@ -317,6 +351,8 @@ void __dereference_static_properties(aclass * const __class) {
 }
 
 void __mark_static_properties(aclass * const __class) {
+    printf("Mark static properties of class %s\n", __class->name);
+    
     if (__class->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
         for(int i = 0; i < __class->static_properties_count; i++) {
             property * const __prop = &__class->static_properties[i];

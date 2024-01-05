@@ -63,7 +63,7 @@ function_result Am_Lang_Array__native_mark_children_0(aobject * const this)
 		nullable_value * const items = (nullable_value *) ah->array_data;
 		for(size_t i = 0; i < size; i++) {
 			nullable_value const nv = items[i];
-			__decrease_reference_count_nullable_value(nv);			
+			__mark_nullable_value(nv);			
 		}
 	} else if ( ah->ctype == object_type) {
 		aobject ** const items = (aobject **) ah->array_data;

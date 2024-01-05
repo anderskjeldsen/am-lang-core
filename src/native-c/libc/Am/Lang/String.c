@@ -215,6 +215,14 @@ function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
+	if (bytes != NULL) {
+		__increase_reference_count(bytes);
+	}
+	if (encoding != NULL) {
+		__increase_reference_count(encoding);
+	}
+
+
 	array_holder *a_holder = (array_holder *) &bytes[1]; // bytes->object_properties.class_object_properties.object_data.value.custom_value;
 
     int const len = a_holder->size; // TODO: support different character sizes
@@ -239,7 +247,7 @@ function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
 
 __exit: ;
 	if (bytes != NULL) {
-		__increase_reference_count(bytes);
+		__decrease_reference_count(bytes);
 	}
 	if (encoding != NULL) {
 		__decrease_reference_count(encoding);
