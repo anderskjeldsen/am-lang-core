@@ -31,7 +31,9 @@ void __mark_root_objects() {
 
 void __mark_object(aobject * const obj) {
     if (obj != NULL) {
+        #if DEBUG
         printf("Mark object %s\n", obj->class_ptr->name);
+        #endif
 
         obj->marked = true;
         if (obj->class_ptr->mark_children != NULL) {
@@ -68,7 +70,9 @@ void __sweep_unmarked_objects() {
 }
 
 void __clear_marks() {
+    #ifdef DEBUG
     printf("clear marks\n");
+    #endif
     aobject * current = __first_object;
     while(current != NULL) {
         if (current->marked) {
@@ -83,14 +87,16 @@ bool __sweep_object(aobject * const obj) {
     if (obj != NULL) {
         if (obj->marked) {
 //            obj->marked = false;
-            printf("Don't sweep marked object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
+//            printf("Don't sweep marked object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
         } else {
             if (obj->reference_count == 0) {
+                #ifdef DEBUG
                 printf("Sweep object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
+                #endif
                 __deallocate_object_from_sweep(obj);
                 return true;
             } else {
-                printf("Don't sweep referenced object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
+//                printf("Don't sweep referenced object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
             }
         }
     }
@@ -98,7 +104,9 @@ bool __sweep_object(aobject * const obj) {
 }
 
 void __register_class(aclass * const __class) {
+    #ifdef DEBUG
     printf("Register class %s\n", __class->name);
+    #endif
     __class->next = __first_class;
     __first_class = __class;
 }
@@ -336,7 +344,9 @@ void __deallocate_object(aobject * const __obj) {
 }
 
 void __dereference_static_properties(aclass * const __class) {
+    #ifdef DEBUG
     printf("Dereference static properties of class %s\n", __class->name);
+    #endif
 
     if (__class->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
         for(int i = 0; i < __class->static_properties_count; i++) {
@@ -351,7 +361,9 @@ void __dereference_static_properties(aclass * const __class) {
 }
 
 void __mark_static_properties(aclass * const __class) {
+    #ifdef DEBUG
     printf("Mark static properties of class %s\n", __class->name);
+    #endif
     
     if (__class->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
         for(int i = 0; i < __class->static_properties_count; i++) {
