@@ -56,9 +56,9 @@ static inline void __decrease_reference_count(aobject * const __obj) {
         printf("decrease reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
         #endif
 
-//        if ( __obj->reference_count == 0 ) {
-//            __deallocate_object(__obj);
-//        }
+        if ( __obj->reference_count == 0 && __obj->property_reference_count == 0) {
+            __deallocate_object(__obj);
+        }
     }
 }
 
@@ -69,33 +69,47 @@ static inline void __increase_reference_count(aobject * const __obj) {
     #endif
 }
 
+static inline void __decrease_property_reference_count(aobject * const __obj) {
+    if ( __obj != NULL) {
+        __obj->property_reference_count--;
+        #ifdef DEBUG
+        printf("decrease property reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
+        #endif
+
+        if (__obj->reference_count == 0 && __obj->property_reference_count == 0) {
+            __deallocate_object(__obj);
+        }
+    }
+}
+
+static inline void __increase_property_reference_count(aobject * const __obj) {
+    __obj->property_reference_count++;
+    #ifdef DEBUG
+    printf("increase property reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
+    #endif
+}
+
 static inline void __set_property(aobject * const __obj, int const __index, nullable_value __prop_value) {
     property * __prop = &__obj->object_properties.class_object_properties.properties[__index];
-    /*
     if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
-        __decrease_reference_count(__prop->nullable_value.value.object_value);
+        __decrease_property_reference_count(__prop->nullable_value.value.object_value);
     }
-
     if ( !__is_primitive(__prop_value) && __prop_value.value.object_value != NULL ) {
-        __increase_reference_count(__prop_value.value.object_value);
+        __increase_property_reference_count(__prop_value.value.object_value);
     }
-    */
 
     __prop->nullable_value = __prop_value;
 }
 
 static inline void __set_static_property(aclass * const __class, int const __index, nullable_value __prop_value) {
     property * __prop = &__class->static_properties[__index];
-    /*
     if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
-        __decrease_reference_count(__prop->nullable_value.value.object_value);
+        __decrease_property_reference_count(__prop->nullable_value.value.object_value);
     }
 
     if ( !__is_primitive(__prop_value) && __prop_value.value.object_value != NULL ) {
-        __increase_reference_count(__prop_value.value.object_value);
+        __increase_property_reference_count(__prop_value.value.object_value);
     }
-    */
-
     __prop->nullable_value = __prop_value;
 }
 
@@ -105,6 +119,11 @@ static inline void __decrease_reference_count_nullable_value(nullable_value __va
     }
 }
 
+static inline void __decrease_property_reference_count_nullable_value(nullable_value __value) {
+    if ( !__is_primitive(__value) && __value.value.object_value != NULL ) {
+        __decrease_property_reference_count(__value.value.object_value);
+    }
+}
 
 static inline void __mark_nullable_value(nullable_value __value) {
     if ( !__is_primitive(__value) && __value.value.object_value != NULL ) {

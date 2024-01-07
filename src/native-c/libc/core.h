@@ -190,6 +190,7 @@ struct _aobject {
     // if class_ptr is an interface, object_properties will contain a iface_implementation
     // this object will also hold a reference to the implementation object, and will remove that once this has reached 0.
     int reference_count;
+    int property_reference_count;
     bool memory_pooled;
     weak_reference_node * first_weak_reference_node;
     object_properties object_properties;
@@ -256,6 +257,9 @@ static inline void __set_property(aobject * const __obj, int const __index, null
 static inline void __set_static_property(aclass * const __class, int const __index, nullable_value __prop_value);
 static inline void __decrease_reference_count_nullable_value(nullable_value __value);
 static inline void __increase_reference_count_nullable_value(nullable_value __value);
+static inline void __decrease_property_reference_count(aobject * const __obj);
+static inline void __increase_property_reference_count(aobject * const __obj);
+static inline void __decrease_property_reference_count_nullable_value(nullable_value __value);
 void __deallocate_object(aobject * const __obj);
 aobject * __allocate_iface_object(aclass * const __class, aobject * const implementation_object);
 //aobject * __allocate_object(aclass * const __class);
