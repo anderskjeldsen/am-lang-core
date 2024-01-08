@@ -89,7 +89,7 @@ sweep_result __sweep_object(aobject * const obj) {
 //            obj->marked = false;
 //            printf("Don't sweep marked object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
         } else {
-            if (obj->reference_count == 0) {
+            if (obj->reference_count == 0 && !obj->pending_deallocation) {
 //                #ifdef DEBUG
                 printf("Sweep object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
 //                #endif
@@ -202,8 +202,10 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
 
     // __obj->reference_count = 1;
 
+//    __obj->marked = false;
+//    __obj->pending_deallocation = false;
     __obj->next = __first_object;
-    __obj->prev = NULL;
+//    __obj->prev = NULL;
 
     if (__first_object != NULL) {
         __first_object->prev = __obj;
@@ -230,6 +232,7 @@ void * __allocate_object_data(aobject * const __obj, int __size) {
 */
 
 sweep_result __deallocate_object_from_sweep(aobject * const __obj) {
+    __obj->pending_deallocation = true;
     __allocation_count--;
     if ( __obj->class_ptr->release != NULL ) {
         function_result release_result = ((__release_T) __obj->class_ptr->release)(__obj);
@@ -266,6 +269,10 @@ sweep_result __deallocate_object_from_sweep(aobject * const __obj) {
 }
 
 void __deallocate_object(aobject * const __obj) {
+    if (__obj->pending_deallocation) {
+        return;
+    }
+    __obj->pending_deallocation = true;
     __allocation_count--;
 //    #ifdef DEBUG
     printf("Deallocate object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);

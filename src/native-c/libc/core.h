@@ -196,6 +196,7 @@ struct _aobject {
     weak_reference_node * first_weak_reference_node;
     object_properties object_properties;
     bool marked;
+    bool pending_deallocation;
     aobject *prev;
     aobject *next;
 };
