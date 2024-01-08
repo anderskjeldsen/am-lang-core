@@ -71,6 +71,7 @@ typedef struct _class_object_properties class_object_properties;
 typedef union _object_properties object_properties;
 typedef struct _anonymous_class_state_data anonymous_class_state_data;
 typedef struct _weak_reference_node weak_reference_node;
+typedef struct _sweep_result sweep_result;
 
 enum _ctype { 
     object_type, // 0
@@ -205,6 +206,11 @@ struct _function_result {
     aobject * exception;
 };
 
+struct _sweep_result {
+    bool is_deallocated;
+    aobject * next;
+};
+
 struct _suspend_state {
     suspend_state * parent;
     suspend_state * child;
@@ -299,8 +305,8 @@ void deallocate_annotations(aclass * const __class);
 void __mark_root_objects();
 void __mark_object(aobject * const obj);
 void __sweep_unmarked_objects();
-bool __sweep_object(aobject * const obj);
-void __deallocate_object_from_sweep(aobject * const obj);
+sweep_result __sweep_object(aobject * const obj);
+sweep_result __deallocate_object_from_sweep(aobject * const __obj);
 static inline void __mark_nullable_value(nullable_value __value);
 void __mark_static_properties(aclass * const __class);
 void __clear_marks();

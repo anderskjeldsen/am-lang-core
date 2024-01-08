@@ -58,11 +58,11 @@ void __sweep_unmarked_objects() {
         new_count = 0;
         aobject * current = __first_object;
         while(current != NULL) {
-            aobject * next = current->next;
-            if (__sweep_object(current)) {
+            sweep_result result = __sweep_object(current);
+            if (result.is_deallocated) {
                 new_count++;
-            }
-            current = next;
+            } 
+            current = result.next;
         }
     }
     __clear_marks();
@@ -83,7 +83,7 @@ void __clear_marks() {
     printf("clear marks DONE\n");
 }
 
-bool __sweep_object(aobject * const obj) {
+sweep_result __sweep_object(aobject * const obj) {
     if (obj != NULL) {
         if (obj->marked) {
 //            obj->marked = false;
@@ -93,14 +93,13 @@ bool __sweep_object(aobject * const obj) {
 //                #ifdef DEBUG
                 printf("Sweep object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
 //                #endif
-                __deallocate_object_from_sweep(obj);
-                return true;
+                return __deallocate_object_from_sweep(obj);
             } else {
 //                printf("Don't sweep referenced object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
             }
         }
     }
-    return false;
+    return (sweep_result) { .next = obj->next, .is_deallocated = false };
 }
 
 void __register_class(aclass * const __class) {
@@ -230,7 +229,7 @@ void * __allocate_object_data(aobject * const __obj, int __size) {
 }
 */
 
-void __deallocate_object_from_sweep(aobject * const __obj) {
+sweep_result __deallocate_object_from_sweep(aobject * const __obj) {
     __allocation_count--;
     if ( __obj->class_ptr->release != NULL ) {
         function_result release_result = ((__release_T) __obj->class_ptr->release)(__obj);
@@ -261,7 +260,9 @@ void __deallocate_object_from_sweep(aobject * const __obj) {
         }
     }
 
+    sweep_result result = { .next = __obj->next, .is_deallocated = true };
     free(__obj);
+    return result;
 }
 
 void __deallocate_object(aobject * const __obj) {
