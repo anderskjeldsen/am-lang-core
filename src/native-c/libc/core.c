@@ -90,9 +90,9 @@ bool __sweep_object(aobject * const obj) {
 //            printf("Don't sweep marked object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
         } else {
             if (obj->reference_count == 0) {
-                #ifdef DEBUG
+//                #ifdef DEBUG
                 printf("Sweep object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
-                #endif
+//                #endif
                 __deallocate_object_from_sweep(obj);
                 return true;
             } else {
