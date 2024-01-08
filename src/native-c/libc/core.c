@@ -80,7 +80,9 @@ void __clear_marks() {
         }   
         current = current->next;
     }
+    #ifdef DEBUG
     printf("clear marks DONE\n");
+    #endif
 }
 
 sweep_result __sweep_object(aobject * const obj) {
@@ -90,9 +92,9 @@ sweep_result __sweep_object(aobject * const obj) {
 //            printf("Don't sweep marked object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
         } else {
             if (obj->reference_count == 0 && !obj->pending_deallocation) {
-//                #ifdef DEBUG
+                #ifdef DEBUG
                 printf("Sweep object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
-//                #endif
+                #endif
                 return __deallocate_object_from_sweep(obj);
             } else {
 //                printf("Don't sweep referenced object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
@@ -274,9 +276,9 @@ void __deallocate_object(aobject * const __obj) {
     }
     __obj->pending_deallocation = true;
     __allocation_count--;
-//    #ifdef DEBUG
+    #ifdef DEBUG
     printf("Deallocate object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
-//    #endif
+    #endif
 
     if ( __obj->class_ptr->release != NULL ) {
         function_result release_result = ((__release_T) __obj->class_ptr->release)(__obj);
