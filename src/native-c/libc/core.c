@@ -16,8 +16,8 @@ aobject * allocations[MAX_ALLOCATIONS];
 int allocation_index = 0;
 #endif
 
-aobject * __first_object;
-aclass * __first_class;
+aobject * __first_object = NULL;
+aclass * __first_class = NULL;
 
 void __mark_root_objects() {    
     aclass *current = __first_class;
