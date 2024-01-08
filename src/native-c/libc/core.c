@@ -266,9 +266,9 @@ void __deallocate_object_from_sweep(aobject * const __obj) {
 
 void __deallocate_object(aobject * const __obj) {
     __allocation_count--;
-    #ifdef DEBUG
+//    #ifdef DEBUG
     printf("Deallocate object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
-    #endif
+//    #endif
 
     if ( __obj->class_ptr->release != NULL ) {
         function_result release_result = ((__release_T) __obj->class_ptr->release)(__obj);
