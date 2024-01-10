@@ -308,7 +308,7 @@ void __deallocate_object(aobject * const __obj) {
                 #ifdef DEBUG
                 printf("Detach property %s:\n", __prop->nullable_value.value.object_value->class_ptr->name);
                 #endif
-//                __decrease_reference_count(__prop->nullable_value.value.object_value);
+                __decrease_property_reference_count(__prop->nullable_value.value.object_value);
                 __prop->nullable_value.value.object_value = NULL;
             }
         }
@@ -363,7 +363,7 @@ void __dereference_static_properties(aclass * const __class) {
             property * const __prop = &__class->static_properties[i];
             // TODO: use __decrease_reference_count_nullable_value
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
-//                __decrease_reference_count(__prop->nullable_value.value.object_value);
+                __decrease_property_reference_count(__prop->nullable_value.value.object_value);
                 __prop->nullable_value.value.object_value = NULL;
             }
         }
