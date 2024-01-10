@@ -31,9 +31,9 @@ void __mark_root_objects() {
 
 void __mark_object(aobject * const obj) {
     if (obj != NULL) {
-        #if DEBUG
+//        #if DEBUG
         printf("Mark object %s\n", obj->class_ptr->name);
-        #endif
+//        #endif
 
         obj->marked = true;
         if (obj->class_ptr->mark_children != NULL) {
@@ -92,12 +92,12 @@ sweep_result __sweep_object(aobject * const obj) {
 //            printf("Don't sweep marked object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
         } else {
             if (obj->reference_count == 0 && !obj->pending_deallocation) {
-                #ifdef DEBUG
+//                #ifdef DEBUG
                 printf("Sweep object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
-                #endif
+//                #endif
                 return __deallocate_object_from_sweep(obj);
             } else {
-//                printf("Don't sweep referenced object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
+                printf("Don't sweep referenced object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
             }
         }
     }
