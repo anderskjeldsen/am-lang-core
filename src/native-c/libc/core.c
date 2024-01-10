@@ -202,18 +202,14 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
     //     memset(__obj->properties, 0, sizeof(property) * __class->properties_count);
     // }
 
-    // __obj->reference_count = 1;
-
-//    __obj->marked = false;
-//    __obj->pending_deallocation = false;
+/*
     __obj->next = __first_object;
-//    __obj->prev = NULL;
 
     if (__first_object != NULL) {
         __first_object->prev = __obj;
     }
     __first_object = __obj;
-
+*/
 
     return __obj;
 }
@@ -257,7 +253,9 @@ sweep_result __deallocate_object_from_sweep(aobject * const __obj) {
 
     if (__obj == __first_object) {
         __first_object = __obj->next;
-        __obj->prev = NULL;
+        if (__first_object != NULL) {
+            __first_object->prev = NULL;
+        }
     } else {        
         __obj->prev->next = __obj->next;
         if (__obj->next != NULL) {
@@ -334,6 +332,7 @@ void __deallocate_object(aobject * const __obj) {
     }
     #endif
 
+    /*
     if (__obj == __first_object) {
         __first_object = __obj->next;
         __obj->prev = NULL;
@@ -343,6 +342,7 @@ void __deallocate_object(aobject * const __obj) {
             __obj->next->prev = __obj->prev;
         }
     }
+    */
 
     if (__obj->class_ptr->memory_pool != NULL) {
         free_from_pool(__obj->class_ptr->memory_pool, __obj);

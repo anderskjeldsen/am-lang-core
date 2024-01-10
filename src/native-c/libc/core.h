@@ -251,6 +251,7 @@ aclass Long = {
 */
 
 // variables
+extern aobject * __first_object;
 extern aclass * __first_class;
 
 

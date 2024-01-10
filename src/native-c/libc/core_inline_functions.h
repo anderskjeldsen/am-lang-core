@@ -76,13 +76,38 @@ static inline void __decrease_property_reference_count(aobject * const __obj) {
         printf("decrease property reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
         #endif
 
-        if (__obj->reference_count == 0 && __obj->property_reference_count == 0) {
-            __deallocate_object(__obj);
+        if (__obj->property_reference_count == 0) {
+            if (__obj == __first_object) {
+                __first_object = __obj->next;                
+                __obj->next = NULL;
+                if (__first_object != NULL) {
+                    __first_object->prev = NULL;
+                }
+            } else {        
+                __obj->prev->next = __obj->next;
+                if (__obj->next != NULL) {
+                    __obj->next->prev = __obj->prev;
+                }
+                __obj->prev = NULL;
+                __obj->next = NULL;
+            }
+
+            if (__obj->reference_count == 0) {
+                __deallocate_object(__obj);
+            }
         }
     }
 }
 
 static inline void __increase_property_reference_count(aobject * const __obj) {
+    if (__obj->property_reference_count == 0) {
+        __obj->next = __first_object;
+
+        if (__first_object != NULL) {
+            __first_object->prev = __obj;
+        }
+        __first_object = __obj;
+    }
     __obj->property_reference_count++;
     #ifdef DEBUG
     printf("increase property reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
