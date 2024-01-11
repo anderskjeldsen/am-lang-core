@@ -547,6 +547,14 @@ aobject * __create_array(size_t const size, size_t const item_size, aclass * con
     return array_obj;
 }
 
+array_holder * get_array_holder(aobject * const array_obj) {
+    return (array_holder *) &array_obj[1];
+}
+
+char * get_array_data(array_holder * holder) {
+    return (char *) &holder[1];
+}
+
 aobject * __create_exception(aobject * const message) {
     aobject *ex = __allocate_object(&Am_Lang_Exception);
     Am_Lang_Exception_Exception_0(ex, message);
