@@ -56,7 +56,7 @@ namespace Am.IO
             return this.filename
         }
 
-        override fun toString() {
+        override fun toString(): String {
             return this.filename
         }
 

@@ -4,9 +4,9 @@ namespace Am.Lang
     primitive native class Bool {
         override fun toString(): String {
             if (this) {
-                return true
+                return "true"
             }
-            return false
+            return "false"
         }
 
         override fun hash(): Int {
