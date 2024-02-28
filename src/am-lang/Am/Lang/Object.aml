@@ -4,6 +4,7 @@ namespace Am.Lang
         static native fun equals(a: Object, b: Object): Bool
         static native fun hash(o: Object): UInt
         static native fun printDebug(o: Object)
+        static native fun initClassRef(o: Any, classRef: ClassRef)
     }
 
     class Object 

@@ -1,0 +1,18 @@
+namespace Am.Lang 
+{
+    class PropertyRef {
+
+    }
+
+    native class ClassRef 
+    {                
+        private var className: String
+        private var properties: PropertyRef[]
+
+        private native fun initFromAny(any: Any)
+
+        override fun toString(): String {
+            return this.className
+        }
+    }
+}
