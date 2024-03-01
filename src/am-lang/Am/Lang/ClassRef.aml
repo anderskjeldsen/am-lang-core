@@ -1,11 +1,14 @@
 namespace Am.Lang 
 {
     class PropertyRef {
+        private var name: String
 
+        native fun getValue(target: Any)
+        native fun setValue(target: Any, value: Any)
     }
 
     native class ClassRef 
-    {                
+    {
         private var className: String
         private var properties: PropertyRef[]
 

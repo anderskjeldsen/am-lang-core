@@ -147,6 +147,7 @@ struct _aclass {
     aclass const * const base;
     __anonymous_function release;
     __anonymous_function mark_children;
+    __anonymous_function init_class_ref;
     __anonymous_function * functions;
     unsigned int iface_implementation_count;
     unsigned int functions_count;
@@ -154,7 +155,7 @@ struct _aclass {
     unsigned int static_properties_count;
     unsigned char annotations_count;
     aobject ** annotations;
-    property * static_properties;    
+    property * static_properties;
     iface_implementation * iface_implementations;
     memory_pool * memory_pool;
     aclass *next;
