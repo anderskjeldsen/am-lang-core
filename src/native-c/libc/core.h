@@ -51,6 +51,10 @@
 #define PRIMITIVE_DOUBLE PRIMITIVE_LONG | PRIMITIVE_FLOATING_POINT_NUMBER
 #define PRIMITIVE_FLOAT PRIMITIVE_INT | PRIMITIVE_FLOATING_POINT_NUMBER
 
+#define MODIFIER_PRIVATE 1
+#define MODIFIER_PROTECTED 2
+#define MODIFIER_STATIC 4
+
 
 /*
 BYTE_SIZE_EXP lookup (order: 2,1)
@@ -79,6 +83,7 @@ typedef struct _function_result function_result;
 typedef union _value value;
 typedef struct _nullable_value nullable_value;
 typedef struct _property property;
+typedef struct _property_info property_info;
 typedef struct _iface_implementation iface_implementation;
 typedef struct _iface_reference iface_reference;
 typedef struct _string_holder string_holder;
@@ -151,6 +156,12 @@ struct _nullable_value {
     value value;
 };
 // object_data.value.object_value
+
+struct _property_info {
+    char * name;
+    unsigned char modifier;
+};
+
 struct _property {
     nullable_value nullable_value;    
 };
