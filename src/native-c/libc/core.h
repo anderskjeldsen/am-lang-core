@@ -144,6 +144,7 @@ struct _property {
 
 struct _property_info {
     char * name;
+    // modifiers
 };
 
 struct _aclass {
