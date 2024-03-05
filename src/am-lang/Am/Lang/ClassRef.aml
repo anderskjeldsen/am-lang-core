@@ -1,7 +1,8 @@
 namespace Am.Lang 
 {
-    class PropertyInfo {
+    native class PropertyInfo {
         private var name: String
+        private var index: UByte
 
         native fun getValue(target: Any)
         native fun setValue(target: Any, value: Any)
