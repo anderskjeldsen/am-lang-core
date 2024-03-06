@@ -4,8 +4,9 @@ namespace Am.Lang
         private var name: String
         private var index: UByte
 
-        native fun getValue(target: Any)
-        native fun setValue(target: Any, value: Any)
+        // only Objects have properties, Any's don't.
+        native fun getValue(target: Object): Any
+        native fun setValue(target: Object, value: Any)
     }
 
     native class ClassRef 
