@@ -11,6 +11,16 @@ namespace Am.Examples {
         import Am.IO.Networking
         import Am.Collections
 
+        static fun main() {
+            var s = "hello"
+            var cr = s.getClassRef()            
+            cr.toString().println()
+
+            var i = 20
+            var cri = i.getClassRef()            
+            cri.toString().println()
+        }
+
         // main12
         static fun main12() {
             var sb = new StringBuilder()
