@@ -11,10 +11,19 @@ namespace Am.Lang
 
     native class ClassRef 
     {
+        import Am.Collections
+
         private var className: String
         private var properties: PropertyInfo[]
+        private static var classRefs: Map<String, ClassRef> = new HashMap<String, ClassRef>()
 
-        private native fun initFromAny(any: Any)
+        static fun getClassRef(name: String): ClassRef {
+            return ClassRef.classRefs.get(name)
+        }
+
+        static fun registerClassRef(name: String, classRef: ClassRef) {
+            ClassRef.classRefs.set(name, classRef)
+        }
 
         override fun toString(): String {
             return this.className

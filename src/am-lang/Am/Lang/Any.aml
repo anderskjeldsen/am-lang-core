@@ -10,10 +10,6 @@ namespace Am.Lang
             return 0UI
         }
 
-        primitive fun getClassRef(): ClassRef {
-            var classRef = new ClassRef()
-            ObjectHelper.initClassRef(this, classRef)
-            return classRef
-        }
+        native primitive fun getClassRef(): ClassRef
     }
 }

@@ -153,8 +153,9 @@ struct _aclass {
     aclass const * const base;
     __anonymous_function release;
     __anonymous_function mark_children;
-    __anonymous_function init_class_ref;
+//    __anonymous_function init_class_ref;
     __anonymous_function * functions;
+    aobject * class_ref_singleton;
     unsigned int iface_implementation_count;
     unsigned int functions_count;
     unsigned int properties_count;
