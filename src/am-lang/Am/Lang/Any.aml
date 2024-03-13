@@ -10,6 +10,8 @@ namespace Am.Lang
             return 0UI
         }
 
-        native primitive fun getClassRef(): ClassRef
+        primitive fun getClassRef(): ClassRef {
+            return ClassRef.getClassRefFromAny(this)
+        }
     }
 }

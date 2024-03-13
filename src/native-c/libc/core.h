@@ -8,15 +8,35 @@
 //#define CLASS_TYPE_PRIMITIVE 1
 //#define CLASS_TYPE_NORMAL 0
 
+
+// 10000000 = primitive
+// 10000001 = primitive + nullable
+// 10000011 = primitive + null
+// 10000010 = invalid state because it's null but not nullable
+// 10000100 = unsigned byte (1 << 0)
+// 10010100 = unsigned short (1 << 1)
+// 10100100 = unsigned int (1 << 2)
+// 10110100 = unsigned long (1 << 3) 
+// 10000000 = signed byte (1 << 0)
+// 10010000 = signed short (1 << 1)
+// 10100000 = signed int (1 << 2)
+// 10110000 = signed long (1 << 3)
+// 10101000 = float (1 << 2)
+// 10111000 = double (1 << 3)
+// 11000000 = bool false
+// 11010000 = bool true
+// 00000000 = object
 #define PRIMITIVE_NULLABLE 1 // can it be null?
 #define PRIMITIVE_NULL 2 // is it null?
 #define PRIMITIVE_UNSIGNED 4 // is it unsigned?
 #define PRIMITIVE_FLOATING_POINT_NUMBER 8
 #define PRIMITIVE_BYTE_SIZE_EXP_1 16
 #define PRIMITIVE_BYTE_SIZE_EXP_2 32
-#define PRIMITIVE 64
-#define PRIMITIVE_BOOL 128 | PRIMITIVE // is it a bool type?
-#define PRIMITIVE_BOOL_TRUE 16 // if it's a bool type, is it true (1) ?
+#define PRIMITIVE 128
+
+#define PRIMITIVE_BOOL 64 | PRIMITIVE // is it a bool type?
+//#define PRIMITIVE_BOOL_FALSE PRIMITIVE_BOOL
+//#define PRIMITIVE_BOOL_TRUE PRIMITIVE_BOOL | 16 
 
 #define PRIMITIVE_LONG PRIMITIVE_BYTE_SIZE_EXP_1 | PRIMITIVE_BYTE_SIZE_EXP_2 | PRIMITIVE
 #define PRIMITIVE_INT PRIMITIVE_BYTE_SIZE_EXP_2 | PRIMITIVE
@@ -128,12 +148,6 @@ struct _array_holder {
 
 // rename to: any_value
 struct _nullable_value {
-    // Flags
-    // 1: nullable (only applies to primitives)
-    // 2: null (only applies to primitives, meaning primitive is null)
-    // 4: object type (1 << (ctype enum + 2))
-    // 8: long type (1 + 1 << 3)
-
     unsigned short flags; // 1 = nullable primitive (this is a primitive that CAN be set to NULL), 2 = primitive null (this is a primitive that is CURRENTLY NULL)
     value value;
 };
@@ -297,6 +311,7 @@ static inline void __set_primitive_null(nullable_value * nullable_value, bool is
 static inline bool __is_primitive_null(const nullable_value nullable_value);
 static inline bool __is_primitive(const nullable_value nullable_value);
 static inline bool __any_has_flags(const nullable_value *nv, unsigned short flags);
+static inline ctype __value_flags_to_ctype(unsigned char flags);
 bool __any_equals(const nullable_value a, const nullable_value b);
 //bool __object_equals(aobject * const a, aobject * const b);
 aobject * __create_string_constant(char const * const str, aclass * const string_class);

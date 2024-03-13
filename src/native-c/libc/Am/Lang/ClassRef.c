@@ -20,7 +20,7 @@ __exit: ;
 		__decrease_reference_count(this);
 	}
 	return __result;
-};
+}
 
 function_result Am_Lang_ClassRef__native_release_0(aobject * const this)
 {
@@ -28,7 +28,7 @@ function_result Am_Lang_ClassRef__native_release_0(aobject * const this)
 	bool __returning = false;
 __exit: ;
 	return __result;
-};
+}
 
 function_result Am_Lang_ClassRef_initFromAny_0(aobject * const this, nullable_value any)
 {
@@ -101,5 +101,81 @@ __exit: ;
 	}
 	__decrease_reference_count_nullable_value(any);
 	return __result;
-};
+}
 
+function_result Am_Lang_ClassRef_getClassRefFromAny_0(nullable_value any)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	__increase_reference_count_nullable_value(any);
+
+	aobject * class_ref = NULL;
+	if (any.flags == 0) {
+		class_ref = any.value.object_value->class_ptr->class_ref_singleton;
+	} else {
+		/*
+		enum _ctype { 
+    object_type, // 0
+    long_type, // 1
+    int_type,
+    short_type,
+    char_type,
+    ulong_type,
+    uint_type,
+    ushort_type,
+    uchar_type,
+    float_type,
+    double_type,
+    bool_type,
+    any_type,
+    void_type
+ };
+		*/
+		ctype ctype = __value_flags_to_ctype(any.flags);
+		switch(ctype) {
+			case long_type:
+				class_ref = Am_Lang_Long.class_ref_singleton;
+				break;
+			case int_type:
+				class_ref = Am_Lang_Int.class_ref_singleton;
+				break;
+			case short_type:
+				class_ref = Am_Lang_Short.class_ref_singleton;
+				break;
+			case char_type:
+				class_ref = Am_Lang_Byte.class_ref_singleton;
+				break;
+			case ulong_type:
+				class_ref = Am_Lang_ULong.class_ref_singleton;
+				break;
+			case uint_type:
+				class_ref = Am_Lang_UInt.class_ref_singleton;
+				break;
+			case ushort_type:
+				class_ref = Am_Lang_UShort.class_ref_singleton;
+				break;
+			case uchar_type:
+				class_ref = Am_Lang_UByte.class_ref_singleton;
+				break;
+				/* TODO: add float and double
+			case float_type:
+				class_ref = &Am_Lang_Float;
+				break;
+			case double_type:
+				class_ref = &Am_Lang_Double;
+				break;
+				*/
+			case bool_type:
+				class_ref = Am_Lang_Bool.class_ref_singleton;
+				break;
+			default:
+				__throw_simple_exception("Invalid primitive type", "getClassRefFromAny", &__result);
+				goto __exit;
+		}
+		__increase_reference_count(class_ref); // one extra, because we want to keep the object until the end.
+		__result.return_value.value.object_value = class_ref;
+	}
+__exit: ;
+	__decrease_reference_count_nullable_value(any);
+	return __result;
+}

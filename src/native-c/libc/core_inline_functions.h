@@ -242,3 +242,33 @@ static inline void detach_weak_reference_node(weak_reference_node * const node) 
     }
 
 }
+
+static inline ctype __value_flags_to_ctype(unsigned char flags) {
+    unsigned char stripped_flags = flags & 0b11111100;
+    switch(stripped_flags) {
+        case PRIMITIVE_BOOL:
+            return bool_type;
+        case PRIMITIVE_LONG:
+            return long_type;
+        case PRIMITIVE_INT: 
+            return int_type;
+        case PRIMITIVE_SHORT:  
+            return short_type;
+        case PRIMITIVE_CHAR:
+            return char_type;
+        case PRIMITIVE_ULONG:
+            return ulong_type;
+        case PRIMITIVE_UINT:
+            return uint_type;
+        case PRIMITIVE_USHORT:
+            return ushort_type;
+        case PRIMITIVE_UCHAR:
+            return uchar_type;
+        case PRIMITIVE_FLOAT:
+            return float_type;
+        case PRIMITIVE_DOUBLE:
+            return double_type;
+        default:
+            return object_type;
+    }
+}

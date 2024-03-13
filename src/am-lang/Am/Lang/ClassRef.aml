@@ -21,6 +21,8 @@ namespace Am.Lang
             return ClassRef.classRefs.get(name)
         }
 
+        native static fun getClassRefFromAny(any: Any): ClassRef
+
         static fun registerClassRef(name: String, classRef: ClassRef) {
             ClassRef.classRefs.set(name, classRef)
         }
