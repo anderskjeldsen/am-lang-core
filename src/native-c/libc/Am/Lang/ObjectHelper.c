@@ -80,6 +80,7 @@ __exit: ;
 	return __result;
 };
 
+/*
 function_result Am_Lang_ObjectHelper_initClassRef_0(nullable_value o, aobject * classRef)
 {
 	function_result __result = { .has_return_value = false };
@@ -98,3 +99,4 @@ __exit: ;
 	return __result;
 };
 
+*/
