@@ -15,7 +15,7 @@ namespace Am.Lang
 
         private var className: String
         private var properties: PropertyInfo[]
-        private static var classRefs: Map<String, ClassRef> = new HashMap<String, ClassRef>()
+        private static var classRefs: HashMap<String, ClassRef> = new HashMap<String, ClassRef>()
 
         static fun getClassRef(name: String): ClassRef {
             return ClassRef.classRefs.get(name)

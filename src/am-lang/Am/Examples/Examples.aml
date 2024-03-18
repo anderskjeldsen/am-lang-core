@@ -13,7 +13,7 @@ namespace Am.Examples {
 
         static fun main() {
             var s = "hello"
-            var cr = s.getClassRef()            
+            var cr = s.getClassRef()
             cr.toString().println()
 
             var i = 20

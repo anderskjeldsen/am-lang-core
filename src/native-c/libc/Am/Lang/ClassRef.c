@@ -111,26 +111,11 @@ function_result Am_Lang_ClassRef_getClassRefFromAny_0(nullable_value any)
 
 	aobject * class_ref = NULL;
 	if (any.flags == 0) {
+		printf("Get class ref from object: %p\n", any.value.object_value);
 		class_ref = any.value.object_value->class_ptr->class_ref_singleton;
 	} else {
-		/*
-		enum _ctype { 
-    object_type, // 0
-    long_type, // 1
-    int_type,
-    short_type,
-    char_type,
-    ulong_type,
-    uint_type,
-    ushort_type,
-    uchar_type,
-    float_type,
-    double_type,
-    bool_type,
-    any_type,
-    void_type
- };
-		*/
+		printf("Get class ref from primitive\n");
+
 		ctype ctype = __value_flags_to_ctype(any.flags);
 		switch(ctype) {
 			case long_type:
@@ -172,9 +157,10 @@ function_result Am_Lang_ClassRef_getClassRefFromAny_0(nullable_value any)
 				__throw_simple_exception("Invalid primitive type", "getClassRefFromAny", &__result);
 				goto __exit;
 		}
-		__increase_reference_count(class_ref); // one extra, because we want to keep the object until the end.
-		__result.return_value.value.object_value = class_ref;
 	}
+	__increase_reference_count(class_ref); // one extra, because we want to keep the object until the end.
+	__result.return_value.value.object_value = class_ref;
+
 __exit: ;
 	__decrease_reference_count_nullable_value(any);
 	return __result;
