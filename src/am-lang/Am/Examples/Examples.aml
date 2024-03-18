@@ -14,11 +14,22 @@ namespace Am.Examples {
         static fun main() {
             var s = "hello"
             var cr = s.getClassRef()
-            cr.toString().println()
+            ("Getting class name of a string: " + cr.toString()).println()
 
             var i = 20
             var cri = i.getClassRef()            
-            cri.toString().println()
+            ("Getting class name of an int: " + cri.toString()).println()
+
+            var file = new File("test.txt")
+            var crf = file.getClassRef()
+            ("Getting class name of a file: " + crf.toString()).println()
+            var props = crf.getProperties()
+            var pi = 0
+            while(pi < props.length()) {
+                var prop = props[pi]
+                ("Property: " + prop.name.toString()).println()
+                pi++
+            }
         }
 
         // main12
