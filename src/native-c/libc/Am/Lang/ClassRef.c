@@ -38,6 +38,7 @@ __exit: ;
 	return __result;
 }
 
+/*
 function_result Am_Lang_ClassRef_initFromAny_0(aobject * const this, nullable_value any)
 {
 	function_result __result = { .has_return_value = false };
@@ -110,6 +111,7 @@ __exit: ;
 	__decrease_reference_count_nullable_value(any);
 	return __result;
 }
+*/
 
 function_result Am_Lang_ClassRef_getClassRefFromAny_0(nullable_value any)
 {
@@ -167,6 +169,7 @@ function_result Am_Lang_ClassRef_getClassRefFromAny_0(nullable_value any)
 		}
 	}
 	__increase_reference_count(class_ref); // one extra, because we want to keep the object until the end.
+	printf("Class ref: %p, ref: %d, prop ref: %d\n", class_ref, class_ref->reference_count, class_ref->property_reference_count);
 	__result.return_value.value.object_value = class_ref;
 
 __exit: ;

@@ -25,11 +25,13 @@ namespace Am.Examples {
             ("Getting class name of a file: " + crf.toString()).println()
             var props = crf.getProperties()
             var pi = 0
+            /*
             while(pi < props.length()) {
                 var prop = props[pi]
                 ("Property: " + prop.name.toString()).println()
                 pi++
             }
+            */
         }
 
         // main12

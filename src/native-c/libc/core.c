@@ -33,21 +33,35 @@ void __mark_root_objects() {
 
 void __mark_object(aobject * const obj) {
     if (obj != NULL) {
-        #if DEBUG
-        printf("Mark object %s\n", obj->class_ptr->name);
-        #endif
+//        #if DEBUG
+        printf("Mark object...%p\n", obj->class_ptr);
+        printf("Mark object...%p\n", obj->class_ptr->name);
+        printf("Mark object %s, ref %d, prop ref %d\n", obj->class_ptr->name, obj->reference_count, obj->property_reference_count);
+
+//        #endif
 
         obj->marked = true;
         if (obj->class_ptr->mark_children != NULL) {
             ((__mark_children_T) obj->class_ptr->mark_children)(obj);
         }
 
+        printf("Mark properties for %s\n", obj->class_ptr->name);
         for(int i = 0; i < obj->class_ptr->properties_count; i++) {
+//            printf("Mark property %d\n", i);
             property * const __prop = &obj->object_properties.class_object_properties.properties[i];
+//            printf("prop %d\n", i);
+//            printf("prop add %p\n", __prop);
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
+                printf("mark prop %p\n", __prop->nullable_value.value.object_value);
+                aobject *o = __prop->nullable_value.value.object_value;
+                printf("prop ref %d, %d\n", o->reference_count, o->property_reference_count);
                 __mark_object(__prop->nullable_value.value.object_value);
             }
         }
+
+//        #if DEBUG
+        printf("Object marked %s\n", obj->class_ptr->name);
+//        #endif
     }
 }
 
@@ -233,6 +247,8 @@ void * __allocate_object_data(aobject * const __obj, int __size) {
 */
 
 sweep_result __deallocate_object_from_sweep(aobject * const __obj) {
+    printf("Deallocate object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+
     __obj->pending_deallocation = true;
     __allocation_count--;
     if ( __obj->class_ptr->release != NULL ) {
@@ -277,9 +293,12 @@ void __deallocate_object(aobject * const __obj) {
     }
     __obj->pending_deallocation = true;
     __allocation_count--;
-    #ifdef DEBUG
+//    #ifdef DEBUG
     printf("Deallocate object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
-    #endif
+    if (strcmp(__obj->class_ptr->name, "String") == 0) {
+        printf("Deallocate string %s\n", ((string_holder *) __obj->object_properties.class_object_properties.object_data.value.custom_value)->string_value);
+    }
+//    #endif
 
     if ( __obj->class_ptr->release != NULL ) {
         function_result release_result = ((__release_T) __obj->class_ptr->release)(__obj);
@@ -587,11 +606,23 @@ bool is_descendant_of(aclass const * const cls, aclass const * const base) {
 
 void create_property_info(const unsigned char index, char * const name, aobject ** property_infos) {
     aobject * property_info = __allocate_object(&Am_Lang_PropertyInfo);
-    __set_property(property_info, Am_Lang_PropertyInfo_P_name, (nullable_value) { .flags = 0, .value.object_value = __create_string_constant(name, &Am_Lang_String)});
+    Am_Lang_PropertyInfo_PropertyInfo_0(property_info);
+    aobject * property_name = __create_string_constant(name, &Am_Lang_String);
+    if (strcmp(name, "name") == 0) {
+        printf("property: %p, propname: %p ref: %d, prop ref: %d\n", property_name->class_ptr, property_name->class_ptr->name, property_name->reference_count, property_name->property_reference_count);
+    }
+    __set_property(property_info, Am_Lang_PropertyInfo_P_name, (nullable_value) { .flags = 0, .value.object_value = property_name});
     __set_property(property_info, Am_Lang_PropertyInfo_P_index, (nullable_value) { .flags = PRIMITIVE_UCHAR, .value.uchar_value = index });
 //	property_info->object_properties.class_object_properties.properties[Am_Lang_PropertyInfo_P_name].nullable_value.value.object_value = __create_string_constant(name, &Am_Lang_String);
 //	property_info->object_properties.class_object_properties.properties[Am_Lang_PropertyInfo_P_index].nullable_value = (nullable_value) { .flags = PRIMITIVE_UCHAR, .value.uchar_value = index };
 	property_infos[index] = property_info;
-//    __increase_reference_count(property_info);
+    __increase_property_reference_count(property_info);
+    __decrease_reference_count(property_info);
+    __decrease_reference_count(property_name);
+    if (strcmp(name, "name") == 0) {
+        printf("property name class %p ref: %d, prop ref: %d\n", property_name->class_ptr->name, property_name->reference_count, property_name->property_reference_count);
+    }
+
+
 }
 
