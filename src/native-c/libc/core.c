@@ -34,9 +34,12 @@ void __mark_root_objects() {
 void __mark_object(aobject * const obj) {
     if (obj != NULL) {
 //        #if DEBUG
-        printf("Mark object...%p\n", obj->class_ptr);
-        printf("Mark object...%p\n", obj->class_ptr->name);
-        printf("Mark object %s, ref %d, prop ref %d\n", obj->class_ptr->name, obj->reference_count, obj->property_reference_count);
+        printf("Mark object...%p\n", obj);
+        printf("Object refs, ref: %d, prop ref: %d\n", obj->reference_count, obj->property_reference_count);
+        printf("Object class: %p\n", obj->class_ptr);
+        printf("Object class name ptr: %p\n", obj->class_ptr->name);
+        printf("Object class name: %s\n", obj->class_ptr->name);
+//        printf("Mark object...%p\n", obj->class_ptr->name);    
 
 //        #endif
 
@@ -122,9 +125,9 @@ sweep_result __sweep_object(aobject * const obj) {
 }
 
 void __register_class(aclass * const __class) {
-    #ifdef DEBUG
-    printf("Register class %s\n", __class->name);
-    #endif
+//    #ifdef DEBUG
+    printf("Register class %s, %p\n", __class->name, __class);
+//    #endif
     __class->next = __first_class;
     __first_class = __class;
 }
@@ -619,9 +622,9 @@ void create_property_info(const unsigned char index, char * const name, aobject 
     __increase_property_reference_count(property_info);
     __decrease_reference_count(property_info);
     __decrease_reference_count(property_name);
-    if (strcmp(name, "name") == 0) {
-        printf("property name class %p ref: %d, prop ref: %d\n", property_name->class_ptr->name, property_name->reference_count, property_name->property_reference_count);
-    }
+    // if (strcmp(name, "name") == 0) {
+    //     printf("property name class %p ref: %d, prop ref: %d\n", property_name->class_ptr->name, property_name->reference_count, property_name->property_reference_count);
+    // }
 
 
 }
