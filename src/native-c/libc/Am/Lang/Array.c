@@ -90,7 +90,7 @@ function_result Am_Lang_Array_length_0(aobject * const this)
 	}
 	array_holder * ah = (array_holder *) &this[1]; // this->object_properties.class_object_properties.object_data.value.custom_value;
 //	printf("get length %ld\n", ah->size);
-	__result.return_value = (nullable_value) { .value = { .long_value = ah->size }, .flags = 0 };
+	__result.return_value = (nullable_value) { .value = { .long_value = ah->size }, .flags = PRIMITIVE_LONG };
 
 __exit: ;
 	if (this != NULL) {

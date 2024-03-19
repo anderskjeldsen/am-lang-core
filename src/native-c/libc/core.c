@@ -4,6 +4,8 @@
 #include <Am/Lang/Exception.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/Annotations/UseMemoryPool.h>
+#include <Am/Lang/PropertyInfo.h>
+#include <Am/Lang/ClassRef.h>
 #include <libc/memory_pools.h>
 #include <libc/core_inline_functions.h>
 
@@ -392,7 +394,7 @@ void print_allocated_objects() {
     #ifdef DEBUG
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         if ( allocations[i] != NULL) {
-            printf("Object still alive: %s (address: %p, object_id: %d)\n", allocations[i]->class_ptr->name, allocations[i], allocations[i]->object_properties.class_object_properties.object_id);
+            printf("Object still alive: %s (address: %p, object_id: %d, property refs: %d, inline refs: %d)\n", allocations[i]->class_ptr->name, allocations[i], allocations[i]->object_properties.class_object_properties.object_id, allocations[i]->property_reference_count, allocations[i]->reference_count);
         }
     }
     #endif
@@ -581,5 +583,15 @@ bool is_descendant_of(aclass const * const cls, aclass const * const base) {
         }
     }
     return false;
+}
+
+void create_property_info(const unsigned char index, char * const name, aobject ** property_infos) {
+    aobject * property_info = __allocate_object(&Am_Lang_PropertyInfo);
+    __set_property(property_info, Am_Lang_PropertyInfo_P_name, (nullable_value) { .flags = 0, .value.object_value = __create_string_constant(name, &Am_Lang_String)});
+    __set_property(property_info, Am_Lang_PropertyInfo_P_index, (nullable_value) { .flags = PRIMITIVE_UCHAR, .value.uchar_value = index });
+//	property_info->object_properties.class_object_properties.properties[Am_Lang_PropertyInfo_P_name].nullable_value.value.object_value = __create_string_constant(name, &Am_Lang_String);
+//	property_info->object_properties.class_object_properties.properties[Am_Lang_PropertyInfo_P_index].nullable_value = (nullable_value) { .flags = PRIMITIVE_UCHAR, .value.uchar_value = index };
+	property_infos[index] = property_info;
+//    __increase_reference_count(property_info);
 }
 

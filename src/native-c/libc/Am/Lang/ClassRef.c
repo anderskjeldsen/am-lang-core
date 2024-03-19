@@ -30,6 +30,14 @@ __exit: ;
 	return __result;
 }
 
+function_result Am_Lang_ClassRef__native_mark_children_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = false };
+	bool __returning = false;
+__exit: ;
+	return __result;
+}
+
 function_result Am_Lang_ClassRef_initFromAny_0(aobject * const this, nullable_value any)
 {
 	function_result __result = { .has_return_value = false };

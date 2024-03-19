@@ -327,6 +327,7 @@ unsigned int __string_hash(const char * const str);
 void deallocate_annotations(aclass * const __class);
 array_holder * get_array_holder(aobject * const array_obj);
 char * get_array_data(array_holder * holder);
+void create_property_info(const unsigned char index, char * const name, aobject ** property_infos);
 
 // Mark & Sweep (GC)
 void __mark_root_objects();
