@@ -19,6 +19,7 @@ int allocation_index = 0;
 #endif
 
 aobject * __first_object = NULL;
+aobject * __first_detached_object = NULL;
 aclass * __first_class = NULL;
 
 void __mark_root_objects() {    
@@ -33,15 +34,10 @@ void __mark_root_objects() {
 
 void __mark_object(aobject * const obj) {
     if (obj != NULL) {
-//        #if DEBUG
-        printf("Mark object...%p\n", obj);
-        printf("Object refs, ref: %d, prop ref: %d\n", obj->reference_count, obj->property_reference_count);
-        printf("Object class: %p\n", obj->class_ptr);
-        printf("Object class name ptr: %p\n", obj->class_ptr->name);
-        printf("Object class name: %s\n", obj->class_ptr->name);
-//        printf("Mark object...%p\n", obj->class_ptr->name);    
-
-//        #endif
+        #ifdef DEBUG
+        printf("Mark object of type %s...%p, refs, ref: %d, prop ref: %d\n", obj->class_ptr->name, obj, obj->reference_count, obj->property_reference_count);
+        printf("Mark object...%p\n", obj->class_ptr->name);    
+        #endif
 
         obj->marked = true;
         if (obj->class_ptr->mark_children != NULL) {
@@ -50,21 +46,16 @@ void __mark_object(aobject * const obj) {
 
         printf("Mark properties for %s\n", obj->class_ptr->name);
         for(int i = 0; i < obj->class_ptr->properties_count; i++) {
-//            printf("Mark property %d\n", i);
             property * const __prop = &obj->object_properties.class_object_properties.properties[i];
-//            printf("prop %d\n", i);
-//            printf("prop add %p\n", __prop);
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
-                printf("mark prop %p\n", __prop->nullable_value.value.object_value);
                 aobject *o = __prop->nullable_value.value.object_value;
-                printf("prop ref %d, %d\n", o->reference_count, o->property_reference_count);
                 __mark_object(__prop->nullable_value.value.object_value);
             }
         }
 
-//        #if DEBUG
+        #ifdef DEBUG
         printf("Object marked %s\n", obj->class_ptr->name);
-//        #endif
+        #endif
     }
 }
 
@@ -72,19 +63,27 @@ void __sweep_unmarked_objects() {
     printf("Allocated objects before sweep %d\n", __allocation_count);
     int old_count = 1;
     int new_count = 0;
+    aobject * current = NULL;
 
     while(old_count != new_count) {
         old_count = new_count;
         new_count = 0;
-        aobject * current = __first_object;
+        current = __first_object;
         while(current != NULL) {
             sweep_result result = __sweep_object(current);
-            if (result.is_deallocated) {
+            if (result.is_swept) {
                 new_count++;
             } 
             current = result.next;
         }
     }
+
+    current = __first_detached_object;
+    while(current != NULL) {
+        __deallocate_detached_object(current);
+        current = current->next;
+    }
+
     __clear_marks();
 
 }
@@ -113,21 +112,21 @@ sweep_result __sweep_object(aobject * const obj) {
         } else {
             if (obj->reference_count == 0 && !obj->pending_deallocation) {
                 #ifdef DEBUG
-                printf("Sweep object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
+                printf("Sweep object %s, m: %d, ref: %d, propref: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count, obj->property_reference_count);
                 #endif
-                return __deallocate_object_from_sweep(obj);
+                return __detach_object_from_sweep(obj);
             } else {
                 printf("Don't sweep referenced object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
             }
         }
     }
-    return (sweep_result) { .next = obj->next, .is_deallocated = false };
+    return (sweep_result) { .next = obj->next, .is_swept = false };
 }
 
 void __register_class(aclass * const __class) {
-//    #ifdef DEBUG
+    #ifdef DEBUG
     printf("Register class %s, %p\n", __class->name, __class);
-//    #endif
+    #endif
     __class->next = __first_class;
     __first_class = __class;
 }
@@ -249,29 +248,18 @@ void * __allocate_object_data(aobject * const __obj, int __size) {
 }
 */
 
-sweep_result __deallocate_object_from_sweep(aobject * const __obj) {
-    printf("Deallocate object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+sweep_result __detach_object_from_sweep(aobject * const __obj) {
 
-    __obj->pending_deallocation = true;
-    __allocation_count--;
-    if ( __obj->class_ptr->release != NULL ) {
-        function_result release_result = ((__release_T) __obj->class_ptr->release)(__obj);
-        // TODO: handle exceptions
+    if (__obj->pending_deallocation) {
+        return (sweep_result) { .is_swept = false };
     }
 
-    if (__obj->class_ptr->type == interface) {
-        iface_reference const *ref = &__obj->object_properties.iface_reference;
-
-        __decrease_reference_count(ref->implementation_object);
-    }
 
     #ifdef DEBUG
-    for(int i = 0; i < 256; i++) {
-        if ( allocations[i] == __obj) {
-            allocations[i] = NULL;
-        }
-    }
+    printf("Detach (sweep) object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
     #endif
+   
+    __detach_object(__obj);
 
     if (__obj == __first_object) {
         __first_object = __obj->next;
@@ -285,23 +273,82 @@ sweep_result __deallocate_object_from_sweep(aobject * const __obj) {
         }
     }
 
-    sweep_result result = { .next = __obj->next, .is_deallocated = true };
-    free(__obj);
+    aobject *next_to_sweep = __obj->next;
+
+    if (__first_detached_object == NULL) {
+        __first_detached_object = __obj;
+        __obj->next = NULL;
+        __obj->prev = NULL;
+    } else {
+        __obj->next = __first_detached_object;
+        __first_detached_object->prev = __obj;
+        __first_detached_object = __obj;
+    }
+
+    sweep_result result = { .next = next_to_sweep, .is_swept = true };
     return result;
 }
 
+void __deallocate_detached_object(aobject * const __obj) {
+    #ifdef DEBUG
+    printf("Deallocate detached object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+    #endif
+
+    __allocation_count--;
+
+    #ifdef DEBUG
+    for(int i = 0; i < MAX_ALLOCATIONS; i++) {
+        if ( allocations[i] == __obj) {
+            allocations[i] = NULL;
+        }
+    }
+    #endif
+
+    if (__obj->class_ptr->memory_pool != NULL) {
+        free_from_pool(__obj->class_ptr->memory_pool, __obj);
+    } else if (__obj->memory_pooled) {
+        free_from_pool(small_object_memory_pool, __obj);
+    } else {
+        free(__obj);
+    }
+}
+
 void __deallocate_object(aobject * const __obj) {
+
     if (__obj->pending_deallocation) {
         return;
     }
+
+    __detach_object(__obj);
+
+    #ifdef DEBUG
+    printf("Deallocate object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+    #endif
+
     __obj->pending_deallocation = true;
     __allocation_count--;
-//    #ifdef DEBUG
-    printf("Deallocate object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
-    if (strcmp(__obj->class_ptr->name, "String") == 0) {
-        printf("Deallocate string %s\n", ((string_holder *) __obj->object_properties.class_object_properties.object_data.value.custom_value)->string_value);
+
+    #ifdef DEBUG
+    for(int i = 0; i < MAX_ALLOCATIONS; i++) {
+        if ( allocations[i] == __obj) {
+            allocations[i] = NULL;
+        }
     }
-//    #endif
+    #endif
+
+    if (__obj->class_ptr->memory_pool != NULL) {
+        free_from_pool(__obj->class_ptr->memory_pool, __obj);
+    } else if (__obj->memory_pooled) {
+        free_from_pool(small_object_memory_pool, __obj);
+    } else {
+        free(__obj);
+    }
+}
+
+void __detach_object(aobject * const __obj) {
+    #ifdef DEBUG
+    printf("Detach object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+    #endif
 
     if ( __obj->class_ptr->release != NULL ) {
         function_result release_result = ((__release_T) __obj->class_ptr->release)(__obj);
@@ -312,11 +359,6 @@ void __deallocate_object(aobject * const __obj) {
         iface_reference const *ref = &__obj->object_properties.iface_reference;
 
         __decrease_reference_count(ref->implementation_object);
-
-//        free(ref);
-//        __obj->object_data.value.custom_value = NULL;
-
-        // interface
     }
 
 // let the native release method handle this
@@ -349,36 +391,17 @@ void __deallocate_object(aobject * const __obj) {
         current_weak_reference_node = next_weak_reference_node;
     }
 
-    #ifdef DEBUG
-    for(int i = 0; i < MAX_ALLOCATIONS; i++) {
-        if ( allocations[i] == __obj) {
-            allocations[i] = NULL;
-        }
-    }
-    #endif
+}
 
-    /*
-    if (__obj == __first_object) {
-        __first_object = __obj->next;
-        __obj->prev = NULL;
-    } else {        
-        __obj->prev->next = __obj->next;
-        if (__obj->next != NULL) {
-            __obj->next->prev = __obj->prev;
-        }
-    }
-    */
-
-    if (__obj->class_ptr->memory_pool != NULL) {
-        free_from_pool(__obj->class_ptr->memory_pool, __obj);
-    } else if (__obj->memory_pooled) {
-        free_from_pool(small_object_memory_pool, __obj);
-    } else {
-        free(__obj);
+void __dereference_static_properties() {
+    aclass *c = __first_class;
+    while(c != NULL) {
+        __dereference_static_properties_for_class(c);
+        c = c->next;
     }
 }
 
-void __dereference_static_properties(aclass * const __class) {
+void __dereference_static_properties_for_class(aclass * const __class) {
     #ifdef DEBUG
     printf("Dereference static properties of class %s\n", __class->name);
     #endif
@@ -611,21 +634,11 @@ void create_property_info(const unsigned char index, char * const name, aobject 
     aobject * property_info = __allocate_object(&Am_Lang_PropertyInfo);
     Am_Lang_PropertyInfo_PropertyInfo_0(property_info);
     aobject * property_name = __create_string_constant(name, &Am_Lang_String);
-    if (strcmp(name, "name") == 0) {
-        printf("property: %p, propname: %p ref: %d, prop ref: %d\n", property_name->class_ptr, property_name->class_ptr->name, property_name->reference_count, property_name->property_reference_count);
-    }
     __set_property(property_info, Am_Lang_PropertyInfo_P_name, (nullable_value) { .flags = 0, .value.object_value = property_name});
     __set_property(property_info, Am_Lang_PropertyInfo_P_index, (nullable_value) { .flags = PRIMITIVE_UCHAR, .value.uchar_value = index });
-//	property_info->object_properties.class_object_properties.properties[Am_Lang_PropertyInfo_P_name].nullable_value.value.object_value = __create_string_constant(name, &Am_Lang_String);
-//	property_info->object_properties.class_object_properties.properties[Am_Lang_PropertyInfo_P_index].nullable_value = (nullable_value) { .flags = PRIMITIVE_UCHAR, .value.uchar_value = index };
 	property_infos[index] = property_info;
     __increase_property_reference_count(property_info);
     __decrease_reference_count(property_info);
     __decrease_reference_count(property_name);
-    // if (strcmp(name, "name") == 0) {
-    //     printf("property name class %p ref: %d, prop ref: %d\n", property_name->class_ptr->name, property_name->reference_count, property_name->property_reference_count);
-    // }
-
-
 }
 

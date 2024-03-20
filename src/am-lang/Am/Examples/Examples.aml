@@ -25,13 +25,19 @@ namespace Am.Examples {
             ("Getting class name of a file: " + crf.toString()).println()
             var props = crf.getProperties()
             var pi = 0
-            /*
+
             while(pi < props.length()) {
                 var prop = props[pi]
                 ("Property: " + prop.name.toString()).println()
                 pi++
             }
-            */
+
+            var crhm = ClassRef.getClassRef("Am.Collections.HashMap[object_object]")
+            if (crhm != null) {
+                ("Name of hash map variant class: " + crhm.toString()).println()
+            } else {
+                "HashMap not found".println()
+            }
         }
 
         // main12

@@ -39,7 +39,7 @@ function_result Am_Lang_ObjectHelper_equals_0(aobject * a, aobject * b)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	__result.return_value = (nullable_value) { .value.bool_value = (a == b), .flags = 1 };
+	__result.return_value = (nullable_value) { .value.bool_value = (a == b), .flags = PRIMITIVE_BOOL };
 	return __result;
 };
 

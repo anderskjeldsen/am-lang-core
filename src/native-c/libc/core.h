@@ -230,7 +230,7 @@ struct _function_result {
 };
 
 struct _sweep_result {
-    bool is_deallocated;
+    bool is_swept;
     aobject * next;
 };
 
@@ -279,7 +279,8 @@ extern aclass * __first_class;
 
 // functions
 void __register_class(aclass * const __class);
-void __dereference_static_properties(aclass * const __class);
+void __dereference_static_properties();
+void __dereference_static_properties_for_class(aclass * const __class);
 
 static inline void __decrease_reference_count(aobject * const __obj);
 static inline void __increase_reference_count(aobject * const __obj);
@@ -291,6 +292,8 @@ static inline void __decrease_property_reference_count(aobject * const __obj);
 static inline void __increase_property_reference_count(aobject * const __obj);
 static inline void __decrease_property_reference_count_nullable_value(nullable_value __value);
 void __deallocate_object(aobject * const __obj);
+void __detach_object(aobject * const __obj);
+
 aobject * __allocate_iface_object(aclass * const __class, aobject * const implementation_object);
 //aobject * __allocate_object(aclass * const __class);
 aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra_size);
@@ -334,7 +337,8 @@ void __mark_root_objects();
 void __mark_object(aobject * const obj);
 void __sweep_unmarked_objects();
 sweep_result __sweep_object(aobject * const obj);
-sweep_result __deallocate_object_from_sweep(aobject * const __obj);
+sweep_result __detach_object_from_sweep(aobject * const __obj);
+void __deallocate_detached_object(aobject * const __obj);
 static inline void __mark_nullable_value(nullable_value __value);
 void __mark_static_properties(aclass * const __class);
 void __clear_marks();

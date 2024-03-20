@@ -5,7 +5,7 @@
 #include <Am/Lang/Any.h>
 #include <Am/Lang/String.h>
 #include <Am/Lang/Array.h>
-#include <Am/Lang/PropertyRef.h>
+#include <Am/Lang/PropertyInfo.h>
 #include <libc/core_inline_functions.h>
 
 function_result Am_Lang_ClassRef__native_init_0(aobject * const this)
@@ -121,11 +121,8 @@ function_result Am_Lang_ClassRef_getClassRefFromAny_0(nullable_value any)
 
 	aobject * class_ref = NULL;
 	if (any.flags == 0) {
-		printf("Get class ref from object: %p\n", any.value.object_value);
 		class_ref = any.value.object_value->class_ptr->class_ref_singleton;
 	} else {
-		printf("Get class ref from primitive\n");
-
 		ctype ctype = __value_flags_to_ctype(any.flags);
 		switch(ctype) {
 			case long_type:
@@ -169,7 +166,6 @@ function_result Am_Lang_ClassRef_getClassRefFromAny_0(nullable_value any)
 		}
 	}
 	__increase_reference_count(class_ref); // one extra, because we want to keep the object until the end.
-	printf("Class ref: %p, ref: %d, prop ref: %d\n", class_ref, class_ref->reference_count, class_ref->property_reference_count);
 	__result.return_value.value.object_value = class_ref;
 
 __exit: ;
