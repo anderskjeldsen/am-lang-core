@@ -11,6 +11,7 @@ namespace Am.Examples {
         import Am.IO.Networking
         import Am.Collections
 
+        // main13
         static fun main() {
             var s = "hello"
             var cr = s.getClassRef()
@@ -28,7 +29,11 @@ namespace Am.Examples {
 
             while(pi < props.length()) {
                 var prop = props[pi]
-                ("Property: " + prop.name.toString()).println()
+                var pcr = prop.getPropertyClassRef()
+                if (pcr == null) {
+                    "Class ref null".println()
+                }
+                ("Property: " + prop.getName().toString() + ", class = " + prop.getPropertyClassRef().getClassName()).println()
                 pi++
             }
 
@@ -53,7 +58,7 @@ namespace Am.Examples {
             var set = new HashSet2<Int>()
             var startDate = Date.now()
             var i = 1
-            var max = 1000000
+            var max = 100000000
             ("Adding " + max.toString() + " key-value pairs to a HashSet on an emulated 020").println()
             while(i <= max) {                
                 set.add(i)

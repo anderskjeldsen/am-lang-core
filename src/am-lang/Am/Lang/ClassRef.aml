@@ -3,6 +3,13 @@ namespace Am.Lang
     native class PropertyInfo {
         private var name: String
         private var index: UByte
+//        private var classRef: ClassRef
+
+        fun getName(): String {
+            return this.name
+        }
+
+        native fun getPropertyClassRef(): ClassRef
 
         // only Objects have properties, Any's don't.
         native fun getValue(target: Object): Any
@@ -29,6 +36,10 @@ namespace Am.Lang
 
         fun getProperties(): PropertyInfo[] {
             return this.properties
+        }
+
+        fun getClassName(): String {
+            return this.className
         }
 
         override fun toString(): String {

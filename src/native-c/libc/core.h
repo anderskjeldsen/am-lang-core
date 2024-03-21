@@ -139,7 +139,7 @@ struct _string_holder {
 };
 
 struct _array_holder {
-    size_t size; // number of items
+    unsigned int size; // number of items
     aclass * item_class;
     ctype ctype;
     unsigned char item_size; // size per item
@@ -319,7 +319,7 @@ bool __any_equals(const nullable_value a, const nullable_value b);
 //bool __object_equals(aobject * const a, aobject * const b);
 aobject * __create_string_constant(char const * const str, aclass * const string_class);
 aobject * __create_string(char const * const str, aclass * const string_class);
-aobject * __create_array(size_t const size, size_t const item_size, aclass * const array_class, ctype const ctype);
+aobject * __create_array(unsigned int const size, unsigned char const item_size, aclass * const array_class, ctype const ctype);
 aobject * __create_exception(aobject * const message);
 void clear_allocated_objects();
 void print_allocated_objects();
@@ -330,7 +330,7 @@ unsigned int __string_hash(const char * const str);
 void deallocate_annotations(aclass * const __class);
 array_holder * get_array_holder(aobject * const array_obj);
 char * get_array_data(array_holder * holder);
-void create_property_info(const unsigned char index, char * const name, aobject ** property_infos);
+void create_property_info(const unsigned char index, char * const name, aobject ** property_infos, aclass *cls);
 
 // Mark & Sweep (GC)
 void __mark_root_objects();

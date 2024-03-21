@@ -36,6 +36,26 @@ __exit: ;
 	return __result;
 }
 
+function_result Am_Lang_PropertyInfo_getPropertyClassRef_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+	property * properties = (property *) &this[1];
+	aclass ** class_holder_ptr = (aclass **) &properties[3];
+	aclass * cls = class_holder_ptr[0];
+	aobject * class_ref = cls->class_ref_singleton;
+	__increase_reference_count(class_ref);
+
+	__result.return_value = (nullable_value) { .flags = 0, .value.object_value = class_ref };
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
+	return __result;
+}
 
 function_result Am_Lang_PropertyInfo_getValue_0(aobject * const this, aobject * target)
 {

@@ -52,7 +52,7 @@ namespace Am.Collections {
 
             if (this.size > (this.bucket.length())) {
                 var oldBucket = this.bucket
-                this.bucket = new HashMapEntry<K, V>[this.bucket.length() * 10]
+                this.bucket = new HashMapEntry<K, V>[this.bucket.length() * 10UI]
                 ("create new bucket in HashMap: " + this.bucket.length().toString()).println()
 
                 var i = 0

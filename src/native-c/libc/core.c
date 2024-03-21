@@ -569,7 +569,7 @@ aobject * __create_string(char const * const str, aclass * const string_class) {
     return str_obj;
 }
 
-aobject * __create_array(size_t const size, size_t const item_size, aclass * const array_class, ctype const ctype) {
+aobject * __create_array(unsigned int const size, unsigned char const item_size, aclass * const array_class, ctype const ctype) {
     size_t extra_size = sizeof(array_holder) + (size * item_size);
     aobject * array_obj = __allocate_object_with_extra_size(array_class, extra_size);
 //    array_holder * const holder = malloc(sizeof(array_holder));
@@ -630,8 +630,12 @@ bool is_descendant_of(aclass const * const cls, aclass const * const base) {
     return false;
 }
 
-void create_property_info(const unsigned char index, char * const name, aobject ** property_infos) {
-    aobject * property_info = __allocate_object(&Am_Lang_PropertyInfo);
+void create_property_info(const unsigned char index, char * const name, aobject ** property_infos, aclass *cls) {
+    aobject * property_info = __allocate_object_with_extra_size(&Am_Lang_PropertyInfo, sizeof(cls));
+    property *properties = (property *) (property_info + 1);
+    aclass ** class_holder_ptr = (aclass **) &properties[3]; // given that PropertyInfo has exactly 2 properties
+    *class_holder_ptr = cls;
+
     Am_Lang_PropertyInfo_PropertyInfo_0(property_info);
     aobject * property_name = __create_string_constant(name, &Am_Lang_String);
     __set_property(property_info, Am_Lang_PropertyInfo_P_name, (nullable_value) { .flags = 0, .value.object_value = property_name});

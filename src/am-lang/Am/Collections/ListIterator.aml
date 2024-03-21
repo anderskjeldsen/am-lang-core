@@ -4,7 +4,7 @@ namespace Am.Collections {
         private var index: Int = 0
 
         fun hasNext(): Bool {
-            return this.index < this.list.size
+            return this.index < this.list.getSize()
         }
 
         fun next(): T {

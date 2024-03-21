@@ -9,9 +9,9 @@ namespace Am.Lang
     native class Array<T>()
     {
         import Am.Lang
-        native fun length(): Long // TODO: Change to Int?
+        native fun length(): UInt
 
-        fun subArray(offset: Long, length: Long): T[] {
+        fun subArray(offset: UInt, length: UInt): T[] {
             var newArray = this.createEmptyArrayOfSameType(length)
             var i = offset
             var j = 0
@@ -24,6 +24,6 @@ namespace Am.Lang
             return newArray
         }
 
-        private native fun createEmptyArrayOfSameType(length: Long): T[]
+        private native fun createEmptyArrayOfSameType(length: UInt): T[]
     }
 }

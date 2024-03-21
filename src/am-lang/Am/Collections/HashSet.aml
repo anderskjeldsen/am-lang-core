@@ -50,7 +50,7 @@ namespace Am.Collections {
 
             if (this.size * 2 > (this.bucket.length())) {
                 var oldBucket = this.bucket
-                this.bucket = new HashSetEntry<T>[this.bucket.length() * 10]
+                this.bucket = new HashSetEntry<T>[this.bucket.length() * 10UI]
                 ("create new bucket in HashSet: " + this.bucket.length().toString()).println()
 //                this.size = 0
 //                "load new bucket in HashSet".println()
