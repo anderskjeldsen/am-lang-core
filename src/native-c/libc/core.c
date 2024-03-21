@@ -44,7 +44,9 @@ void __mark_object(aobject * const obj) {
             ((__mark_children_T) obj->class_ptr->mark_children)(obj);
         }
 
+        #ifdef DEBUG
         printf("Mark properties for %s\n", obj->class_ptr->name);
+        #endif
         for(int i = 0; i < obj->class_ptr->properties_count; i++) {
             property * const __prop = &obj->object_properties.class_object_properties.properties[i];
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {

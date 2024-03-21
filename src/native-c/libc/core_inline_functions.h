@@ -133,11 +133,15 @@ static inline bool __set_property_safe(aobject * const __obj, int const __index,
     if (old_type != new_type) {
         return false;
     }
+   
 
     if (new_type == object_type) {
         if (!is_descendant_of(__prop_value.value.object_value->class_ptr, __prop->nullable_value.value.object_value->class_ptr)) {
             return false;
         }
+    } else if (__is_primitive_nullable(__prop_value) && !__is_primitive_nullable(__prop->nullable_value)) {
+        // If new value is a nullable primitive, check of the property supports that
+        return false;
     }
 
     if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {

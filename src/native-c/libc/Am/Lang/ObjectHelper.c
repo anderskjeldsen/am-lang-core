@@ -79,24 +79,3 @@ __exit: ;
 	}
 	return __result;
 };
-
-/*
-function_result Am_Lang_ObjectHelper_initClassRef_0(nullable_value o, aobject * classRef)
-{
-	function_result __result = { .has_return_value = false };
-	bool __returning = false;
-	__increase_reference_count_nullable_value(o);
-	if (classRef != NULL) {
-		__increase_reference_count(classRef);
-	}
-	
-	Am_Lang_ClassRef_initFromAny_0(classRef, o);
-__exit: ;
-	__decrease_reference_count_nullable_value(o);
-	if (classRef != NULL) {
-		__decrease_reference_count(classRef);
-	}
-	return __result;
-};
-
-*/

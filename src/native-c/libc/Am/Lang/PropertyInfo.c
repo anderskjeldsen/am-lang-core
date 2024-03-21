@@ -94,9 +94,7 @@ function_result Am_Lang_PropertyInfo_setValue_0(aobject * const this, aobject * 
 	}
 	__increase_reference_count_nullable_value(value);
 
-	printf("set property 1\n");
 	int index = this->object_properties.class_object_properties.properties[Am_Lang_PropertyInfo_P_index].nullable_value.value.uchar_value;
-	printf("set property 2\n");
 
 	if (!__set_property_safe(target, index, value)) {
 		// 		__throw_simple_exception("Failed to open directory", "in Am_IO_File_listNative_0", &__result);
@@ -104,7 +102,6 @@ function_result Am_Lang_PropertyInfo_setValue_0(aobject * const this, aobject * 
 		__throw_simple_exception("Failed to set property", "in Am_Lang_PropertyInfo_setValue_0", &__result);
 		goto __exit;
 	}
-	printf("set property 3\n");
 __exit: ;
 	if (target != NULL) {
 		__decrease_reference_count(target);

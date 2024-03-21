@@ -79,7 +79,6 @@ typedef struct _function_result function_result;
 typedef union _value value;
 typedef struct _nullable_value nullable_value;
 typedef struct _property property;
-typedef struct _property_info property_info;
 typedef struct _iface_implementation iface_implementation;
 typedef struct _iface_reference iface_reference;
 typedef struct _string_holder string_holder;
@@ -154,11 +153,6 @@ struct _nullable_value {
 // object_data.value.object_value
 struct _property {
     nullable_value nullable_value;    
-};
-
-struct _property_info {
-    char * name;
-    // modifiers
 };
 
 struct _aclass {
