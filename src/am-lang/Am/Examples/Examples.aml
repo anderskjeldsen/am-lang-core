@@ -12,7 +12,7 @@ namespace Am.Examples {
         import Am.Collections
 
         // main13
-        static fun main() {
+        static fun main13() {
             var s = "hello"
             var cr = s.getClassRef()
             ("Getting class name of a string: " + cr.toString()).println()
