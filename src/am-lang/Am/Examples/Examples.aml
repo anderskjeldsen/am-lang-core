@@ -29,6 +29,10 @@ namespace Am.Examples {
 
             while(pi < props.length()) {
                 var prop = props[pi]
+                if (prop.getName() == "filename") {
+                    prop.setValue(file, "newfilename")
+                    prop.setValue(file, 1L)
+                }
                 var pcr = prop.getPropertyClassRef()
                 if (pcr == null) {
                     "Class ref null".println()
@@ -36,6 +40,8 @@ namespace Am.Examples {
                 ("Property: " + prop.getName().toString() + ", class = " + prop.getPropertyClassRef().getClassName()).println()
                 pi++
             }
+
+            ("new filename: " + file.filename).println()
 
             var crhm = ClassRef.getClassRef("Am.Collections.HashMap[object_object]")
             if (crhm != null) {

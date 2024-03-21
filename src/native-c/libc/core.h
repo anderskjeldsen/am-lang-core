@@ -285,6 +285,7 @@ void __dereference_static_properties_for_class(aclass * const __class);
 static inline void __decrease_reference_count(aobject * const __obj);
 static inline void __increase_reference_count(aobject * const __obj);
 static inline void __set_property(aobject * const __obj, int const __index, nullable_value __prop_value);
+static inline bool __set_property_safe(aobject * const __obj, int const __index, nullable_value __prop_value);
 static inline void __set_static_property(aclass * const __class, int const __index, nullable_value __prop_value);
 static inline void __decrease_reference_count_nullable_value(nullable_value __value);
 static inline void __increase_reference_count_nullable_value(nullable_value __value);

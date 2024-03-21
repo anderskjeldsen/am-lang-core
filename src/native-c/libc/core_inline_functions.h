@@ -126,6 +126,31 @@ static inline void __set_property(aobject * const __obj, int const __index, null
     __prop->nullable_value = __prop_value;
 }
 
+static inline bool __set_property_safe(aobject * const __obj, int const __index, nullable_value __prop_value) {
+    property * __prop = &__obj->object_properties.class_object_properties.properties[__index];
+    ctype old_type = __value_flags_to_ctype(__prop->nullable_value.flags);
+    ctype new_type = __value_flags_to_ctype(__prop_value.flags);
+    if (old_type != new_type) {
+        return false;
+    }
+
+    if (new_type == object_type) {
+        if (!is_descendant_of(__prop_value.value.object_value->class_ptr, __prop->nullable_value.value.object_value->class_ptr)) {
+            return false;
+        }
+    }
+
+    if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
+        __decrease_property_reference_count(__prop->nullable_value.value.object_value);        
+    }
+    if ( !__is_primitive(__prop_value) && __prop_value.value.object_value != NULL ) {
+        __increase_property_reference_count(__prop_value.value.object_value);
+    }
+
+    __prop->nullable_value = __prop_value;
+    return true;
+}
+
 static inline void __set_static_property(aclass * const __class, int const __index, nullable_value __prop_value) {
     property * __prop = &__class->static_properties[__index];
     if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {

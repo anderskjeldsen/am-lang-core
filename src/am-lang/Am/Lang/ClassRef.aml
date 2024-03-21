@@ -3,7 +3,6 @@ namespace Am.Lang
     native class PropertyInfo {
         private var name: String
         private var index: UByte
-//        private var classRef: ClassRef
 
         fun getName(): String {
             return this.name
