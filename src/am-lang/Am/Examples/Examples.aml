@@ -30,8 +30,13 @@ namespace Am.Examples {
             while(pi < props.length()) {
                 var prop = props[pi]
                 if (prop.getName() == "filename") {
-                    prop.setValue(file, "newfilename")
-                    prop.setValue(file, 1L)
+                    try {
+                        prop.setValue(file, "newfilename")
+                        prop.setValue(file, 1L)
+                    } catch(e: Exception) {
+//                        "Exception".println()
+                        e.toString().println()
+                    }                    
                 }
                 var pcr = prop.getPropertyClassRef()
                 if (pcr == null) {
