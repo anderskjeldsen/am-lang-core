@@ -5,4 +5,4 @@
 #include <Am/Lang/Any.h>
 #include <Am/Lang/String.h>
 #include <Am/Lang/Array.h>
-#include <Am/Lang/PropertyRef.h>
+#include <Am/Lang/PropertyInfo.h>
