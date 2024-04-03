@@ -82,9 +82,11 @@ void __sweep_unmarked_objects() {
 
     current = __first_detached_object;
     while(current != NULL) {
+        aobject *next = current->next;
         __deallocate_detached_object(current);
-        current = current->next;
+        current = next;
     }
+    __first_detached_object = NULL;
 
     __clear_marks();
 
@@ -256,7 +258,6 @@ sweep_result __detach_object_from_sweep(aobject * const __obj) {
         return (sweep_result) { .is_swept = false };
     }
 
-
     #ifdef DEBUG
     printf("Detach (sweep) object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
     #endif
@@ -327,7 +328,6 @@ void __deallocate_object(aobject * const __obj) {
     printf("Deallocate object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
     #endif
 
-    __obj->pending_deallocation = true;
     __allocation_count--;
 
     #ifdef DEBUG
@@ -351,6 +351,8 @@ void __detach_object(aobject * const __obj) {
     #ifdef DEBUG
     printf("Detach object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
     #endif
+
+    __obj->pending_deallocation = true;
 
     if ( __obj->class_ptr->release != NULL ) {
         function_result release_result = ((__release_T) __obj->class_ptr->release)(__obj);
