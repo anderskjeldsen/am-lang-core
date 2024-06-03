@@ -53,8 +53,8 @@ namespace Am.IO.Networking
 
         private native fun connectNative(hostName: String, port: Int, addressFamily: AddressFamily)
 
-        native fun send(bytes: Byte[], length: Int): Int
-        native fun receive(bytes: Byte[], length: Int): Int
+        native fun send(bytes: UByte[], length: UInt): UInt
+        native fun receive(bytes: UByte[], length: UInt): UInt
 
         native fun close()
     }
@@ -65,11 +65,11 @@ namespace Am.IO.Networking
         import Am.Lang
         import Am.IO
 
-        fun read(buffer: Byte[], offset: Long, length: Int): Int {
+        fun read(buffer: UByte[], offset: Long, length: UInt): UInt {
             return this.socket.receive(buffer, length)
         }
 
-        fun write(buffer: Byte[], offset: Long, length: Int) {
+        fun write(buffer: UByte[], offset: Long, length: UInt) {
             this.socket.send(buffer, length)
         }
 

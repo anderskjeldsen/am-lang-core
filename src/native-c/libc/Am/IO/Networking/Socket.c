@@ -115,7 +115,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_IO_Networking_Socket_send_0(aobject * const this, aobject * bytes, const int length)
+function_result Am_IO_Networking_Socket_send_0(aobject * const this, aobject * bytes, const unsigned int length)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -144,7 +144,14 @@ function_result Am_IO_Networking_Socket_send_0(aobject * const this, aobject * b
 
 //	printf("Sending: %s\n", array_holder->array_data);
 	int sent = send(s, a_holder->array_data, length, 0);
-	__result.return_value.value.int_value = sent;
+
+	if (sent < 0)
+	{
+		__throw_simple_exception("Error sending data", "in Am_IO_Networking_Socket_send_0", &__result);
+		goto __exit;
+	}
+
+	__result.return_value.value.uint_value = sent;
 	__result.return_value.flags = PRIMITIVE_UINT;
 __exit: ;
 	if (this != NULL) {
@@ -156,7 +163,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_IO_Networking_Socket_receive_0(aobject * const this, aobject * bytes, const int length)
+function_result Am_IO_Networking_Socket_receive_0(aobject * const this, aobject * bytes, const unsigned int length)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -184,8 +191,15 @@ function_result Am_IO_Networking_Socket_receive_0(aobject * const this, aobject 
 	int received = recv(s, a_holder->array_data, length, 0);
 //	printf("Received %d bytes\n", received);
 //	printf("Received data: %s\n", array_holder->array_data);
-	__result.return_value.value.int_value = received;
-	__result.return_value.flags = PRIMITIVE_INT;
+
+	if (received < 0)
+	{
+		__throw_simple_exception("Error receiving data", "in Am_IO_Networking_Socket_receive_0", &__result);
+		goto __exit;
+	}
+
+	__result.return_value.value.uint_value = received;
+	__result.return_value.flags = PRIMITIVE_UINT;
 	__returning = true;
 
 __exit: ;
