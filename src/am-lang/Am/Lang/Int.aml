@@ -3,7 +3,7 @@ namespace Am.Lang
 {
     primitive native class Int {
         override native fun toString(): String
-        override native fun hash(): Int
+        override native fun hash(): UInt
         native fun toByte(): Byte
         native fun toShort(): Short
         native fun toLong(): Long
