@@ -11,9 +11,9 @@ namespace Am.Lang
 
         override fun hash(): UInt {
             if (this) {
-                return 1
+                return 1UI
             } // should work: else {
-            return 0
+            return 0UI
         }
     }
 
