@@ -102,6 +102,10 @@ namespace Am.Collections {
             return y
         }
 
+        fun clear() {
+            this.size = 0
+        }
+
 /*
         fun filter(predicate: (t: T) => Bool) {
 

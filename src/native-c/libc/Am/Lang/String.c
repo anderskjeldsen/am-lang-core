@@ -283,7 +283,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_Lang_String_characterAt_0(aobject * const this)
+function_result Am_Lang_String_characterAt_0(aobject * const this, unsigned int index)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -292,8 +292,7 @@ function_result Am_Lang_String_characterAt_0(aobject * const this)
 	}
 
 	string_holder *string_holder = this->object_properties.class_object_properties.object_data.value.custom_value;
-//	__result.return_value.value.ushort_value = string_holder->string_value[...]
-
+	__result.return_value.value.ushort_value = string_holder->strings_value[index];
 
 __exit: ;
 	if (this != NULL) {
