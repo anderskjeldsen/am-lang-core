@@ -38,9 +38,10 @@ namespace Am.Lang
             return this
         }
 
-        fun add(c: UShort): StringBuffer {
+        fun add(c: UShort) : StringBuilder {
             // TODO: convert to UTF-8
-            buf.add(c.toUByte()) // ditching the upper 8 bits for now.
+            this.buffer.add(c.toUByte()) // ditching the upper 8 bits for now.
+            return this
         }
 
         fun clear() {

@@ -1,19 +1,20 @@
 namespace Am.Lang.Util.Parsers.Json {
 
-    class TextParser(private string: String) {
+    class TextParser(private var string: String) {
         import Am.Lang
 
         private var index: Int
         private var sb: StringBuilder = new StringBuilder()
 
-        parseUntil(predicate: (c: UShort) => Bool): String {
-            sb.clear()
+        fun parseUntil(predicate: (c: UShort) => Bool) : String {
+            this.sb.clear()
             while(this.index < this.string.length()) {
                 var c = this.string.characterAt(this.index)
                 if (predicate(c)) {
-                    this.sb.add(c.toString())
+                    this.sb.add(c)
                 }
             }
+            return sb.toString()
         }
     }
 

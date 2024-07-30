@@ -12,7 +12,7 @@ namespace Am.Lang
         native op + (s: String): String
         native static fun fromBytes(bytes: UByte[], encoding: String): String
         native fun toBytes(encoding: String): UByte[]
-        native fun characterAt(UInt index): UShort
+        native fun characterAt(index: UInt): UShort
         native fun indexOf(s: String): Int
         native fun lastIndexOf(s: String): Int
         native fun substring(start: UInt, end: UInt): String
