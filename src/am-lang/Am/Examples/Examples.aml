@@ -10,6 +10,18 @@ namespace Am.Examples {
         import Am.IO
         import Am.IO.Networking
         import Am.Collections
+        import Am.Lang.Util.Parsers.Json
+
+        static fun main() {
+            var tp = new TextParser("Hello World")
+            var parsed = tp.parseUntil((c) => {
+                if (c == 0x20) {
+                    return true
+                }
+                return false
+            })
+            ("Parsed " + parsed).println()
+        }
 
         // main13
         static fun main13() {

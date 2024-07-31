@@ -3,18 +3,22 @@ namespace Am.Lang.Util.Parsers.Json {
     class TextParser(private var string: String) {
         import Am.Lang
 
-        private var index: Int
+        private var index: UInt
         private var sb: StringBuilder = new StringBuilder()
 
         fun parseUntil(predicate: (c: UShort) => Bool) : String {
             this.sb.clear()
-            while(this.index < this.string.length()) {
+            while(this.index < this.string.getLength()) {
                 var c = this.string.characterAt(this.index)
-                if (predicate(c)) {
-                    this.sb.add(c)
+                if (!(predicate(c))) {
+                    this.sb.addChar(c)
+                    this.index++
+                } else {
+                    // TODO: implement "break"
+                    this.index = this.string.getLength()
                 }
             }
-            return sb.toString()
+            return this.sb.toString()
         }
     }
 
