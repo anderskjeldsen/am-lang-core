@@ -20,7 +20,26 @@ namespace Am.Lang.Util.Parsers.Json {
             }
             return this.sb.toString()
         }
+
+        fun skipUntil(predicate: (c: UShort) => Bool): Boolean {
+            while(this.index < this.string.getLength()) {
+                var c = this.string.characterAt(this.index)
+                if (!(predicate(c))) {
+                    this.index++
+                } else {
+                    return true
+                }
+            }
+            return false
+        }
+
+        fun peek(len: UInt) : String {
+            return this.string.substring(this.index, len)
+        }
+
+        fun skip(len: UInt) {
+            this.index += len
+        }
+
     }
-
-
 }

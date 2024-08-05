@@ -1,0 +1,99 @@
+namespace Am.Lang.Util.Parsers.Json {
+
+    class GsonParser(private var parser: TextParser) {
+        import Am.Lang
+
+        private fun skipWhitespace() {
+            this.parser.skipUntil((c) => c != 32US && c != 9US && c != 10US && c != 13US)
+        }
+
+        public fun parse(classRef: ClassRef) {
+            // '{' ascii value is: 123
+            // '[' ascii value is: 91
+            this.skipWhitespace()
+            var str = this.parser.peek(1)
+            if (c == "{") {
+                return this.parseJsonObject(classRef)
+            } else if (c == 91US) {
+                return this.parseJsonArray(classRef)
+            }
+        }
+
+        private fun parseStringConstant(): String {
+            // check if it starts with a double quote
+            var c = this.parser.peek(1)
+            if (c != 34US) {
+                throw new Exception("Invalid string constant")
+            }
+            this.parser.skip(1)
+            var sb: StringBuilder = null
+            while(true) {
+                // " or \
+                var str = this.parser.parseUntil((c) => c == 34US || c == 92US)
+                var c = this.parser.peek(1)
+                if (c == "\\") {
+                    var c2 = this.parser.peek(2)
+/*
+                    if (c2 == "\\n") {
+                        str = "\n"
+                    } else if (c2 == "t") {
+                        str = "\t"
+                    } else if (c2 == "r") {
+                        str = "\r"
+                    } else if (c2 == "b") {
+                        str = "\b"
+                    } else if (c2 == "f") {
+                        str = "\f"
+                    } else if (c2 == "\"") {
+                        str = "\""
+                    } else if (c2 == "\\") {
+                        str = "\\"
+                    } else if (c2 == "/") {
+                        str = "/"
+                    } else if (c2 == "u") {
+                        // unicode
+                        var hex = this.parser.peek(6)
+                        var code = Integer.parseInt(hex, 16)
+                        str = code.toChar()
+                        this.parser.skip(6)
+                    }
+                    */
+                    if (sb == null) {
+                        sb = new StringBuilder()
+                    }
+                    sb.append(str)
+                    this.parser.skip(1)
+                }
+
+                c = this.parser.peek(1)
+                if (c == 34US) {
+                    this.parser.skip(1)
+                    break
+                }
+                this.parser.skip(1)
+            }
+            this.parser.skip(1)
+        }
+
+        private fun parseJsonObject(classRef: ClassRef) {
+            this.parser.skip(1)
+            this.skipWhitespace()
+            while (true) {
+                var key = this.parseString()
+                this.skipWhitespace()
+                this.parser.skip(1)
+                this.skipWhitespace()
+                var value = this.parseValue()
+                this.skipWhitespace()
+                var c = this.parser.peek(1)
+                if (c == ",") {
+                    this.parser.skip(1)
+                    this.skipWhitespace()
+                } else if (c == "}") {
+                    this.parser.skip(1)
+                    break
+                }
+            }
+        }
+    }
+}
