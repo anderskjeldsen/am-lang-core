@@ -23,6 +23,13 @@ namespace Am.Examples {
             ("Parsed " + parsed).println()
         }
 
+        // main14
+        static fun main14() {
+            var c = 'a'
+            var i = c.toInt()
+            ("Char to int: " + i.toString()).println()
+        }
+
         // main13
         static fun main13() {
             var s = "hello"

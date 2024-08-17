@@ -21,7 +21,7 @@ namespace Am.Lang.Util.Parsers.Json {
             return this.sb.toString()
         }
 
-        fun skipUntil(predicate: (c: UShort) => Bool): Boolean {
+        fun skipUntil(predicate: (c: UShort) => Bool): Bool {
             while(this.index < this.string.getLength()) {
                 var c = this.string.characterAt(this.index)
                 if (!(predicate(c))) {

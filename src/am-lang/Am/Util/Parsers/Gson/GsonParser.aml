@@ -3,6 +3,16 @@ namespace Am.Lang.Util.Parsers.Json {
     class GsonParser(private var parser: TextParser) {
         import Am.Lang
 
+        private static var leftBrace: UShort = 123US
+        private static var leftBracket: UShort = 91US
+        private static var doubleQuote: UShort = 34US
+        private static var space: UShort = 32US
+        private static var tab: UShort = 9US
+        private static var newLine: UShort = 10US
+        private static var carriageReturn: UShort = 13US
+        // "\\"
+        private static var backslash: UShort = 92US
+
         private fun skipWhitespace() {
             this.parser.skipUntil((c) => c != 32US && c != 9US && c != 10US && c != 13US)
         }
@@ -11,8 +21,8 @@ namespace Am.Lang.Util.Parsers.Json {
             // '{' ascii value is: 123
             // '[' ascii value is: 91
             this.skipWhitespace()
-            var str = this.parser.peek(1)
-            if (c == "{") {
+            var c = this.parser.peek(1)
+            if (c == GsonParser.leftBrace ) { // '{'
                 return this.parseJsonObject(classRef)
             } else if (c == 91US) {
                 return this.parseJsonArray(classRef)
@@ -29,9 +39,9 @@ namespace Am.Lang.Util.Parsers.Json {
             var sb: StringBuilder = null
             while(true) {
                 // " or \
-                var str = this.parser.parseUntil((c) => c == 34US || c == 92US)
-                var c = this.parser.peek(1)
-                if (c == "\\") {
+                var str = this.parser.parseUntil((cs) => (cs == 34US) || cs == 92US)
+                c1 = this.parser.peek(1)
+                if (c1 == GsonParser.backslash) {
                     var c2 = this.parser.peek(2)
 /*
                     if (c2 == "\\n") {
@@ -73,6 +83,25 @@ namespace Am.Lang.Util.Parsers.Json {
                 this.parser.skip(1)
             }
             this.parser.skip(1)
+        }
+
+        private fun parseJsonArray(classRef: ClassRef) {
+            /*
+            this.parser.skip(1)
+            this.skipWhitespace()
+            while (true) {
+                var value = this.parseValue()
+                this.skipWhitespace()
+                var c = this.parser.peek(1)
+                if (c == ",") {
+                    this.parser.skip(1)
+                    this.skipWhitespace()
+                } else if (c == "]") {
+                    this.parser.skip(1)
+                    break
+                }
+            }
+            */
         }
 
         private fun parseJsonObject(classRef: ClassRef) {
