@@ -1,6 +1,6 @@
 namespace Am.Lang.Util.Parsers.Json {
 
-    class GsonParser(private var parser: TextParser) {
+    class JsonParser(private var parser: TextParser) {
         import Am.Lang
 
         private static var leftBrace: UShort = 123US
@@ -22,7 +22,7 @@ namespace Am.Lang.Util.Parsers.Json {
             // '[' ascii value is: 91
             this.skipWhitespace()
             var c = this.parser.peek(1UI)
-            if (c == GsonParser.leftBrace ) { // '{'
+            if (c == JsonParser.leftBrace ) { // '{'
                 return this.parseJsonObject(classRef)
             } else if (c == 91US) {
                 return this.parseJsonArray(classRef)
@@ -43,7 +43,7 @@ namespace Am.Lang.Util.Parsers.Json {
                 // " or \
                 var str = this.parser.parseUntil((cs) => return (cs == 34US) || cs == 92US)
                 var c1 = this.parser.peek(1UI)
-                if (c1 == GsonParser.backslash) {
+                if (c1 == JsonParser.backslash) {
                     var c2 = this.parser.peek(2UI)
 /*
                     if (c2 == "\\n") {
