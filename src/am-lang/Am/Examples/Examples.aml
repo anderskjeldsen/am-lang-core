@@ -10,7 +10,7 @@ namespace Am.Examples {
         import Am.IO
         import Am.IO.Networking
         import Am.Collections
-        import Am.Lang.Util.Parsers.Json
+        import Am.Util.Parsers.Json
 
         static fun main() {
             var tp = new TextParser("Hello World")

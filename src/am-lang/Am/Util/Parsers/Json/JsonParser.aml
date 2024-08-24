@@ -1,4 +1,4 @@
-namespace Am.Lang.Util.Parsers.Json {
+namespace Am.Util.Parsers.Json {
 
     class JsonParser(private var parser: TextParser) {
         import Am.Lang
@@ -21,7 +21,7 @@ namespace Am.Lang.Util.Parsers.Json {
             // '{' ascii value is: 123
             // '[' ascii value is: 91
             this.skipWhitespace()
-            var c = this.parser.peek(1UI)
+            var c = this.parser.peekChar()
             if (c == JsonParser.leftBrace ) { // '{'
                 return this.parseJsonObject(classRef)
             } else if (c == 91US) {
@@ -32,7 +32,7 @@ namespace Am.Lang.Util.Parsers.Json {
 
         private fun parseString(): String {
             // check if it starts with a double quote
-            var c = this.parser.peek(1UI)
+            var c = this.parser.peekChar()
             if (c != 34US) {
                 throw new Exception("Invalid string constant")
             }
@@ -42,7 +42,7 @@ namespace Am.Lang.Util.Parsers.Json {
             while(go) {
                 // " or \
                 var str = this.parser.parseUntil((cs) => return (cs == 34US) || cs == 92US)
-                var c1 = this.parser.peek(1UI)
+                var c1 = this.parser.peekChar()
                 if (c1 == JsonParser.backslash) {
                     var c2 = this.parser.peek(2UI)
 /*
@@ -77,7 +77,7 @@ namespace Am.Lang.Util.Parsers.Json {
                     this.parser.skip(1UI)
                 }
 
-                c = this.parser.peek(1UI)
+                c = this.parser.peekChar()
                 if (c == 34US) {
                     this.parser.skip(1UI)
                     go = false
@@ -108,7 +108,7 @@ namespace Am.Lang.Util.Parsers.Json {
         }
 
         private fun parseValue(): Any {
-            var c = this.parser.peek(1UI)
+            var c = this.parser.peekChar()
             return null
             /*
             if (c == 34US) {

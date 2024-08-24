@@ -1,4 +1,4 @@
-namespace Am.Lang.Util.Parsers.Json {
+namespace Am.Util.Parsers.Json {
 
     class TextParser(private var string: String) {
         import Am.Lang
@@ -35,6 +35,10 @@ namespace Am.Lang.Util.Parsers.Json {
 
         fun peek(len: UInt) : String {
             return this.string.substring(this.index, len)
+        }
+
+        fun peekChar() : UShort {
+            return this.string.characterAt(this.index)
         }
 
         fun skip(len: UInt) {
