@@ -12,7 +12,10 @@ namespace Am.Examples {
         import Am.Collections
         import Am.Util.Parsers.Json
 
-        static fun main() {
+
+
+        // main15
+        static fun main15() {
             var tp = new TextParser("Hello World")
             var parsed = tp.parseUntil((c) => {
                 if (c == 0x20) {
@@ -21,6 +24,20 @@ namespace Am.Examples {
                 return false
             })
             ("Parsed " + parsed).println()
+        }
+
+        // main16
+        static fun main16() {
+            var i = 0
+            "main".println()
+            while(i < 100) {
+                i++
+                if (i == 20) {
+                    "break".println()
+                    break
+                }
+            }
+            ("i = " + i.toString()).println()
         }
 
         // main14
@@ -172,13 +189,18 @@ namespace Am.Examples {
             }
         }
 
-        static fun main3() {
+        static fun main() {
             var list = List<String>.newList<String>()
             list.add("hello")
             list.add("world")
             each(list, i) {
                 i.println()
+                if (i == "world") {
+                    "break".println()
+                    break
+                }
             }
+            "end".println()
         }
 
         static fun main2() {
