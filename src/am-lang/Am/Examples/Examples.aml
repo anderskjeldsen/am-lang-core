@@ -12,6 +12,19 @@ namespace Am.Examples {
         import Am.Collections
         import Am.Util.Parsers.Json
 
+        static var boolValue: Bool = true
+
+        static fun main() {
+            if (!CoreStartup.boolFun()) {
+                "boolFun false".println()
+            } else {
+                "boolFun true".println()
+            }
+        }
+
+        static fun boolFun(): Bool {
+            return CoreStartup.boolValue
+        }
 
 
         // main15
@@ -189,7 +202,7 @@ namespace Am.Examples {
             }
         }
 
-        static fun main() {
+        static fun main3() {
             var list = List<String>.newList<String>()
             list.add("hello")
             list.add("world")
