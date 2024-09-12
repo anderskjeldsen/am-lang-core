@@ -14,7 +14,7 @@ namespace Am.Examples {
 
         static var boolValue: Bool = true
 
-        static fun main() {
+        static fun main16() {
             if (!CoreStartup.boolFun()) {
                 "boolFun false".println()
             } else {
