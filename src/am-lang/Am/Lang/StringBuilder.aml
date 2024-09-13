@@ -13,6 +13,10 @@ namespace Am.Lang
             return String.fromBytes(byteArray, this.encoding)
         }
 
+        fun getLength(): UInt {
+            return this.buffer.getSize().toUInt()
+        }
+
 //        native fun getLength(): Int
         op + (s: String): StringBuilder {
             var bytes = s.toBytes(this.encoding)
