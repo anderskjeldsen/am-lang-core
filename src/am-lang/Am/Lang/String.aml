@@ -36,6 +36,7 @@ namespace Am.Lang
                 } else {
                     sb.addChar(c)
                 }
+                i++
             }
             if (sb.getLength() > 0) {
                 result.add(sb.toString())
