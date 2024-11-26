@@ -30,7 +30,7 @@ namespace Am.IO
 
 
         fun readString(): String {
-            var read = this.read(this.buffer, 0L, this.buffer.length().toUInt())
+            var read = this.read(this.buffer, 0L, this.buffer.length())
             var list = List<UByte>.newList<UByte>()
 
             while(read > 0UI) {
@@ -43,9 +43,9 @@ namespace Am.IO
 
                 list.addArray(subArray)
 
-                var exp = read == this.buffer.length().toUInt()
+                var exp = read == this.buffer.length()
                 if (exp) {
-                    read = this.read(this.buffer, 0L, this.buffer.length().toUInt())
+                    read = this.read(this.buffer, 0L, this.buffer.length())
                 } 
                 if (!exp) {
                     read = 0UI
@@ -62,13 +62,13 @@ namespace Am.IO
 
         fun writeString(string: String) {
             var bytes = string.toBytes("UTF-8")
-            this.write(bytes, 0L, bytes.length().toUInt())
+            this.write(bytes, 0L, bytes.length())
         }
 
         // TODO: implement properly, now it doesn't work.
         /*
         fun readLine(): String {
-            var read = this.read(this.buffer, 0L, this.buffer.length().toUInt())
+            var read = this.read(this.buffer, 0L, this.buffer.length())
             var list = List<UByte>.newList<UByte>()
 
             if (read == 0) {
