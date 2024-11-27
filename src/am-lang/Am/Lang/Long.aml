@@ -25,6 +25,13 @@ namespace Am.Lang
             }
             return b
         }
+
+        static fun abs(a: Long): Long {
+            if (a < 0) {
+                return -a
+            }
+            return a
+        }
     }
 }
 
