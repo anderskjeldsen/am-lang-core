@@ -27,11 +27,11 @@ namespace Am.Lang
             return b
         }
 
-        fun abs(a: Int): Int {
-            if (a < 0) {
-                return -a
+        fun abs(): Int {
+            if (this < 0) {
+                return -this
             }
-            return a
+            return this
         }
 
     }
