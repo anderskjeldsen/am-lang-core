@@ -27,7 +27,7 @@ namespace Am.Lang
             return b
         }
 
-        static fun abs(a: Int): Int {
+        fun abs(a: Int): Int {
             if (a < 0) {
                 return -a
             }

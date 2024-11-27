@@ -27,11 +27,11 @@ namespace Am.Lang
             return b
         }
 
-        static fun abs(a: Short): Short {
-            if (a < 0) {
-                return -a
+        fun abs(): Short {
+            if (this < 0) {
+                return -this
             }
-            return a
+            return this
         }
 
     }
