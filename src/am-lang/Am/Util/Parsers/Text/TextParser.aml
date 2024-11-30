@@ -9,7 +9,7 @@ namespace Am.Util.Parsers.Json {
         fun parseUntil(predicate: (c: UShort) => Bool) : String {
             this.sb.clear()
             while(this.index < this.string.getLength()) {
-                var c = this.string.characterAt(this.index)
+                var c = this.string.characterAt(this.index.toUInt())
                 if (!(predicate(c))) {
                     this.sb.addChar(c)
                     this.index++
@@ -23,7 +23,7 @@ namespace Am.Util.Parsers.Json {
 
         fun skipUntil(predicate: (c: UShort) => Bool): Bool {
             while(this.index < this.string.getLength()) {
-                var c = this.string.characterAt(this.index)
+                var c = this.string.characterAt(this.index.toUInt())
                 if (!(predicate(c))) {
                     this.index++
                 } else {
@@ -34,15 +34,15 @@ namespace Am.Util.Parsers.Json {
         }
 
         fun peek(len: UInt) : String {
-            return this.string.substring(this.index, len)
+            return this.string.substring(this.index.toUInt(), len)
         }
 
         fun peekChar() : UShort {
-            return this.string.characterAt(this.index)
+            return this.string.characterAt(this.index.toUInt())
         }
 
         fun skip(len: UInt) {
-            this.index += len
+            this.index += len.toInt()
         }
 
     }
