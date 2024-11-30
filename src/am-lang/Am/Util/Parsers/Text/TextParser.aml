@@ -3,7 +3,7 @@ namespace Am.Util.Parsers.Json {
     class TextParser(private var string: String) {
         import Am.Lang
 
-        private var index: UInt
+        private var index: Int
         private var sb: StringBuilder = new StringBuilder()
 
         fun parseUntil(predicate: (c: UShort) => Bool) : String {

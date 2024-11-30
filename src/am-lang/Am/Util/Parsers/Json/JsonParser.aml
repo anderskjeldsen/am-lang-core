@@ -88,7 +88,8 @@ namespace Am.Util.Parsers.Json {
             return ""
         }
 
-        private fun parseJsonArray(classRef: ClassRef) {
+        private fun parseJsonArray(classRef: ClassRef): Object {
+            return null
             /*
             this.parser.skip(1)
             this.skipWhitespace()
