@@ -11,7 +11,11 @@ namespace Am.Lang
         native fun toUShort(): UShort
         native fun toUInt(): UInt
         native fun toULong(): ULong
-        native fun toBool(): Bool        
+        native fun toBool(): Bool     
+
+
+        static const var maxValue: Short = 0x7fffS
+        static const var minValue: Short = 0x8000S
 
         static fun min(a: Short, b: Short): Short {
             if (a < b) {

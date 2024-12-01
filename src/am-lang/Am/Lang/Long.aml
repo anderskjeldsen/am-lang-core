@@ -12,6 +12,10 @@ namespace Am.Lang
         native fun toUInt(): UInt
         native fun toULong(): ULong
         native fun toBool(): Bool
+
+        static const var maxValue: Long = 0x7fffffffffffffffL
+        static const var minValue: Long = 0x8000000000000000L
+
         static fun min(a: Long, b: Long): Long {
             if (a < b) {
                 return a

@@ -623,6 +623,7 @@ void __throw_simple_exception(const char * const message, const char * const sta
     __decrease_reference_count(ex); // it's in the exception stack trace list now, we don't need it anymore.
 }
 
+// true meaning: is same class OR descendant
 bool is_descendant_of(aclass const * const cls, aclass const * const base) {
     if (cls == base) {
         return true;

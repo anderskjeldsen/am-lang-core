@@ -14,6 +14,14 @@ namespace Am.Examples {
 
         static var boolValue: Bool = true
 
+        // main18
+        static fun main18() {
+            var max = Int.maxValue
+// compile error:            Int.maxValue = max
+            ("max: " + max.toString()).println()
+        }
+
+        // main17
         static fun main17() {
             if (!CoreStartup.boolFun()) {
                 "boolFun false".println()
