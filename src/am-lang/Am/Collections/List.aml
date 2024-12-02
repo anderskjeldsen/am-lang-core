@@ -107,7 +107,6 @@ namespace Am.Collections {
         }
 
         fun contains(item: T): Bool {
-            var i = 0
             each(this.items, i) {
                 if (i == item) {
                     return true
