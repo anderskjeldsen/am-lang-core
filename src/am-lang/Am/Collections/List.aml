@@ -106,6 +106,16 @@ namespace Am.Collections {
             this.size = 0
         }
 
+        fun contains(item: T): Bool {
+            var i = 0
+            each(this.items, i) {
+                if (i == item) {
+                    return true
+                }
+            }
+            return false
+        }
+
 /*
         fun filter(predicate: (t: T) => Bool) {
 
