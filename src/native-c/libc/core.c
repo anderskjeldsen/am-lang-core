@@ -37,8 +37,14 @@ void __mark_root_objects() {
 void __mark_object(aobject * const obj) {
     if (obj != NULL) {
         #ifdef DEBUG
+        #ifdef CONDLOG 
+        if (__conditional_logging_on) {
+        #endif
         printf("Mark object of type %s...%p, refs, ref: %d, prop ref: %d\n", obj->class_ptr->name, obj, obj->reference_count, obj->property_reference_count);
         printf("Mark object...%p\n", obj->class_ptr->name);    
+        #ifdef CONDLOG 
+        }
+        #endif        
         #endif
 
         obj->marked = true;
@@ -47,8 +53,15 @@ void __mark_object(aobject * const obj) {
         }
 
         #ifdef DEBUG
-        printf("Mark properties for %s\n", obj->class_ptr->name);
+        #ifdef CONDLOG 
+        if (__conditional_logging_on) {
         #endif
+        printf("Mark properties for %s\n", obj->class_ptr->name);
+        #ifdef CONDLOG 
+        }
+        #endif        
+        #endif
+
         for(int i = 0; i < obj->class_ptr->properties_count; i++) {
             property * const __prop = &obj->object_properties.class_object_properties.properties[i];
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
@@ -58,13 +71,29 @@ void __mark_object(aobject * const obj) {
         }
 
         #ifdef DEBUG
+        #ifdef CONDLOG 
+        if (__conditional_logging_on) {
+        #endif
         printf("Object marked %s\n", obj->class_ptr->name);
+        #ifdef CONDLOG 
+        }
+        #endif
         #endif
     }
 }
 
 void __sweep_unmarked_objects() {
+    #ifdef DEBUG
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
+    #endif
+
     printf("Allocated objects before sweep %d\n", __allocation_count);
+    #ifdef CONDLOG 
+    }
+    #endif
+    #endif
+
     int old_count = 1;
     int new_count = 0;
     aobject * current = NULL;
@@ -96,8 +125,15 @@ void __sweep_unmarked_objects() {
 
 void __clear_marks() {
     #ifdef DEBUG
-    printf("clear marks\n");
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
     #endif
+    printf("clear marks\n");
+    #ifdef CONDLOG 
+}
+    #endif
+    #endif
+
     aobject * current = __first_object;
     while(current != NULL) {
         if (current->marked) {
@@ -106,7 +142,13 @@ void __clear_marks() {
         current = current->next;
     }
     #ifdef DEBUG
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
+    #endif
     printf("clear marks DONE\n");
+    #ifdef CONDLOG 
+    }
+    #endif
     #endif
 }
 
@@ -118,11 +160,26 @@ sweep_result __sweep_object(aobject * const obj) {
         } else {
             if (obj->reference_count == 0 && !obj->pending_deallocation) {
                 #ifdef DEBUG
-                printf("Sweep object %s, m: %d, ref: %d, propref: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count, obj->property_reference_count);
+                #ifdef CONDLOG 
+                if (__conditional_logging_on) {
                 #endif
+                printf("Sweep object %s, m: %d, ref: %d, propref: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count, obj->property_reference_count);
+                #ifdef CONDLOG 
+                }
+                #endif
+                #endif
+
                 return __detach_object_from_sweep(obj);
             } else {
+                #ifdef DEBUG
+                #ifdef CONDLOG 
+                if (__conditional_logging_on) {
+                #endif
                 printf("Don't sweep referenced object %s, m: %d, rc: %d\n", obj->class_ptr->name, obj->marked, obj->reference_count);
+                #ifdef CONDLOG 
+                }
+                #endif
+                #endif
             }
         }
     }
@@ -131,7 +188,13 @@ sweep_result __sweep_object(aobject * const obj) {
 
 void __register_class(aclass * const __class) {
     #ifdef DEBUG
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
+    #endif
     printf("Register class %s, %p\n", __class->name, __class);
+    #ifdef CONDLOG 
+    }
+    #endif
     #endif
     __class->next = __first_class;
     __first_class = __class;
@@ -177,7 +240,13 @@ unsigned int __string_hash(const char * const str) {
 aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra_size) {
     __allocation_count++;
     #ifdef DEBUG
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
+    #endif
     printf("Allocate object of type %s (count: %d, object_id: %d) \n", __class->name, __allocation_count, ++__last_object_id);
+    #ifdef CONDLOG 
+    }
+    #endif
     #endif
 
     size_t size_with_properties = sizeof(aobject) + (sizeof(property) * __class->properties_count) + extra_size;
@@ -261,7 +330,13 @@ sweep_result __detach_object_from_sweep(aobject * const __obj) {
     }
 
     #ifdef DEBUG
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
+    #endif
     printf("Detach (sweep) object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+    #ifdef CONDLOG 
+    }
+    #endif
     #endif
    
     __detach_object(__obj);
@@ -296,7 +371,13 @@ sweep_result __detach_object_from_sweep(aobject * const __obj) {
 
 void __deallocate_detached_object(aobject * const __obj) {
     #ifdef DEBUG
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
+    #endif
     printf("Deallocate detached object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+    #ifdef CONDLOG 
+    }
+    #endif
     #endif
 
     __allocation_count--;
@@ -327,7 +408,13 @@ void __deallocate_object(aobject * const __obj) {
     __detach_object(__obj);
 
     #ifdef DEBUG
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
+    #endif
     printf("Deallocate object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+    #ifdef CONDLOG 
+    }
+    #endif
     #endif
 
     __allocation_count--;
@@ -351,7 +438,13 @@ void __deallocate_object(aobject * const __obj) {
 
 void __detach_object(aobject * const __obj) {
     #ifdef DEBUG
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
+    #endif
     printf("Detach object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+    #ifdef CONDLOG 
+    }
+    #endif
     #endif
 
     __obj->pending_deallocation = true;
@@ -379,7 +472,13 @@ void __detach_object(aobject * const __obj) {
             // TODO: use __decrease_reference_count_nullable_value
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
                 #ifdef DEBUG
+                #ifdef CONDLOG 
+                if (__conditional_logging_on) {
+                #endif
                 printf("Detach property %s:\n", __prop->nullable_value.value.object_value->class_ptr->name);
+                #ifdef CONDLOG 
+                }
+                #endif
                 #endif
                 __decrease_property_reference_count(__prop->nullable_value.value.object_value);
                 __prop->nullable_value.value.object_value = NULL;
@@ -409,7 +508,13 @@ void __dereference_static_properties() {
 
 void __dereference_static_properties_for_class(aclass * const __class) {
     #ifdef DEBUG
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
+    #endif
     printf("Dereference static properties of class %s\n", __class->name);
+    #ifdef CONDLOG 
+    }
+    #endif
     #endif
 
     if (__class->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
@@ -426,7 +531,13 @@ void __dereference_static_properties_for_class(aclass * const __class) {
 
 void __mark_static_properties(aclass * const __class) {
     #ifdef DEBUG
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
+    #endif
     printf("Mark static properties of class %s\n", __class->name);
+    #ifdef CONDLOG 
+    }
+    #endif
     #endif
     
     if (__class->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
