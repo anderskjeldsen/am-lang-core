@@ -493,6 +493,14 @@ void __pass_exception(function_result *result, aobject * const exception, aobjec
 //    result.exception_holder->last_stack_trace_item = new_item;
 }
 
+bool __any_null(const nullable_value a) {
+    if (__is_primitive_nullable(a)) {
+        return __is_primitive_null(a);
+    } else {
+        return a.value.object_value == NULL;
+    }
+}
+
 bool __any_equals(const nullable_value a, const nullable_value b) {
     if (__is_primitive_nullable(a)) {
         if (__is_primitive_nullable(b)) {

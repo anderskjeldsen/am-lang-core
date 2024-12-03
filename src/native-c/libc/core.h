@@ -322,6 +322,7 @@ static inline bool __is_primitive(const nullable_value nullable_value);
 static inline bool __any_has_flags(const nullable_value *nv, unsigned short flags);
 static inline ctype __value_flags_to_ctype(unsigned char flags);
 bool __any_equals(const nullable_value a, const nullable_value b);
+bool __any_null(const nullable_value a);
 //bool __object_equals(aobject * const a, aobject * const b);
 aobject * __create_string_constant(char const * const str, aclass * const string_class);
 aobject * __create_string(char const * const str, aclass * const string_class);
