@@ -445,13 +445,13 @@ void print_allocated_objects() {
         printf("Going through attached objects:\n");
         aobject *c = __first_object;
         while(c != NULL) {
-            printf("Object alive, %s\n", c->class_ptr.name);
+            printf("Object alive, %s\n", c->class_ptr->name);
             c = c->next;
         }    
         printf("Going through detached objects:\n");
         *c = __first_detached_object;
         while(c != NULL) {
-            printf("Object alive, %s\n", c->class_ptr.name);
+            printf("Object alive, %s\n", c->class_ptr->name);
             c = c->next;
         }    
     }
