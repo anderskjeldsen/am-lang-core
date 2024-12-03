@@ -2,6 +2,6 @@ namespace Am.Lang.Diagnostics {
     native class Debug {
         import Am.Lang
 
-        native fun setConditionalLogging(on: Bool)
+        native static fun setConditionalLogging(on: Bool)
     }
 }

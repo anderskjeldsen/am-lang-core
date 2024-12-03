@@ -36,18 +36,12 @@ __exit: ;
 	return __result;
 }
 
-function_result Am_Lang_Diagnostics_Debug_setConditionalLogging_0(aobject * const this, bool on)
+function_result Am_Lang_Diagnostics_Debug_setConditionalLogging_0(bool on)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 	__conditional_logging_on = on;
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 }
 
