@@ -12,7 +12,7 @@
 bool __conditional_logging_on = false;
 
 int __allocation_count = 0;
-#define MAX_ALLOCATIONS 1024 * 500
+#define MAX_ALLOCATIONS 1024 * 50
 
 #ifdef DEBUG
 int __last_object_id = 0;
@@ -284,10 +284,11 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
     __obj->reference_count = 1;
 
     #ifdef DEBUG
+    allocations[allocation_index++] = __obj;
     if (allocation_index % 1000 == 0) {
         printf("Another 1000 allocations: %d\n", allocation_index);
     }
-    allocations[allocation_index++] = __obj;
+
     __obj->object_properties.class_object_properties.object_id = __last_object_id;
     #endif
 
