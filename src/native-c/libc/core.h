@@ -74,6 +74,8 @@ BYTE_SIZE_EXP lookup (order: 2,1)
 */
 // #define PRIMITIVE_ALL PRIMITIVE_LONG | PRIMITIVE_INT | PRIMITIVE_SHORT | PRIMITIVE_CHAR | PRIMITIVE_BOOL // just check if the flags are 0 to see if its an object and not a primitive
 
+extern bool __conditional_logging_on;
+
 typedef struct _aobject aobject;
 typedef struct _aclass aclass;
 typedef void (*__anonymous_function)();
