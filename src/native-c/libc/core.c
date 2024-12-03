@@ -9,7 +9,7 @@
 #include <libc/memory_pools.h>
 #include <libc/core_inline_functions.h>
 
-bool __conditional_logging_on = FALSE;
+bool __conditional_logging_on = false;
 
 int __allocation_count = 0;
 #define MAX_ALLOCATIONS 1024 * 50
