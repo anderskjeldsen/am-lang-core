@@ -440,6 +440,22 @@ void __mark_static_properties(aclass * const __class) {
 
 void print_allocated_objects() {
     printf("Allocated objects %d\n", __allocation_count);
+
+    if (__allocation_count > 0) {
+        printf("Going through attached objects:\n");
+        aobject *c = __first_object;
+        while(c != NULL) {
+            printf("Object alive, %s\n", c->class_ptr.name);
+            c = c->next;
+        }    
+        printf("Going through detached objects:\n");
+        *c = __first_detached_object;
+        while(c != NULL) {
+            printf("Object alive, %s\n", c->class_ptr.name);
+            c = c->next;
+        }    
+    }
+
     #ifdef DEBUG
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         if ( allocations[i] != NULL) {
