@@ -1,0 +1,7 @@
+namespace Am.Lang.Diagnostics {
+    native class Debug {
+        import Am.Lang
+
+        native fun setConditionalLogging(on: Bool)
+    }
+}
