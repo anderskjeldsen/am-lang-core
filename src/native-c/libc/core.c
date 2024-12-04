@@ -479,7 +479,7 @@ void __deallocate_object(aobject * const __obj) {
 
     if (it) {
         printf("remove from array\n");
-        sleep(2);
+        sleep(1);
     }
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
@@ -490,11 +490,29 @@ void __deallocate_object(aobject * const __obj) {
     }
     #endif
 
+    if (it) {
+        printf("removed from array\n");
+        sleep(2);
+    }
+
     if (__obj->class_ptr->memory_pool != NULL) {
+        if (it) {
+            printf("free from pool\n");
+            sleep(2);
+        }
+
         free_from_pool(__obj->class_ptr->memory_pool, __obj);
     } else if (__obj->memory_pooled) {
+        if (it) {
+            printf("free from small pool\n");
+            sleep(2);
+        }
         free_from_pool(small_object_memory_pool, __obj);
     } else {
+        if (it) {
+            printf("free\n");
+            sleep(2);
+        }
         free(__obj);
     }
 
