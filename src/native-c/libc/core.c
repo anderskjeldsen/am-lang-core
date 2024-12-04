@@ -406,6 +406,7 @@ void __deallocate_detached_object(aobject * const __obj) {
 }
 
 void __deallocate_object(aobject * const __obj) {
+    bool it = false;
 
     if (__conditional_logging_on) {
         printf("Deallocate object\n");      
@@ -416,6 +417,14 @@ void __deallocate_object(aobject * const __obj) {
             if (strcmp(__obj->class_ptr->name, "String") == 0) {
                 string_holder *sh = (string_holder *) __obj->object_properties.class_object_properties.object_data.value.custom_value;
                 printf("String value: %s\n", sh->string_value);
+                if (sh->is_string_constant) {
+                    printf("String is constant\n");
+                }
+                #if defined(DEBUG) || defined(TRACKOBJECTS)
+                if (__obj->object_properties->object_id == 250) {
+                    it = true;
+                }
+                #endif
             }
         }
 
@@ -440,7 +449,16 @@ void __deallocate_object(aobject * const __obj) {
         sleep(1);
     }
 
+    if (it) {
+        printf("detach");
+        sleep(2);
+    }
     __detach_object(__obj);
+
+    if (it) {
+        printf("detached");
+        sleep(2);
+    }
 
     #ifdef DEBUG
     #ifdef CONDLOG 
@@ -453,6 +471,11 @@ void __deallocate_object(aobject * const __obj) {
     #endif
 
     __allocation_count--;
+
+    if (it) {
+        printf("remove from array");
+        sleep(2);
+    }
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
@@ -469,6 +492,12 @@ void __deallocate_object(aobject * const __obj) {
     } else {
         free(__obj);
     }
+
+    if (it) {
+        printf("freed");
+        sleep(2);
+    }
+
 
     if (object_id == 640) {
         __conditional_logging_on = true;
