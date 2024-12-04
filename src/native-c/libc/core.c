@@ -567,7 +567,7 @@ void __decrease_property_reference_count(aobject * const __obj) {
                     printf("\n");
                     sleep(1);
                     printf("again");
-                    for(int i = 0; i < 100; i++) {
+                    for(int i = 0; i < 1000; i++) {
                         printf("Let's flush the buffer\n");
                     }
                     sleep(1);
