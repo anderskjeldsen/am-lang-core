@@ -469,7 +469,8 @@ void __detach_object(aobject * const __obj) {
         function_result release_result = ((__release_T) __obj->class_ptr->release)(__obj);
         // TODO: handle exceptions
         if (release_result.exception != NULL) {
-            printf("Exception in release method for : %s\n", __obj->class_ptr->name;
+            printf("Exception in release method for : %s\n", __obj->class_ptr->name);
+            __decrease_reference_count(release_result.exception);
         }
 
     }
