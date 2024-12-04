@@ -409,6 +409,10 @@ void __deallocate_object(aobject * const __obj) {
 
     if (__conditional_logging_on) {
         printf("Deallocate object\n");
+        for(int i = 0; i < 1000; i++) {
+            printf("Let's flush the buffer 2\n");
+        }
+
         sleep(1);
         printf("Is object set? %p\n", __obj);
         sleep(1);
@@ -566,7 +570,6 @@ void __decrease_property_reference_count(aobject * const __obj) {
                     }
                     printf("\n");
                     sleep(1);
-                    printf("again");
                     for(int i = 0; i < 1000; i++) {
                         printf("Let's flush the buffer\n");
                     }
