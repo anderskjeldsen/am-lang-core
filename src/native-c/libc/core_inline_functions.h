@@ -82,6 +82,7 @@ static inline void __increase_reference_count(aobject * const __obj) {
     #endif
 }
 
+/*
 static inline void __decrease_property_reference_count(aobject * const __obj) {
     if ( __obj != NULL) {
         __obj->property_reference_count--;
@@ -171,7 +172,7 @@ static inline void __decrease_property_reference_count(aobject * const __obj) {
         }
     }
 }
-
+*/
 static inline void __increase_property_reference_count(aobject * const __obj) {
     if (__obj->property_reference_count == 0) {
         __obj->next = __first_object;
