@@ -510,6 +510,9 @@ void __dereference_static_properties() {
         }
         c = c->next;
     }
+    #if defined(DEBUG) || defined(TRACKOBJECTS)
+    printf("\nStatic properties for all classes dereferenced\n");
+    #endif
     __dereference_static_properties_for_class(class_ref);
 }
 
