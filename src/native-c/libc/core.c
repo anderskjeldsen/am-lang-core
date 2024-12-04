@@ -511,47 +511,17 @@ void __decrease_property_reference_count(aobject * const __obj) {
         }
 
         if (__obj->property_reference_count == 0) {
-            if (fl) {
-                printf("check first object\n");
-                sleep(1);
-            }
             if (__obj == __first_object) {
-                if (fl) {
-                    printf("is first object\n");
-                    sleep(1);
-                }
-
                 __first_object = __obj->next;                
                 __obj->next = NULL;
                 if (__first_object != NULL) {
                     __first_object->prev = NULL;
                 }
             } else {        
-                if (fl) {
-                    printf("is not first object\n");
-                    sleep(1);
-                }
-
-                if (fl) {
-                    printf("has prev %p\n", __obj->prev);
-                    sleep(1);
-                }
-
                 __obj->prev->next = __obj->next;
-                if (fl) {
-                    printf("1\n");
-                }
-
                 if (__obj->next != NULL) {
-                    if (fl) {
-                        printf("2\n");
-                    }
                     __obj->next->prev = __obj->prev;
                 }
-                if (fl) {
-                    printf("3\n");
-                }
-
                 __obj->prev = NULL;
                 __obj->next = NULL;
             }
@@ -562,28 +532,7 @@ void __decrease_property_reference_count(aobject * const __obj) {
                     printf("deallocate in 1s\n");
                     sleep(1);
                 }
-                unsigned char *fptr = (unsigned char *) &__deallocate_object;
-                if (fl) {
-                    // print the first 10 bytes of the function data
-                    for(int i = 0; i < 100; i++) {
-                        printf("%02x ", fptr[i]);
-                    }
-                    printf("\n");
-                    sleep(1);
-                    for(int i = 0; i < 1000; i++) {
-                        printf("Let's flush the buffer\n");
-                    }
-                    sleep(1);
-                }
                 __deallocate_object(__obj);
-                if (__conditional_logging_on || fl) {
-                    sleep(5);
-                    printf("deallocated\n");
-                    for(int i = 0; i < 1000; i++) {
-                        printf("Let's flush the buffer again\n");
-                    }
-
-                }
             }
         }
     }
@@ -760,13 +709,6 @@ void print_allocated_objects() {
 }
 
 void clear_allocated_objects() {
-    unsigned char *fptr = (unsigned char *) &__deallocate_object;
-    printf("Deallocate object function data:\n");
-    // print the first 10 bytes of the function data
-    for(int i = 0; i < 100; i++) {
-        printf("%02x ", fptr[i]);
-    }
-    printf("\n");
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
