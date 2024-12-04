@@ -13,8 +13,7 @@ bool __conditional_logging_on = false;
 
 int __allocation_count = 0;
 #define MAX_ALLOCATIONS 1024 * 50
-
-#ifdef DEBUG
+#if defined(DEBUG) || defined(TRACKOBJECTS)
 int __last_object_id = 0;
 aobject * allocations[MAX_ALLOCATIONS];
 int allocation_index = 0;
@@ -283,7 +282,7 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
     __obj->class_ptr = __class;
     __obj->reference_count = 1;
 
-    #ifdef DEBUG
+    #if defined(DEBUG) || defined(TRACKOBJECTS)
     allocations[allocation_index++] = __obj;
     if (allocation_index % 1000 == 0) {
         printf("Another 1000 allocations: %d\n", allocation_index);
@@ -386,7 +385,7 @@ void __deallocate_detached_object(aobject * const __obj) {
 
     __allocation_count--;
 
-    #ifdef DEBUG
+    #if defined(DEBUG) || defined(TRACKOBJECTS)
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         if ( allocations[i] == __obj) {
             allocations[i] = NULL;
@@ -423,7 +422,7 @@ void __deallocate_object(aobject * const __obj) {
 
     __allocation_count--;
 
-    #ifdef DEBUG
+    #if defined(DEBUG) || defined(TRACKOBJECTS)
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         if ( allocations[i] == __obj) {
             allocations[i] = NULL;
@@ -578,7 +577,7 @@ void print_allocated_objects() {
         }
     }
 
-    #ifdef DEBUG
+    #if defined(DEBUG) || defined(TRACKOBJECTS)
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         if ( allocations[i] != NULL) {
             printf("Object still alive: %s (address: %p, object_id: %d, property refs: %d, inline refs: %d)\n", allocations[i]->class_ptr->name, allocations[i], allocations[i]->object_properties.class_object_properties.object_id, allocations[i]->property_reference_count, allocations[i]->reference_count);
@@ -588,7 +587,7 @@ void print_allocated_objects() {
 }
 
 void clear_allocated_objects() {
-    #ifdef DEBUG
+    #if defined(DEBUG) || defined(TRACKOBJECTS)
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         allocations[i] = NULL;
     }

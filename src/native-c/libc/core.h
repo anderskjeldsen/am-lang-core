@@ -204,7 +204,7 @@ struct _iface_reference {
 
 struct _class_object_properties {
     nullable_value object_data;
-    #ifdef DEBUG
+    #if defined(DEBUG) || defined(TRACKOBJECTS)
     int object_id;
     #endif
     property * properties;
