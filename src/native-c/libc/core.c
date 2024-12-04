@@ -475,10 +475,11 @@ void __deallocate_object(aobject * const __obj) {
         free(__obj);
     }
 
+    if (object_id == 640) {
+        __conditional_logging_on = true;
+    }
+
     if (__conditional_logging_on) {
-        if (object_id == 640) {
-            __conditional_logging_on = true;
-        }
         printf("Deallocated object of type %s (total object allocation count: %d, object id: %d)\n", name, __allocation_count, object_id);
     }
 
@@ -501,17 +502,14 @@ void __decrease_property_reference_count(aobject * const __obj) {
             printf("decrease property reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
         }
 
-        bool fl = false;
         if (strcmp(__obj->class_ptr->name, "String") == 0) {
             string_holder *sh = (string_holder *) __obj->object_properties.class_object_properties.object_data.value.custom_value;
             printf("String value: %s\n", sh->string_value);
-            if (strcmp(sh->string_value, "Am.Lang.Short") == 0) {
-                fl = true;
-            }
         }
 
         if (__obj->property_reference_count == 0) {
             if (__obj == __first_object) {
+
                 __first_object = __obj->next;                
                 __obj->next = NULL;
                 if (__first_object != NULL) {
@@ -528,10 +526,6 @@ void __decrease_property_reference_count(aobject * const __obj) {
 
 
             if (__obj->reference_count == 0) {
-                if (__conditional_logging_on || fl) {
-                    printf("deallocate in 1s\n");
-                    sleep(1);
-                }
                 __deallocate_object(__obj);
             }
         }
@@ -709,6 +703,13 @@ void print_allocated_objects() {
 }
 
 void clear_allocated_objects() {
+    unsigned char *fptr = (unsigned char *) &__deallocate_object;
+    printf("Deallocate object function data:\n");
+    // print the first 10 bytes of the function data
+    for(int i = 0; i < 100; i++) {
+        printf("%02x ", fptr[i]);
+    }
+    printf("\n");
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
