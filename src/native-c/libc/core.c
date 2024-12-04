@@ -514,8 +514,9 @@ void __deallocate_object(aobject * const __obj) {
         }
         free_from_pool(small_object_memory_pool, __obj);
     } else {
+        printf("free obj %p\n", __obj);
+
         if (it) {
-            printf("free obj %p\n", __obj);
             sleep(2);
         }
         free(__obj);
@@ -853,6 +854,11 @@ bool __any_equals(const nullable_value a, const nullable_value b) {
 aobject * __create_string_constant(char const * const str, aclass * const string_class) {
     size_t len = strlen(str);
     aobject * str_obj = __allocate_object_with_extra_size(string_class, sizeof(string_holder));
+
+    if (strcmp(str, "Am.Lang.Short") == 0) {
+        printf("new string %p\n", str_obj);
+    }
+
     string_holder * const holder = (string_holder *) (str_obj + 1);
     str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
     int hash = __string_hash(str);
