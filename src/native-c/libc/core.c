@@ -510,7 +510,7 @@ void __dereference_static_properties() {
 }
 
 void __dereference_static_properties_for_class(aclass * const __class) {
-    #ifdef DEBUG
+    #if defined(DEBUG) || defined(TRACKOBJECTS)
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
     #endif
