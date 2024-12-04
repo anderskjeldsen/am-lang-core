@@ -238,11 +238,14 @@ unsigned int __string_hash(const char * const str) {
 
 aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra_size) {
     __allocation_count++;
+    #if defined(DEBUG) || defined(TRACKOBJECTS)
+    __last_object_id++;
+    #endif
     #ifdef DEBUG
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
     #endif
-    printf("Allocate object of type %s (count: %d, object_id: %d) \n", __class->name, __allocation_count, ++__last_object_id);
+    printf("Allocate object of type %s (count: %d, object_id: %d) \n", __class->name, __allocation_count, __last_object_id);
     #ifdef CONDLOG 
     }
     #endif
@@ -409,7 +412,8 @@ void __deallocate_object(aobject * const __obj) {
     }
 
     if (__conditional_logging_on) {
-    printf("Deallocate object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+        printf("Deallocate object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+        sleep(1);
     }
 
     __detach_object(__obj);
