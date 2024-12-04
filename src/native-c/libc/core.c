@@ -411,8 +411,10 @@ void __deallocate_object(aobject * const __obj) {
         return;
     }
 
+    char *name = __obj->class_ptr->name;
+
     if (__conditional_logging_on) {
-        printf("Deallocate object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+        printf("Deallocate object of type %s (total object allocation count: %d)\n", name, __allocation_count);
         sleep(1);
     }
 
@@ -447,7 +449,7 @@ void __deallocate_object(aobject * const __obj) {
     }
 
     if (__conditional_logging_on) {
-        printf("Deallocated object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+        printf("Deallocated object of type %s (total object allocation count: %d)\n", name, __allocation_count);
     }
 
 }
