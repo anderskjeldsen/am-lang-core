@@ -578,11 +578,13 @@ void print_allocated_objects() {
     }
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
+    printf("List of allocated objects:\n");
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         if ( allocations[i] != NULL) {
             printf("Object still alive: %s (address: %p, object_id: %d, property refs: %d, inline refs: %d)\n", allocations[i]->class_ptr->name, allocations[i], allocations[i]->object_properties.class_object_properties.object_id, allocations[i]->property_reference_count, allocations[i]->reference_count);
         }
     }
+    printf("End of list of allocated objects\n");
     #endif
 }
 
