@@ -445,6 +445,11 @@ void __deallocate_object(aobject * const __obj) {
     } else {
         free(__obj);
     }
+
+    if (__conditional_logging_on) {
+        printf("Deallocated object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+    }
+
 }
 
 void __detach_object(aobject * const __obj) {
@@ -463,6 +468,10 @@ void __detach_object(aobject * const __obj) {
     if ( __obj->class_ptr->release != NULL ) {
         function_result release_result = ((__release_T) __obj->class_ptr->release)(__obj);
         // TODO: handle exceptions
+        if (release_result.exception != NULL) {
+            printf("Exception in release method for : %s\n", __obj->class_ptr->name;
+        }
+
     }
 
     if (__obj->class_ptr->type == interface) {
