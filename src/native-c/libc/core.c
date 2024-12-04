@@ -557,16 +557,15 @@ void __decrease_property_reference_count(aobject * const __obj) {
                 if (__conditional_logging_on || fl) {
                     printf("deallocate in 1s\n");
                     sleep(1);
-                    printf("let's wait 5 more\n");
-                    sleep(5);
                 }
                 char *fptr = (char *) &__deallocate_object;
-                if (__conditional_logging_on || fl) {
+                if (fl) {
                     // print the first 10 bytes of the function data
                     for(int i = 0; i < 10; i++) {
                         printf("%02x ", fptr[i]);
                     }
                     printf("\n");
+                    sleep(10);
                 }
                 __deallocate_object(__obj);
                 if (__conditional_logging_on || fl) {
@@ -748,6 +747,14 @@ void print_allocated_objects() {
 }
 
 void clear_allocated_objects() {
+    char *fptr = (char *) &__deallocate_object;
+    printf("Deallocate object function data:\n");
+    // print the first 10 bytes of the function data
+    for(int i = 0; i < 10; i++) {
+        printf("%02x ", fptr[i]);
+    }
+    printf("\n");
+
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         allocations[i] = NULL;
