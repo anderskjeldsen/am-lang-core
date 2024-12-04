@@ -94,6 +94,10 @@ static inline void __decrease_property_reference_count(aobject * const __obj) {
         #endif        
         #endif
 
+        if (__conditional_logging_on) {
+            printf("decrease property reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
+        }
+
         if (__obj->property_reference_count == 0) {
             if (__obj == __first_object) {
                 __first_object = __obj->next;                

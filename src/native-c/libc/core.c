@@ -513,6 +513,7 @@ void __dereference_static_properties() {
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     printf("\nStatic properties for all classes dereferenced\n");
     #endif
+    __conditional_logging_on = true;
     __dereference_static_properties_for_class(class_ref);
 }
 
@@ -532,7 +533,7 @@ void __dereference_static_properties_for_class(aclass * const __class) {
             property * const __prop = &__class->static_properties[i];
             #if defined(DEBUG) || defined(TRACKOBJECTS)
             char *name = "<null>";
-            if (__prop->nullable_value.value.object_value != NULL) {
+            if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
                 name = __prop->nullable_value.value.object_value->class_ptr->name;
             }
             printf("Dereference static property %d %s\n", i, name);
