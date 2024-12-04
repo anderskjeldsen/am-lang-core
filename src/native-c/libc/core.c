@@ -408,30 +408,31 @@ void __deallocate_detached_object(aobject * const __obj) {
 void __deallocate_object(aobject * const __obj) {
     bool it = false;
 
-    if (__conditional_logging_on) {
-        printf("Deallocate object\n");      
-        printf("Is object set? %p\n", __obj);
-        printf("Has class? %p\n", __obj->class_ptr);
-        if (__obj->class_ptr != NULL) {
-            printf("Has class name? %s\n", __obj->class_ptr->name);
-            if (strcmp(__obj->class_ptr->name, "String") == 0) {
-                string_holder *sh = (string_holder *) __obj->object_properties.class_object_properties.object_data.value.custom_value;
-                printf("String value: %s\n", sh->string_value);
-                if (sh->is_string_constant) {
-                    printf("String is constant\n");
-                }
-            }
-        }
-
-        sleep(1);
-    }
-
     if (__obj->pending_deallocation) {
         if (__conditional_logging_on) {
             printf("Object already pending deallocation\n");
         }
         return;
     }
+
+//    if (__conditional_logging_on) {
+//        printf("Deallocate object\n");      
+//        printf("Is object set? %p\n", __obj);
+//        printf("Has class? %p\n", __obj->class_ptr);
+        if (__obj->class_ptr != NULL) {
+//            printf("Has class name? %s\n", __obj->class_ptr->name);
+            if (strcmp(__obj->class_ptr->name, "String") == 0) {
+                string_holder *sh = (string_holder *) __obj->object_properties.class_object_properties.object_data.value.custom_value;
+                if (sh->is_string_constant) {
+                    printf("String value: %s\n", sh->string_value);
+                    printf("Object ptr %p", __obj);
+                    printf("String is constant\n");
+                    sleep(10);
+                }
+            }
+        }
+
+//    }
 
     char *name = __obj->class_ptr->name;
     int object_id = 0;
