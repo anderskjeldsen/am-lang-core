@@ -515,7 +515,7 @@ void __deallocate_object(aobject * const __obj) {
         free_from_pool(small_object_memory_pool, __obj);
     } else {
         if (it) {
-            printf("free\n");
+            printf("free obj %p\n", __obj);
             sleep(2);
         }
         free(__obj);
