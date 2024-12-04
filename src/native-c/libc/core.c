@@ -401,6 +401,10 @@ void __deallocate_detached_object(aobject * const __obj) {
     } else if (__obj->memory_pooled) {
         free_from_pool(small_object_memory_pool, __obj);
     } else {
+        if (__conditional_logging_on) {
+            printf("Free object %p\n", __obj);
+            sleep(1);
+        }
         free(__obj);
     }
 }
