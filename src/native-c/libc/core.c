@@ -408,13 +408,13 @@ void __deallocate_detached_object(aobject * const __obj) {
 void __deallocate_object(aobject * const __obj) {
 
     if (__conditional_logging_on) {
-        printf("Deallocate object\n");
-        for(int i = 0; i < 1000; i++) {
-            printf("Let's flush the buffer 2\n");
+        printf("Deallocate object\n");      
+        printf("Is object set? %p\n", __obj);
+        printf("Has class? %p\n", __obj->class_ptr);
+        if (__obj->class_ptr != NULL) {
+            printf("Has class name? %s\n", __obj->class_ptr->name);
         }
 
-        sleep(1);
-        printf("Is object set? %p\n", __obj);
         sleep(1);
     }
 
@@ -423,15 +423,6 @@ void __deallocate_object(aobject * const __obj) {
             printf("Object already pending deallocation\n");
         }
         return;
-    }
-
-    if (__conditional_logging_on) {
-        printf("Has class? %p\n", __obj->class_ptr);
-        sleep(1);
-        if (__obj->class_ptr != NULL) {
-            printf("Has class name? %s\n", __obj->class_ptr->name);
-        }
-        sleep(1);
     }
 
     char *name = __obj->class_ptr->name;
