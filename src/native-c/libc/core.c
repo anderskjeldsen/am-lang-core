@@ -425,8 +425,7 @@ void __deallocate_object(aobject * const __obj) {
                 string_holder *sh = (string_holder *) __obj->object_properties.class_object_properties.object_data.value.custom_value;
                 if (sh->is_string_constant) {
                     printf("String value: %s\n", sh->string_value);
-                    printf("Object ptr %p", __obj);
-                    printf("String is constant\n");
+                    printf("String ptr %p\n", __obj);
                     sleep(1);
                 }
             }
@@ -446,6 +445,7 @@ void __deallocate_object(aobject * const __obj) {
 
     if (it) {
         printf("it!\n");
+        sleep(5);        
     }
 
 
