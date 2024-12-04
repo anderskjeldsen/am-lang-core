@@ -503,10 +503,14 @@ void __detach_object(aobject * const __obj) {
 
 void __dereference_static_properties() {
     aclass *c = __first_class;
+    aclass *class_ref = &Am_Lang_ClassRef;
     while(c != NULL) {
-        __dereference_static_properties_for_class(c);
+        if (c != class_ref) {
+            __dereference_static_properties_for_class(c);
+        }
         c = c->next;
     }
+    __dereference_static_properties_for_class(class_ref);
 }
 
 void __dereference_static_properties_for_class(aclass * const __class) {
