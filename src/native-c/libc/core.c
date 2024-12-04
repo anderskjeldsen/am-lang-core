@@ -412,9 +412,13 @@ void __deallocate_object(aobject * const __obj) {
     }
 
     char *name = __obj->class_ptr->name;
+    int object_id = 0;
+    #if defined(DEBUG) || defined(TRACKOBJECTS)
+    object_id = __obj->object_properties.class_object_properties.object_id;
+    #endif
 
     if (__conditional_logging_on) {
-        printf("Deallocate object of type %s (total object allocation count: %d)\n", name, __allocation_count);
+        printf("Deallocate object of type %s (total object allocation count: %d, object id: %d)\n", name, __allocation_count, object_id);
         sleep(1);
     }
 
@@ -449,7 +453,7 @@ void __deallocate_object(aobject * const __obj) {
     }
 
     if (__conditional_logging_on) {
-        printf("Deallocated object of type %s (total object allocation count: %d)\n", name, __allocation_count);
+        printf("Deallocated object of type %s (total object allocation count: %d, object id: %d)\n", name, __allocation_count, object_id);
     }
 
 }
