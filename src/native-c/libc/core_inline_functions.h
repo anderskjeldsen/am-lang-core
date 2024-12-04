@@ -120,7 +120,13 @@ static inline void __decrease_property_reference_count(aobject * const __obj) {
                 __obj->next = NULL;
             }
 
+
             if (__obj->reference_count == 0) {
+                if (__conditional_logging_on) {
+                    printf("deallocate in 1s\n");
+                    sleep(1);
+                }
+
                 __deallocate_object(__obj);
             }
         }
