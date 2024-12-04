@@ -407,7 +407,17 @@ void __deallocate_detached_object(aobject * const __obj) {
 
 void __deallocate_object(aobject * const __obj) {
 
+    if (__conditional_logging_on) {
+        printf("Deallocate object\n");
+        sleep(1);
+        printf("Is object set? %p\n", __obj);
+        sleep(1);
+    }
+
     if (__obj->pending_deallocation) {
+        if (__conditional_logging_on) {
+            printf("Object already pending deallocation\n");
+        }
         return;
     }
 
