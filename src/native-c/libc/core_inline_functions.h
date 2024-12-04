@@ -131,21 +131,32 @@ static inline void __decrease_property_reference_count(aobject * const __obj) {
                 }
 
                 if (fl) {
-                    printf("has prev %s\n", __obj->prev != NULL ? "yes" : "no");
+                    printf("has prev %p\n", __obj->prev);
                     sleep(1);
                 }
 
                 __obj->prev->next = __obj->next;
+                if (fl) {
+                    printf("1\n");
+                }
+
                 if (__obj->next != NULL) {
+                    if (fl) {
+                        printf("2\n");
+                    }
                     __obj->next->prev = __obj->prev;
                 }
+                if (fl) {
+                    printf("3\n");
+                }
+
                 __obj->prev = NULL;
                 __obj->next = NULL;
             }
 
 
             if (__obj->reference_count == 0) {
-                if (__conditional_logging_on) {
+                if (__conditional_logging_on || fl) {
                     printf("deallocate in 1s\n");
                     sleep(1);
                 }
