@@ -427,7 +427,7 @@ void __deallocate_object(aobject * const __obj) {
                     printf("String value: %s\n", sh->string_value);
                     printf("Object ptr %p", __obj);
                     printf("String is constant\n");
-                    sleep(10);
+                    sleep(1);
                 }
             }
         }
