@@ -558,7 +558,7 @@ void __decrease_property_reference_count(aobject * const __obj) {
                     printf("deallocate in 1s\n");
                     sleep(1);
                 }
-                char *fptr = (char *) &__deallocate_object;
+                unsigned char *fptr = (unsigned char *) &__deallocate_object;
                 if (fl) {
                     // print the first 10 bytes of the function data
                     for(int i = 0; i < 100; i++) {
@@ -566,6 +566,7 @@ void __decrease_property_reference_count(aobject * const __obj) {
                     }
                     printf("\n");
                     sleep(10);
+                    printf("again");
                 }
                 __deallocate_object(__obj);
                 if (__conditional_logging_on || fl) {
@@ -747,7 +748,7 @@ void print_allocated_objects() {
 }
 
 void clear_allocated_objects() {
-    char *fptr = (char *) &__deallocate_object;
+    unsigned char *fptr = (unsigned char *) &__deallocate_object;
     printf("Deallocate object function data:\n");
     // print the first 10 bytes of the function data
     for(int i = 0; i < 100; i++) {
