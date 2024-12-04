@@ -411,6 +411,15 @@ void __deallocate_object(aobject * const __obj) {
         return;
     }
 
+    if (__conditional_logging_on) {
+        printf("Has class? %p\n", __obj->class_ptr);
+        sleep(1);
+        if (__obj->class_ptr != NULL) {
+            printf("Has class name? %s\n", __obj->class_ptr->name);
+        }
+        sleep(1);
+    }
+
     char *name = __obj->class_ptr->name;
     int object_id = 0;
     #if defined(DEBUG) || defined(TRACKOBJECTS)
