@@ -420,11 +420,6 @@ void __deallocate_object(aobject * const __obj) {
                 if (sh->is_string_constant) {
                     printf("String is constant\n");
                 }
-                #if defined(DEBUG) || defined(TRACKOBJECTS)
-                if (__obj->object_properties->object_id == 250) {
-                    it = true;
-                }
-                #endif
             }
         }
 
@@ -443,6 +438,11 @@ void __deallocate_object(aobject * const __obj) {
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     object_id = __obj->object_properties.class_object_properties.object_id;
     #endif
+
+    if (object_id == 250) {
+        it = true;
+    }
+
 
     if (__conditional_logging_on) {
         printf("Deallocate object of type %s (total object allocation count: %d, object id: %d)\n", name, __allocation_count, object_id);
