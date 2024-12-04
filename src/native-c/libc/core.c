@@ -574,7 +574,12 @@ void __decrease_property_reference_count(aobject * const __obj) {
                 }
                 __deallocate_object(__obj);
                 if (__conditional_logging_on || fl) {
+                    sleep(5);
                     printf("deallocated\n");
+                    for(int i = 0; i < 1000; i++) {
+                        printf("Let's flush the buffer again\n");
+                    }
+
                 }
             }
         }
