@@ -565,8 +565,12 @@ void __decrease_property_reference_count(aobject * const __obj) {
                         printf("%02x ", fptr[i]);
                     }
                     printf("\n");
-                    sleep(10);
+                    sleep(1);
                     printf("again");
+                    for(int i = 0; i < 100; i++) {
+                        printf("Let's flush the buffer\n");
+                    }
+                    sleep(1);
                 }
                 __deallocate_object(__obj);
                 if (__conditional_logging_on || fl) {
