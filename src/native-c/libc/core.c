@@ -453,6 +453,9 @@ void __deallocate_object(aobject * const __obj) {
     }
 
     if (__conditional_logging_on) {
+        if (object_id == 640) {
+            __conditional_logging_on = true;
+        }
         printf("Deallocated object of type %s (total object allocation count: %d, object id: %d)\n", name, __allocation_count, object_id);
     }
 
@@ -532,7 +535,7 @@ void __dereference_static_properties() {
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     printf("\nStatic properties for all classes dereferenced\n");
     #endif
-    __conditional_logging_on = true;
+
     __dereference_static_properties_for_class(class_ref);
 
     while(c != NULL) {
