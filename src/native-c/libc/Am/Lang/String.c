@@ -25,16 +25,17 @@ __exit: ;
 function_result Am_Lang_String__native_release_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
-	bool __returning = false;
 
-	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
-	if ( !holder->is_string_constant ) {
+//	bool __returning = false;
+
+//	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+//	if ( !holder->is_string_constant ) {
 //		free(holder->string_value);
-	}
+//	}
 //	free(holder);
-	this->object_properties.class_object_properties.object_data.value.custom_value = NULL;
+//	this->object_properties.class_object_properties.object_data.value.custom_value = NULL;
 
-__exit: ;
+//__exit: ;
 	return __result;
 };
 
