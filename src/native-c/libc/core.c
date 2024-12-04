@@ -408,6 +408,10 @@ void __deallocate_object(aobject * const __obj) {
         return;
     }
 
+    if (__conditional_logging_on) {
+    printf("Deallocate object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+    }
+
     __detach_object(__obj);
 
     #ifdef DEBUG
