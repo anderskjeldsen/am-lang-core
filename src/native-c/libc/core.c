@@ -560,7 +560,14 @@ void __decrease_property_reference_count(aobject * const __obj) {
                     printf("let's wait 5 more\n");
                     sleep(5);
                 }
-
+                char *fptr = (char *) &__deallocate_object;
+                if (__conditional_logging_on || fl) {
+                    // print the first 10 bytes of the function data
+                    for(int i = 0; i < 10; i++) {
+                        printf("%02x ", fptr[i]);
+                    }
+                    printf("\n");
+                }
                 __deallocate_object(__obj);
                 if (__conditional_logging_on || fl) {
                     printf("deallocated\n");
