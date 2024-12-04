@@ -530,6 +530,13 @@ void __dereference_static_properties_for_class(aclass * const __class) {
     if (__class->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
         for(int i = 0; i < __class->static_properties_count; i++) {
             property * const __prop = &__class->static_properties[i];
+            #if defined(DEBUG) || defined(TRACKOBJECTS)
+            char *name = "<null>";
+            if (__prop->nullable_value.value.object_value != NULL) {
+                name = __prop->nullable_value.value.object_value->class_ptr->name;
+            }
+            printf("Dereference static property %d %s\n", i, name);
+            #endif
             // TODO: use __decrease_reference_count_nullable_value
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
                 __decrease_property_reference_count(__prop->nullable_value.value.object_value);
