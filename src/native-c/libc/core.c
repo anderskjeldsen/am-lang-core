@@ -504,17 +504,19 @@ void __detach_object(aobject * const __obj) {
 void __dereference_static_properties() {
     aclass *c = __first_class;
     aclass *class_ref = &Am_Lang_ClassRef;
+
+    #if defined(DEBUG) || defined(TRACKOBJECTS)
+    printf("\nStatic properties for all classes dereferenced\n");
+    #endif
+    __conditional_logging_on = true;
+    __dereference_static_properties_for_class(class_ref);
+
     while(c != NULL) {
         if (c != class_ref) {
             __dereference_static_properties_for_class(c);
         }
         c = c->next;
     }
-    #if defined(DEBUG) || defined(TRACKOBJECTS)
-    printf("\nStatic properties for all classes dereferenced\n");
-    #endif
-    __conditional_logging_on = true;
-    __dereference_static_properties_for_class(class_ref);
 }
 
 void __dereference_static_properties_for_class(aclass * const __class) {
