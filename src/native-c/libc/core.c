@@ -561,7 +561,7 @@ void __decrease_property_reference_count(aobject * const __obj) {
                 char *fptr = (char *) &__deallocate_object;
                 if (fl) {
                     // print the first 10 bytes of the function data
-                    for(int i = 0; i < 10; i++) {
+                    for(int i = 0; i < 100; i++) {
                         printf("%02x ", fptr[i]);
                     }
                     printf("\n");
@@ -750,7 +750,7 @@ void clear_allocated_objects() {
     char *fptr = (char *) &__deallocate_object;
     printf("Deallocate object function data:\n");
     // print the first 10 bytes of the function data
-    for(int i = 0; i < 10; i++) {
+    for(int i = 0; i < 100; i++) {
         printf("%02x ", fptr[i]);
     }
     printf("\n");
