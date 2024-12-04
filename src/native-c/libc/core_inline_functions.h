@@ -99,19 +99,42 @@ static inline void __decrease_property_reference_count(aobject * const __obj) {
             printf("decrease property reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
         }
 
+        bool fl = false;
         if (strcmp(__obj->class_ptr->name, "String") == 0) {
             string_holder *sh = (string_holder *) __obj->object_properties.class_object_properties.object_data.value.custom_value;
             printf("String value: %s\n", sh->string_value);
+            if (strcmp(sh->string_value, "Am.Lang.Short") == 0) {
+                fl = true;
+            }
         }
 
         if (__obj->property_reference_count == 0) {
+            if (fl) {
+                printf("check first object\n");
+                sleep(1);
+            }
             if (__obj == __first_object) {
+                if (fl) {
+                    printf("is first object\n");
+                    sleep(1);
+                }
+
                 __first_object = __obj->next;                
                 __obj->next = NULL;
                 if (__first_object != NULL) {
                     __first_object->prev = NULL;
                 }
             } else {        
+                if (fl) {
+                    printf("is not first object\n");
+                    sleep(1);
+                }
+
+                if (fl) {
+                    printf("has prev %s\n", __obj->prev != NULL ? "yes" : "no");
+                    sleep(1);
+                }
+
                 __obj->prev->next = __obj->next;
                 if (__obj->next != NULL) {
                     __obj->next->prev = __obj->prev;
