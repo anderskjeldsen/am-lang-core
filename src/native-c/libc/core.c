@@ -443,20 +443,25 @@ void __deallocate_object(aobject * const __obj) {
         it = true;
     }
 
+    if (it) {
+        printf("it!\n");
+    }
+
 
     if (__conditional_logging_on) {
         printf("Deallocate object of type %s (total object allocation count: %d, object id: %d)\n", name, __allocation_count, object_id);
         sleep(1);
+        printf(".\n");
     }
 
     if (it) {
-        printf("detach");
+        printf("detach\n");
         sleep(2);
     }
     __detach_object(__obj);
 
     if (it) {
-        printf("detached");
+        printf("detached\n");
         sleep(2);
     }
 
@@ -473,7 +478,7 @@ void __deallocate_object(aobject * const __obj) {
     __allocation_count--;
 
     if (it) {
-        printf("remove from array");
+        printf("remove from array\n");
         sleep(2);
     }
 
@@ -494,7 +499,7 @@ void __deallocate_object(aobject * const __obj) {
     }
 
     if (it) {
-        printf("freed");
+        printf("freed\n");
         sleep(2);
     }
 
