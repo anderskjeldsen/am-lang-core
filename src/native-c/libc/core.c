@@ -240,15 +240,7 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
     __allocation_count++;
     
     #if defined(DEBUG) || defined(TRACKOBJECTS)
-    __last_object_id++;
-
-    if (__last_object_id > 240 && __last_object_id < 252) {
-        printf("Allocate object 249\n");      
-        printf("Has class? %p\n", __class);
-        printf("Has class name? %s\n", __class->name);
-        printf("Extra size: %d\n", extra_size);
-    }
-    
+    __last_object_id++;   
     #endif
     #ifdef DEBUG
     #ifdef CONDLOG 
@@ -412,10 +404,6 @@ void __deallocate_detached_object(aobject * const __obj) {
     } else if (__obj->memory_pooled) {
         free_from_pool(small_object_memory_pool, __obj);
     } else {
-        if (__conditional_logging_on) {
-            printf("Free object %p\n", __obj);
-            sleep(1);
-        }
         free(__obj);
     }
 }
@@ -424,69 +412,10 @@ void __deallocate_object(aobject * const __obj) {
     bool it = false;
 
     if (__obj->pending_deallocation) {
-        if (__conditional_logging_on) {
-            printf("Object already pending deallocation\n");
-        }
         return;
     }
 
-//    if (__conditional_logging_on) {
-//        printf("Deallocate object\n");      
-//        printf("Is object set? %p\n", __obj);
-//        printf("Has class? %p\n", __obj->class_ptr);
-        if (__obj->class_ptr != NULL) {
-//            printf("Has class name? %s\n", __obj->class_ptr->name);
-            if (strcmp(__obj->class_ptr->name, "String") == 0) {
-                string_holder *sh = (string_holder *) __obj->object_properties.class_object_properties.object_data.value.custom_value;
-                if (sh->is_string_constant) {
-                    printf("String value: %s\n", sh->string_value);
-                    printf("String ptr %p\n", __obj);
-                    sleep(1);
-                }
-            }
-        }
-
-//    }
-
-    char *name = __obj->class_ptr->name;
-    int object_id = 0;
-    #if defined(DEBUG) || defined(TRACKOBJECTS)
-    object_id = __obj->object_properties.class_object_properties.object_id;
-    #endif
-
-    if (object_id == 249) {
-        printf("Deallocate object 249\n");      
-        printf("Is object set? %p\n", __obj);
-        printf("Has class? %p\n", __obj->class_ptr);
-        printf("Has class name? %s\n", __obj->class_ptr->name);
-    }
-
-    if (object_id == 250) {
-        it = true;
-    }
-
-    if (it) {
-        printf("it!\n");
-        sleep(5);        
-    }
-
-
-    if (__conditional_logging_on) {
-        printf("Deallocate object of type %s (total object allocation count: %d, object id: %d)\n", name, __allocation_count, object_id);
-        sleep(1);
-        printf(".\n");
-    }
-
-    if (it) {
-        printf("detach\n");
-        sleep(2);
-    }
     __detach_object(__obj);
-
-    if (it) {
-        printf("detached\n");
-        sleep(2);
-    }
 
     #ifdef DEBUG
     #ifdef CONDLOG 
@@ -500,11 +429,6 @@ void __deallocate_object(aobject * const __obj) {
 
     __allocation_count--;
 
-    if (it) {
-        printf("remove from array\n");
-        sleep(1);
-    }
-
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         if ( allocations[i] == __obj) {
@@ -513,47 +437,13 @@ void __deallocate_object(aobject * const __obj) {
     }
     #endif
 
-    if (it) {
-        printf("removed from array\n");
-        sleep(2);
-    }
-
     if (__obj->class_ptr->memory_pool != NULL) {
-        if (it) {
-            printf("free from pool\n");
-            sleep(2);
-        }
-
         free_from_pool(__obj->class_ptr->memory_pool, __obj);
     } else if (__obj->memory_pooled) {
-        if (it) {
-            printf("free from small pool\n");
-            sleep(2);
-        }
         free_from_pool(small_object_memory_pool, __obj);
     } else {
-        printf("free obj %p\n", __obj);
-
-        if (it) {
-            sleep(2);
-        }
         free(__obj);
     }
-
-    if (it) {
-        printf("freed\n");
-        sleep(2);
-    }
-
-
-    if (object_id == 640) {
-        __conditional_logging_on = true;
-    }
-
-    if (__conditional_logging_on) {
-        printf("Deallocated object of type %s (total object allocation count: %d, object id: %d)\n", name, __allocation_count, object_id);
-    }
-
 }
 
 void __decrease_property_reference_count(aobject * const __obj) {
@@ -568,10 +458,6 @@ void __decrease_property_reference_count(aobject * const __obj) {
         }
         #endif        
         #endif
-
-        if (__conditional_logging_on) {
-            printf("decrease property reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
-        }
 
         if (__obj->property_reference_count == 0) {
             if (__obj == __first_object) {
@@ -735,6 +621,7 @@ void __mark_static_properties(aclass * const __class) {
 }
 
 void print_allocated_objects() {
+    #if defined(DEBUG) || defined(TRACKOBJECTS)
     printf("Allocated objects %d\n", __allocation_count);
 
     if (__allocation_count > 0) {
@@ -757,7 +644,6 @@ void print_allocated_objects() {
         }
     }
 
-    #if defined(DEBUG) || defined(TRACKOBJECTS)
     printf("List of allocated objects:\n");
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         if ( allocations[i] != NULL) {
@@ -769,14 +655,6 @@ void print_allocated_objects() {
 }
 
 void clear_allocated_objects() {
-    unsigned char *fptr = (unsigned char *) &__deallocate_object;
-    printf("Deallocate object function data:\n");
-    // print the first 10 bytes of the function data
-    for(int i = 0; i < 100; i++) {
-        printf("%02x ", fptr[i]);
-    }
-    printf("\n");
-
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         allocations[i] = NULL;
@@ -872,10 +750,6 @@ bool __any_equals(const nullable_value a, const nullable_value b) {
 aobject * __create_string_constant(char const * const str, aclass * const string_class) {
     size_t len = strlen(str);
     aobject * str_obj = __allocate_object_with_extra_size(string_class, sizeof(string_holder));
-
-    if (strcmp(str, "Am.Lang.Short") == 0) {
-        printf("new string %p\n", str_obj);
-    }
 
     string_holder * const holder = (string_holder *) (str_obj + 1);
     str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
