@@ -978,7 +978,7 @@ bool is_descendant_of(aclass const * const cls, aclass const * const base) {
 void create_property_info(const unsigned char index, char * const name, aobject ** property_infos, aclass *cls) {
     aobject * property_info = __allocate_object_with_extra_size(&Am_Lang_PropertyInfo, sizeof(cls));
     property *properties = (property *) (property_info + 1);
-    aclass ** class_holder_ptr = (aclass **) &properties[3]; // given that PropertyInfo has exactly 2 properties
+    aclass ** class_holder_ptr = (aclass **) (properties + 2); // given that PropertyInfo has exactly 2 properties
     *class_holder_ptr = cls;
 
     Am_Lang_PropertyInfo_PropertyInfo_0(property_info);
