@@ -238,8 +238,16 @@ unsigned int __string_hash(const char * const str) {
 
 aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra_size) {
     __allocation_count++;
+    
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     __last_object_id++;
+
+    if (__last_object_id == 249) {
+        printf("Allocate object 249\n");      
+        printf("Has class? %p\n", class_ptr);
+        printf("Has class name? %s\n", class_ptr->name);        
+    }
+    
     #endif
     #ifdef DEBUG
     #ifdef CONDLOG 
@@ -250,6 +258,8 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
     }
     #endif
     #endif
+
+
 
     size_t size_with_properties = sizeof(aobject) + (sizeof(property) * __class->properties_count) + extra_size;
 
