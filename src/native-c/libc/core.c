@@ -443,6 +443,13 @@ void __deallocate_object(aobject * const __obj) {
     object_id = __obj->object_properties.class_object_properties.object_id;
     #endif
 
+    if (object_id == 249) {
+        printf("Deallocate object 249\n");      
+        printf("Is object set? %p\n", __obj);
+        printf("Has class? %p\n", __obj->class_ptr);
+        printf("Has class name? %s\n", __obj->class_ptr->name);
+    }
+
     if (object_id == 250) {
         it = true;
     }
