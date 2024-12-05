@@ -245,7 +245,8 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
     if (__last_object_id == 249) {
         printf("Allocate object 249\n");      
         printf("Has class? %p\n", __class);
-        printf("Has class name? %s\n", __class->name);        
+        printf("Has class name? %s\n", __class->name);
+        printf("Extra size: %d\n", extra_size);
     }
     
     #endif
