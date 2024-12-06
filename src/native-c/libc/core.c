@@ -475,7 +475,7 @@ void __deallocate_object(aobject * const __obj) {
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
     #endif
-    printf("End of deallocation of object of type %s (address: %p, object id: %d, total object allocation count: %d)\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __allocation_count);
+    printf("End of deallocation of object of type %s (address: %p, object id: %d, total object allocation count: %d)\n", type, __obj, object_id, __allocation_count);
     #ifdef CONDLOG 
     }
     #endif
