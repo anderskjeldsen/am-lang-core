@@ -29,14 +29,14 @@ function_result Am_Lang_Array__native_release_0(aobject * const this)
 	unsigned int const size = ah->size;
 
 	if (ah->ctype == any_type) {
-		nullable_value * const items = (nullable_value *) &ah[1];
+		nullable_value * const items = (nullable_value *) (ah + 1);
 		for(unsigned int i = 0; i < size; i++) {
 			nullable_value const nv = items[i];
 			__decrease_property_reference_count_nullable_value(nv);
 			items[i] = (nullable_value) { .flags = 0, .value.object_value = NULL };
 		}
 	} else if ( ah->ctype == object_type) {
-		aobject ** const items = (aobject **) &ah[1];
+		aobject ** const items = (aobject **) (ah + 1);
 		for(unsigned int i = 0; i < size; i++) {
 			aobject * const obj = items[i];
 			if (obj != NULL) {
