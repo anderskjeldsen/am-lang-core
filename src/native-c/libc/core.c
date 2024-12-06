@@ -411,7 +411,27 @@ void __deallocate_detached_object(aobject * const __obj) {
 void __deallocate_object(aobject * const __obj) {
     bool it = false;
 
+    #ifdef DEBUG
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
+    #endif
+    printf("Start deallocation of object of type %s (address: %p, object id: %d, total object allocation count: %d)\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __allocation_count);
+    #ifdef CONDLOG 
+    }
+    #endif
+    #endif
+
     if (__obj->pending_deallocation) {
+        #ifdef DEBUG
+        #ifdef CONDLOG 
+        if (__conditional_logging_on) {
+        #endif
+        printf("Cancel (pending) deallocation of object of type %s (address: %p, object id: %d, total object allocation count: %d)\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __allocation_count);
+        #ifdef CONDLOG 
+        }
+        #endif
+        #endif
+
         return;
     }
 
@@ -421,7 +441,7 @@ void __deallocate_object(aobject * const __obj) {
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
     #endif
-    printf("Deallocate object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+    printf("Finalize deallocation of object of type %s (address: %p, object id: %d, total object allocation count: %d)\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __allocation_count);
     #ifdef CONDLOG 
     }
     #endif
@@ -444,6 +464,17 @@ void __deallocate_object(aobject * const __obj) {
     } else {
         free(__obj);
     }
+
+        #ifdef DEBUG
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
+    #endif
+    printf("End of deallocation of object of type %s (address: %p, object id: %d, total object allocation count: %d)\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __allocation_count);
+    #ifdef CONDLOG 
+    }
+    #endif
+    #endif
+
 }
 
 void __decrease_property_reference_count(aobject * const __obj) {
