@@ -361,11 +361,14 @@ sweep_result __detach_object_from_sweep(aobject * const __obj) {
     #endif
 
     if (__obj == __first_object) {
+        printf("Detaching first object\n");
         __first_object = __obj->next;
         if (__first_object != NULL) {
             __first_object->prev = NULL;
         }
     } else {        
+        printf("Detaching not first object\n");
+
         __obj->prev->next = __obj->next;
         if (__obj->next != NULL) {
             __obj->next->prev = __obj->prev;
@@ -375,10 +378,14 @@ sweep_result __detach_object_from_sweep(aobject * const __obj) {
     aobject *next_to_sweep = __obj->next;
 
     if (__first_detached_object == NULL) {
+        printf("set first detached object\n");
+
         __first_detached_object = __obj;
         __obj->next = NULL;
         __obj->prev = NULL;
     } else {
+        printf("link to first detached object\n");
+
         __obj->next = __first_detached_object;
         __first_detached_object->prev = __obj;
         __first_detached_object = __obj;
