@@ -411,6 +411,12 @@ void __deallocate_detached_object(aobject * const __obj) {
 void __deallocate_object(aobject * const __obj) {
     bool it = false;
 
+    #if defined(DEBUG) || defined(TRACKOBJECTS)
+    char *name = __obj->class_ptr->name;
+    int object_id = __obj->object_properties.class_object_properties.object_id;
+    char *type = __obj->class_ptr->name;    
+    #endif
+
     #ifdef DEBUG
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
@@ -441,7 +447,7 @@ void __deallocate_object(aobject * const __obj) {
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
     #endif
-    printf("Finalize deallocation of object of type %s (address: %p, object id: %d, total object allocation count: %d)\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __allocation_count);
+    printf("Finalize deallocation of object of type %s (address: %p, object id: %d, total object allocation count: %d)\n", type, __obj, object_id, __allocation_count);
     #ifdef CONDLOG 
     }
     #endif
@@ -465,7 +471,7 @@ void __deallocate_object(aobject * const __obj) {
         free(__obj);
     }
 
-        #ifdef DEBUG
+    #ifdef DEBUG
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
     #endif
