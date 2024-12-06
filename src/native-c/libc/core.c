@@ -350,6 +350,16 @@ sweep_result __detach_object_from_sweep(aobject * const __obj) {
    
     __detach_object(__obj);
 
+    #ifdef DEBUG
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
+    #endif
+    printf("Almost done Detaching (sweep) object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+    #ifdef CONDLOG 
+    }
+    #endif
+    #endif
+
     if (__obj == __first_object) {
         __first_object = __obj->next;
         if (__first_object != NULL) {
@@ -375,6 +385,16 @@ sweep_result __detach_object_from_sweep(aobject * const __obj) {
     }
 
     sweep_result result = { .next = next_to_sweep, .is_swept = true };
+    #ifdef DEBUG
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
+    #endif
+    printf("Done Detaching (sweep) object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+    #ifdef CONDLOG 
+    }
+    #endif
+    #endif
+
     return result;
 }
 
@@ -574,6 +594,16 @@ void __detach_object(aobject * const __obj) {
             }
         }
         __obj->object_properties.class_object_properties.properties = NULL;
+
+        #ifdef DEBUG
+        #ifdef CONDLOG 
+        if (__conditional_logging_on) {
+        #endif
+        printf("Done detaching properties for object of type %s (address: %p, object_id: %d, total object allocation count: %d)\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id,  __allocation_count);
+        #ifdef CONDLOG 
+        }
+        #endif
+        #endif
     }
 
     weak_reference_node *current_weak_reference_node = __obj->first_weak_reference_node;
