@@ -525,7 +525,7 @@ void __detach_object(aobject * const __obj) {
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
     #endif
-    printf("Detach object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
+    printf("Detach object of type %s (address: %p, object_id: %d, total object allocation count: %d)\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id,  __allocation_count);
     #ifdef CONDLOG 
     }
     #endif
