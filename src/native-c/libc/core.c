@@ -453,7 +453,7 @@ void __decrease_property_reference_count(aobject * const __obj) {
         #ifdef CONDLOG 
         if (__conditional_logging_on) {
         #endif
-        printf("decrease property reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
+        printf("decrease property reference count of object of type %s (address: %p, object_id: %d), new reference count %d, property reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count, __obj->property_reference_count);
         #ifdef CONDLOG 
         }
         #endif        
