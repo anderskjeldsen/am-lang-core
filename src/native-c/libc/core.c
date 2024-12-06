@@ -528,7 +528,7 @@ void __decrease_property_reference_count(aobject * const __obj) {
         #endif        
         #endif
 
-        if (__obj->property_reference_count == 0) {
+        if (__obj->property_reference_count == 0 && !__obj->pending_deallocation) {
             if (__obj == __first_object) {
 
                 __first_object = __obj->next;                
