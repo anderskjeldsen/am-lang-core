@@ -299,6 +299,7 @@ static inline void __increase_reference_count_nullable_value(nullable_value __va
 void __decrease_property_reference_count(aobject * const __obj);
 static inline void __increase_property_reference_count(aobject * const __obj);
 static inline void __decrease_property_reference_count_nullable_value(nullable_value __value);
+static inline void __increase_property_reference_count_nullable_value(nullable_value __value);
 void __deallocate_object(aobject * const __obj);
 void __detach_object(aobject * const __obj);
 

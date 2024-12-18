@@ -270,6 +270,13 @@ static inline void __increase_reference_count_nullable_value(nullable_value __va
         __increase_reference_count(__value.value.object_value);
     }
 }
+
+static inline void __increase_property_reference_count_nullable_value(nullable_value __value) {
+    if ( !__is_primitive(__value) && __value.value.object_value != NULL ) {
+        __increase_property_reference_count(__value.value.object_value);
+    }
+}
+
 /*
 inline void __throw_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text) {
 

@@ -210,7 +210,43 @@ namespace Am.Examples {
             }
         }
 
-        static fun main3() {
+        static fun genericTest<T>(t: T): Iterable<T> {
+/*
+            var list = List<T>.newList<T>()
+            t.toString().println()
+            u.toString().println()
+            return u
+            */
+
+            var list = List<T>.newList<T>()
+            var filtered = list.filter((s) => {
+                // list needs to casted to Iterator<T>
+                // we forward T to filter<T>
+                if (s == t) {
+                    return false
+                }
+                return true
+            })
+            return filtered
+        }
+
+        static fun main() {    
+            "String value".println()
+            var u1 = CoreStartup.genericTest("hello")
+//            var classRef1 = u1.getClassRef()
+//            var className1 = classRef1.getClassName()
+//            ("Class name: " + className1).println()
+//            ("u1: " + u1.toString()).println()
+            "Int value".println()
+            var u2 = CoreStartup.genericTest<Int>(1)
+//            var classRef2 = u2.getClassRef()
+//            var className2 = classRef2.getClassName()
+//            ("Class name: " + className2).println()
+
+//            ("u2: " + u2.toString()).println()
+            "Done".println()
+
+            /*
             var list = List<String>.newList<String>()
             list.add("hello")
             list.add("world")
@@ -221,6 +257,23 @@ namespace Am.Examples {
                     break
                 }
             }
+            var filtered = list.filter((s) => {
+                if (s == "world") {
+                    return false
+                }
+                return true
+            })
+*/
+/*
+            var x: (s: String) => Bool = (s) => {
+                if (s == "world") {
+                    return false
+                }
+                return true
+            }
+            var b = x("hello")
+            */
+
             "end".println()
         }
 

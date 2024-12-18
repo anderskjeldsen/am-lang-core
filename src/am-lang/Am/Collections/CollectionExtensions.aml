@@ -4,14 +4,14 @@ namespace Am.Collections {
         import Am.Lang
 
 // predicate must be able to get the type of T from the function signature
-        ext fun filter<T>(collection: Collection<T>, predicate: (t: T) => Bool): Collection<T> {
+        ext fun filter<T>(collection: Iterable<T>, predicate: (t: T) => Bool): Iterable<T> {
             var result = List<T>.newList<T>()
             each(collection, item) {
                 if (predicate(item)) {
                     result.add(item)
                 }
             }
-            return result
+            return result as Iterable<T>
         }
 
     }
