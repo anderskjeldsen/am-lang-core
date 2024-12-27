@@ -1,16 +1,23 @@
 namespace Am.Lang 
 {
-    class Any 
+    interface AnyInterface {
+        primitive fun toString(): String
+        primitive fun hash(): UInt
+        primitive fun getClassRef(): ClassRef
+    }
+
+
+    class Any : AnyInterface
     {
-        primitive fun toString(): String {
+        override fun toString(): String {
             return "Any"
         }
 
-        primitive fun hash(): UInt {
+        override fun hash(): UInt {
             return 0UI
         }
 
-        primitive fun getClassRef(): ClassRef {
+        override fun getClassRef(): ClassRef {
             return ClassRef.getClassRefFromAny(this)
         }
     }
