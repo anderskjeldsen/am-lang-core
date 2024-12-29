@@ -1,7 +1,7 @@
 
 namespace Am.Lang 
 {
-    class AnonymousFunction() : FunctionReference {
+    interface AnonymousFunction : FunctionReference {
 
     }
 

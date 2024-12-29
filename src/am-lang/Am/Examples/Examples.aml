@@ -236,7 +236,7 @@ namespace Am.Examples {
 //            var classRef1 = u1.getClassRef()
 //            var className1 = classRef1.getClassName()
 //            ("Class name: " + className1).println()
-//            ("u1: " + u1.toString()).println()
+            ("u1: " + u1.toString()).println()
             "Int value".println()
             var u2 = CoreStartup.genericTest<Int>(1)
 //            var classRef2 = u2.getClassRef()

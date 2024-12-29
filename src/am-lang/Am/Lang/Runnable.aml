@@ -3,9 +3,7 @@ TODO: change from class to interface.
 */
 namespace Am.Lang 
 {
-    class Runnable {
-        fun run() {
-
-        }        
+    interface Runnable {
+        fun run()
     }
 }
