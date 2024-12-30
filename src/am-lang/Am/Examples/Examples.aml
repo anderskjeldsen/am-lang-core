@@ -218,7 +218,7 @@ namespace Am.Examples {
             return u
             */
 
-            var list = List<T>.newList<T>()
+            var list = List<T>.newList<T>()            
             var filtered = list.filter((s) => {
                 // list needs to casted to Iterator<T>
                 // we forward T to filter<T>
@@ -232,24 +232,22 @@ namespace Am.Examples {
 
         static fun main() {    
             "String value".println()
-            var u1 = CoreStartup.genericTest("hello")
+//            var u1 = CoreStartup.genericTest("hello")
 //            var classRef1 = u1.getClassRef()
 //            var className1 = classRef1.getClassName()
 //            ("Class name: " + className1).println()
-            ("u1: " + u1.toString()).println()
-            "Int value".println()
-            var u2 = CoreStartup.genericTest<Int>(1)
+//            ("u1: " + u1.toString()).println()
+//            "Int value".println()
+//            var u2 = CoreStartup.genericTest<Int>(1)
 //            var classRef2 = u2.getClassRef()
 //            var className2 = classRef2.getClassName()
 //            ("Class name: " + className2).println()
-
 //            ("u2: " + u2.toString()).println()
-            "Done".println()
 
-            /*
             var list = List<String>.newList<String>()
             list.add("hello")
             list.add("world")
+/*
             each(list, i) {
                 i.println()
                 if (i == "world") {
@@ -257,13 +255,20 @@ namespace Am.Examples {
                     break
                 }
             }
+            */
             var filtered = list.filter((s) => {
                 if (s == "world") {
-                    return false
+                    ("Filtering: " + s).println()
+                    return true
                 }
-                return true
+                ("Not Filtering: " + s).println()
+                return false
             })
-*/
+
+            each(filtered, i) {
+                ("Filtered: " + i).println()
+            }
+
 /*
             var x: (s: String) => Bool = (s) => {
                 if (s == "world") {
