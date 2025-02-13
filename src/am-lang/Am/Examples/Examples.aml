@@ -230,7 +230,8 @@ namespace Am.Examples {
             return filtered
         }
 
-        static fun main() {    
+        // main20
+        static fun main20() {    
             "String value".println()
 //            var u1 = CoreStartup.genericTest("hello")
 //            var classRef1 = u1.getClassRef()
