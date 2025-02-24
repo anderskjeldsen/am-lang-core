@@ -69,7 +69,7 @@ namespace Am.Examples {
         }
 
         // main13
-        static fun main13() {
+        static fun main() {
             var s = "hello"
             var cr = s.getClassRef()
             ("Getting class name of a string: " + cr.toString()).println()
@@ -218,6 +218,7 @@ namespace Am.Examples {
             return u
             */
 
+/*
             var list = List<T>.newList<T>()            
             var filtered = list.filter((s) => {
                 // list needs to casted to Iterator<T>
@@ -228,6 +229,8 @@ namespace Am.Examples {
                 return true
             })
             return filtered
+            */
+            return null
         }
 
         // main20
@@ -257,6 +260,8 @@ namespace Am.Examples {
                 }
             }
             */
+
+            /* TODO: Make this work
             var filtered = list.filter((s) => {
                 if (s == "world") {
                     ("Filtering: " + s).println()
@@ -269,6 +274,7 @@ namespace Am.Examples {
             each(filtered, i) {
                 ("Filtered: " + i).println()
             }
+            */
 
 /*
             var x: (s: String) => Bool = (s) => {
