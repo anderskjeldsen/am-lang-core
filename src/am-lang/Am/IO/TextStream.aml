@@ -31,7 +31,7 @@ namespace Am.IO
 
         fun readString(): String {
             var read = this.read(this.buffer, 0L, this.buffer.length())
-            var list = List<UByte>.newList<UByte>()
+            var list = List.newList<UByte>()
 
             while(read > 0UI) {
                 var subArray = new UByte[read]
