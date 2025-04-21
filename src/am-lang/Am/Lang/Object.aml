@@ -17,7 +17,7 @@ namespace Am.Lang
         }
 
 
-        fun equals(other: Object): Bool {
+        open fun equals(other: Object): Bool {
             return ObjectHelper.equals(this, other)
         }
     }
