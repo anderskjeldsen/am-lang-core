@@ -9,11 +9,11 @@ namespace Am.Lang
 
     class Any : AnyInterface
     {
-        override fun toString(): String {
+        open override fun toString(): String {
             return "Any"
         }
 
-        override fun hash(): UInt {
+        open override fun hash(): UInt {
             return 0UI
         }
 
