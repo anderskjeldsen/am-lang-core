@@ -22,7 +22,7 @@ namespace Am.Collections {
 
         fun get(key: K): V {
             if (this.bucket == null) {
-                return false
+                return null
             }
             var hash = key.hash()
             var index = hash % this.bucket.length()
