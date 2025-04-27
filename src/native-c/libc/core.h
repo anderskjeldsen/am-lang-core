@@ -352,6 +352,7 @@ void __deallocate_detached_object(aobject * const __obj);
 static inline void __mark_nullable_value(nullable_value __value);
 void __mark_static_properties(aclass * const __class);
 void __clear_marks();
+aclass * const get_class_from_any(nullable_value const value);
 
 // aliases for generated code
 #include <Am/Lang/Object.h>

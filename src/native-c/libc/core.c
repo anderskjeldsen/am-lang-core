@@ -944,3 +944,53 @@ void create_property_info(const unsigned char index, char * const name, aobject 
     __decrease_reference_count(property_name);
 }
 
+aclass * const get_class_from_any(nullable_value const value) {
+    int flag const = value.flags & PRIMITIVE_MASK;
+/*
+#define PRIMITIVE_BOOL 64 | PRIMITIVE // is it a bool type?
+
+#define PRIMITIVE_LONG PRIMITIVE_BYTE_SIZE_EXP_1 | PRIMITIVE_BYTE_SIZE_EXP_2 | PRIMITIVE
+#define PRIMITIVE_INT PRIMITIVE_BYTE_SIZE_EXP_2 | PRIMITIVE
+#define PRIMITIVE_SHORT PRIMITIVE_BYTE_SIZE_EXP_1 | PRIMITIVE
+#define PRIMITIVE_CHAR PRIMITIVE
+
+#define PRIMITIVE_ULONG PRIMITIVE_LONG | PRIMITIVE_UNSIGNED
+#define PRIMITIVE_UINT PRIMITIVE_INT | PRIMITIVE_UNSIGNED
+#define PRIMITIVE_USHORT PRIMITIVE_SHORT | PRIMITIVE_UNSIGNED
+#define PRIMITIVE_UCHAR PRIMITIVE_CHAR | PRIMITIVE_UNSIGNED
+
+#define PRIMITIVE_DOUBLE PRIMITIVE_LONG | PRIMITIVE_FLOATING_POINT_NUMBER
+#define PRIMITIVE_FLOAT PRIMITIVE_INT | PRIMITIVE_FLOATING_POINT_NUMBER
+*/
+    if (flag & PRIMITIVE_LONG == PRIMITIVE_LONG) {
+        return &Am_Lang_Long;
+    } else if (flag & PRIMITIVE_INT == PRIMITIVE_INT) {
+        return &Am_Lang_Int;
+    } else if (flag & PRIMITIVE_SHORT == PRIMITIVE_SHORT) {
+        return &Am_Lang_Short;
+    } else if (flag & PRIMITIVE_CHAR == PRIMITIVE_CHAR) {
+        return &Am_Lang_Char;
+    } else if (flag & PRIMITIVE_BOOL == PRIMITIVE_BOOL) {
+        return &Am_Lang_Bool;
+//    } else if (flag & PRIMITIVE_FLOAT == PRIMITIVE_FLOAT) {
+//        return &Am_Lang_Float;
+//    } else if (flag & PRIMITIVE_DOUBLE == PRIMITIVE_DOUBLE) {
+//        return &Am_Lang_Double;
+    } else if (flag & PRIMITIVE_UCHAR == PRIMITIVE_UCHAR) {
+        return &Am_Lang_UChar;
+    } else if (flag & PRIMITIVE_USHORT == PRIMITIVE_USHORT) {
+        return &Am_Lang_UShort;
+    } else if (flag & PRIMITIVE_UINT == PRIMITIVE_UINT) {
+        return &Am_Lang_UInt;
+    } else if (flag & PRIMITIVE_ULONG == PRIMITIVE_ULONG) {
+        return &Am_Lang_ULong;
+    } else if (flag == 0) {
+        return value.value.object_value->class_ptr;
+    } else {
+        #ifdef DEBUG
+        printf("Unknown type %d\n", flag);
+        #endif
+        return NULL;
+    }
+}
+
