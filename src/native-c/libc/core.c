@@ -260,7 +260,7 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
 
     if (__class->memory_pool == NULL) {
         for(int i = 0; i < __class->annotations_count; i++) {
-            if (__class->annotations[i]->class_ptr == &Am_Lang_Annotations_UseMemoryPool) {
+            if (__class->annotations[i]->class_ptr == &__use_memory_pool_class_alias) {
                 __class->memory_pool = create_memory_pool(size_with_properties);
             }
         }
@@ -631,7 +631,7 @@ void __detach_object(aobject * const __obj) {
 
 void __dereference_static_properties() {
     aclass *c = __first_class;
-    aclass *class_ref = &Am_Lang_ClassRef;
+    aclass *class_ref = &__class_ref_class_alias;
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     printf("\nStatic properties for all classes dereferenced\n");
@@ -900,15 +900,15 @@ char * get_array_data(array_holder * holder) {
 }
 
 aobject * __create_exception(aobject * const message) {
-    aobject *ex = __allocate_object(&Am_Lang_Exception);
+    aobject *ex = __allocate_object(&__exception_class_alias);
     Am_Lang_Exception_Exception_0(ex, message);
     Am_Lang_Exception___init_instance((nullable_value){ .value.object_value = ex });
     return ex;
 }
 
 void __throw_simple_exception(const char * const message, const char * const stack_trace_item_text, function_result * const result) {
-    aobject * ex_msg = __create_string_constant(message, &Am_Lang_String);
-    aobject * stit = __create_string_constant(stack_trace_item_text, &Am_Lang_String);
+    aobject * ex_msg = __create_string_constant(message, &__string_class_alias);
+    aobject * stit = __create_string_constant(stack_trace_item_text, &__string_class_alias);
     aobject * ex = __create_exception(ex_msg);
     __throw_exception(result, ex, stit);
     __decrease_reference_count(ex_msg); // it's in the exception stack trace list now, we don't need it anymore.
@@ -935,7 +935,7 @@ void create_property_info(const unsigned char index, char * const name, aobject 
     *class_holder_ptr = cls;
 
     Am_Lang_PropertyInfo_PropertyInfo_0(property_info);
-    aobject * property_name = __create_string_constant(name, &Am_Lang_String);
+    aobject * property_name = __create_string_constant(name, &__string_class_alias);
     __set_property(property_info, Am_Lang_PropertyInfo_P_name, (nullable_value) { .flags = 0, .value.object_value = property_name});
     __set_property(property_info, Am_Lang_PropertyInfo_P_index, (nullable_value) { .flags = PRIMITIVE_UCHAR, .value.uchar_value = index });
 	property_infos[index] = property_info;

@@ -353,3 +353,13 @@ static inline void __mark_nullable_value(nullable_value __value);
 void __mark_static_properties(aclass * const __class);
 void __clear_marks();
 
+// aliases for generated code
+#include <Am/Lang/Object.h>
+#include <Am/Lang/ClassRef.h>
+#include <Am/Lang/Annotations/UseMemoryPool.h>
+typedef Am_Lang_Object_ta__equals_0_T __object_equals_alias;
+#define __object_equals_index Am_Lang_Object_ta__equals_0_index
+#define __use_memory_pool_class_alias Am_Lang_Annotations_UseMemoryPool_ta_;
+#define  __class_ref_class_alias Am_Lang_ClassRef_ta_;
+#define __string_class_alias Am_Lang_String_ta_;
+#define __exception_class_alias Am_Lang_Exception_ta_;

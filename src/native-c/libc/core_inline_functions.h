@@ -307,7 +307,7 @@ static inline void __deallocate_function_result(function_result const result) {
 
 static inline bool __object_equals(aobject * const a, aobject * const b) {
     if (a != NULL) {
-        Am_Lang_Object_equals_0_T af = (Am_Lang_Object_equals_0_T) a->class_ptr->functions[Am_Lang_Object_equals_0_index];
+        __object_equals_alias af = (__object_equals_alias) a->class_ptr->functions[__object_equals_index];
         function_result res = af(a, b);
         // Am_Lang_Object_equals_0(a, b);
         return res.return_value.value.bool_value;
