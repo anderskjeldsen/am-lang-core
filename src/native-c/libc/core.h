@@ -41,12 +41,14 @@
 #define PRIMITIVE_LONG PRIMITIVE_BYTE_SIZE_EXP_1 | PRIMITIVE_BYTE_SIZE_EXP_2 | PRIMITIVE
 #define PRIMITIVE_INT PRIMITIVE_BYTE_SIZE_EXP_2 | PRIMITIVE
 #define PRIMITIVE_SHORT PRIMITIVE_BYTE_SIZE_EXP_1 | PRIMITIVE
-#define PRIMITIVE_CHAR PRIMITIVE
+#define PRIMITIVE_BYTE PRIMITIVE
+#define PRIMITIVE_CHAR PRIMITIVE_BYTE
 
 #define PRIMITIVE_ULONG PRIMITIVE_LONG | PRIMITIVE_UNSIGNED
 #define PRIMITIVE_UINT PRIMITIVE_INT | PRIMITIVE_UNSIGNED
 #define PRIMITIVE_USHORT PRIMITIVE_SHORT | PRIMITIVE_UNSIGNED
-#define PRIMITIVE_UCHAR PRIMITIVE_CHAR | PRIMITIVE_UNSIGNED
+#define PRIMITIVE_UBYTE PRIMITIVE_BYTE | PRIMITIVE_UNSIGNED
+#define PRIMITIVE_UCHAR PRIMITIVE_UBYTE
 
 #define PRIMITIVE_DOUBLE PRIMITIVE_LONG | PRIMITIVE_FLOATING_POINT_NUMBER
 #define PRIMITIVE_FLOAT PRIMITIVE_INT | PRIMITIVE_FLOATING_POINT_NUMBER
@@ -77,6 +79,7 @@ BYTE_SIZE_EXP lookup (order: 2,1)
 extern bool __conditional_logging_on;
 
 typedef struct _aobject aobject;
+typedef struct _class_static class_static;
 typedef struct _aclass aclass;
 typedef void (*__anonymous_function)();
 //typedef struct _stack_trace_item stack_trace_item;
@@ -168,22 +171,25 @@ struct _property {
     nullable_value nullable_value;    
 };
 
+struct _class_static {
+    unsigned int static_properties_count;
+    unsigned char annotations_count;
+    aobject ** annotations;
+    property * static_properties;
+};
+
 struct _aclass {
     char * name;
     class_type type;
+    class_static const * const statics;
     aclass const * const base;
     __anonymous_function release;
     __anonymous_function mark_children;
-//    __anonymous_function init_class_ref;
     __anonymous_function * functions;
     aobject * class_ref_singleton;
     unsigned int iface_implementation_count;
     unsigned int functions_count;
     unsigned int properties_count;
-    unsigned int static_properties_count;
-    unsigned char annotations_count;
-    aobject ** annotations;
-    property * static_properties;
     iface_implementation * iface_implementations;
     memory_pool * memory_pool;
     aclass *next;
@@ -293,7 +299,7 @@ static inline void __decrease_reference_count(aobject * const __obj);
 static inline void __increase_reference_count(aobject * const __obj);
 static inline void __set_property(aobject * const __obj, int const __index, nullable_value __prop_value);
 static inline bool __set_property_safe(aobject * const __obj, int const __index, nullable_value __prop_value);
-static inline void __set_static_property(aclass * const __class, int const __index, nullable_value __prop_value);
+static inline void __set_static_property(class_static * const __class_static, int const __index, nullable_value __prop_value);
 static inline void __decrease_reference_count_nullable_value(nullable_value __value);
 static inline void __increase_reference_count_nullable_value(nullable_value __value);
 void __decrease_property_reference_count(aobject * const __obj);
@@ -357,10 +363,18 @@ aclass * const get_class_from_any(nullable_value const value);
 // aliases for generated code
 #include <Am/Lang/Object.h>
 #include <Am/Lang/ClassRef.h>
+#include <Am/Lang/Exception.h>
 #include <Am/Lang/Annotations/UseMemoryPool.h>
-typedef Am_Lang_Object_ta__equals_0_T __object_equals_alias;
-#define __object_equals_index Am_Lang_Object_ta__equals_0_index
-#define __use_memory_pool_class_alias Am_Lang_Annotations_UseMemoryPool_ta_;
-#define  __class_ref_class_alias Am_Lang_ClassRef_ta_;
-#define __string_class_alias Am_Lang_String_ta_;
-#define __exception_class_alias Am_Lang_Exception_ta_;
+// typedef Am_Lang_Object_equals_0_T __object_equals_alias;
+#define __object_equals_alias Am_Lang_Object_equals_0_T
+#define __object_equals_index Am_Lang_Object_equals_0_index
+#define __use_memory_pool_class_alias Am_Lang_Annotations_UseMemoryPool
+#define  __class_ref_class_alias Am_Lang_ClassRef
+#define __string_class_alias Am_Lang_String
+#define __exception_class_alias Am_Lang_Exception
+#define __add_stack_trace_item_function_alias Am_Lang_Exception_addStackTraceItem_0
+#define __exception_constructor_alias Am_Lang_Exception_Exception_0
+#define __exception_init_instance_function_alias Am_Lang_Exception___init_instance
+#define __property_info_class_alias Am_Lang_PropertyInfo
+#define __property_info_constructor_alias Am_Lang_PropertyInfo_PropertyInfo_0
+#define __char_class_alias Am_Lang_Char

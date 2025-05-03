@@ -6,6 +6,17 @@
 #include <Am/Lang/Annotations/UseMemoryPool.h>
 #include <Am/Lang/PropertyInfo.h>
 #include <Am/Lang/ClassRef.h>
+
+#include <Am/Lang/Byte.h>
+#include <Am/Lang/Bool.h>
+#include <Am/Lang/Int.h>
+#include <Am/Lang/Long.h>
+#include <Am/Lang/Short.h>
+#include <Am/Lang/UByte.h>
+#include <Am/Lang/UInt.h>
+#include <Am/Lang/ULong.h>
+#include <Am/Lang/UShort.h>
+
 #include <libc/memory_pools.h>
 #include <libc/core_inline_functions.h>
 
@@ -755,7 +766,7 @@ void __throw_exception(function_result *result, aobject * const exception, aobje
 //    holder->first_stack_trace_item = __create_stack_trace_item(NULL, stack_trace_item_text);
 //    holder->last_stack_trace_item  = holder->first_stack_trace_item;
 
-    Am_Lang_Exception_addStackTraceItem_0(exception, stack_trace_item_text);
+    __add_stack_trace_item_function_alias(exception, stack_trace_item_text);
 
 //    result.has_return_value = 0;
     if (result->exception) {
@@ -767,7 +778,7 @@ void __throw_exception(function_result *result, aobject * const exception, aobje
 
 void __pass_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text) {
 
-    Am_Lang_Exception_addStackTraceItem_0(exception, stack_trace_item_text);
+    __add_stack_trace_item_function_alias(exception, stack_trace_item_text);
     if (result->exception) {
         __decrease_reference_count(result->exception);
     }
@@ -901,8 +912,8 @@ char * get_array_data(array_holder * holder) {
 
 aobject * __create_exception(aobject * const message) {
     aobject *ex = __allocate_object(&__exception_class_alias);
-    Am_Lang_Exception_Exception_0(ex, message);
-    Am_Lang_Exception___init_instance((nullable_value){ .value.object_value = ex });
+    __exception_constructor_alias(ex, message);
+    __exception_init_instance_function_alias((nullable_value){ .value.object_value = ex });
     return ex;
 }
 
@@ -929,12 +940,12 @@ bool is_descendant_of(aclass const * const cls, aclass const * const base) {
 }
 
 void create_property_info(const unsigned char index, char * const name, aobject ** property_infos, aclass *cls) {
-    aobject * property_info = __allocate_object_with_extra_size(&Am_Lang_PropertyInfo, sizeof(cls));
+    aobject * property_info = __allocate_object_with_extra_size(&__property_info_class_alias, sizeof(cls));
     property *properties = (property *) (property_info + 1);
     aclass ** class_holder_ptr = (aclass **) (properties + 2); // given that PropertyInfo has exactly 2 properties
     *class_holder_ptr = cls;
 
-    Am_Lang_PropertyInfo_PropertyInfo_0(property_info);
+    __property_info_constructor_alias(property_info);
     aobject * property_name = __create_string_constant(name, &__string_class_alias);
     __set_property(property_info, Am_Lang_PropertyInfo_P_name, (nullable_value) { .flags = 0, .value.object_value = property_name});
     __set_property(property_info, Am_Lang_PropertyInfo_P_index, (nullable_value) { .flags = PRIMITIVE_UCHAR, .value.uchar_value = index });
@@ -945,7 +956,7 @@ void create_property_info(const unsigned char index, char * const name, aobject 
 }
 
 aclass * const get_class_from_any(nullable_value const value) {
-    int flag const = value.flags & PRIMITIVE_MASK;
+    int flag = value.flags;
 /*
 #define PRIMITIVE_BOOL 64 | PRIMITIVE // is it a bool type?
 
@@ -968,16 +979,16 @@ aclass * const get_class_from_any(nullable_value const value) {
         return &Am_Lang_Int;
     } else if (flag & PRIMITIVE_SHORT == PRIMITIVE_SHORT) {
         return &Am_Lang_Short;
-    } else if (flag & PRIMITIVE_CHAR == PRIMITIVE_CHAR) {
-        return &Am_Lang_Char;
+    } else if (flag & PRIMITIVE_BYTE == PRIMITIVE_BYTE) {
+        return &Am_Lang_Byte;
     } else if (flag & PRIMITIVE_BOOL == PRIMITIVE_BOOL) {
         return &Am_Lang_Bool;
 //    } else if (flag & PRIMITIVE_FLOAT == PRIMITIVE_FLOAT) {
 //        return &Am_Lang_Float;
 //    } else if (flag & PRIMITIVE_DOUBLE == PRIMITIVE_DOUBLE) {
 //        return &Am_Lang_Double;
-    } else if (flag & PRIMITIVE_UCHAR == PRIMITIVE_UCHAR) {
-        return &Am_Lang_UChar;
+    } else if (flag & PRIMITIVE_UBYTE == PRIMITIVE_UBYTE) {
+        return &Am_Lang_UByte;
     } else if (flag & PRIMITIVE_USHORT == PRIMITIVE_USHORT) {
         return &Am_Lang_UShort;
     } else if (flag & PRIMITIVE_UINT == PRIMITIVE_UINT) {

@@ -235,8 +235,8 @@ static inline bool __set_property_safe(aobject * const __obj, int const __index,
     return true;
 }
 
-static inline void __set_static_property(aclass * const __class, int const __index, nullable_value __prop_value) {
-    property * __prop = &__class->static_properties[__index];
+static inline void __set_static_property(class_static * const __class_static, int const __index, nullable_value __prop_value) {
+    property * __prop = &__class_static->static_properties[__index];
     if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
         __decrease_property_reference_count(__prop->nullable_value.value.object_value);
     }
