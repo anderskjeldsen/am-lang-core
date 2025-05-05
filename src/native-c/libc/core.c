@@ -33,9 +33,10 @@ int allocation_index = 0;
 aobject * __first_object = NULL;
 aobject * __first_detached_object = NULL;
 aclass * __first_class = NULL;
+class_static *__first_class_static = NULL;
 
 void __mark_root_objects() {    
-    aclass *current = __first_class;
+    class_static *current = __first_class_static;
     while(current != NULL) {
         if (current->type == class) {
             __mark_static_properties(current);
@@ -270,8 +271,8 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
     aobject * __obj = NULL;
 
     if (__class->memory_pool == NULL) {
-        for(int i = 0; i < __class->annotations_count; i++) {
-            if (__class->annotations[i]->class_ptr == &__use_memory_pool_class_alias) {
+        for(int i = 0; i < __class->statics->annotations_count; i++) {
+            if (__class->statics->annotations[i]->class_ptr == &__use_memory_pool_class_alias) {
                 __class->memory_pool = create_memory_pool(size_with_properties);
             }
         }
@@ -292,7 +293,7 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
 //        __obj = (aobject *) malloc(size_with_properties + extra_size);
     }
 
-    if (__class->type == class && __class->properties_count > 0) {
+    if (__class->statics->type == class && __class->properties_count > 0) {
         __obj->object_properties.class_object_properties.properties = (property *) (__obj + 1);;
     }
 
@@ -586,7 +587,7 @@ void __detach_object(aobject * const __obj) {
 
     }
 
-    if (__obj->class_ptr->type == interface) {
+    if (__obj->class_ptr->statics->type == interface) {
         iface_reference const *ref = &__obj->object_properties.iface_reference;
 
         __decrease_reference_count(ref->implementation_object);
@@ -598,7 +599,7 @@ void __detach_object(aobject * const __obj) {
     //     __obj->object_data.value.custom_value = NULL;
     // }
 
-    if (__obj->class_ptr->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
+    if (__obj->class_ptr->statics->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
         for(int i = 0; i < __obj->class_ptr->properties_count; i++) {
             property * const __prop = &__obj->object_properties.class_object_properties.properties[i];
             // TODO: use __decrease_reference_count_nullable_value
@@ -641,7 +642,7 @@ void __detach_object(aobject * const __obj) {
 }
 
 void __dereference_static_properties() {
-    aclass *c = __first_class;
+    class_static *c = __first_class_static;
     aclass *class_ref = &__class_ref_class_alias;
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
@@ -651,14 +652,14 @@ void __dereference_static_properties() {
     __dereference_static_properties_for_class(class_ref);
 
     while(c != NULL) {
-        if (c != class_ref) {
+        if (c != class_ref->statics) {
             __dereference_static_properties_for_class(c);
         }
         c = c->next;
     }
 }
 
-void __dereference_static_properties_for_class(aclass * const __class) {
+void __dereference_static_properties_for_class(class_static * const __class_static) {
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
@@ -669,9 +670,9 @@ void __dereference_static_properties_for_class(aclass * const __class) {
     #endif
     #endif
 
-    if (__class->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
-        for(int i = 0; i < __class->static_properties_count; i++) {
-            property * const __prop = &__class->static_properties[i];
+    if (__class_static->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
+        for(int i = 0; i < __class_static->static_properties_count; i++) {
+            property * const __prop = &__class_static->static_properties[i];
             #if defined(DEBUG) || defined(TRACKOBJECTS)
             char *name = "<null>";
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
@@ -688,7 +689,7 @@ void __dereference_static_properties_for_class(aclass * const __class) {
     }
 }
 
-void __mark_static_properties(aclass * const __class) {
+void __mark_static_properties(class_static * const __class_static) {
     #ifdef DEBUG
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
@@ -699,9 +700,9 @@ void __mark_static_properties(aclass * const __class) {
     #endif
     #endif
     
-    if (__class->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
-        for(int i = 0; i < __class->static_properties_count; i++) {
-            property * const __prop = &__class->static_properties[i];
+    if (__class_static->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
+        for(int i = 0; i < __class_static->static_properties_count; i++) {
+            property * const __prop = &__class_static->static_properties[i];
             // TODO: use __decrease_reference_count_nullable_value
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
                 __mark_object(__prop->nullable_value.value.object_value);
@@ -753,10 +754,10 @@ void clear_allocated_objects() {
 }
 
 void deallocate_annotations(aclass * const __class) {
-    for(int i = 0; i < __class->annotations_count; i++) {
-        aobject * const a = __class->annotations[i];
+    for(int i = 0; i < __class->statics->annotations_count; i++) {
+        aobject * const a = __class->statics->annotations[i];
         __decrease_reference_count(a);
-        __class->annotations[i] = NULL;
+        __class->statics->annotations[i] = NULL;
     }
 }
 void __throw_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text) {

@@ -176,11 +176,12 @@ struct _class_static {
     unsigned char annotations_count;
     aobject ** annotations;
     property * static_properties;
+    class_type type;
+    class_static *next;
 };
 
 struct _aclass {
     char * name;
-    class_type type;
     class_static const * const statics;
     aclass const * const base;
     __anonymous_function release;
@@ -288,12 +289,13 @@ aclass Long = {
 // variables
 extern aobject * __first_object;
 extern aclass * __first_class;
+extern class_static * __first_class_static;
 
 
 // functions
 void __register_class(aclass * const __class);
 void __dereference_static_properties();
-void __dereference_static_properties_for_class(aclass * const __class);
+void __dereference_static_properties_for_class(class_static * const __class_static);
 
 static inline void __decrease_reference_count(aobject * const __obj);
 static inline void __increase_reference_count(aobject * const __obj);
@@ -356,7 +358,7 @@ sweep_result __sweep_object(aobject * const obj);
 sweep_result __detach_object_from_sweep(aobject * const __obj);
 void __deallocate_detached_object(aobject * const __obj);
 static inline void __mark_nullable_value(nullable_value __value);
-void __mark_static_properties(aclass * const __class);
+void __mark_static_properties(class_static * const __class_static);
 void __clear_marks();
 aclass * const get_class_from_any(nullable_value const value);
 
