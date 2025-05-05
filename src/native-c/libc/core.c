@@ -649,7 +649,7 @@ void __dereference_static_properties() {
     printf("\nStatic properties for all classes dereferenced\n");
     #endif
 
-    __dereference_static_properties_for_class(class_ref);
+    __dereference_static_properties_for_class(class_ref->statics);
 
     while(c != NULL) {
         if (c != class_ref->statics) {
@@ -664,7 +664,7 @@ void __dereference_static_properties_for_class(class_static * const __class_stat
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
     #endif
-    printf("Dereference static properties of class %s\n", __class->name);
+    printf("Dereference static properties of class %s\n", __class_static->name);
     #ifdef CONDLOG 
     }
     #endif
@@ -694,7 +694,7 @@ void __mark_static_properties(class_static * const __class_static) {
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
     #endif
-    printf("Mark static properties of class %s\n", __class->name);
+    printf("Mark static properties of class %s\n", __class_static->name);
     #ifdef CONDLOG 
     }
     #endif
@@ -753,11 +753,11 @@ void clear_allocated_objects() {
     #endif
 }
 
-void deallocate_annotations(aclass * const __class) {
-    for(int i = 0; i < __class->statics->annotations_count; i++) {
-        aobject * const a = __class->statics->annotations[i];
+void deallocate_annotations(class_static * const __class_static) {
+    for(int i = 0; i < __class_static->annotations_count; i++) {
+        aobject * const a = __class_static->annotations[i];
         __decrease_reference_count(a);
-        __class->statics->annotations[i] = NULL;
+        __class_static->annotations[i] = NULL;
     }
 }
 void __throw_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text) {

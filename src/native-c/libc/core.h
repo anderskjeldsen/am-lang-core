@@ -172,6 +172,7 @@ struct _property {
 };
 
 struct _class_static {
+    char * name; // not includng generic param type names
     unsigned int static_properties_count;
     unsigned char annotations_count;
     aobject ** annotations;
@@ -182,8 +183,8 @@ struct _class_static {
 
 struct _aclass {
     char * name;
-    class_static const * const statics;
-    aclass const * const base;
+    class_static * const statics;
+    aclass * const base;
     __anonymous_function release;
     __anonymous_function mark_children;
     __anonymous_function * functions;
@@ -345,7 +346,7 @@ bool is_descendant_of(aclass const * const cls, aclass const * const base);
 static inline void attach_weak_reference_node(weak_reference_node * const node, aobject * const object);
 static inline void detach_weak_reference_node(weak_reference_node * const node);
 unsigned int __string_hash(const char * const str);
-void deallocate_annotations(aclass * const __class);
+void deallocate_annotations(class_static * const __class_static);
 array_holder * get_array_holder(aobject * const array_obj);
 char * get_array_data(array_holder * holder);
 void create_property_info(const unsigned char index, char * const name, aobject ** property_infos, aclass *cls);
