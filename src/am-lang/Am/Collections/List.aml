@@ -67,7 +67,7 @@ namespace Am.Collections {
         fun removeAt(index: Int): T {
             var i = index
             var value = this.items[i]
-            this.items[i] = null
+//            this.items[i] = null
             while(i < this.size) {
                 var j = i + 1
                 if (j < this.size) {
