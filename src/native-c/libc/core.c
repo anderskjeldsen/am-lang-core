@@ -957,23 +957,39 @@ void create_property_info(const unsigned char index, char * const name, aobject 
 }
 
 aclass * const get_class_from_any(nullable_value const value) {
-    int flag = value.flags;
+    ctype type =__value_flags_to_ctype(value.flags);
+
+    switch(type) {
+        case char_type:
+            return &Am_Lang_Byte;
+        case short_type:
+            return &Am_Lang_Short;
+        case int_type:
+            return &Am_Lang_Int;
+        case long_type:
+            return &Am_Lang_Long;
+//        case float_type:
+//            return &Am_Lang_Float;
+//        case double_type:
+//            return &Am_Lang_Double;
+        case bool_type:
+            return &Am_Lang_Bool;
+        case uchar_type:
+            return &Am_Lang_UByte;
+        case ushort_type:
+            return &Am_Lang_UShort;
+        case uint_type:
+            return &Am_Lang_UInt;
+        case ulong_type:
+            return &Am_Lang_ULong;
+        case object_type:
+            return value.value.object_value->class_ptr;
+        default:
+            return &Am_Lang_Any;
+
+    }
+
 /*
-#define PRIMITIVE_BOOL 64 | PRIMITIVE // is it a bool type?
-
-#define PRIMITIVE_LONG PRIMITIVE_BYTE_SIZE_EXP_1 | PRIMITIVE_BYTE_SIZE_EXP_2 | PRIMITIVE
-#define PRIMITIVE_INT PRIMITIVE_BYTE_SIZE_EXP_2 | PRIMITIVE
-#define PRIMITIVE_SHORT PRIMITIVE_BYTE_SIZE_EXP_1 | PRIMITIVE
-#define PRIMITIVE_CHAR PRIMITIVE
-
-#define PRIMITIVE_ULONG PRIMITIVE_LONG | PRIMITIVE_UNSIGNED
-#define PRIMITIVE_UINT PRIMITIVE_INT | PRIMITIVE_UNSIGNED
-#define PRIMITIVE_USHORT PRIMITIVE_SHORT | PRIMITIVE_UNSIGNED
-#define PRIMITIVE_UCHAR PRIMITIVE_CHAR | PRIMITIVE_UNSIGNED
-
-#define PRIMITIVE_DOUBLE PRIMITIVE_LONG | PRIMITIVE_FLOATING_POINT_NUMBER
-#define PRIMITIVE_FLOAT PRIMITIVE_INT | PRIMITIVE_FLOATING_POINT_NUMBER
-*/
     if (flag & PRIMITIVE_LONG == PRIMITIVE_LONG) {
         return &Am_Lang_Long;
     } else if (flag & PRIMITIVE_INT == PRIMITIVE_INT) {
@@ -1004,5 +1020,6 @@ aclass * const get_class_from_any(nullable_value const value) {
         #endif
         return NULL;
     }
+        */
 }
 
