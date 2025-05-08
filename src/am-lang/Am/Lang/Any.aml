@@ -9,15 +9,15 @@ namespace Am.Lang
 
     class Any : AnyInterface
     {
-        open override fun toString(): String {
+        open override primitive fun toString(): String {
             return "Any"
         }
 
-        open override fun hash(): UInt {
+        open override primitive fun hash(): UInt {
             return 0UI
         }
 
-        override fun getClassRef(): ClassRef {
+        override primitive fun getClassRef(): ClassRef {
             return ClassRef.getClassRefFromAny(this)
         }
     }
