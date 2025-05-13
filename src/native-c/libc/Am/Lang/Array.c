@@ -103,7 +103,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_Lang_Array_createEmptyArrayOfSameType_internal(aobject * const this, unsigned int length)
+function_result Am_Lang_Array_createEmptyArrayOfSameType_0(aobject * const this, unsigned int length)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -121,19 +121,4 @@ __exit: ;
 		__decrease_reference_count(this);
 	}
 	return __result;
-};
-
-function_result Am_Lang_Array_createEmptyArrayOfSameType_0_uchar(aobject * const this, long long length)
-{
-	return Am_Lang_Array_createEmptyArrayOfSameType_internal(this, length);
-};
-
-function_result Am_Lang_Array_createEmptyArrayOfSameType_0_char(aobject * const this, long long length)
-{
-	return Am_Lang_Array_createEmptyArrayOfSameType_internal(this, length);
-};
-
-function_result Am_Lang_Array_createEmptyArrayOfSameType_0_object(aobject * const this, long long length)
-{
-	return Am_Lang_Array_createEmptyArrayOfSameType_internal(this, length);
 };

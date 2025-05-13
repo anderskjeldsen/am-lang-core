@@ -369,15 +369,15 @@ aclass * const get_class_from_any(nullable_value const value);
 #include <Am/Lang/Exception.h>
 #include <Am/Lang/Annotations/UseMemoryPool.h>
 // typedef Am_Lang_Object_equals_0_T __object_equals_alias;
-#define __object_equals_alias Am_Lang_Object_equals_0_T
-#define __object_equals_index Am_Lang_Object_equals_0_index
+#define __object_equals_alias Am_Lang_Object_f_equals_0_T
+#define __object_equals_index Am_Lang_Object_f_equals_0_index
 #define __use_memory_pool_class_alias Am_Lang_Annotations_UseMemoryPool
 #define  __class_ref_class_alias Am_Lang_ClassRef
 #define __string_class_alias Am_Lang_String
 #define __exception_class_alias Am_Lang_Exception
-#define __add_stack_trace_item_function_alias Am_Lang_Exception_addStackTraceItem_0
-#define __exception_constructor_alias Am_Lang_Exception_Exception_0
+#define __add_stack_trace_item_function_alias Am_Lang_Exception_f_addStackTraceItem_0
+#define __exception_constructor_alias Am_Lang_Exception_f_Exception_0
 #define __exception_init_instance_function_alias Am_Lang_Exception___init_instance
 #define __property_info_class_alias Am_Lang_PropertyInfo
-#define __property_info_constructor_alias Am_Lang_PropertyInfo_PropertyInfo_0
+#define __property_info_constructor_alias Am_Lang_PropertyInfo_f_PropertyInfo_0
 #define __char_class_alias Am_Lang_Char
