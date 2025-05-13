@@ -71,11 +71,19 @@ static inline void __decrease_reference_count(aobject * const __obj) {
 
 static inline void __increase_reference_count(aobject * const __obj) {
     __obj->reference_count++;
+    printf("obj ok\n");
     #ifdef DEBUG
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
     #endif
-    printf("increase reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
+//    printf("increase reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
+    printf("increase reference count (address: %p)\n", __obj);
+    printf("increase reference count (address: %p)\n", __obj->class_ptr);
+    printf("increase reference count (address: %p)\n", __obj->class_ptr->name);
+    printf("increase reference count of object of type %s\n", __obj->class_ptr->name);
+    printf("increase reference count (object_id: %d)\n", __obj->object_properties.class_object_properties.object_id);
+    printf("increase reference count (new reference count %d\n", __obj->reference_count);
+
     #ifdef CONDLOG 
     }
     #endif        

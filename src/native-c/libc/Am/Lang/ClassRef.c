@@ -138,6 +138,7 @@ function_result Am_Lang_ClassRef_getClassRefFromAny_0(nullable_value any)
 			case int_type:
 			printf("getClassRefFroMAny 1d2\n");
 			class_ref = Am_Lang_Int.class_ref_singleton;
+			printf("bla: %s", class_ref->class_ptr->name);
 			if (class_ref == NULL) {
 				printf("class_ref null\n");
 			}
