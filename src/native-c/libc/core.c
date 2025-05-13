@@ -32,7 +32,7 @@ int allocation_index = 0;
 
 aobject * __first_object = NULL;
 aobject * __first_detached_object = NULL;
-aclass * __first_class = NULL;
+//aclass * __first_class = NULL;
 class_static *__first_class_static = NULL;
 
 void __mark_root_objects() {    
@@ -197,18 +197,18 @@ sweep_result __sweep_object(aobject * const obj) {
     return (sweep_result) { .next = obj->next, .is_swept = false };
 }
 
-void __register_class(aclass * const __class) {
+void __register_class(class_static * const __class_static) {
     #ifdef DEBUG
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
     #endif
-    printf("Register class %s, %p\n", __class->name, __class);
+    printf("Register class %s, %p\n", __class_static->name, __class);
     #ifdef CONDLOG 
     }
     #endif
     #endif
-    __class->next = __first_class;
-    __first_class = __class;
+    __class_static->next = __first_class_static;
+    __first_class_static = __class_static;
 }
 
 aobject * __allocate_iface_object(aclass * const __class, aobject * const implementation_object) {

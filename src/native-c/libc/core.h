@@ -294,7 +294,7 @@ extern class_static * __first_class_static;
 
 
 // functions
-void __register_class(aclass * const __class);
+void __register_class(class_static * const __class_static);
 void __dereference_static_properties();
 void __dereference_static_properties_for_class(class_static * const __class_static);
 
