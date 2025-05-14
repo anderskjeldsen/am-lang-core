@@ -202,7 +202,7 @@ void __register_class(class_static * const __class_static) {
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
     #endif
-    printf("Register class %s, %p\n", __class_static->name, __class);
+    printf("Register class %s, %p\n", __class_static->name, __class_static);
     #ifdef CONDLOG 
     }
     #endif
@@ -373,18 +373,18 @@ sweep_result __detach_object_from_sweep(aobject * const __obj) {
     #endif
 
     if (__obj == __first_object) {
-        printf("Detaching first object\n");
+//        printf("Detaching first object\n");
         __first_object = __obj->next;
         if (__first_object != NULL) {
             __first_object->prev = NULL;
         }
     } else {        
-        printf("Detaching not first object\n");
+//        printf("Detaching not first object\n");
         if (__obj->prev == NULL) {
-            printf("prev is null\n");
+//            printf("prev is null\n");
         }
         if (__obj->next == NULL) {
-            printf("next is null\n");
+//            printf("next is null\n");
         }
         __obj->prev->next = __obj->next;
         if (__obj->next != NULL) {
@@ -395,13 +395,13 @@ sweep_result __detach_object_from_sweep(aobject * const __obj) {
     aobject *next_to_sweep = __obj->next;
 
     if (__first_detached_object == NULL) {
-        printf("set first detached object\n");
+//        printf("set first detached object\n");
 
         __first_detached_object = __obj;
         __obj->next = NULL;
         __obj->prev = NULL;
     } else {
-        printf("link to first detached object\n");
+//        printf("link to first detached object\n");
 
         __obj->next = __first_detached_object;
         __first_detached_object->prev = __obj;

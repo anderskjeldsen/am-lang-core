@@ -71,7 +71,6 @@ static inline void __decrease_reference_count(aobject * const __obj) {
 
 static inline void __increase_reference_count(aobject * const __obj) {
     __obj->reference_count++;
-    printf("obj ok\n");
     #ifdef DEBUG
     #ifdef CONDLOG 
     if (__conditional_logging_on) {

@@ -118,54 +118,38 @@ function_result Am_Lang_ClassRef_getClassRefFromAny_0(nullable_value any)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 	__increase_reference_count_nullable_value(any);
-	printf("getClassRefFroMAny 1\n");
 	aobject * class_ref = NULL;
 	if (any.flags == 0) {
-		printf("getClassRefFroMAny 1b\n");
 
 		class_ref = any.value.object_value->class_ptr->class_ref_singleton;
 	} else {
-		printf("getClassRefFroMAny 1c\n");
 
 		ctype ctype = __value_flags_to_ctype(any.flags);
-		printf("getClassRefFroMAny 1d\n");
 
 		switch(ctype) {
 			case long_type:
-			printf("getClassRefFroMAny 1d1\n");
-			class_ref = Am_Lang_Long.class_ref_singleton;
+				class_ref = Am_Lang_Long.class_ref_singleton;
 				break;
 			case int_type:
-			printf("getClassRefFroMAny 1d2\n");
-			class_ref = Am_Lang_Int.class_ref_singleton;
-			printf("bla: %s", class_ref->class_ptr->name);
-			if (class_ref == NULL) {
-				printf("class_ref null\n");
-			}
+				class_ref = Am_Lang_Int.class_ref_singleton;
 				break;
 			case short_type:
-			printf("getClassRefFroMAny 1d3\n");
-			class_ref = Am_Lang_Short.class_ref_singleton;
+				class_ref = Am_Lang_Short.class_ref_singleton;
 				break;
 			case char_type:
-			printf("getClassRefFroMAny 1d4\n");
-			class_ref = Am_Lang_Byte.class_ref_singleton;
+				class_ref = Am_Lang_Byte.class_ref_singleton;
 				break;
 			case ulong_type:
-			printf("getClassRefFroMAny 1d5\n");
-			class_ref = Am_Lang_ULong.class_ref_singleton;
+				class_ref = Am_Lang_ULong.class_ref_singleton;
 				break;
 			case uint_type:
-			printf("getClassRefFroMAny 1d6\n");
-			class_ref = Am_Lang_UInt.class_ref_singleton;
+				class_ref = Am_Lang_UInt.class_ref_singleton;
 				break;
 			case ushort_type:
-			printf("getClassRefFroMAny 1d7\n");
-			class_ref = Am_Lang_UShort.class_ref_singleton;
+				class_ref = Am_Lang_UShort.class_ref_singleton;
 				break;
 			case uchar_type:
-			printf("getClassRefFroMAny 1d8\n");
-			class_ref = Am_Lang_UByte.class_ref_singleton;
+				class_ref = Am_Lang_UByte.class_ref_singleton;
 				break;
 				/* TODO: add float and double
 			case float_type:
@@ -176,30 +160,21 @@ function_result Am_Lang_ClassRef_getClassRefFromAny_0(nullable_value any)
 				break;
 				*/
 			case bool_type:
-			printf("getClassRefFroMAny 1d9\n");
-			class_ref = Am_Lang_Bool.class_ref_singleton;
+				class_ref = Am_Lang_Bool.class_ref_singleton;
 				break;
 			default:
-			printf("getClassRefFroMAny 1d9\n");
-			__throw_simple_exception("Invalid primitive type", "getClassRefFromAny", &__result);
+				__throw_simple_exception("Invalid primitive type", "getClassRefFromAny", &__result);
 				goto __exit;
 		}
 	}
 
 	if (class_ref == NULL) {
 	}
-	printf("class_ref2 %p\n", class_ref);
-
-	printf("getClassRefFroMAny 2\n");
 
 	__increase_reference_count(class_ref); // one extra, because we want to keep the object until the end.
-	printf("getClassRefFroMAny 2b\n");
 	__result.return_value.value.object_value = class_ref;
-	printf("getClassRefFroMAny 2c\n");
 
 __exit: ;
-	printf("getClassRefFroMAny 3\n");
-
 	__decrease_reference_count_nullable_value(any);
 	return __result;
 }

@@ -19,13 +19,14 @@ namespace Am.Lang
         }
 
         fun printWithStackTrace() {
-            this.message.println()
+            ("Exception: " + this.message).println()
             var i = 0
             while(i < this.stackTrace.getSize()) {
                 var s = this.stackTrace.get(i)
                 s.println()
                 i++
             }
+            "End of stacktrace".println()
         }
     }
 

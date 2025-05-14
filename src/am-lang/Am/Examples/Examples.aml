@@ -68,12 +68,8 @@ namespace Am.Examples {
             ("Char to int: " + i.toString()).println()
         }
 
-        static fun main() {
-            "hello".println()
-        }
-
         // main13
-        static fun main13() {
+        static fun main() {
             var s = "hello"
             var cr = s.getClassRef()
             ("Getting class name of a string: " + cr.toString()).println()
@@ -96,7 +92,8 @@ namespace Am.Examples {
                         prop.setValue(file, 1L)
                     } catch(e: Exception) {
 //                        "Exception".println()
-                        e.toString().println()
+                        e.printWithStackTrace()
+//                        e.toString().println()
                     }                    
                 }
                 var pcr = prop.getPropertyClassRef()
