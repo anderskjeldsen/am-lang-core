@@ -1,7 +1,10 @@
 namespace Am.Examples {    
-    struct MyStruct {
+
+    class TRun : Runnable {
         import Am.Lang
-        var x: Int
+        override fun run() {
+            "hello world".println()
+        }
     }
     
     class CoreStartup {
@@ -11,6 +14,7 @@ namespace Am.Examples {
         import Am.IO.Networking
         import Am.Collections
         import Am.Util.Parsers.Json
+        import Am.Threading
 
         static var boolValue: Bool = true
 
@@ -69,7 +73,11 @@ namespace Am.Examples {
         }
 
         // main13
-        static fun main() {
+        static fun main13() {
+            var runnable = new TRun() as Runnable
+            var th = new Thread(runnable)
+            th.start()
+            
             var s = "hello"
             var cr = s.getClassRef()
             ("Getting class name of a string: " + cr.toString()).println()
@@ -83,13 +91,14 @@ namespace Am.Examples {
             ("Getting class name of a file: " + crf.toString()).println()
             var props = crf.getProperties()
             var pi = 0
+            ("prop length: " + props.length().toString()).println()
 
             while(pi < props.length()) {
                 var prop = props[pi]
                 if (prop.getName() == "filename") {
                     try {
                         prop.setValue(file, "newfilename")
-                        prop.setValue(file, 1L)
+//                        prop.setValue(file, 1L)
                     } catch(e: Exception) {
 //                        "Exception".println()
                         e.printWithStackTrace()
@@ -106,7 +115,11 @@ namespace Am.Examples {
 
             ("new filename: " + file.filename).println()
 
-            var crhm = ClassRef.getClassRef("Am.Collections.HashMap[object_object]")
+            var hm = new HashMap<String, String>()
+            var hmcr = hm.getClassRef()
+            ("Getting class name of a hash map: " + hmcr.toString()).println()
+
+            var crhm = ClassRef.getClassRef("Am.Collections.HashMap_ta_Am.Lang.String_x_Am.Lang.String")
             if (crhm != null) {
                 ("Name of hash map variant class: " + crhm.toString()).println()
             } else {
