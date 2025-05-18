@@ -72,6 +72,16 @@ namespace Am.Examples {
             ("Char to int: " + i.toString()).println()
         }
 
+        static fun main() {
+            var l = new List<Int>()
+            l.add(1)
+            l.add(2)
+            each(l, i) {
+                ("List item: " + i.toString()).println()
+            }
+            "done".println()
+        }
+
         // main13
         static fun main13() {
             var runnable = new TRun() as Runnable
