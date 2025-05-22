@@ -73,9 +73,21 @@ namespace Am.Examples {
         }
 
         static fun main() {
-            var l = new List<Int>()
+            var l = new List<Int>() 
             l.add(1)
             l.add(2)
+            var l2 = l.filter((i) => {
+                if (i == 1) {
+                    return false
+                }
+                return true
+            })
+
+            "List 1".println()
+            each(l, i) {
+                ("List item: " + i.toString()).println()
+            }
+            "List 2".println()
             each(l, i) {
                 ("List item: " + i.toString()).println()
             }
