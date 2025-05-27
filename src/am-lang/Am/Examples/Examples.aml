@@ -38,6 +38,9 @@ namespace Am.Examples {
             return CoreStartup.boolValue
         }
 
+        static fun foo<T>(t: T, predicate: (t: T) => Bool) {
+            predicate(t)
+        }
 
         // main15
         static fun main15() {
@@ -73,22 +76,25 @@ namespace Am.Examples {
         }
 
         static fun main() {
-            var l = new List<Int>() 
+            var l = List.newList<Int>() 
             l.add(1)
             l.add(2)
+
+            "List 1".println()
+            each(l, i) {
+                ("List item: " + i.toString()).println()
+            }
+
             var l2 = l.filter((i) => {
+                ("filter " + i.toString()).println()
                 if (i == 1) {
                     return false
                 }
                 return true
             })
 
-            "List 1".println()
-            each(l, i) {
-                ("List item: " + i.toString()).println()
-            }
             "List 2".println()
-            each(l, i) {
+            each(l2, i) {
                 ("List item: " + i.toString()).println()
             }
             "done".println()
