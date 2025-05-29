@@ -75,7 +75,7 @@ namespace Am.Examples {
             ("Char to int: " + i.toString()).println()
         }
 
-        static fun main() {
+        static fun main17() {
             var l = List.newList<Int>() 
             l.add(1)
             l.add(2)
