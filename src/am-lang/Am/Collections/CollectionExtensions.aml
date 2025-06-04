@@ -14,5 +14,12 @@ namespace Am.Collections {
             return result as Iterable<T>
         }
 
+        ext fun firstOr<T>(iterable: Iterable<T>, or: T): T {
+            each(iterable, item) {
+                return item
+            }
+            return or
+        }
+
     }
 }
