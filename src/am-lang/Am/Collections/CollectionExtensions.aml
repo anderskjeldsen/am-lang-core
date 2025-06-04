@@ -21,5 +21,22 @@ namespace Am.Collections {
             return or
         }
 
+        ext fun toList<T>(iterable: Iterable<T>): List<T> {
+            var result = List<T>.newList<T>()
+            each(iterable, item) {
+                result.add(item)
+            }
+            return result
+        }
+
+        // Must be able to resolve U from return type
+        ext fun map<T, U>(iterable: Iterable<T>, mapper: (t: t) => U): Iterable<U> {
+            var result = List<U>.newList<U>()
+            each(iterable, item) {
+                result.add(mapper(item))
+            }
+            return result
+        }
+
     }
 }

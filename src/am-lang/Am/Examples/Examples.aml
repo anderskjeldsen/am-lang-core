@@ -29,6 +29,9 @@ namespace Am.Examples {
                 ("List item: " + i.toString()).println()
             }
 
+            var first = l.firstOr(3)
+            ("first: " + first.toString()).println()
+
             var l2 = l.filter((i) => {
                 ("filter " + i.toString()).println()
                 if (i == 1) {
@@ -41,6 +44,18 @@ namespace Am.Examples {
             each(l2, i) {
                 ("List item: " + i.toString()).println()
             }
+
+            // Must be able to resolve U from return type
+/*
+            var l3 = l.map((i) => {
+                return i.toString()
+            })
+            each(l3, i) {
+                ("List item: " + i).println()
+            }
+            */
+
+
             "done".println()
         }
 
