@@ -339,32 +339,6 @@ inline void __throw_simple_exception(const char * const message, const char * co
     __decrease_reference_count(ex); // it's in the exception stack trace list now, we don't need it anymore.
 }
 */
-static inline void attach_weak_reference_node(weak_reference_node * const node, aobject * const object) {
-    node->object = object;
-    weak_reference_node * const first = object->first_weak_reference_node;
-    node->next = first;
-    object->first_weak_reference_node = node;
-}
-
-static inline void detach_weak_reference_node(weak_reference_node * const node) {
-    weak_reference_node * const first = node->object->first_weak_reference_node;
-    weak_reference_node * current = first;
-    if (current == node) {
-        node->object->first_weak_reference_node = node->next;
-        node->next = NULL;
-    } else {
-        while(current != NULL) {
-            if (current->next == node) {
-                current->next = node->next;
-                node->next = NULL;
-                current = NULL;
-            } else {
-                current = current->next;
-            }
-        }
-    }
-
-}
 
 static inline ctype __value_flags_to_ctype(unsigned char flags) {
     unsigned char stripped_flags = flags & 0b11111100;

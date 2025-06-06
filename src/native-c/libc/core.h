@@ -100,7 +100,6 @@ typedef enum _class_type class_type;
 typedef struct _class_object_properties class_object_properties;
 typedef union _object_properties object_properties;
 typedef struct _anonymous_class_state_data anonymous_class_state_data;
-typedef struct _weak_reference_node weak_reference_node;
 typedef struct _sweep_result sweep_result;
 
 enum _ctype { 
@@ -230,7 +229,6 @@ struct _aobject {
     int reference_count;
     int property_reference_count;
     bool memory_pooled;
-    weak_reference_node * first_weak_reference_node;
     object_properties object_properties;
     bool marked;
     bool pending_deallocation;
@@ -262,11 +260,6 @@ struct _suspend_state {
 struct _anonymous_class_state_data {
     unsigned int state_objects_count; // to be used by parent function at re-entry
     nullable_value *state_objects; // to be used by parent function at re-entry
-};
-
-struct _weak_reference_node {
-    weak_reference_node *next;
-    aobject *object;
 };
 
 /*
@@ -343,8 +336,6 @@ aobject * __create_exception(aobject * const message);
 void clear_allocated_objects();
 void print_allocated_objects();
 bool is_descendant_of(aclass const * const cls, aclass const * const base);
-static inline void attach_weak_reference_node(weak_reference_node * const node, aobject * const object);
-static inline void detach_weak_reference_node(weak_reference_node * const node);
 unsigned int __string_hash(const char * const str);
 void deallocate_annotations(class_static * const __class_static);
 array_holder * get_array_holder(aobject * const array_obj);

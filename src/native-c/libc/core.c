@@ -347,7 +347,7 @@ void * __allocate_object_data(aobject * const __obj, int __size) {
 sweep_result __detach_object_from_sweep(aobject * const __obj) {
 
     if (__obj->pending_deallocation) {
-        return (sweep_result) { .is_swept = false };
+        return (sweep_result) { .is_swept = false, .next = __obj->next };
     }
 
     #ifdef DEBUG
@@ -629,16 +629,6 @@ void __detach_object(aobject * const __obj) {
         #endif
         #endif
     }
-
-    weak_reference_node *current_weak_reference_node = __obj->first_weak_reference_node;
-    __obj->first_weak_reference_node = NULL;
-    while (current_weak_reference_node != NULL) {
-        weak_reference_node * const next_weak_reference_node = current_weak_reference_node->next;
-        current_weak_reference_node->next = NULL;
-        current_weak_reference_node->object = NULL;
-        current_weak_reference_node = next_weak_reference_node;
-    }
-
 }
 
 void __dereference_static_properties() {
