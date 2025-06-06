@@ -53,7 +53,7 @@ static inline aobject * __allocate_object(aclass * const __class) {
 static inline void __decrease_reference_count(aobject * const __obj) {
     if ( __obj != NULL) {
         __obj->reference_count--;
-        #ifdef DEBUG
+        #if defined(DEBUG) && defined(ARCLOG)
         #ifdef CONDLOG 
         if (__conditional_logging_on) {
         #endif
@@ -71,7 +71,7 @@ static inline void __decrease_reference_count(aobject * const __obj) {
 
 static inline void __increase_reference_count(aobject * const __obj) {
     __obj->reference_count++;
-    #ifdef DEBUG
+    #if defined(DEBUG) && defined(ARCLOG)
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
     #endif
@@ -190,7 +190,7 @@ static inline void __increase_property_reference_count(aobject * const __obj) {
         __first_object = __obj;
     }
     __obj->property_reference_count++;
-    #ifdef DEBUG
+    #if defined(DEBUG) && defined(ARCLOG)
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
     #endif

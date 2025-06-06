@@ -530,7 +530,7 @@ void __deallocate_object(aobject * const __obj) {
 void __decrease_property_reference_count(aobject * const __obj) {
     if ( __obj != NULL) {
         __obj->property_reference_count--;
-        #ifdef DEBUG
+        #if defined(DEBUG) && defined(ARCLOG)
         #ifdef CONDLOG 
         if (__conditional_logging_on) {
         #endif
