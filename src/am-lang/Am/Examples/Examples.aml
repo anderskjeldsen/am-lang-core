@@ -18,6 +18,13 @@ namespace Am.Examples {
 
         static var boolValue: Bool = true
 
+        // main20 
+        static fun main() {
+            var array: String[] = ["Hello", "World"]
+            array[0].println()
+            array[1].println()
+        }
+
         // main19
         static fun main19() {
             var l = List.newList<Int>() 
