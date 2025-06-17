@@ -19,7 +19,7 @@ namespace Am.Examples {
         static var boolValue: Bool = true
 
         // main20 
-        static fun main() {
+        static fun main20() {
             var array: String[] = ["Hello", "World"]
             array[0].println()
             array[1].println()
