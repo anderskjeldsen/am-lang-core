@@ -317,7 +317,7 @@ static inline bool __object_equals(aobject * const a, aobject * const b) {
         if (a->class_ptr->statics->type == interface) {
             return __object_equals(a->object_properties.iface_reference.implementation_object, b);
         }
-        if (b->class_ptr->statics->type == interface) {
+        if (b != NULL && b->class_ptr->statics->type == interface) {
             return __object_equals(a, b->object_properties.iface_reference.implementation_object);
         }
         __object_equals_alias af = (__object_equals_alias) a->class_ptr->functions[__object_equals_index];
