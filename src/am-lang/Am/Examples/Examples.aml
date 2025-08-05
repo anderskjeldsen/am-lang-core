@@ -18,7 +18,7 @@ namespace Am.Examples {
 
         static var boolValue: Bool = true
 
-        static fun main() {
+        static fun main22() {
             var i = 0
             var j = ++i
             ("Both should be 1: i: " + i.toString() + ", j: " + j.toString()).println()
