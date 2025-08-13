@@ -30,7 +30,7 @@ namespace Am.Collections {
         }
 
         // Must be able to resolve U from return type
-        ext fun map<T, U>(iterable: Iterable<T>, mapper: (t: t) => U): Iterable<U> {
+        ext fun map<T, U>(iterable: Iterable<T>, mapper: (t: T) => U): Iterable<U> {
             var result = List<U>.newList<U>()
             each(iterable, item) {
                 result.add(mapper(item))
