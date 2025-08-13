@@ -2,6 +2,7 @@ namespace Am.Util.Parsers.Json {
 
     class JsonParser(private var parser: TextParser) {
         import Am.Lang
+        import Am.Util.Parsers.Text
 
         private static var leftBrace: UShort = 123US
         private static var leftBracket: UShort = 91US
