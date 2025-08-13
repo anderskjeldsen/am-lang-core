@@ -18,7 +18,7 @@ namespace Am.Collections {
 
         static fun createWithInitialSize<K, V>(initialSize: Int): HashMap<K, V> {
             var map = new HashMap<K, V>()
-            map.size = size
+            map.size = initialSize
             map.bucket = new HashMapEntry<K, V>[initialSize]
         }
 
