@@ -81,7 +81,7 @@ static inline void __increase_reference_count(aobject * const __obj) {
     printf("increase reference count (address: %p)\n", __obj->class_ptr->name);
     printf("increase reference count of object of type %s\n", __obj->class_ptr->name);
     printf("increase reference count (object_id: %d)\n", __obj->object_properties.class_object_properties.object_id);
-    printf("increase reference count (new reference count %d\n", __obj->reference_count);
+    printf("increase reference count (new reference count %d)\n", __obj->reference_count);
 
     #ifdef CONDLOG 
     }
