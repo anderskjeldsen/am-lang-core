@@ -1,0 +1,42 @@
+namespace Am.Collections {
+
+    class CollectionExtensions {
+        import Am.Lang
+
+// predicate must be able to get the type of T from the function signature
+        ext fun filter<T>(collection: Iterable<T>, predicate: (t: T) => Bool): Iterable<T> {
+            var result = List<T>.newList<T>()
+            each(collection, item) {
+                if (predicate(item)) {
+                    result.add(item)
+                }
+            }
+            return result as Iterable<T>
+        }
+
+        ext fun firstOr<T>(iterable: Iterable<T>, or: T): T {
+            each(iterable, item) {
+                return item
+            }
+            return or
+        }
+
+        ext fun toList<T>(iterable: Iterable<T>): List<T> {
+            var result = List<T>.newList<T>()
+            each(iterable, item) {
+                result.add(item)
+            }
+            return result
+        }
+
+        // Must be able to resolve U from return type
+        ext fun map<T, U>(iterable: Iterable<T>, mapper: (t: T) => U): Iterable<U> {
+            var result = List<U>.newList<U>()
+            each(iterable, item) {
+                result.add(mapper(item))
+            }
+            return result
+        }
+
+    }
+}

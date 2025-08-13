@@ -13,6 +13,10 @@ namespace Am.Lang
             return String.fromBytes(byteArray, this.encoding)
         }
 
+        fun getLength(): UInt {
+            return this.buffer.getSize().toUInt()
+        }
+
 //        native fun getLength(): Int
         op + (s: String): StringBuilder {
             var bytes = s.toBytes(this.encoding)
@@ -36,6 +40,16 @@ namespace Am.Lang
                 i++
             }
             return this
+        }
+
+        fun addChar(c: UShort) : StringBuilder {
+            // TODO: convert to UTF-8
+            this.buffer.add(c.toUByte()) // ditching the upper 8 bits for now.
+            return this
+        }
+
+        fun clear() {
+            this.buffer.clear()
         }
 
     }

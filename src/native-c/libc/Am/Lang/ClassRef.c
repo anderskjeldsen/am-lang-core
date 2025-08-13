@@ -118,12 +118,14 @@ function_result Am_Lang_ClassRef_getClassRefFromAny_0(nullable_value any)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 	__increase_reference_count_nullable_value(any);
-
 	aobject * class_ref = NULL;
 	if (any.flags == 0) {
+
 		class_ref = any.value.object_value->class_ptr->class_ref_singleton;
 	} else {
+
 		ctype ctype = __value_flags_to_ctype(any.flags);
+
 		switch(ctype) {
 			case long_type:
 				class_ref = Am_Lang_Long.class_ref_singleton;
@@ -165,6 +167,10 @@ function_result Am_Lang_ClassRef_getClassRefFromAny_0(nullable_value any)
 				goto __exit;
 		}
 	}
+
+	if (class_ref == NULL) {
+	}
+
 	__increase_reference_count(class_ref); // one extra, because we want to keep the object until the end.
 	__result.return_value.value.object_value = class_ref;
 

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <unistd.h>
 #include <libc/core.h>
 
 #include <Am/Lang/Exception.h>
@@ -52,8 +53,14 @@ static inline aobject * __allocate_object(aclass * const __class) {
 static inline void __decrease_reference_count(aobject * const __obj) {
     if ( __obj != NULL) {
         __obj->reference_count--;
-        #ifdef DEBUG
+        #if defined(DEBUG) && defined(ARCLOG)
+        #ifdef CONDLOG 
+        if (__conditional_logging_on) {
+        #endif
         printf("decrease reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
+        #ifdef CONDLOG 
+        }
+        #endif        
         #endif
 
         if ( __obj->reference_count == 0 && __obj->property_reference_count == 0) {
@@ -64,41 +71,115 @@ static inline void __decrease_reference_count(aobject * const __obj) {
 
 static inline void __increase_reference_count(aobject * const __obj) {
     __obj->reference_count++;
-    #ifdef DEBUG
-    printf("increase reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
+    #if defined(DEBUG) && defined(ARCLOG)
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
+    #endif
+//    printf("increase reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
+    printf("increase reference count (address: %p)\n", __obj);
+    printf("increase reference count (address: %p)\n", __obj->class_ptr);
+    printf("increase reference count (address: %p)\n", __obj->class_ptr->name);
+    printf("increase reference count of object of type %s\n", __obj->class_ptr->name);
+    printf("increase reference count (object_id: %d)\n", __obj->object_properties.class_object_properties.object_id);
+    printf("increase reference count (new reference count %d)\n", __obj->reference_count);
+
+    #ifdef CONDLOG 
+    }
+    #endif        
     #endif
 }
 
+/*
 static inline void __decrease_property_reference_count(aobject * const __obj) {
     if ( __obj != NULL) {
         __obj->property_reference_count--;
         #ifdef DEBUG
+        #ifdef CONDLOG 
+        if (__conditional_logging_on) {
+        #endif
         printf("decrease property reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
+        #ifdef CONDLOG 
+        }
+        #endif        
         #endif
 
+        if (__conditional_logging_on) {
+            printf("decrease property reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
+        }
+
+        bool fl = false;
+        if (strcmp(__obj->class_ptr->name, "String") == 0) {
+            string_holder *sh = (string_holder *) __obj->object_properties.class_object_properties.object_data.value.custom_value;
+            printf("String value: %s\n", sh->string_value);
+            if (strcmp(sh->string_value, "Am.Lang.Short") == 0) {
+                fl = true;
+            }
+        }
+
         if (__obj->property_reference_count == 0) {
+            if (fl) {
+                printf("check first object\n");
+                sleep(1);
+            }
             if (__obj == __first_object) {
+                if (fl) {
+                    printf("is first object\n");
+                    sleep(1);
+                }
+
                 __first_object = __obj->next;                
                 __obj->next = NULL;
                 if (__first_object != NULL) {
                     __first_object->prev = NULL;
                 }
             } else {        
+                if (fl) {
+                    printf("is not first object\n");
+                    sleep(1);
+                }
+
+                if (fl) {
+                    printf("has prev %p\n", __obj->prev);
+                    sleep(1);
+                }
+
                 __obj->prev->next = __obj->next;
+                if (fl) {
+                    printf("1\n");
+                }
+
                 if (__obj->next != NULL) {
+                    if (fl) {
+                        printf("2\n");
+                    }
                     __obj->next->prev = __obj->prev;
                 }
+                if (fl) {
+                    printf("3\n");
+                }
+
                 __obj->prev = NULL;
                 __obj->next = NULL;
             }
 
+
             if (__obj->reference_count == 0) {
+                if (__conditional_logging_on || fl) {
+                    printf("deallocate in 1s\n");
+                    sleep(1);
+                    printf("let's wait 5 more\n");
+                    sleep(5);
+                }
+
                 __deallocate_object(__obj);
+                if (__conditional_logging_on || fl) {
+                    printf("deallocated\n");
+                }
             }
         }
     }
 }
-
+*/
 static inline void __increase_property_reference_count(aobject * const __obj) {
     if (__obj->property_reference_count == 0) {
         __obj->next = __first_object;
@@ -109,8 +190,14 @@ static inline void __increase_property_reference_count(aobject * const __obj) {
         __first_object = __obj;
     }
     __obj->property_reference_count++;
-    #ifdef DEBUG
+    #if defined(DEBUG) && defined(ARCLOG)
+    #ifdef CONDLOG 
+    if (__conditional_logging_on) {
+    #endif
     printf("increase property reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
+    #ifdef CONDLOG 
+    }
+    #endif        
     #endif
 }
 
@@ -155,8 +242,8 @@ static inline bool __set_property_safe(aobject * const __obj, int const __index,
     return true;
 }
 
-static inline void __set_static_property(aclass * const __class, int const __index, nullable_value __prop_value) {
-    property * __prop = &__class->static_properties[__index];
+static inline void __set_static_property(class_static * const __class_static, int const __index, nullable_value __prop_value) {
+    property * __prop = &__class_static->static_properties[__index];
     if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
         __decrease_property_reference_count(__prop->nullable_value.value.object_value);
     }
@@ -190,6 +277,13 @@ static inline void __increase_reference_count_nullable_value(nullable_value __va
         __increase_reference_count(__value.value.object_value);
     }
 }
+
+static inline void __increase_property_reference_count_nullable_value(nullable_value __value) {
+    if ( !__is_primitive(__value) && __value.value.object_value != NULL ) {
+        __increase_property_reference_count(__value.value.object_value);
+    }
+}
+
 /*
 inline void __throw_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text) {
 
@@ -220,7 +314,13 @@ static inline void __deallocate_function_result(function_result const result) {
 
 static inline bool __object_equals(aobject * const a, aobject * const b) {
     if (a != NULL) {
-        Am_Lang_Object_equals_0_T af = (Am_Lang_Object_equals_0_T) a->class_ptr->functions[Am_Lang_Object_equals_0_index];
+        if (a->class_ptr->statics->type == interface) {
+            return __object_equals(a->object_properties.iface_reference.implementation_object, b);
+        }
+        if (b != NULL && b->class_ptr->statics->type == interface) {
+            return __object_equals(a, b->object_properties.iface_reference.implementation_object);
+        }
+        __object_equals_alias af = (__object_equals_alias) a->class_ptr->functions[__object_equals_index];
         function_result res = af(a, b);
         // Am_Lang_Object_equals_0(a, b);
         return res.return_value.value.bool_value;
@@ -245,32 +345,6 @@ inline void __throw_simple_exception(const char * const message, const char * co
     __decrease_reference_count(ex); // it's in the exception stack trace list now, we don't need it anymore.
 }
 */
-static inline void attach_weak_reference_node(weak_reference_node * const node, aobject * const object) {
-    node->object = object;
-    weak_reference_node * const first = object->first_weak_reference_node;
-    node->next = first;
-    object->first_weak_reference_node = node;
-}
-
-static inline void detach_weak_reference_node(weak_reference_node * const node) {
-    weak_reference_node * const first = node->object->first_weak_reference_node;
-    weak_reference_node * current = first;
-    if (current == node) {
-        node->object->first_weak_reference_node = node->next;
-        node->next = NULL;
-    } else {
-        while(current != NULL) {
-            if (current->next == node) {
-                current->next = node->next;
-                node->next = NULL;
-                current = NULL;
-            } else {
-                current = current->next;
-            }
-        }
-    }
-
-}
 
 static inline ctype __value_flags_to_ctype(unsigned char flags) {
     unsigned char stripped_flags = flags & 0b11111100;

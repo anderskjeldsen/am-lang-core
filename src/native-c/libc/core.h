@@ -41,12 +41,14 @@
 #define PRIMITIVE_LONG PRIMITIVE_BYTE_SIZE_EXP_1 | PRIMITIVE_BYTE_SIZE_EXP_2 | PRIMITIVE
 #define PRIMITIVE_INT PRIMITIVE_BYTE_SIZE_EXP_2 | PRIMITIVE
 #define PRIMITIVE_SHORT PRIMITIVE_BYTE_SIZE_EXP_1 | PRIMITIVE
-#define PRIMITIVE_CHAR PRIMITIVE
+#define PRIMITIVE_BYTE PRIMITIVE
+#define PRIMITIVE_CHAR PRIMITIVE_BYTE
 
 #define PRIMITIVE_ULONG PRIMITIVE_LONG | PRIMITIVE_UNSIGNED
 #define PRIMITIVE_UINT PRIMITIVE_INT | PRIMITIVE_UNSIGNED
 #define PRIMITIVE_USHORT PRIMITIVE_SHORT | PRIMITIVE_UNSIGNED
-#define PRIMITIVE_UCHAR PRIMITIVE_CHAR | PRIMITIVE_UNSIGNED
+#define PRIMITIVE_UBYTE PRIMITIVE_BYTE | PRIMITIVE_UNSIGNED
+#define PRIMITIVE_UCHAR PRIMITIVE_UBYTE
 
 #define PRIMITIVE_DOUBLE PRIMITIVE_LONG | PRIMITIVE_FLOATING_POINT_NUMBER
 #define PRIMITIVE_FLOAT PRIMITIVE_INT | PRIMITIVE_FLOATING_POINT_NUMBER
@@ -74,7 +76,10 @@ BYTE_SIZE_EXP lookup (order: 2,1)
 */
 // #define PRIMITIVE_ALL PRIMITIVE_LONG | PRIMITIVE_INT | PRIMITIVE_SHORT | PRIMITIVE_CHAR | PRIMITIVE_BOOL // just check if the flags are 0 to see if its an object and not a primitive
 
+extern bool __conditional_logging_on;
+
 typedef struct _aobject aobject;
+typedef struct _class_static class_static;
 typedef struct _aclass aclass;
 typedef void (*__anonymous_function)();
 //typedef struct _stack_trace_item stack_trace_item;
@@ -95,7 +100,6 @@ typedef enum _class_type class_type;
 typedef struct _class_object_properties class_object_properties;
 typedef union _object_properties object_properties;
 typedef struct _anonymous_class_state_data anonymous_class_state_data;
-typedef struct _weak_reference_node weak_reference_node;
 typedef struct _sweep_result sweep_result;
 
 enum _ctype { 
@@ -166,22 +170,27 @@ struct _property {
     nullable_value nullable_value;    
 };
 
+struct _class_static {
+    char * name; // not includng generic param type names
+    unsigned int static_properties_count;
+    unsigned char annotations_count;
+    aobject ** annotations;
+    property * static_properties;
+    class_type type;
+    class_static *next;
+};
+
 struct _aclass {
     char * name;
-    class_type type;
-    aclass const * const base;
+    class_static * const statics;
+    aclass * const base;
     __anonymous_function release;
     __anonymous_function mark_children;
-//    __anonymous_function init_class_ref;
     __anonymous_function * functions;
     aobject * class_ref_singleton;
     unsigned int iface_implementation_count;
     unsigned int functions_count;
     unsigned int properties_count;
-    unsigned int static_properties_count;
-    unsigned char annotations_count;
-    aobject ** annotations;
-    property * static_properties;
     iface_implementation * iface_implementations;
     memory_pool * memory_pool;
     aclass *next;
@@ -202,7 +211,7 @@ struct _iface_reference {
 
 struct _class_object_properties {
     nullable_value object_data;
-    #ifdef DEBUG
+    #if defined(DEBUG) || defined(TRACKOBJECTS)
     int object_id;
     #endif
     property * properties;
@@ -220,7 +229,6 @@ struct _aobject {
     int reference_count;
     int property_reference_count;
     bool memory_pooled;
-    weak_reference_node * first_weak_reference_node;
     object_properties object_properties;
     bool marked;
     bool pending_deallocation;
@@ -254,11 +262,6 @@ struct _anonymous_class_state_data {
     nullable_value *state_objects; // to be used by parent function at re-entry
 };
 
-struct _weak_reference_node {
-    weak_reference_node *next;
-    aobject *object;
-};
-
 /*
 aclass Int = {
 	.name = "Int",
@@ -280,23 +283,25 @@ aclass Long = {
 // variables
 extern aobject * __first_object;
 extern aclass * __first_class;
+extern class_static * __first_class_static;
 
 
 // functions
-void __register_class(aclass * const __class);
+void __register_class(class_static * const __class_static);
 void __dereference_static_properties();
-void __dereference_static_properties_for_class(aclass * const __class);
+void __dereference_static_properties_for_class(class_static * const __class_static);
 
 static inline void __decrease_reference_count(aobject * const __obj);
 static inline void __increase_reference_count(aobject * const __obj);
 static inline void __set_property(aobject * const __obj, int const __index, nullable_value __prop_value);
 static inline bool __set_property_safe(aobject * const __obj, int const __index, nullable_value __prop_value);
-static inline void __set_static_property(aclass * const __class, int const __index, nullable_value __prop_value);
+static inline void __set_static_property(class_static * const __class_static, int const __index, nullable_value __prop_value);
 static inline void __decrease_reference_count_nullable_value(nullable_value __value);
 static inline void __increase_reference_count_nullable_value(nullable_value __value);
-static inline void __decrease_property_reference_count(aobject * const __obj);
+void __decrease_property_reference_count(aobject * const __obj);
 static inline void __increase_property_reference_count(aobject * const __obj);
 static inline void __decrease_property_reference_count_nullable_value(nullable_value __value);
+static inline void __increase_property_reference_count_nullable_value(nullable_value __value);
 void __deallocate_object(aobject * const __obj);
 void __detach_object(aobject * const __obj);
 
@@ -322,6 +327,7 @@ static inline bool __is_primitive(const nullable_value nullable_value);
 static inline bool __any_has_flags(const nullable_value *nv, unsigned short flags);
 static inline ctype __value_flags_to_ctype(unsigned char flags);
 bool __any_equals(const nullable_value a, const nullable_value b);
+bool __any_null(const nullable_value a);
 //bool __object_equals(aobject * const a, aobject * const b);
 aobject * __create_string_constant(char const * const str, aclass * const string_class);
 aobject * __create_string(char const * const str, aclass * const string_class);
@@ -330,10 +336,8 @@ aobject * __create_exception(aobject * const message);
 void clear_allocated_objects();
 void print_allocated_objects();
 bool is_descendant_of(aclass const * const cls, aclass const * const base);
-static inline void attach_weak_reference_node(weak_reference_node * const node, aobject * const object);
-static inline void detach_weak_reference_node(weak_reference_node * const node);
 unsigned int __string_hash(const char * const str);
-void deallocate_annotations(aclass * const __class);
+void deallocate_annotations(class_static * const __class_static);
 array_holder * get_array_holder(aobject * const array_obj);
 char * get_array_data(array_holder * holder);
 void create_property_info(const unsigned char index, char * const name, aobject ** property_infos, aclass *cls);
@@ -346,6 +350,25 @@ sweep_result __sweep_object(aobject * const obj);
 sweep_result __detach_object_from_sweep(aobject * const __obj);
 void __deallocate_detached_object(aobject * const __obj);
 static inline void __mark_nullable_value(nullable_value __value);
-void __mark_static_properties(aclass * const __class);
+void __mark_static_properties(class_static * const __class_static);
 void __clear_marks();
+aclass * const get_class_from_any(nullable_value const value);
 
+// aliases for generated code
+#include <Am/Lang/Object.h>
+#include <Am/Lang/ClassRef.h>
+#include <Am/Lang/Exception.h>
+#include <Am/Lang/Annotations/UseMemoryPool.h>
+// typedef Am_Lang_Object_equals_0_T __object_equals_alias;
+#define __object_equals_alias Am_Lang_Object_f_equals_0_T
+#define __object_equals_index Am_Lang_Object_f_equals_0_index
+#define __use_memory_pool_class_alias Am_Lang_Annotations_UseMemoryPool
+#define  __class_ref_class_alias Am_Lang_ClassRef
+#define __string_class_alias Am_Lang_String
+#define __exception_class_alias Am_Lang_Exception
+#define __add_stack_trace_item_function_alias Am_Lang_Exception_f_addStackTraceItem_0
+#define __exception_constructor_alias Am_Lang_Exception_f_Exception_0
+#define __exception_init_instance_function_alias Am_Lang_Exception___init_instance
+#define __property_info_class_alias Am_Lang_PropertyInfo
+#define __property_info_constructor_alias Am_Lang_PropertyInfo_f_PropertyInfo_0
+#define __char_class_alias Am_Lang_Char

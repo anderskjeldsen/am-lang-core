@@ -16,13 +16,20 @@ namespace Am.Collections {
         private var size: Int
         private var bucket: HashMapEntry<K, V>[]
 
+        static fun createWithInitialSize<K, V>(initialSize: Int): HashMap<K, V> {
+            var map = new HashMap<K, V>()
+            map.size = initialSize
+            map.bucket = new HashMapEntry<K, V>[initialSize]
+            return map
+        }
+
         fun getSize(): Int {
             return this.size
         }
 
         fun get(key: K): V {
             if (this.bucket == null) {
-                return false
+                return null
             }
             var hash = key.hash()
             var index = hash % this.bucket.length()

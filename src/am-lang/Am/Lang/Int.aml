@@ -13,6 +13,9 @@ namespace Am.Lang
         native fun toULong(): ULong
         native fun toBool(): Bool
 
+        static const var maxValue: Int = 0x7fffffff
+        static const var minValue: Int = 0x80000000
+
         static fun min(a: Int, b: Int): Int {
             if (a < b) {
                 return a
@@ -25,6 +28,13 @@ namespace Am.Lang
                 return a
             }
             return b
+        }
+
+        fun abs(): Int {
+            if (this < 0) {
+                return -this
+            }
+            return this
         }
 
     }

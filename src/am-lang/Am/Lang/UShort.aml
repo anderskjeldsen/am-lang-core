@@ -13,6 +13,9 @@ namespace Am.Lang
         native fun toULong(): ULong
         native fun toBool(): Bool        
 
+        static const var maxValue: UShort = 0xffffUS
+        static const var minValue: UShort = 0x0000US
+
         static fun min(a: UShort, b: UShort): UShort {
             if (a < b) {
                 return a

@@ -1,7 +1,10 @@
 namespace Am.Examples {    
-    struct MyStruct {
+
+    class TRun : Runnable {
         import Am.Lang
-        var x: Int
+        override fun run() {
+            "hello world".println()
+        }
     }
     
     class CoreStartup {
@@ -10,9 +13,129 @@ namespace Am.Examples {
         import Am.IO
         import Am.IO.Networking
         import Am.Collections
+        import Am.Util.Parsers.Json
+        import Am.Threading
+
+        static var boolValue: Bool = true
+
+        static fun main22() {
+            var i = 0
+            var j = ++i
+            ("Both should be 1: i: " + i.toString() + ", j: " + j.toString()).println()
+        }
+
+        // main21 
+        static fun main21() {
+            var array: String[] = ["Hello", "World"]
+            array[0].println()
+            array[1].println()
+        }
+
+        // main19
+        static fun main19() {
+            var l = List.newList<Int>() 
+            l.add(1)
+            l.add(2)
+
+            "List 1".println()
+            each(l, i) {
+                ("List item: " + i.toString()).println()
+            }
+
+            var first = l.firstOr(3)
+            ("first: " + first.toString()).println()
+
+            var l2 = l.filter((i) => {
+                ("filter " + i.toString()).println()
+                if (i == 1) {
+                    return false
+                }
+                return true
+            })
+
+            "List 2".println()
+            each(l2, i) {
+                ("List item: " + i.toString()).println()
+            }
+
+            // Must be able to resolve U from return type
+/*
+            var l3 = l.map((i) => {
+                return i.toString()
+            })
+            each(l3, i) {
+                ("List item: " + i).println()
+            }
+            */
+
+
+            "done".println()
+        }
+
+
+        // main18
+        static fun main18() {
+            var max = Int.maxValue
+// compile error:            Int.maxValue = max
+            ("max: " + max.toString()).println()
+        }
+
+        // main17
+        static fun main17() {
+            if (!CoreStartup.boolFun()) {
+                "boolFun false".println()
+            } else {
+                "boolFun true".println()
+            }
+        }
+
+        static fun boolFun(): Bool {
+            return CoreStartup.boolValue
+        }
+
+        static fun foo<T>(t: T, predicate: (t: T) => Bool) {
+            predicate(t)
+        }
+
+        // main15
+        static fun main15() {
+            var tp = new TextParser("Hello World")
+            var parsed = tp.parseUntil((c) => {
+                if (c == 0x20) {
+                    return true
+                }
+                return false
+            })
+            ("Parsed " + parsed).println()
+        }
+
+        // main16
+        static fun main16() {
+            var i = 0
+            "main".println()
+            while(i < 100) {
+                i++
+                if (i == 20) {
+                    "break".println()
+                    break
+                }
+            }
+            ("i = " + i.toString()).println()
+        }
+
+        // main14
+        static fun main14() {
+            var c = 'a'
+            var i = c.toInt()
+            ("Char to int: " + i.toString()).println()
+        }
 
         // main13
         static fun main13() {
+            var runnable = new TRun() as Runnable
+            var th = new Thread(runnable)
+            th.start()
+            
             var s = "hello"
             var cr = s.getClassRef()
             ("Getting class name of a string: " + cr.toString()).println()
@@ -26,16 +149,18 @@ namespace Am.Examples {
             ("Getting class name of a file: " + crf.toString()).println()
             var props = crf.getProperties()
             var pi = 0
+            ("prop length: " + props.length().toString()).println()
 
             while(pi < props.length()) {
                 var prop = props[pi]
                 if (prop.getName() == "filename") {
                     try {
                         prop.setValue(file, "newfilename")
-                        prop.setValue(file, 1L)
+//                        prop.setValue(file, 1L)
                     } catch(e: Exception) {
 //                        "Exception".println()
-                        e.toString().println()
+                        e.printWithStackTrace()
+//                        e.toString().println()
                     }                    
                 }
                 var pcr = prop.getPropertyClassRef()
@@ -48,7 +173,11 @@ namespace Am.Examples {
 
             ("new filename: " + file.filename).println()
 
-            var crhm = ClassRef.getClassRef("Am.Collections.HashMap[object_object]")
+            var hm = new HashMap<String, String>()
+            var hmcr = hm.getClassRef()
+            ("Getting class name of a hash map: " + hmcr.toString()).println()
+
+            var crhm = ClassRef.getClassRef("Am.Collections.HashMap_ta_Am.Lang.String_x_Am.Lang.String")
             if (crhm != null) {
                 ("Name of hash map variant class: " + crhm.toString()).println()
             } else {
@@ -153,13 +282,83 @@ namespace Am.Examples {
             }
         }
 
-        static fun main3() {
+        static fun genericTest<T>(t: T): Iterable<T> {
+/*
+            var list = List<T>.newList<T>()
+            t.toString().println()
+            u.toString().println()
+            return u
+            */
+
+/*
+            var list = List<T>.newList<T>()            
+            var filtered = list.filter((s) => {
+                // list needs to casted to Iterator<T>
+                // we forward T to filter<T>
+                if (s == t) {
+                    return false
+                }
+                return true
+            })
+            return filtered
+            */
+            return null
+        }
+
+        // main20
+        static fun main20() {    
+            "String value".println()
+//            var u1 = CoreStartup.genericTest("hello")
+//            var classRef1 = u1.getClassRef()
+//            var className1 = classRef1.getClassName()
+//            ("Class name: " + className1).println()
+//            ("u1: " + u1.toString()).println()
+//            "Int value".println()
+//            var u2 = CoreStartup.genericTest<Int>(1)
+//            var classRef2 = u2.getClassRef()
+//            var className2 = classRef2.getClassName()
+//            ("Class name: " + className2).println()
+//            ("u2: " + u2.toString()).println()
+
             var list = List<String>.newList<String>()
             list.add("hello")
             list.add("world")
+/*
             each(list, i) {
                 i.println()
+                if (i == "world") {
+                    "break".println()
+                    break
+                }
             }
+            */
+
+            /* TODO: Make this work
+            var filtered = list.filter((s) => {
+                if (s == "world") {
+                    ("Filtering: " + s).println()
+                    return true
+                }
+                ("Not Filtering: " + s).println()
+                return false
+            })
+
+            each(filtered, i) {
+                ("Filtered: " + i).println()
+            }
+            */
+
+/*
+            var x: (s: String) => Bool = (s) => {
+                if (s == "world") {
+                    return false
+                }
+                return true
+            }
+            var b = x("hello")
+            */
+
+            "end".println()
         }
 
         static fun main2() {

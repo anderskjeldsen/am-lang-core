@@ -4,7 +4,7 @@ namespace Am.Lang
     class Exception(var message: String) {
         import Am.Collections
 
-        private var stackTrace: List<String> = List<String>.newList<String>()
+        private var stackTrace: List<String> = List.newList<String>()
 
         private fun addStackTraceItem(stackTraceItem: String) {
             this.stackTrace.add(stackTraceItem)
@@ -19,13 +19,11 @@ namespace Am.Lang
         }
 
         fun printWithStackTrace() {
-            this.message.println()
-            var i = 0
-            while(i < this.stackTrace.size) {
-                var s = this.stackTrace.get(i)
-                s.println()
-                i++
+            ("Exception: " + this.message).println()
+            each(this.stackTrace, sti) {
+                sti.println()
             }
+            "End of stacktrace".println()
         }
     }
 

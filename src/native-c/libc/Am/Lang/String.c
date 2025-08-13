@@ -25,16 +25,17 @@ __exit: ;
 function_result Am_Lang_String__native_release_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
-	bool __returning = false;
 
-	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
-	if ( !holder->is_string_constant ) {
+//	bool __returning = false;
+
+//	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+//	if ( !holder->is_string_constant ) {
 //		free(holder->string_value);
-	}
+//	}
 //	free(holder);
-	this->object_properties.class_object_properties.object_data.value.custom_value = NULL;
+//	this->object_properties.class_object_properties.object_data.value.custom_value = NULL;
 
-__exit: ;
+//__exit: ;
 	return __result;
 };
 
@@ -266,7 +267,7 @@ function_result Am_Lang_String_toBytes_0(aobject * const this, aobject * encodin
 		__increase_reference_count(encoding);
 	}
 	string_holder *string_holder = this->object_properties.class_object_properties.object_data.value.custom_value;
-	aobject *array = __create_array(string_holder->length, 1, &Am_Lang_Array_v_uchar, uchar_type);
+	aobject *array = __create_array(string_holder->length, 1, &Am_Lang_Array_ta_Am_Lang_UByte, uchar_type);
 
 	array_holder *a_holder = (array_holder *) &array[1]; // array->object_properties.class_object_properties.object_data.value.custom_value;
 	strcpy(a_holder->array_data, string_holder->string_value);
@@ -283,7 +284,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_Lang_String_characterAt_0(aobject * const this)
+function_result Am_Lang_String_characterAt_0(aobject * const this, unsigned int index)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -292,8 +293,7 @@ function_result Am_Lang_String_characterAt_0(aobject * const this)
 	}
 
 	string_holder *string_holder = this->object_properties.class_object_properties.object_data.value.custom_value;
-//	__result.return_value.value.ushort_value = string_holder->string_value[...]
-
+	__result.return_value.value.ushort_value = string_holder->string_value[index];
 
 __exit: ;
 	if (this != NULL) {

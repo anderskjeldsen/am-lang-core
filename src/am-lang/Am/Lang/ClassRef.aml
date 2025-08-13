@@ -27,6 +27,11 @@ namespace Am.Lang
             return ClassRef.classRefs.get(name)
         }
 
+        static fun getClassRefFromClass<T>(): ClassRef {
+            return ClassRef.classRefs.get(nameof(T))
+        }
+
+
         native static fun getClassRefFromAny(any: Any): ClassRef
 
         static fun registerClassRef(name: String, classRef: ClassRef) {

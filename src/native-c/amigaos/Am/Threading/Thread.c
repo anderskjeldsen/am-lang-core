@@ -103,8 +103,8 @@ void Am_Threading_Thread__InitTask()
 		{
 //			printf("Thread found\n");
 			aobject * runnable = thread->object_properties.class_object_properties.properties[0].nullable_value.value.object_value;
-			Am_Lang_Runnable_run_0_T rFunc = (Am_Lang_Runnable_run_0_T) runnable->class_ptr->functions[3]; // TODO: Create index constants
-			rFunc(runnable);
+			Am_Lang_Runnable_f_run_0_T rFunc = (Am_Lang_Runnable_f_run_0_T) runnable->class_ptr->functions[3]; // TODO: Create index constants
+			rFunc(runnable->object_properties.iface_reference.implementation_object);
 			Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) thread->object_properties.class_object_properties.object_data.value.custom_value;
 			data->done = true;
 		}

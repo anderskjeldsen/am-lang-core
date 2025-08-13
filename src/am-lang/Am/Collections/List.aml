@@ -67,7 +67,7 @@ namespace Am.Collections {
         fun removeAt(index: Int): T {
             var i = index
             var value = this.items[i]
-            this.items[i] = null
+//            this.items[i] = null
             while(i < this.size) {
                 var j = i + 1
                 if (j < this.size) {
@@ -100,6 +100,21 @@ namespace Am.Collections {
             var x = new ListIterator<T>(this)
             var y = x as Iterator<T>
             return y
+        }
+
+        fun clear() {
+            this.size = 0
+        }
+
+        fun contains(item: T): Bool {
+            var i = 0
+            while(i < this.size) {
+                if (this.items[i] == item) {
+                    return true
+                }
+                i++
+            }
+            return false
         }
 
 /*

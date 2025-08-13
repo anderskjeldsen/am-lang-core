@@ -84,7 +84,7 @@ function_result Am_IO_File_listNative_0(aobject * const this, aobject * folderFi
 	}
 	while ((dir = readdir(d)) != NULL) {
 		aobject *filename_str = __create_string(dir->d_name, &Am_Lang_String);
-		Am_Collections_List_add_0_object(list, filename_str);
+		Am_Collections_List_ta_Am_Lang_String_f_add_0(list, filename_str);
 		__decrease_reference_count(filename_str);
 
 //		printf("%s\n", dir->d_name);

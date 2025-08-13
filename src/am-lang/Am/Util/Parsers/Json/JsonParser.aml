@@ -1,0 +1,169 @@
+namespace Am.Util.Parsers.Json {
+
+    class JsonParser(private var parser: TextParser) {
+        import Am.Lang
+
+        private static var leftBrace: UShort = 123US
+        private static var leftBracket: UShort = 91US
+        private static var doubleQuote: UShort = 34US
+        private static var space: UShort = 32US
+        private static var tab: UShort = 9US
+        private static var newLine: UShort = 10US
+        private static var carriageReturn: UShort = 13US
+        // "\\"
+        private static var backslash: UShort = 92US
+
+        private fun skipWhitespace() {
+            this.parser.skipUntil((c) => return (c != 32US) && (c != 9US) && (c != 10US) && (c != 13US))
+        }
+
+        public fun parse(classRef: ClassRef): Any {
+            // '{' ascii value is: 123
+            // '[' ascii value is: 91
+            this.skipWhitespace()
+            var c = this.parser.peekChar()
+            if (c == JsonParser.leftBrace ) { // '{'
+                return this.parseJsonObject(classRef)
+            } else if (c == 91US) {
+                return this.parseJsonArray(classRef)
+            }
+            return null
+        }
+
+        private fun parseString(): String {
+            // check if it starts with a double quote
+            var c = this.parser.peekChar()
+            if (c != 34US) {
+                throw new Exception("Invalid string constant")
+            }
+            this.parser.skip(1UI)
+            var sb: StringBuilder = null
+            var go = true
+            while(go) {
+                // " or \
+                var str = this.parser.parseUntil((cs) => return (cs == 34US) || cs == 92US)
+                var c1 = this.parser.peekChar()
+                if (c1 == JsonParser.backslash) {
+                    var c2 = this.parser.peek(2UI)
+/*
+                    if (c2 == "\\n") {
+                        str = "\n"
+                    } else if (c2 == "t") {
+                        str = "\t"
+                    } else if (c2 == "r") {
+                        str = "\r"
+                    } else if (c2 == "b") {
+                        str = "\b"
+                    } else if (c2 == "f") {
+                        str = "\f"
+                    } else if (c2 == "\"") {
+                        str = "\""
+                    } else if (c2 == "\\") {
+                        str = "\\"
+                    } else if (c2 == "/") {
+                        str = "/"
+                    } else if (c2 == "u") {
+                        // unicode
+                        var hex = this.parser.peek(6)
+                        var code = Integer.parseInt(hex, 16)
+                        str = code.toChar()
+                        this.parser.skip(6)
+                    }
+                    */
+                    if (sb == null) {
+                        sb = new StringBuilder()
+                    }
+                    sb.add(str)
+                    this.parser.skip(1UI)
+                }
+
+                c = this.parser.peekChar()
+                if (c == JsonParser.doubleQuote) {
+                    this.parser.skip(1UI)
+                    go = false
+                }
+//                this.parser.skip(1)
+            }
+//            this.parser.skip(1UI)
+            return ""
+        }
+
+        private fun parseJsonArray(classRef: ClassRef): Object {
+            return null
+            /*
+            this.parser.skip(1)
+            this.skipWhitespace()
+            while (true) {
+                var value = this.parseValue()
+                this.skipWhitespace()
+                var c = this.parser.peek(1)
+                if (c == ",") {
+                    this.parser.skip(1)
+                    this.skipWhitespace()
+                } else if (c == "]") {
+                    this.parser.skip(1)
+                    break
+                }
+            }
+            */
+        }
+
+        private fun parseValue(): Any {
+            var c = this.parser.peekChar()
+            return null
+            /*
+            if (c == 34US) {
+                return this.parseString()
+            } else if (c == 123US) {
+                return this.parseJsonObject(null)
+            } else if (c == 91US) {
+                return this.parseJsonArray(null)
+            } else if (c == 116US) {
+                // true
+                this.parser.skip(4)
+                return true
+            } else if (c == 102US) {
+                // false
+                this.parser.skip(5)
+                return false
+            } else if (c == 110US) {
+                // null
+                this.parser.skip(4)
+                return null
+            } else {
+                // number
+                var str = this.parser.parseUntil((c) => c == 32US || c == 9US || c == 10US || c == 13US || c == 44US || c == 93US || c == 125US)
+                if (str.indexOf(".") != -1) {
+                    return Double.parseDouble(str)
+                } else {
+                    return Integer.parseInt(str)
+                }
+            }
+            */
+        }
+
+        private fun parseJsonObject(classRef: ClassRef): Object {
+            return null
+/*
+            this.parser.skip(1)
+            this.skipWhitespace()
+            while (true) {
+                var key = this.parseString()
+                this.skipWhitespace()
+                this.parser.skip(1)
+                this.skipWhitespace()
+                var value = this.parseValue()
+                this.skipWhitespace()
+                var c = this.parser.peek(1)
+                if (c == ",") {
+                    this.parser.skip(1)
+                    this.skipWhitespace()
+                } else if (c == "}") {
+                    this.parser.skip(1)
+                    break
+                }
+            }
+            */
+        }
+    }
+}

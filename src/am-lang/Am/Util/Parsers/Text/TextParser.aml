@@ -1,0 +1,49 @@
+namespace Am.Util.Parsers.Text {
+
+    class TextParser(private var string: String) {
+        import Am.Lang
+
+        private var index: Int
+        private var sb: StringBuilder = new StringBuilder()
+
+        fun parseUntil(predicate: (c: UShort) => Bool) : String {
+            this.sb.clear()
+            while(this.index < this.string.getLength()) {
+                var c = this.string.characterAt(this.index.toUInt())
+                if (!(predicate(c))) {
+                    this.sb.addChar(c)
+                    this.index++
+                } else {
+                    // TODO: implement "break"
+                    this.index = this.string.getLength()
+                }
+            }
+            return this.sb.toString()
+        }
+
+        fun skipUntil(predicate: (c: UShort) => Bool): Bool {
+            while(this.index < this.string.getLength()) {
+                var c = this.string.characterAt(this.index.toUInt())
+                if (!(predicate(c))) {
+                    this.index++
+                } else {
+                    return true
+                }
+            }
+            return false
+        }
+
+        fun peek(len: UInt) : String {
+            return this.string.substring(this.index.toUInt(), len)
+        }
+
+        fun peekChar() : UShort {
+            return this.string.characterAt(this.index.toUInt())
+        }
+
+        fun skip(len: UInt) {
+            this.index += len.toInt()
+        }
+
+    }
+}

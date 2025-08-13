@@ -23,8 +23,8 @@ namespace Am.IO
         }
 
         fun list(): String[] {
-            var l = List<String>.newList<String>()
-            var l2 = List<String>.newList<String>()
+            var l = List.newList<String>()
+            var l2 = List.newList<String>()
             this.listNative(this.filename, l)
             var endsWithColon = (this.filename.endsWith(":"))
             var endsWithSlash = (this.filename.endsWith("/"))

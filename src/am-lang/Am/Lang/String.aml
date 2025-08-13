@@ -2,6 +2,8 @@
 namespace Am.Lang 
 {
     native class String {
+        import Am.Collections
+
         override native fun hash(): UInt
         override fun toString(): String {
             return this
@@ -12,13 +14,34 @@ namespace Am.Lang
         native op + (s: String): String
         native static fun fromBytes(bytes: UByte[], encoding: String): String
         native fun toBytes(encoding: String): UByte[]
-        native fun characterAt: Short
+        native fun characterAt(index: UInt): UShort
         native fun indexOf(s: String): Int
         native fun lastIndexOf(s: String): Int
         native fun substring(start: UInt, end: UInt): String
 
         fun endsWith(s: String): Bool {
             return this.lastIndexOf(s) == (this.getLength() - s.getLength()).toUInt()
+        }
+
+        fun split(character: UShort): String[] {
+            var result = List<String>.newList<String>()
+            var sb = new StringBuilder()
+            var len = this.getLength()
+            var i = 0UI
+            while(i < len) {
+                var c = this.characterAt(i)
+                if (c == character) {
+                    result.add(sb.toString())
+                    sb.clear()
+                } else {
+                    sb.addChar(c)
+                }
+                i++
+            }
+            if (sb.getLength() > 0) {
+                result.add(sb.toString())
+            }
+            return result.toArray()
         }
 
         fun println() {
