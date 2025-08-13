@@ -1,4 +1,4 @@
-namespace Am.Util.Parsers.Json {
+namespace Am.Util.Parsers.Text {
 
     class TextParser(private var string: String) {
         import Am.Lang
