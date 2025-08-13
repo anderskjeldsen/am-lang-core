@@ -78,13 +78,13 @@ namespace Am.Util.Parsers.Json {
                 }
 
                 c = this.parser.peekChar()
-                if (c == 34US) {
+                if (c == JsonParser.doubleQuote) {
                     this.parser.skip(1UI)
                     go = false
                 }
 //                this.parser.skip(1)
             }
-            this.parser.skip(1UI)
+//            this.parser.skip(1UI)
             return ""
         }
 
