@@ -35,7 +35,7 @@ namespace Am.Lang
                 return -this
             }
             return this
-        }s
+        }
 
     }
 }
