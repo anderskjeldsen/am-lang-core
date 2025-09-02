@@ -1,0 +1,6 @@
+namespace Am.Util {
+    native class Random {
+        import Am.Lang
+        native static fun randomInt(max: Int): Int
+    }
+}
