@@ -19,6 +19,63 @@ namespace Am.Examples {
 
         static var boolValue: Bool = true
 
+        /*
+        static fun main() {
+// For loop with continue
+            for (i = 0 to 10) {
+                if (i == 5) {
+                    continue  // Skip when i equals 5
+                }
+                i.toString().println()
+            }
+
+            // While loop with continue  
+            var j = 0
+            while (j < 10) {
+                j++
+                if (j % 2 == 0) {
+                    continue  // Skip even numbers
+                }
+                j.toString().println()
+            }
+
+            // Each loop with continue
+            var myArray = List.newList<Int>()
+            myArray.add(1)
+            myArray.add(-2)
+            myArray.add(3)
+            myArray.add(-4)
+            myArray.add(5)
+            each(myArray, item) {
+                if (item < 0) {
+                    continue  // Skip negative values
+                }
+                item.toString().println()
+            }        
+        }
+*/
+
+
+        // main24
+        static fun main() {
+            var x = 5
+            var b = 10
+            var s = "x = $x, b = ${b}"
+            s.println()
+        }
+
+        // main23
+        static fun main23() {
+            for(i = 0 to 10) {
+                ("i: " + i.toString()).println()
+                if (i == 5) {
+                    "break".println()
+                    break
+                }
+            }
+        }
+
+        // main22
         static fun main22() {
             var i = 0
             var j = ++i
