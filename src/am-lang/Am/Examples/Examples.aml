@@ -6,7 +6,26 @@ namespace Am.Examples {
             "hello world".println()
         }
     }
-    
+
+    /*
+    class FS() {
+        import Am.Lang
+        fun read(): Int {
+            return 0
+        }
+    }
+
+    class BS(private var fs: FS) {
+        import Am.Lang
+        fun read(): Int {
+            return this.fs.read() + 1
+        }
+
+        friend fun asBS(that: FS): BS {
+            return new BS(that)
+        }
+    }
+  */
     class CoreStartup {
         import Am.Lang
         import Am.Lang.Diagnostics
@@ -18,6 +37,16 @@ namespace Am.Examples {
         import Am.Threading
 
         static var boolValue: Bool = true
+
+        static var strValue: String = "hello"
+
+            /*
+        static fun main() {
+            var bs = new FS().asBS()
+            bs.read().toString().println()
+        }
+            */
+
 
         /*
         static fun main() {
@@ -55,9 +84,13 @@ namespace Am.Examples {
         }
 */
 
+        // main25
+        static fun main25() {            
+            CoreStartup.strValue.println()
+        }
 
         // main24
-        static fun main() {
+        static fun main24() {
             var x = 5
             var b = 10
             var s = "x = $x, b = ${b}"
