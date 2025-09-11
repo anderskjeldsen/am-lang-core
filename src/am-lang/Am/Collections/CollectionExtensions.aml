@@ -38,5 +38,9 @@ namespace Am.Collections {
             return result
         }
 
+        ext fun asIterable<T>(array: Array<T>): ArrayIterable<T> {
+            return new ArrayIterable<T>(array)
+        }
+
     }
 }

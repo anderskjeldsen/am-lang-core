@@ -1,0 +1,16 @@
+namespace Am.Collections {
+    class ArrayIterator<T>(private var array: Array<T>) : Iterator<T> {
+        import Am.Lang
+        private var index: Int = 0
+
+        fun hasNext(): Bool {
+            return this.index < this.array.length()
+        }
+
+        fun next(): T {
+            var t = this.array[this.index]
+            this.index++
+            return t
+        }
+    }
+}

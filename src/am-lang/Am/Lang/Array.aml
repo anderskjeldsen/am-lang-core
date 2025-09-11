@@ -9,6 +9,7 @@ namespace Am.Lang
     native class Array<T>()
     {
         import Am.Lang
+        import Am.Collections
         native fun length(): UInt
 
         fun subArray(offset: UInt, length: UInt): T[] {
