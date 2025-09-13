@@ -353,6 +353,7 @@ static inline void __mark_nullable_value(nullable_value __value);
 void __mark_static_properties(class_static * const __class_static);
 void __clear_marks();
 aclass * const get_class_from_any(nullable_value const value);
+aobject * __concatenate_strings(int count, ...);
 
 // aliases for generated code
 #include <Am/Lang/Object.h>

@@ -1,6 +1,7 @@
 // #include <stdlib.h>
 #include <libc/core.h>
 #include <string.h>
+#include <stdarg.h> 
 #include <Am/Lang/Exception.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/Annotations/UseMemoryPool.h>
@@ -1013,3 +1014,64 @@ aclass * const get_class_from_any(nullable_value const value) {
         */
 }
 
+aobject * __concatenate_strings(int count, ...) {
+    va_list args;
+    va_list args_copy;
+    size_t total_length;
+    aobject* result_obj;
+    string_holder* result_holder;
+    char* result_str;
+    int i;
+    
+    va_start(args, count);
+    
+    /* Calculate total length needed */
+    total_length = 0;
+    va_copy(args_copy, args);
+    
+    for (i = 0; i < count; i++) {
+        aobject* str_obj = va_arg(args_copy, aobject*);
+        if (str_obj != NULL) {
+            string_holder* holder = (string_holder*)str_obj->object_properties.class_object_properties.object_data.value.custom_value;
+            if (holder != NULL) {
+                total_length += holder->length;
+            }
+        }
+    }
+    va_end(args_copy);
+    
+    /* Allocate new string object with extra space for the concatenated string */
+    result_obj = __allocate_object_with_extra_size(&__string_class_alias, sizeof(string_holder) + total_length + 1);
+    if (result_obj == NULL) {
+        va_end(args);
+        return NULL;
+    }
+    
+    /* Set up the string holder */
+    result_holder = (string_holder*)(result_obj + 1);
+    result_str = (char*)(result_holder + 1);
+    result_obj->object_properties.class_object_properties.object_data.value.custom_value = result_holder;
+    
+    /* Initialize the result string buffer */
+    result_str[0] = '\0';
+    
+    /* Concatenate all strings */
+    for (i = 0; i < count; i++) {
+        aobject* str_obj = va_arg(args, aobject*);
+        if (str_obj != NULL) {
+            string_holder* holder = (string_holder*)str_obj->object_properties.class_object_properties.object_data.value.custom_value;
+            if (holder != NULL && holder->string_value != NULL) {
+                strcat(result_str, holder->string_value);
+            }
+        }
+    }
+    va_end(args);
+    
+    /* Set up the string holder fields */
+    result_holder->is_string_constant = 0; /* false */
+    result_holder->length = total_length;
+    result_holder->string_value = result_str;
+    result_holder->hash = __string_hash(result_str);
+    
+    return result_obj;
+}
