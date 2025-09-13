@@ -7,25 +7,6 @@ namespace Am.Examples {
         }
     }
 
-    /*
-    class FS() {
-        import Am.Lang
-        fun read(): Int {
-            return 0
-        }
-    }
-
-    class BS(private var fs: FS) {
-        import Am.Lang
-        fun read(): Int {
-            return this.fs.read() + 1
-        }
-
-        friend fun asBS(that: FS): BS {
-            return new BS(that)
-        }
-    }
-  */
     class CoreStartup {
         import Am.Lang
         import Am.Lang.Diagnostics
