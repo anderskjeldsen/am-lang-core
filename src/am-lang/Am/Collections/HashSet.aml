@@ -182,7 +182,7 @@ namespace Am.Collections {
             var bucketIndex = 0
             while(bucketIndex < this.bucketSize && arrIndex < this.size) {
                 var valueIndex = this.valueIndexes[bucketIndex] - 1
-                while(valueIndex > -1 && arrIndex < this.size) {
+                while((valueIndex > -1) && (arrIndex < this.size)) {
                     arr[arrIndex] = this.values[valueIndex]
                     arrIndex++
                     valueIndex = this.nextIndexes[valueIndex] - 1
