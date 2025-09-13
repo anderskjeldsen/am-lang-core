@@ -21,16 +21,8 @@ namespace Am.Examples {
 
         static var strValue: String = "hello"
 
-            /*
-        static fun main() {
-            var bs = new FS().asBS()
-            bs.read().toString().println()
-        }
-            */
-
-
-        /*
-        static fun main() {
+        // main27
+        static fun main27() {
 // For loop with continue
             for (i = 0 to 10) {
                 if (i == 5) {
@@ -63,7 +55,6 @@ namespace Am.Examples {
                 item.toString().println()
             }        
         }
-*/
 
         // main26
         static fun main26() {
