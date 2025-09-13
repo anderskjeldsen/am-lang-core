@@ -10,5 +10,6 @@ namespace Am.Collections {
         fun clear()
         fun contains(item: T): Bool
         fun toArray(): T[]
+        fun isEmpty(): Bool
     }
 }

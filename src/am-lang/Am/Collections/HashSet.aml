@@ -16,7 +16,6 @@ namespace Am.Collections {
         }
 
         fun has(value: T): Bool {
-            "has value".println()
             if (this.bucket == null) {
                 return false
             }
@@ -125,6 +124,10 @@ namespace Am.Collections {
 
         fun contains(value: T): Bool {
             return this.has(value)
+        }
+
+        fun isEmpty(): Bool {
+            return this.size == 0
         }
 
         fun remove(value: T): Bool {

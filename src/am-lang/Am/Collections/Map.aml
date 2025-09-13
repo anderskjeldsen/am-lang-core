@@ -15,5 +15,6 @@ namespace Am.Collections {
         fun clear()
         fun containsKey(key: T): Bool
         fun containsValue(value: U): Bool
+        fun isEmpty(): Bool
     }
 }

@@ -135,6 +135,10 @@ namespace Am.Collections {
         fun containsValue(value: V): Bool {
             return false
         }
+
+        fun isEmpty(): Bool {
+            return this.size == 0
+        }
     }
 
     class HashMap<K, V>: Map<K, V> {
@@ -350,6 +354,10 @@ namespace Am.Collections {
                 i++
             }
             return false
+        }
+
+        fun isEmpty(): Bool {
+            return this.size == 0
         }
     }
 }

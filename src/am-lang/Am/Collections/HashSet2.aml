@@ -16,7 +16,6 @@ namespace Am.Collections {
         }
 
         fun has(value: T): Bool {
-            "has value".println()
             if (this.valueIndexes == null) {
                 return false
             }
@@ -107,6 +106,10 @@ namespace Am.Collections {
             return this.has(value)
         }
 
+        fun isEmpty(): Bool {
+            return this.size == 0
+        }
+
         fun remove(value: T): Bool {
             if (this.valueIndexes == null) {
                 return false
@@ -174,15 +177,17 @@ namespace Am.Collections {
             }
             var arr = new T[this.size]
             var arrIndex = 0
-            var i = 0
-            while(i < this.currentValueIndex && arrIndex < this.size) {
-                // Check if this value is still valid (not removed)
-                var value = this.values[i]
-                if (this.has(value)) {
-                    arr[arrIndex] = value
+            
+            // Iterate through all bucket indices
+            var bucketIndex = 0
+            while(bucketIndex < this.bucketSize && arrIndex < this.size) {
+                var valueIndex = this.valueIndexes[bucketIndex] - 1
+                while(valueIndex > -1 && arrIndex < this.size) {
+                    arr[arrIndex] = this.values[valueIndex]
                     arrIndex++
+                    valueIndex = this.nextIndexes[valueIndex] - 1
                 }
-                i++
+                bucketIndex++
             }
             return arr
         }
