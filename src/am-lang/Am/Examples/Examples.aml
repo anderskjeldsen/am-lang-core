@@ -196,7 +196,7 @@ namespace Am.Examples {
 
         // main10
         static fun main10() {
-            var set = new HashSet2<Int>()
+            var set = new HashSet<Int>()
             var startDate = Date.now()
             var i = 1
             var max = 100000000
@@ -222,7 +222,7 @@ namespace Am.Examples {
         }
 
         static fun main11() {
-            var set = new HashSet2<String>()
+            var set = new HashSet<String>()
             var startDate = Date.now()
             var i = 1
             var max = 10000000

@@ -10,14 +10,14 @@ namespace Am.Collections {
         }
     }
 
-    class HashMap<K, V>: Map<K, V> {
+    class HashMap_old<K, V>: Map<K, V> {
         import Am.Lang
 
         private var size: Int
         private var bucket: HashMapEntry<K, V>[]
 
-        static fun createWithInitialSize<K, V>(initialSize: Int): HashMap<K, V> {
-            var map = new HashMap<K, V>()
+        static fun createWithInitialSize<K, V>(initialSize: Int): HashMap_old<K, V> {
+            var map = new HashMap_old<K, V>()
             map.size = initialSize
             map.bucket = new HashMapEntry<K, V>[initialSize]
             return map
@@ -119,6 +119,237 @@ namespace Am.Collections {
                 }
             }
 
+        }
+
+        fun remove(key: K): V {
+            return null
+        }
+
+        fun clear() {
+        }
+
+        fun containsKey(key: K): Bool {
+            return false
+        }
+
+        fun containsValue(value: V): Bool {
+            return false
+        }
+    }
+
+    class HashMap<K, V>: Map<K, V> {
+        import Am.Lang
+
+        private var size: Int
+        private var currentEntryIndex: Int
+        private var nextIndexes: Int[]
+        private var keyIndexes: Int[]
+        private var keys: K[]
+        private var values: V[] 
+        private var bucketSize: Int
+        private var currentIndex: Int
+
+        static fun createWithInitialSize<K, V>(initialSize: Int): HashMap<K, V> {
+            var map = new HashMap<K, V>()
+            map.bucketSize = initialSize
+            map.currentIndex = initialSize
+            map.nextIndexes = new Int[initialSize]
+            map.keys = new K[initialSize]
+            map.values = new V[initialSize]
+            map.keyIndexes = new Int[initialSize * 2]
+            return map
+        }
+
+        fun getSize(): Int {
+            return this.size
+        }
+
+        fun get(key: K): V {
+            if (this.keyIndexes == null) {
+                return null
+            }
+            var hash = key.hash()
+            var index = hash % this.bucketSize
+            var keyIndex = this.keyIndexes[index] - 1
+            var entryIndex = this.findEntry(keyIndex, key)
+            if (entryIndex >= 0) {
+                return this.values[entryIndex]
+            }
+            return null
+        }
+
+        private fun findEntry(keyIndex: Int, key: K): Int {
+            while(keyIndex > -1) {
+                var key2 = this.keys[keyIndex]
+                if (key2 == key) {
+                    return keyIndex
+                }
+                keyIndex = this.nextIndexes[keyIndex] - 1                
+            }
+            return -1
+        }
+
+        fun set(key: K, value: V) {
+            if (this.nextIndexes == null) {
+                this.bucketSize = 100
+                this.nextIndexes = new Int[this.bucketSize]
+                this.keys = new K[this.bucketSize]
+                this.values = new V[this.bucketSize]
+                this.keyIndexes = new Int[this.bucketSize * 2]
+                this.currentIndex = this.bucketSize
+            }
+
+            if ( this.size * 4 >= this.bucketSize * 2 || this.currentIndex >= (this.bucketSize * 2) ) {
+                var entryLastIndex = this.currentEntryIndex
+                var oldKeys = this.keys
+                var oldValues = this.values
+                var newBucketSize = this.bucketSize * 10
+                this.bucketSize = newBucketSize
+                this.currentIndex = newBucketSize
+                this.currentEntryIndex = 0
+                this.size = 0
+
+                this.nextIndexes = new Int[newBucketSize]
+                this.keys = new K[newBucketSize]
+                this.values = new V[newBucketSize]
+                this.keyIndexes = new Int[newBucketSize * 2]
+                ("create new bucket in HashMap: " + this.bucketSize.toString() + ", copy " + entryLastIndex.toString() + " items").println()
+
+                var i = 0
+                while(i < entryLastIndex) {
+                    var oldKey = oldKeys[i]
+                    var oldValue = oldValues[i]
+                    this.privateSetKeyValue(oldKey, oldValue)
+                    i++
+                }       
+            }
+
+            this.privateSetKeyValue(key, value)
+        }
+
+        private fun privateSetKeyValue(key: K, value: V) {
+            var hash = key.hash()
+            var index = hash % this.bucketSize
+
+            // Check if key already exists
+            var keyIndex = this.keyIndexes[index] - 1
+            var existingIndex = this.findEntry(keyIndex, key)
+            if (existingIndex >= 0) {
+                // Update existing value
+                this.values[existingIndex] = value
+                return
+            }
+
+            this.keys[this.currentEntryIndex] = key
+            this.values[this.currentEntryIndex] = value
+
+            keyIndex = this.keyIndexes[index] - 1 // index of keys and next arrays
+
+            if (keyIndex < 0) {
+                this.keyIndexes[index] = this.currentEntryIndex + 1 // cause all are initially set to 0, then a real 0 will be 1
+                this.nextIndexes[this.currentEntryIndex] = 0
+                this.size++            
+            } 
+            else {        
+                this.keyIndexes[index] = this.currentEntryIndex + 1
+                this.nextIndexes[this.currentEntryIndex] = keyIndex + 1 // old value
+                this.currentIndex++
+                this.size++
+            }
+            this.currentEntryIndex++
+        }
+
+        fun remove(key: K): V {
+            if (this.keyIndexes == null) {
+                return null
+            }
+            var hash = key.hash()
+            var index = hash % this.bucketSize
+            var keyIndex = this.keyIndexes[index] - 1
+            
+            if (keyIndex < 0) {
+                return null
+            }
+            
+            // Check if it's the first item in the chain
+            var firstKey = this.keys[keyIndex]
+            if (firstKey == key) {
+                var oldValue = this.values[keyIndex]
+                // Remove first item - update bucket to point to next
+                var nextIndex = this.nextIndexes[keyIndex] - 1
+                if (nextIndex >= 0) {
+                    this.keyIndexes[index] = nextIndex + 1
+                } else {
+                    this.keyIndexes[index] = 0
+                }
+                this.size--
+                return oldValue
+            }
+            
+            // Look for item in the chain
+            var previousIndex = keyIndex
+            keyIndex = this.nextIndexes[keyIndex] - 1
+            while(keyIndex > -1) {
+                var key2 = this.keys[keyIndex]
+                if (key2 == key) {
+                    var oldValue = this.values[keyIndex]
+                    // Remove item by updating previous to point to next
+                    var nextIndex = this.nextIndexes[keyIndex] - 1
+                    if (nextIndex >= 0) {
+                        this.nextIndexes[previousIndex] = nextIndex + 1
+                    } else {
+                        this.nextIndexes[previousIndex] = 0
+                    }
+                    this.size--
+                    return oldValue
+                }
+                previousIndex = keyIndex
+                keyIndex = this.nextIndexes[keyIndex] - 1
+            }
+            return null
+        }
+
+        fun clear() {
+            this.size = 0
+            this.currentEntryIndex = 0
+            this.currentIndex = this.bucketSize
+            if (this.keyIndexes != null) {
+                var i = 0
+                while(i < this.keyIndexes.length()) {
+                    this.keyIndexes[i] = 0
+                    i++
+                }
+            }
+        }
+
+        fun containsKey(key: K): Bool {
+            if (this.keyIndexes == null) {
+                return false
+            }
+            var hash = key.hash()
+            var index = hash % this.bucketSize
+            var keyIndex = this.keyIndexes[index] - 1
+            var entryIndex = this.findEntry(keyIndex, key)
+            return entryIndex >= 0
+        }
+
+        fun containsValue(value: V): Bool {
+            if (this.values == null) {
+                return false
+            }
+            var i = 0
+            while(i < this.currentEntryIndex) {
+                var value2 = this.values[i]
+                if (value2 == value) {
+                    // Verify this entry is still valid by checking if its key exists
+                    var key = this.keys[i]
+                    if (this.containsKey(key)) {
+                        return true
+                    }
+                }
+                i++
+            }
+            return false
         }
     }
 }

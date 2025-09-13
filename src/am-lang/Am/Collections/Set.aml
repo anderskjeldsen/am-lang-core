@@ -6,5 +6,9 @@ namespace Am.Collections {
         fun getSize(): Int
         fun has(item: T): Bool
         fun add(item: T)
+        fun remove(item: T): Bool
+        fun clear()
+        fun contains(item: T): Bool
+        fun toArray(): T[]
     }
 }

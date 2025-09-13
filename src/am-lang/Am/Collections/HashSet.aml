@@ -5,7 +5,7 @@ namespace Am.Collections {
         var next: HashSetEntry<T>
     }
 
-    class HashSet<T>: Set<T> {
+    class HashSet_old<T>: Set<T> {
         import Am.Lang
 
         private var size: Int
@@ -121,6 +121,73 @@ namespace Am.Collections {
                 }
             }
 
+        }
+
+        fun contains(value: T): Bool {
+            return this.has(value)
+        }
+
+        fun remove(value: T): Bool {
+            if (this.bucket == null) {
+                return false
+            }
+            var hash = value.hash()
+            var index = hash % this.bucket.length()
+            var entry = this.bucket[index]
+            
+            if (entry == null) {
+                return false
+            }
+            
+            // Check if it's the first entry
+            if (entry.value == value) {
+                this.bucket[index] = entry.next
+                this.size--
+                return true
+            }
+            
+            // Look for the entry in the chain
+            while (entry.next != null) {
+                if (entry.next.value == value) {
+                    entry.next = entry.next.next
+                    this.size--
+                    return true
+                }
+                entry = entry.next
+            }
+            return false
+        }
+
+        fun clear() {
+            this.size = 0
+            if (this.bucket != null) {
+                var i = 0
+                while(i < this.bucket.length()) {
+                    this.bucket[i] = null
+                    i++
+                }
+            }
+        }
+
+        fun toArray(): T[] {
+            if (this.size == 0) {
+                return new T[0]
+            }
+            var arr = new T[this.size]
+            var arrIndex = 0
+            if (this.bucket != null) {
+                var i = 0
+                while(i < this.bucket.length() && arrIndex < this.size) {
+                    var entry = this.bucket[i]
+                    while(entry != null && arrIndex < this.size) {
+                        arr[arrIndex] = entry.value
+                        arrIndex++
+                        entry = entry.next
+                    }
+                    i++
+                }
+            }
+            return arr
         }
     }
 }

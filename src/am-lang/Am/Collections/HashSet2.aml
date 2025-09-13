@@ -1,6 +1,6 @@
 namespace Am.Collections {
 
-    class HashSet2<T>: Set<T> {
+    class HashSet<T>: Set<T> {
         import Am.Lang
 
         private var size: Int
@@ -102,6 +102,89 @@ namespace Am.Collections {
                 this.size++
             }
             this.currentValueIndex++
+        }
+        fun contains(value: T): Bool {
+            return this.has(value)
+        }
+
+        fun remove(value: T): Bool {
+            if (this.valueIndexes == null) {
+                return false
+            }
+            var hash = value.hash()
+            var index = hash % this.bucketSize
+            var valueIndex = this.valueIndexes[index] - 1
+            
+            if (valueIndex < 0) {
+                return false
+            }
+            
+            // Check if it's the first item in the chain
+            var firstValue = this.values[valueIndex]
+            if (firstValue == value) {
+                // Remove first item - update bucket to point to next
+                var nextIndex = this.nextIndexes[valueIndex] - 1
+                if (nextIndex >= 0) {
+                    this.valueIndexes[index] = nextIndex + 1
+                } else {
+                    this.valueIndexes[index] = 0
+                }
+                this.size--
+                return true
+            }
+            
+            // Look for item in the chain
+            var previousIndex = valueIndex
+            valueIndex = this.nextIndexes[valueIndex] - 1
+            while(valueIndex > -1) {
+                var value2 = this.values[valueIndex]
+                if (value2 == value) {
+                    // Remove item by updating previous to point to next
+                    var nextIndex = this.nextIndexes[valueIndex] - 1
+                    if (nextIndex >= 0) {
+                        this.nextIndexes[previousIndex] = nextIndex + 1
+                    } else {
+                        this.nextIndexes[previousIndex] = 0
+                    }
+                    this.size--
+                    return true
+                }
+                previousIndex = valueIndex
+                valueIndex = this.nextIndexes[valueIndex] - 1
+            }
+            return false
+        }
+
+        fun clear() {
+            this.size = 0
+            this.currentValueIndex = 0
+            this.currentIndex = this.bucketSize
+            if (this.valueIndexes != null) {
+                var i = 0
+                while(i < this.valueIndexes.length()) {
+                    this.valueIndexes[i] = 0
+                    i++
+                }
+            }
+        }
+
+        fun toArray(): T[] {
+            if (this.size == 0) {
+                return new T[0]
+            }
+            var arr = new T[this.size]
+            var arrIndex = 0
+            var i = 0
+            while(i < this.currentValueIndex && arrIndex < this.size) {
+                // Check if this value is still valid (not removed)
+                var value = this.values[i]
+                if (this.has(value)) {
+                    arr[arrIndex] = value
+                    arrIndex++
+                }
+                i++
+            }
+            return arr
         }
     }
 }

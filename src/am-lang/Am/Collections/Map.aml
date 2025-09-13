@@ -11,5 +11,9 @@ namespace Am.Collections {
         fun getSize(): Int
         fun get(key: T): U
         fun set(key: T, value: U)
+        fun remove(key: T): U
+        fun clear()
+        fun containsKey(key: T): Bool
+        fun containsValue(value: U): Bool
     }
 }
