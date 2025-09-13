@@ -84,6 +84,19 @@ namespace Am.Examples {
         }
 */
 
+        // main26
+        static fun main26() {
+            "init array".println()
+            var myArray: Int[] = [1, 2, 3, 4, 5]
+            "as iterable".println()
+            var ac = myArray.asIterable()
+            "each...".println()
+            each(ac, item) {
+                item.toString().println()
+            }
+            "done".println()
+        }
+
         // main25
         static fun main25() {            
             CoreStartup.strValue.println()
