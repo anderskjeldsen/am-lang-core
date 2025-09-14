@@ -475,5 +475,106 @@ namespace Am.Examples {
         }
 */
 
+        // TreeSet example with custom comparator
+        static fun main() {
+            "Testing TreeSet with custom comparator".println()
+            
+            // Create a comparator for integers (ascending order)
+            var intComparator = new IntComparator()
+            var treeSet = new TreeSet<Int>(intComparator)
+            
+            // Add some numbers in random order
+            treeSet.add(5)
+            treeSet.add(2)
+            treeSet.add(8)
+            treeSet.add(1)
+            treeSet.add(9)
+            treeSet.add(3)
+            
+            ("TreeSet size: " + treeSet.getSize().toString()).println()
+            
+            // Check if elements exist
+            ("Contains 5: " + treeSet.has(5).toString()).println()
+            ("Contains 10: " + treeSet.has(10).toString()).println()
+            
+            // Get sorted list
+            var sortedList = treeSet.toList()
+            "Sorted elements: ".println()
+            var i = 0
+            while (i < sortedList.getSize()) {
+                sortedList.get(i).toString().println()
+                i++
+            }
+            
+            // Test with string comparator (reverse order)
+            "Testing TreeSet with String comparator (reverse order)".println()
+            var stringComparator = new ReverseStringComparator()
+            var stringTreeSet = new TreeSet<String>(stringComparator)
+            
+            stringTreeSet.add("apple")
+            stringTreeSet.add("banana")
+            stringTreeSet.add("cherry")
+            stringTreeSet.add("date")
+            
+            var sortedStrings = stringTreeSet.toList()
+            "Reverse sorted strings: ".println()
+            var j = 0
+            while (j < sortedStrings.getSize()) {
+                sortedStrings.get(j).println()
+                j++
+            }
+        }
+
+    }
+
+    // Integer comparator for ascending order
+    class IntComparator: Comparator<Int> {
+        import Am.Lang
+        
+        override fun compare(a: Int, b: Int): Int {
+            if (a < b) {
+                return -1
+            } else if (a > b) {
+                return 1
+            } else {
+                return 0
+            }
+        }
+    }
+
+    // String comparator for reverse (descending) order
+    class ReverseStringComparator: Comparator<String> {
+        import Am.Lang
+        
+        override fun compare(a: String, b: String): Int {
+            // Basic string comparison - compare character by character
+            var lenA = a.getLength()
+            var lenB = b.getLength()
+            var minLen = lenA
+            if (lenB < lenA) {
+                minLen = lenB
+            }
+            
+            var i = 0
+            while (i < minLen) {
+                var charA = a.characterAt(i.toUInt())
+                var charB = b.characterAt(i.toUInt())
+                if (charA < charB) {
+                    return 1  // Reverse order: return positive if a < b
+                } else if (charA > charB) {
+                    return -1  // Reverse order: return negative if a > b
+                }
+                i++
+            }
+            
+            // If all compared characters are equal, compare lengths (reverse order)
+            if (lenA < lenB) {
+                return 1
+            } else if (lenA > lenB) {
+                return -1
+            } else {
+                return 0
+            }
+        }
     }
 }

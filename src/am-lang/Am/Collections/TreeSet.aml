@@ -1,0 +1,168 @@
+namespace Am.Collections {
+    import Am.Lang
+
+    class TreeSet<T>: Set<T> {
+        private var root: TreeNode<T>
+        private var comparator: Comparator<T>
+        private var size: Int = 0
+
+        constructor(comparator: Comparator<T>) {
+            this.comparator = comparator
+        }
+
+        fun getSize(): Int {
+            return this.size
+        }
+
+        fun has(item: T): Bool {
+            return this.findNode(this.root, item) != null
+        }
+
+        fun add(item: T) {
+            if (this.root == null) {
+                this.root = new TreeNode<T>(item)
+                this.size++
+            } else {
+                if (this.insertNode(this.root, item)) {
+                    this.size++
+                }
+            }
+        }
+
+        private fun findNode(node: TreeNode<T>, item: T): TreeNode<T> {
+            if (node == null) {
+                return null
+            }
+            
+            var compareResult = this.comparator.compare(item, node.value)
+            if (compareResult == 0) {
+                return node
+            } else if (compareResult < 0) {
+                return this.findNode(node.left, item)
+            } else {
+                return this.findNode(node.right, item)
+            }
+        }
+
+        private fun insertNode(node: TreeNode<T>, item: T): Bool {
+            var compareResult = this.comparator.compare(item, node.value)
+            
+            if (compareResult == 0) {
+                // Item already exists, don't add duplicate
+                return false
+            } else if (compareResult < 0) {
+                if (node.left == null) {
+                    node.left = new TreeNode<T>(item)
+                    return true
+                } else {
+                    return this.insertNode(node.left, item)
+                }
+            } else {
+                if (node.right == null) {
+                    node.right = new TreeNode<T>(item)
+                    return true
+                } else {
+                    return this.insertNode(node.right, item)
+                }
+            }
+        }
+
+        fun remove(item: T): Bool {
+            if (this.root == null) {
+                return false
+            }
+            
+            var result = this.removeNode(this.root, item)
+            if (result.removed) {
+                this.root = result.node
+                this.size--
+                return true
+            }
+            return false
+        }
+
+        private fun removeNode(node: TreeNode<T>, item: T): RemoveResult<T> {
+            if (node == null) {
+                return new RemoveResult<T>(null, false)
+            }
+
+            var compareResult = this.comparator.compare(item, node.value)
+            
+            if (compareResult < 0) {
+                var result = this.removeNode(node.left, item)
+                node.left = result.node
+                return new RemoveResult<T>(node, result.removed)
+            } else if (compareResult > 0) {
+                var result = this.removeNode(node.right, item)
+                node.right = result.node
+                return new RemoveResult<T>(node, result.removed)
+            } else {
+                // Found the node to remove
+                if (node.left == null && node.right == null) {
+                    return new RemoveResult<T>(null, true)
+                } else if (node.left == null) {
+                    return new RemoveResult<T>(node.right, true)
+                } else if (node.right == null) {
+                    return new RemoveResult<T>(node.left, true)
+                } else {
+                    // Node has two children - find inorder successor
+                    var successor = this.findMin(node.right)
+                    node.value = successor.value
+                    var result = this.removeNode(node.right, successor.value)
+                    node.right = result.node
+                    return new RemoveResult<T>(node, true)
+                }
+            }
+        }
+
+        private fun findMin(node: TreeNode<T>): TreeNode<T> {
+            while (node.left != null) {
+                node = node.left
+            }
+            return node
+        }
+
+        fun toList(): List<T> {
+            var list = List.newList<T>()
+            this.inorderTraversal(this.root, list)
+            return list
+        }
+
+        private fun inorderTraversal(node: TreeNode<T>, list: List<T>) {
+            if (node != null) {
+                this.inorderTraversal(node.left, list)
+                list.add(node.value)
+                this.inorderTraversal(node.right, list)
+            }
+        }
+
+        fun clear() {
+            this.root = null
+            this.size = 0
+        }
+
+        fun isEmpty(): Bool {
+            return this.size == 0
+        }
+    }
+
+    class TreeNode<T> {
+        var value: T
+        var left: TreeNode<T>
+        var right: TreeNode<T>
+
+        constructor(value: T) {
+            this.value = value
+        }
+    }
+
+    class RemoveResult<T> {
+        var node: TreeNode<T>
+        var removed: Bool
+
+        constructor(node: TreeNode<T>, removed: Bool) {
+            this.node = node
+            this.removed = removed
+        }
+    }
+}

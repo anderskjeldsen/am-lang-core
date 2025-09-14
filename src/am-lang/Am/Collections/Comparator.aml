@@ -1,0 +1,7 @@
+namespace Am.Collections {
+    import Am.Lang
+
+    interface Comparator<T> {
+        fun compare(a: T, b: T): Int
+    }
+}
