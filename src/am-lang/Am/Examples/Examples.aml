@@ -476,7 +476,7 @@ namespace Am.Examples {
 */
 
         // TreeSet example with lambda comparison functions
-        static fun main() {
+        static fun main28() {
             "=== TreeSet<T> Examples ===".println()
             
             // Example 1: Basic integer sorting (ascending)
@@ -509,10 +509,9 @@ namespace Am.Examples {
             // Get sorted list
             var sortedList = treeSet.toList()
             "Sorted elements: ".println()
-            var i = 0
-            while (i < sortedList.getSize()) {
+
+            for (i = 0 to sortedList.getSize()) {
                 sortedList.get(i).toString().println()
-                i++
             }
             
             // Example 2: Reverse order (descending)
@@ -554,9 +553,8 @@ namespace Am.Examples {
                 if (lenB < lenA) {
                     minLen = lenB
                 }
-                
-                var i = 0
-                while (i < minLen) {
+
+                for (i = 0 to minLen) {
                     var charA = a.characterAt(i.toUInt())
                     var charB = b.characterAt(i.toUInt())
                     if (charA < charB) {
@@ -564,7 +562,6 @@ namespace Am.Examples {
                     } else if (charA > charB) {
                         return -1  // Reverse order: return negative if a > b
                     }
-                    i++
                 }
                 
                 // If all compared characters are equal, compare lengths (reverse order)
@@ -587,10 +584,8 @@ namespace Am.Examples {
             
             var sortedStrings = stringTreeSet.toList()
             "Reverse alphabetical order: ".println()
-            var k = 0
-            while (k < sortedStrings.getSize()) {
+            for (k = 0 to sortedStrings.getSize()) {
                 sortedStrings.get(k).println()
-                k++
             }
             
             // Example 4: Test remove functionality
@@ -613,19 +608,15 @@ namespace Am.Examples {
             
             ("Before remove: size = " + testSet.getSize().toString()).println()
             var beforeList = testSet.toList()
-            var l = 0
-            while (l < beforeList.getSize()) {
+            for (l = 0 to beforeList.getSize()) {
                 beforeList.get(l).toString().println()
-                l++
             }
             
             testSet.remove(5)
             ("After removing 5: size = " + testSet.getSize().toString()).println()
             var afterList = testSet.toList()
-            var m = 0
-            while (m < afterList.getSize()) {
+            for (m = 0 to afterList.getSize()) {
                 afterList.get(m).toString().println()
-                m++
             }
             
             "=== TreeSet Examples Complete ===".println()

@@ -53,8 +53,8 @@ namespace Am.Collections {
             if (node == null) {
                 return null
             }
-            
-            var compareResult = this.compareFunction(item, node.value)
+            var cf = this.compareFunction
+            var compareResult = cf(item, node.value)
             if (compareResult == 0) {
                 return node
             } else if (compareResult < 0) {
@@ -65,8 +65,9 @@ namespace Am.Collections {
         }
 
         private fun insertNode(node: TreeNode<T>, item: T): Bool {
-            var compareResult = this.compareFunction(item, node.value)
-            
+            var cf = this.compareFunction
+            var compareResult = cf(item, node.value)
+
             if (compareResult == 0) {
                 // Item already exists, don't add duplicate
                 return false
@@ -106,8 +107,9 @@ namespace Am.Collections {
                 return new RemoveResult<T>(null, false)
             }
 
-            var compareResult = this.compareFunction(item, node.value)
-            
+            var cf = this.compareFunction
+            var compareResult = cf(item, node.value)
+
             if (compareResult < 0) {
                 var result = this.removeNode(node.left, item)
                 node.left = result.node
