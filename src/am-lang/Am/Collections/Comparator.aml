@@ -1,6 +1,16 @@
 namespace Am.Collections {
     import Am.Lang
 
+    /*
+     * Comparator<T> - Interface for comparing two objects of type T.
+     * 
+     * Implementations should provide a compare method that returns:
+     * - A negative integer if the first argument is less than the second
+     * - Zero if the arguments are equal
+     * - A positive integer if the first argument is greater than the second
+     * 
+     * This comparison must be consistent with equals and define a total ordering.
+     */
     interface Comparator<T> {
         fun compare(a: T, b: T): Int
     }

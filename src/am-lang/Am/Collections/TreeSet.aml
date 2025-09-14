@@ -1,6 +1,27 @@
 namespace Am.Collections {
     import Am.Lang
 
+    /*
+     * TreeSet<T> - A sorted set implementation using a binary search tree.
+     * 
+     * This class provides a Set that maintains elements in sorted order
+     * according to a provided Comparator<T>. It does not allow duplicate
+     * elements as determined by the comparator's compare method.
+     * 
+     * Features:
+     * - O(log n) insertion, removal, and lookup operations
+     * - Maintains elements in sorted order
+     * - No duplicate elements allowed
+     * - Requires a Comparator<T> for element comparison
+     * 
+     * Example usage:
+     *   var comparator = new IntComparator()
+     *   var treeSet = new TreeSet<Int>(comparator)
+     *   treeSet.add(5)
+     *   treeSet.add(2)
+     *   treeSet.add(8)
+     *   var sortedList = treeSet.toList() // [2, 5, 8]
+     */
     class TreeSet<T>: Set<T> {
         private var root: TreeNode<T>
         private var comparator: Comparator<T>

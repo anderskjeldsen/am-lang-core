@@ -477,9 +477,10 @@ namespace Am.Examples {
 
         // TreeSet example with custom comparator
         static fun main() {
-            "Testing TreeSet with custom comparator".println()
+            "=== TreeSet<T> Examples ===".println()
             
-            // Create a comparator for integers (ascending order)
+            // Example 1: Basic integer sorting (ascending)
+            "1. Integer TreeSet (ascending order)".println()
             var intComparator = new IntComparator()
             var treeSet = new TreeSet<Int>(intComparator)
             
@@ -490,6 +491,7 @@ namespace Am.Examples {
             treeSet.add(1)
             treeSet.add(9)
             treeSet.add(3)
+            treeSet.add(2)  // Duplicate - should not be added
             
             ("TreeSet size: " + treeSet.getSize().toString()).println()
             
@@ -506,8 +508,30 @@ namespace Am.Examples {
                 i++
             }
             
-            // Test with string comparator (reverse order)
-            "Testing TreeSet with String comparator (reverse order)".println()
+            // Example 2: Using utility comparator (reverse order)
+            "".println()
+            "2. Integer TreeSet with utility comparator (descending order)".println()
+            var reverseComparator = Comparators.reverseIntComparator()
+            var reverseTreeSet = new TreeSet<Int>(reverseComparator)
+            
+            reverseTreeSet.add(5)
+            reverseTreeSet.add(2)
+            reverseTreeSet.add(8)
+            reverseTreeSet.add(1)
+            reverseTreeSet.add(9)
+            reverseTreeSet.add(3)
+            
+            var reverseSortedList = reverseTreeSet.toList()
+            "Reverse sorted elements: ".println()
+            var j = 0
+            while (j < reverseSortedList.getSize()) {
+                reverseSortedList.get(j).toString().println()
+                j++
+            }
+            
+            // Example 3: String sorting (reverse alphabetical order)
+            "".println()
+            "3. String TreeSet (reverse alphabetical order)".println()
             var stringComparator = new ReverseStringComparator()
             var stringTreeSet = new TreeSet<String>(stringComparator)
             
@@ -515,14 +539,46 @@ namespace Am.Examples {
             stringTreeSet.add("banana")
             stringTreeSet.add("cherry")
             stringTreeSet.add("date")
+            stringTreeSet.add("apple")  // Duplicate - should not be added
+            
+            ("String TreeSet size: " + stringTreeSet.getSize().toString()).println()
             
             var sortedStrings = stringTreeSet.toList()
-            "Reverse sorted strings: ".println()
-            var j = 0
-            while (j < sortedStrings.getSize()) {
-                sortedStrings.get(j).println()
-                j++
+            "Reverse alphabetical order: ".println()
+            var k = 0
+            while (k < sortedStrings.getSize()) {
+                sortedStrings.get(k).println()
+                k++
             }
+            
+            // Example 4: Test remove functionality
+            "".println()
+            "4. Testing remove functionality".println()
+            var testSet = new TreeSet<Int>(Comparators.naturalIntComparator())
+            testSet.add(10)
+            testSet.add(5)
+            testSet.add(15)
+            testSet.add(3)
+            testSet.add(7)
+            
+            ("Before remove: size = " + testSet.getSize().toString()).println()
+            var beforeList = testSet.toList()
+            var l = 0
+            while (l < beforeList.getSize()) {
+                beforeList.get(l).toString().println()
+                l++
+            }
+            
+            testSet.remove(5)
+            ("After removing 5: size = " + testSet.getSize().toString()).println()
+            var afterList = testSet.toList()
+            var m = 0
+            while (m < afterList.getSize()) {
+                afterList.get(m).toString().println()
+                m++
+            }
+            
+            "=== TreeSet Examples Complete ===".println()
         }
 
     }
