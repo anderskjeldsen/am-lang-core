@@ -475,5 +475,153 @@ namespace Am.Examples {
         }
 */
 
+        // TreeSet example with lambda comparison functions
+        static fun main28() {
+            "=== TreeSet<T> Examples ===".println()
+            
+            // Example 1: Basic integer sorting (ascending)
+            "1. Integer TreeSet (ascending order)".println()
+            var treeSet = new TreeSet<Int>((a, b) => {
+                if (a < b) {
+                    return -1
+                } else if (a > b) {
+                    return 1
+                } else {
+                    return 0
+                }
+            })
+            
+            // Add some numbers in random order
+            treeSet.add(5)
+            treeSet.add(2)
+            treeSet.add(8)
+            treeSet.add(1)
+            treeSet.add(9)
+            treeSet.add(3)
+            treeSet.add(2)  // Duplicate - should not be added
+            
+            ("TreeSet size: " + treeSet.getSize().toString()).println()
+            
+            // Check if elements exist
+            ("Contains 5: " + treeSet.has(5).toString()).println()
+            ("Contains 10: " + treeSet.has(10).toString()).println()
+            
+            // Get sorted list
+            var sortedList = treeSet.toList()
+            "Sorted elements: ".println()
+
+            for (i = 0 to sortedList.getSize()) {
+                sortedList.get(i).toString().println()
+            }
+            
+            // Example 2: Reverse order (descending)
+            "".println()
+            "2. Integer TreeSet (descending order)".println()
+            var reverseTreeSet = new TreeSet<Int>((a, b) => {
+                if (a > b) {
+                    return -1
+                } else if (a < b) {
+                    return 1
+                } else {
+                    return 0
+                }
+            })
+            
+            reverseTreeSet.add(5)
+            reverseTreeSet.add(2)
+            reverseTreeSet.add(8)
+            reverseTreeSet.add(1)
+            reverseTreeSet.add(9)
+            reverseTreeSet.add(3)
+            
+            var reverseSortedList = reverseTreeSet.toList()
+            "Reverse sorted elements: ".println()
+            var j = 0
+            while (j < reverseSortedList.getSize()) {
+                reverseSortedList.get(j).toString().println()
+                j++
+            }
+            
+            // Example 3: String sorting (reverse alphabetical order)
+            "".println()
+            "3. String TreeSet (reverse alphabetical order)".println()
+            var stringTreeSet = new TreeSet<String>((a, b) => {
+                // Basic string comparison - compare character by character
+                var lenA = a.getLength()
+                var lenB = b.getLength()
+                var minLen = lenA
+                if (lenB < lenA) {
+                    minLen = lenB
+                }
+
+                for (i = 0 to minLen) {
+                    var charA = a.characterAt(i.toUInt())
+                    var charB = b.characterAt(i.toUInt())
+                    if (charA < charB) {
+                        return 1  // Reverse order: return positive if a < b
+                    } else if (charA > charB) {
+                        return -1  // Reverse order: return negative if a > b
+                    }
+                }
+                
+                // If all compared characters are equal, compare lengths (reverse order)
+                if (lenA < lenB) {
+                    return 1
+                } else if (lenA > lenB) {
+                    return -1
+                } else {
+                    return 0
+                }
+            })
+            
+            stringTreeSet.add("apple")
+            stringTreeSet.add("banana")
+            stringTreeSet.add("cherry")
+            stringTreeSet.add("date")
+            stringTreeSet.add("apple")  // Duplicate - should not be added
+            
+            ("String TreeSet size: " + stringTreeSet.getSize().toString()).println()
+            
+            var sortedStrings = stringTreeSet.toList()
+            "Reverse alphabetical order: ".println()
+            for (k = 0 to sortedStrings.getSize()) {
+                sortedStrings.get(k).println()
+            }
+            
+            // Example 4: Test remove functionality
+            "".println()
+            "4. Testing remove functionality".println()
+            var testSet = new TreeSet<Int>((a, b) => {
+                if (a < b) {
+                    return -1
+                } else if (a > b) {
+                    return 1
+                } else {
+                    return 0
+                }
+            })
+            testSet.add(10)
+            testSet.add(5)
+            testSet.add(15)
+            testSet.add(3)
+            testSet.add(7)
+            
+            ("Before remove: size = " + testSet.getSize().toString()).println()
+            var beforeList = testSet.toList()
+            for (l = 0 to beforeList.getSize()) {
+                beforeList.get(l).toString().println()
+            }
+            
+            testSet.remove(5)
+            ("After removing 5: size = " + testSet.getSize().toString()).println()
+            var afterList = testSet.toList()
+            for (m = 0 to afterList.getSize()) {
+                afterList.get(m).toString().println()
+            }
+            
+            "=== TreeSet Examples Complete ===".println()
+        }
+
     }
+
 }
