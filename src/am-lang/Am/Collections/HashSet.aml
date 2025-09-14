@@ -1,126 +1,195 @@
 namespace Am.Collections {
 
-    @Am.Lang.Annotations.UseMemoryPool
-    class HashSetEntry<T>(var value: T) {        
-        var next: HashSetEntry<T>
-    }
-
     class HashSet<T>: Set<T> {
         import Am.Lang
 
         private var size: Int
-        private var bucket: HashSetEntry<T>[]
+        private var currentValueIndex: Int
+        private var nextIndexes: Int[]
+        private var valueIndexes: Int[]
+        private var values: T[] 
+        private var bucketSize: Int
+        private var currentIndex: Int
 
         fun getSize(): Int {
             return this.size
         }
 
         fun has(value: T): Bool {
-            "has value".println()
-            if (this.bucket == null) {
+            if (this.valueIndexes == null) {
                 return false
             }
             var hash = value.hash()
-            var index = hash % this.bucket.length()
-            var entry = this.bucket[index]
-            var x = this.findEntry(entry, value)
-//            ObjectHelper.printDebug(x)
-            if (x != null) {
+            var index = hash % this.bucketSize
+            var valueIndex = this.valueIndexes[index] - 1
+            var x = this.findEntry(valueIndex, value)
+            if (x >= 0) {
                 return true
             }
             return false
-
         }
 
-        private fun findEntry(entry: HashSetEntry<T>, value: T): HashSetEntry<T> {
-            while(entry != null) {
-                if (entry.value == value) {
-//                    ObjectHelper.printDebug(entry)
-                    return entry
+        private fun findEntry(valueIndex: Int, value: T): Int {
+            while(valueIndex > -1) {
+//                var valueIndex = this.valueIndexes[index] - 1
+                var value2 = this.values[valueIndex]
+                if (value2 == value) {
+                    return valueIndex
                 }
-                entry = entry.next
+                valueIndex = this.nextIndexes[valueIndex] - 1                
             }
-            return null
+            return -1
         }
 
         fun add(value: T) {
-            if (this.bucket == null) {
-                this.bucket = new HashSetEntry<T>[20]
+            if (this.nextIndexes == null) {
+                this.bucketSize = 100
+                this.nextIndexes = new Int[this.bucketSize]
+                this.values = new T[this.bucketSize]
+                this.valueIndexes = new Int[this.bucketSize * 2]
+                this.currentIndex = this.bucketSize
             }
 
-            if (this.size * 2 > (this.bucket.length())) {
-                var oldBucket = this.bucket
-                this.bucket = new HashSetEntry<T>[this.bucket.length() * 10UI]
-                ("create new bucket in HashSet: " + this.bucket.length().toString()).println()
-//                this.size = 0
-//                "load new bucket in HashSet".println()
+            if ( this.size * 4 >= this.bucketSize * 2 || this.currentIndex >= (this.bucketSize * 2) ) {
+                var valueLastIndex = this.currentValueIndex
+                var oldValues = this.values
+                var newBucketSize = this.bucketSize * 10
+                this.bucketSize = newBucketSize
+                this.currentIndex = newBucketSize
+                this.currentValueIndex = 0
+                this.size = 0
+
+                this.nextIndexes = new Int[newBucketSize]
+                this.values = new T[newBucketSize]
+                this.valueIndexes = new Int[newBucketSize * 2]
+                ("create new bucket in HashSet: " + this.bucketSize.toString() + ", copy " + valueLastIndex.toString() + " items").println()
 
                 var i = 0
-                var n: HashSetEntry<T> = null
-                while(i < oldBucket.length()) {
-                    var entry = oldBucket[i]
-                    while (entry != null) {    
-                        var next = entry.next
-                        entry.next = n
-                        this.privateSetEntry(entry)
-                        entry = next
-                    }
+                while(i < valueLastIndex) {
+                    var oldValue = oldValues[i]
+                    this.privateSetValue(oldValue)
                     i++
                 }       
-//                "loaded new list in hashmap".println()         
             }
 
-            this.privateSet(value)
+            this.privateSetValue(value)
         }
 
-        private fun privateSetEntry(entry: HashSetEntry<T>) {
-            var hash = entry.value.hash()
-            var index = hash % this.bucket.length()
-//            ("value: " + entry.value.toString() + ", hash: " + hash.toString() + ", index: " + index.toString()).println()
-
-            var bEntry = this.bucket[index]
-            if (bEntry == null) {
-                this.bucket[index] = entry
-//                this.size++
-            } 
-            else {                
-                this.bucket[index] = entry
-                entry.next = bEntry
-//                this.size++
-            }
-        }
-
-        private fun privateSet(value: T) {
+        private fun privateSetValue(value: T) {
             var hash = value.hash()
-            var index = hash % this.bucket.length()
-//            ("value: " + value.toString() + ", hash: " + hash.toString() + ", index: " + index.toString()).println()
+            var index = hash % this.bucketSize
 
-            var entry = this.bucket[index]
-            if (entry == null) {
-                entry = new HashSetEntry<T>(value)
-                this.bucket[index] = entry
-                this.size++
+            this.values[this.currentValueIndex] = value
+//            this.nextIndexes[this.currentValueIndex] = 0
+
+            var valueIndex = this.valueIndexes[index] - 1 // index of values and next arrays
+
+            if (valueIndex < 0) {
+                this.valueIndexes[index] = this.currentValueIndex + 1 // cause all are initially set to 0, then a real 0 will be 1
+                this.nextIndexes[this.currentValueIndex] = 0
+                this.size++            
             } 
-            else {
-//            if (entry != null) {
-                var found = false
-                var previous = entry
-                while((entry != null) && (found == false)) {
-                    previous = entry
-//                    ("compare " + value.toString() + " vs " + entry.value.toString()).println()
-                    if (value == entry.value) {
-//                        ("found " + value.toString()).println()
-                        found = true
-                    }
-                    entry = entry.next
+            else {        
+//                {v: x, n: 0}          
+//              {v: y, n: x}
+//                this.valueIndexes[this.currentIndex] = valueIndex + 1 // append new index to the value at the end
+//                this.nextIndexes[this.currentValueIndex] = this.nextIndexes[valueIndex] // append new index to the next value at the end
+
+                this.valueIndexes[index] = this.currentValueIndex + 1
+                this.nextIndexes[this.currentValueIndex] = valueIndex + 1 // old value
+                this.currentIndex++
+                this.size++
+            }
+            this.currentValueIndex++
+        }
+        fun contains(value: T): Bool {
+            return this.has(value)
+        }
+
+        fun isEmpty(): Bool {
+            return this.size == 0
+        }
+
+        fun remove(value: T): Bool {
+            if (this.valueIndexes == null) {
+                return false
+            }
+            var hash = value.hash()
+            var index = hash % this.bucketSize
+            var valueIndex = this.valueIndexes[index] - 1
+            
+            if (valueIndex < 0) {
+                return false
+            }
+            
+            // Check if it's the first item in the chain
+            var firstValue = this.values[valueIndex]
+            if (firstValue == value) {
+                // Remove first item - update bucket to point to next
+                var nextIndex = this.nextIndexes[valueIndex] - 1
+                if (nextIndex >= 0) {
+                    this.valueIndexes[index] = nextIndex + 1
+                } else {
+                    this.valueIndexes[index] = 0
                 }
-                if (!found) {
-//                    ("add " + value.toString()).println()
-                    previous.next = new HashSetEntry<T>(value)
-                    this.size++
+                this.size--
+                return true
+            }
+            
+            // Look for item in the chain
+            var previousIndex = valueIndex
+            valueIndex = this.nextIndexes[valueIndex] - 1
+            while(valueIndex > -1) {
+                var value2 = this.values[valueIndex]
+                if (value2 == value) {
+                    // Remove item by updating previous to point to next
+                    var nextIndex = this.nextIndexes[valueIndex] - 1
+                    if (nextIndex >= 0) {
+                        this.nextIndexes[previousIndex] = nextIndex + 1
+                    } else {
+                        this.nextIndexes[previousIndex] = 0
+                    }
+                    this.size--
+                    return true
+                }
+                previousIndex = valueIndex
+                valueIndex = this.nextIndexes[valueIndex] - 1
+            }
+            return false
+        }
+
+        fun clear() {
+            this.size = 0
+            this.currentValueIndex = 0
+            this.currentIndex = this.bucketSize
+            if (this.valueIndexes != null) {
+                var i = 0
+                while(i < this.valueIndexes.length()) {
+                    this.valueIndexes[i] = 0
+                    i++
                 }
             }
+        }
 
+        fun toArray(): T[] {
+            if (this.size == 0) {
+                return new T[0]
+            }
+            var arr = new T[this.size]
+            var arrIndex = 0
+            
+            // Iterate through all bucket indices
+            var bucketIndex = 0
+            while(bucketIndex < this.bucketSize && arrIndex < this.size) {
+                var valueIndex = this.valueIndexes[bucketIndex] - 1
+                while((valueIndex > -1) && (arrIndex < this.size)) {
+                    arr[arrIndex] = this.values[valueIndex]
+                    arrIndex++
+                    valueIndex = this.nextIndexes[valueIndex] - 1
+                }
+                bucketIndex++
+            }
+            return arr
         }
     }
 }
