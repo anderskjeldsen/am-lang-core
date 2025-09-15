@@ -8,8 +8,6 @@ namespace Am.Collections {
         fun add(item: T)
         fun remove(item: T): Bool
         fun clear()
-        fun contains(item: T): Bool
-        fun toArray(): T[]
         fun isEmpty(): Bool
     }
 }
