@@ -21,6 +21,13 @@ namespace Am.Examples {
 
         static var strValue: String = "hello"
 
+        static fun main29(args: String[]) {
+            for(i = 0 to args.length()) {
+                var s = args[i]
+                ("String $i = $s").println()
+            }
+        }
+
         // main27
         static fun main27() {
 // For loop with continue
