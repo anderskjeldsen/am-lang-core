@@ -21,6 +21,29 @@ namespace Am.Examples {
 
         static var strValue: String = "hello"
 
+        static fun main30() {
+            var x = 1
+            switch(x) {
+                case 1:
+                    "x is 1".println()
+                case 2:
+                    "x is 2".println()
+                default:
+                    "x is something else".println()
+            } 
+            var y = "hello"
+            switch(y) {
+                case "world":
+                    "y is world".println()
+                case "5":
+                    "y is 5".println()
+                case "hello":
+                    "y is hello".println()
+                default:
+                    "y is something else".println()
+            }
+        }
+
         static fun main29(args: String[]) {
             for(i = 0 to args.length()) {
                 var s = args[i]
