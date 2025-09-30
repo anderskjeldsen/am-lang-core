@@ -788,6 +788,45 @@ bool __any_null(const nullable_value a) {
     }
 }
 
+bool primitive_or_object_equals(const value a, const value b, const ctype type) {
+    if (type == bool_type) {
+        // boolean comparison
+        return a.bool_value == b.bool_value;
+    } else if (type == char_type) {
+        // char comparison
+        return a.char_value == b.char_value;
+    } else if (type == short_type) {
+        // short comparison
+        return a.short_value == b.short_value;
+    } else if (type == int_type) {
+        // int comparison
+        return a.int_value == b.int_value;
+    } else if (type == long_type) {
+        // long comparison
+        return a.long_value == b.long_value;
+    } else if (type == uchar_type) {
+        // uchar comparison
+        return a.uchar_value == b.uchar_value;
+    } else if (type == ushort_type) {
+        // ushort comparison
+        return a.ushort_value == b.ushort_value;
+    } else if (type == uint_type) {
+        // uint comparison
+        return a.uint_value == b.uint_value;
+    } else if (type == ulong_type) {
+        // ulong comparison
+        return a.ulong_value == b.ulong_value;
+    } else if (a.object_value == b.object_value) {
+        return true;
+    } else if (a.object_value != NULL && b.object_value != NULL) {
+        // both not null
+        return __object_equals(a.object_value, b.object_value);
+    } else {
+        return false;
+        // one is null, the other not
+    }
+}
+
 bool __any_equals(const nullable_value a, const nullable_value b) {
     if (__is_primitive_nullable(a)) {
         if (__is_primitive_nullable(b)) {
@@ -802,7 +841,8 @@ bool __any_equals(const nullable_value a, const nullable_value b) {
                 if (__is_primitive_null(b)) {
                     return false;
                 } else {
-                    return memcmp(&a.value, &b.value, sizeof(value)); // TODO: let's hope there's no garbage here
+                    return primitive_or_object_equals(a.value, b.value, __value_flags_to_ctype(a.flags));
+//                    return memcmp(&a.value, &b.value, sizeof(value)); // TODO: let's hope there's no garbage here
                 }
             }
         } else {
@@ -815,15 +855,14 @@ bool __any_equals(const nullable_value a, const nullable_value b) {
             return false;
         } else {
             // both are objects
-            if (a.value.object_value == b.value.object_value) {
-                return true;
-            } else if (a.value.object_value != NULL && b.value.object_value != NULL) {
-                // both not null
-                return __object_equals(a.value.object_value, b.value.object_value);
-            } else {
+
+            ctype at = __value_flags_to_ctype(a.flags);
+            ctype bt = __value_flags_to_ctype(b.flags);
+            if (at != bt) {
                 return false;
-                // one is null, the other not
             }
+
+            return primitive_or_object_equals(a.value, b.value, at);
         }
     }
 }
