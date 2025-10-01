@@ -1,0 +1,64 @@
+namespace Am.Tests {
+
+    class ExceptionTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Testing
+        
+        static fun main() {
+            var runner = new TestRunner()
+            
+            "=== Exception Tests ===".println()
+            "".println()
+            
+            // Exception tests
+            ExceptionTests.testThrowAndCatch(runner)
+            ExceptionTests.testExceptionMessage(runner)
+            ExceptionTests.testListIndexOutOfBounds(runner)
+            
+            runner.printSummary()
+        }
+        
+        static fun testThrowAndCatch(runner: TestRunner) {
+            runner.test("Exception - throw and catch", () => {
+                var caught = false
+                try {
+                    throw new Exception("Test exception")
+                } catch(e: Exception) {
+                    caught = true
+                }
+                
+                return runner.assertTrue(caught, "exception should be caught")
+            })
+        }
+        
+        static fun testExceptionMessage(runner: TestRunner) {
+            runner.test("Exception - message retrieval", () => {
+                var message = ""
+                try {
+                    throw new Exception("Custom message")
+                } catch(e: Exception) {
+                    message = e.getMessage()
+                }
+                
+                return runner.assertEquals("Custom message", message, "exception message")
+            })
+        }
+        
+        static fun testListIndexOutOfBounds(runner: TestRunner) {
+            runner.test("Exception - List index out of bounds", () => {
+                var caught = false
+                var list = List.newList<Int>()
+                list.add(1)
+                
+                try {
+                    var item = list.get(10)  // Index out of bounds
+                } catch(e: Exception) {
+                    caught = true
+                }
+                
+                return runner.assertTrue(caught, "should throw exception for invalid index")
+            })
+        }
+    }
+}

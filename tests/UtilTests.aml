@@ -1,0 +1,55 @@
+namespace Am.Tests {
+
+    class UtilTests {
+        import Am.Lang
+        import Am.Util.Parsers.Text
+        import Am.Testing
+        
+        static fun main() {
+            var runner = new TestRunner()
+            
+            "=== Utility Tests ===".println()
+            "".println()
+            
+            // TextParser tests
+            UtilTests.testTextParserParseUntil(runner)
+            UtilTests.testTextParserPeek(runner)
+            UtilTests.testTextParserSkip(runner)
+            
+            runner.printSummary()
+        }
+        
+        static fun testTextParserParseUntil(runner: TestRunner) {
+            runner.test("TextParser - parseUntil with space", () => {
+                var tp = new TextParser("Hello World")
+                var parsed = tp.parseUntil((c) => {
+                    if (c == 0x20) {  // Space character
+                        return true
+                    }
+                    return false
+                })
+                
+                return runner.assertEquals("Hello", parsed, "parseUntil space")
+            })
+        }
+        
+        static fun testTextParserPeek(runner: TestRunner) {
+            runner.test("TextParser - peek characters", () => {
+                var tp = new TextParser("Hello World")
+                var peeked = tp.peek(5.toUInt())
+                
+                return runner.assertEquals("Hello", peeked, "peek 5 characters")
+            })
+        }
+        
+        static fun testTextParserSkip(runner: TestRunner) {
+            runner.test("TextParser - skip characters", () => {
+                var tp = new TextParser("Hello World")
+                tp.skip(6.toUInt())  // Skip "Hello "
+                var peeked = tp.peek(5.toUInt())
+                
+                return runner.assertEquals("World", peeked, "skip then peek")
+            })
+        }
+    }
+}

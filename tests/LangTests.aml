@@ -23,8 +23,13 @@ namespace Am.Tests {
             LangTests.testClassRefForString(runner)
             LangTests.testClassRefForInt(runner)
             
+            // Static field tests
+            LangTests.testStaticFieldAccess(runner)
+            
             runner.printSummary()
         }
+        
+        static var testStaticValue: String = "static hello"
         
         static fun testArrayLiterals(runner: TestRunner) {
             runner.test("Array - literal initialization", () => {
@@ -98,6 +103,14 @@ namespace Am.Tests {
                 var className = cri.toString()
                 
                 return runner.assertTrue(className.getLength() > 0, "class name should not be empty")
+            })
+        }
+        
+        static fun testStaticFieldAccess(runner: TestRunner) {
+            runner.test("Static field - access", () => {
+                var value = LangTests.testStaticValue
+                
+                return runner.assertEquals("static hello", value, "static field value")
             })
         }
     }
