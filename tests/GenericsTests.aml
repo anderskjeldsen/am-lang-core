@@ -5,90 +5,59 @@ namespace Am.Tests {
         import Am.Collections
         import Am.Testing
         
-        static fun main() {
-            var runner = new TestRunner()
+        static test genericListWithStrings() {
+            var list = List<String>.newList<String>()
+            list.add("hello")
+            list.add("world")
             
-            "=== Generics Tests ===".println()
-            "".println()
-            
-            // Generic list tests
-            GenericsTests.testGenericListWithStrings(runner)
-            GenericsTests.testGenericListWithInts(runner)
-            
-            // Filter tests
-            GenericsTests.testListFilter(runner)
-            
-            // First/firstOr tests
-            GenericsTests.testListFirstOr(runner)
-            
-            runner.printSummary()
+            Assert.assertEquals(2, list.getSize())
+            Assert.assertEquals("hello", list.get(0))
+            Assert.assertEquals("world", list.get(1))
         }
         
-        static fun testGenericListWithStrings(runner: TestRunner) {
-            runner.test("Generics - List<String>", () => {
-                var list = List<String>.newList<String>()
-                list.add("hello")
-                list.add("world")
-                
-                var pass = runner.assertEquals(2, list.getSize(), "size should be 2")
-                pass = pass && runner.assertEquals("hello", list.get(0), "first element")
-                pass = pass && runner.assertEquals("world", list.get(1), "second element")
-                return pass
-            })
+        static test genericListWithInts() {
+            var list = List.newList<Int>()
+            list.add(10)
+            list.add(20)
+            list.add(30)
+            
+            Assert.assertEquals(3, list.getSize())
+            Assert.assertEquals(10, list.get(0))
+            Assert.assertEquals(20, list.get(1))
+            Assert.assertEquals(30, list.get(2))
         }
         
-        static fun testGenericListWithInts(runner: TestRunner) {
-            runner.test("Generics - List<Int>", () => {
-                var list = List.newList<Int>()
-                list.add(10)
-                list.add(20)
-                list.add(30)
-                
-                var pass = runner.assertEquals(3, list.getSize(), "size should be 3")
-                pass = pass && runner.assertEquals(10, list.get(0), "first element")
-                pass = pass && runner.assertEquals(20, list.get(1), "second element")
-                pass = pass && runner.assertEquals(30, list.get(2), "third element")
-                return pass
+        static test listFilter() {
+            var l = List.newList<Int>()
+            l.add(1)
+            l.add(2)
+            l.add(3)
+            
+            var l2 = l.filter((i) => {
+                if (i == 1) {
+                    return false
+                }
+                return true
             })
+            
+            Assert.assertEquals(2, l2.getSize())
+            Assert.assertEquals(2, l2.get(0))
+            Assert.assertEquals(3, l2.get(1))
         }
         
-        static fun testListFilter(runner: TestRunner) {
-            runner.test("Generics - List filter with lambda", () => {
-                var l = List.newList<Int>()
-                l.add(1)
-                l.add(2)
-                l.add(3)
-                
-                var l2 = l.filter((i) => {
-                    if (i == 1) {
-                        return false
-                    }
-                    return true
-                })
-                
-                var pass = runner.assertEquals(2, l2.getSize(), "filtered list size")
-                pass = pass && runner.assertEquals(2, l2.get(0), "first filtered element")
-                pass = pass && runner.assertEquals(3, l2.get(1), "second filtered element")
-                return pass
-            })
-        }
-        
-        static fun testListFirstOr(runner: TestRunner) {
-            runner.test("Generics - List firstOr", () => {
-                var l = List.newList<Int>()
-                l.add(1)
-                l.add(2)
-                
-                var first = l.firstOr(3)
-                
-                var pass = runner.assertEquals(1, first, "firstOr should return first element")
-                
-                var emptyList = List.newList<Int>()
-                var firstEmpty = emptyList.firstOr(99)
-                
-                pass = pass && runner.assertEquals(99, firstEmpty, "firstOr on empty list returns default")
-                return pass
-            })
+        static test listFirstOr() {
+            var l = List.newList<Int>()
+            l.add(1)
+            l.add(2)
+            
+            var first = l.firstOr(3)
+            
+            Assert.assertEquals(1, first)
+            
+            var emptyList = List.newList<Int>()
+            var firstEmpty = emptyList.firstOr(99)
+            
+            Assert.assertEquals(99, firstEmpty)
         }
     }
 }

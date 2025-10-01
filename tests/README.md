@@ -6,54 +6,43 @@ This directory contains unit tests for the Am Lang Core library.
 
 - **CollectionsTests.aml** - Tests for List, HashMap, HashSet, and TreeSet
 - **StringTests.aml** - Tests for String operations and StringBuilder
-- **ControlFlowTests.aml** - Tests for control flow (if/else, switch, loops, break, continue)
+- **ControlFlowTests.aml** - Tests for control flow (switch, loops, break, continue)
 - **LangTests.aml** - Tests for primitive types, arrays, and basic language features
 - **GenericsTests.aml** - Tests for generic types and functions
 - **UtilTests.aml** - Tests for utility classes like TextParser
 - **ExceptionTests.aml** - Tests for exception handling
-- **AllTests.aml** - Master test runner that executes all test suites
 
 ## Test Framework
 
-The tests use a simple test framework (`Am.Testing.TestRunner`) that provides:
-- `test(name, testFunc)` - Run a test with a name and test function
-- `assert(condition, message)` - Assert a condition is true
-- `assertEquals(expected, actual, message)` - Assert two values are equal
-- `assertTrue(condition, message)` - Assert a condition is true
-- `assertFalse(condition, message)` - Assert a condition is false
-- `printSummary()` - Print test results summary
+The tests use the Assert class from the `@anderskjeldsen/am-tests` package. Each test class contains multiple `test` functions (not `fun`) with no parameters. Tests throw an AssertException if they fail.
+
+## Test Structure
+
+Each test file is a class containing static test functions:
+
+```aml
+namespace Am.Tests {
+    class MyTests {
+        import Am.Lang
+        import Am.Testing
+        
+        static test myFirstTest() {
+            var value = 5
+            Assert.assertEquals(5, value)
+        }
+        
+        static test mySecondTest() {
+            var list = List.newList<Int>()
+            list.add(1)
+            Assert.assertEquals(1, list.getSize())
+        }
+    }
+}
+```
 
 ## Running Tests
 
-To run a specific test file, change the `main()` function reference in the package to point to the test class. For example:
-
-```aml
-namespace Am.Tests {
-    class CoreStartup {
-        static fun main() {
-            CollectionsTests.main()
-        }
-    }
-}
-```
-
-Or run all tests:
-
-```aml
-namespace Am.Tests {
-    class CoreStartup {
-        static fun main() {
-            AllTests.main()
-        }
-    }
-}
-```
-
-Then build and run using the AmLang compiler (amlc):
-
-```bash
-java -jar amlc-1.jar . -acmd -bt <build-target>
-```
+The compiler automatically discovers and runs tests. No main functions are needed.
 
 ## Test Coverage
 
