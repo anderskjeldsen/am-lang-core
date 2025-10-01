@@ -1,12 +1,12 @@
-namespace Am.Tests {
+namespace Tests {
 
     class LangTests {
         import Am.Lang
-        import Am.Testing
+        import Am.Tests
         
         static var testStaticValue: String = "static hello"
         
-        static test arrayLiterals() {
+        test arrayLiterals() {
             var array: String[] = ["Hello", "World"]
             
             Assert.assertEquals("Hello", array[0])
@@ -14,7 +14,7 @@ namespace Am.Tests {
             Assert.assertEquals(2, array.length())
         }
         
-        static test arrayIteration() {
+        test arrayIteration() {
             var myArray: Int[] = [1, 2, 3, 4, 5]
             var sum = 0
             
@@ -26,14 +26,14 @@ namespace Am.Tests {
             Assert.assertEquals(15, sum)
         }
         
-        static test intMaxValue() {
+        test intMaxValue() {
             var max = Int.maxValue
             
             // Int.maxValue should be 2147483647 for 32-bit signed integer
             Assert.assertTrue(max > 0)
         }
         
-        static test charToInt() {
+        test charToInt() {
             var c = 'a'
             var i = c.toInt()
             
@@ -41,7 +41,7 @@ namespace Am.Tests {
             Assert.assertEquals(97, i)
         }
         
-        static test booleanOperations() {
+        test booleanOperations() {
             var trueVal = true
             var falseVal = false
             
@@ -49,7 +49,7 @@ namespace Am.Tests {
             Assert.assertTrue(!falseVal)
         }
         
-        static test classRefForString() {
+        test classRefForString() {
             var s = "hello"
             var cr = s.getClassRef()
             var className = cr.toString()
@@ -57,7 +57,7 @@ namespace Am.Tests {
             Assert.assertTrue(className.getLength() > 0)
         }
         
-        static test classRefForInt() {
+        test classRefForInt() {
             var i = 20
             var cri = i.getClassRef()
             var className = cri.toString()
@@ -65,7 +65,7 @@ namespace Am.Tests {
             Assert.assertTrue(className.getLength() > 0)
         }
         
-        static test staticFieldAccess() {
+        test staticFieldAccess() {
             var value = LangTests.testStaticValue
             
             Assert.assertEquals("static hello", value)

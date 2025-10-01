@@ -1,9 +1,9 @@
-namespace Am.Tests {
+namespace Tests {
 
     class ControlFlowTests {
         import Am.Lang
         import Am.Collections
-        import Am.Testing
+        import Am.Tests
         
         static test switchWithInt() {
             var result = ""

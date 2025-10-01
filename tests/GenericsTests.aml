@@ -1,11 +1,11 @@
-namespace Am.Tests {
+namespace Tests {
 
     class GenericsTests {
         import Am.Lang
         import Am.Collections
-        import Am.Testing
+        import Am.Tests
         
-        static test genericListWithStrings() {
+        test genericListWithStrings() {
             var list = List<String>.newList<String>()
             list.add("hello")
             list.add("world")
@@ -15,7 +15,7 @@ namespace Am.Tests {
             Assert.assertEquals("world", list.get(1))
         }
         
-        static test genericListWithInts() {
+        test genericListWithInts() {
             var list = List.newList<Int>()
             list.add(10)
             list.add(20)
@@ -27,25 +27,31 @@ namespace Am.Tests {
             Assert.assertEquals(30, list.get(2))
         }
         
-        static test listFilter() {
+        test listFilter() {
             var l = List.newList<Int>()
             l.add(1)
             l.add(2)
             l.add(3)
-            
-            var l2 = l.filter((i) => {
+            "1".println()
+            var it = l.filter((i) => {
+                "2".println()
+
                 if (i == 1) {
                     return false
                 }
                 return true
             })
+            "3".println()
             
+            var l2 = it.toList()
+            "4".println()
+
             Assert.assertEquals(2, l2.getSize())
             Assert.assertEquals(2, l2.get(0))
             Assert.assertEquals(3, l2.get(1))
         }
         
-        static test listFirstOr() {
+        test listFirstOr() {
             var l = List.newList<Int>()
             l.add(1)
             l.add(2)

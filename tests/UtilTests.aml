@@ -1,11 +1,11 @@
-namespace Am.Tests {
+namespace Tests {
 
     class UtilTests {
         import Am.Lang
         import Am.Util.Parsers.Text
-        import Am.Testing
+        import Am.Tests
         
-        static test textParserParseUntil() {
+        test textParserParseUntil() {
             var tp = new TextParser("Hello World")
             var parsed = tp.parseUntil((c) => {
                 if (c == 0x20) {  // Space character
@@ -17,14 +17,14 @@ namespace Am.Tests {
             Assert.assertEquals("Hello", parsed)
         }
         
-        static test textParserPeek() {
+        test textParserPeek() {
             var tp = new TextParser("Hello World")
             var peeked = tp.peek(5.toUInt())
             
             Assert.assertEquals("Hello", peeked)
         }
         
-        static test textParserSkip() {
+        test textParserSkip() {
             var tp = new TextParser("Hello World")
             tp.skip(6.toUInt())  // Skip "Hello "
             var peeked = tp.peek(5.toUInt())

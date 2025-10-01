@@ -2,6 +2,13 @@
 id: am-lang-core
 version: 0.1.0
 type: library
+dependencies:
+  - id: am-tests
+    testOnly: true
+    realm: github
+    type: git-repo
+    tag: latest
+    url: https://github.com/anderskjeldsen/am-tests.git
 platforms:
   - id: libc
     abstract: true
@@ -114,8 +121,6 @@ buildTargets:
       - make -f macos-arm.makefile
   - id: linux-x64
     platform: linux-x64
-    commands:
-      - make -f linux-x64.makefile
   - id: windows_docker
     commands: 
       - docker run --rm -v "${build_dir}":/usr/src/ -w /usr/src/ gcc:12.1 make -f linux-x64.makefile

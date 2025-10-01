@@ -1,12 +1,12 @@
-namespace Am.Tests {
+namespace Tests {
 
     class CollectionsTests {
         import Am.Lang
         import Am.Collections
-        import Am.Testing
+        import Am.Tests
         
         // List Tests
-        static test listAddAndGet() {
+        test listAddAndGet() {
             var list = List.newList<Int>()
             list.add(1)
             list.add(2)
@@ -18,7 +18,7 @@ namespace Am.Tests {
             Assert.assertEquals(3, list.get(2))
         }
         
-        static test listRemove() {
+        test listRemove() {
             var list = List.newList<Int>()
             list.add(1)
             list.add(2)
@@ -31,7 +31,7 @@ namespace Am.Tests {
             Assert.assertEquals(3, list.get(1))
         }
         
-        static test listContains() {
+        test listContains() {
             var list = List.newList<Int>()
             list.add(1)
             list.add(2)
@@ -41,7 +41,7 @@ namespace Am.Tests {
             Assert.assertFalse(list.contains(5))
         }
         
-        static test listIsEmpty() {
+        test listIsEmpty() {
             var list = List.newList<Int>()
             
             Assert.assertTrue(list.isEmpty())
@@ -49,7 +49,7 @@ namespace Am.Tests {
             Assert.assertFalse(list.isEmpty())
         }
         
-        static test listClear() {
+        test listClear() {
             var list = List.newList<Int>()
             list.add(1)
             list.add(2)
@@ -62,7 +62,7 @@ namespace Am.Tests {
         }
         
         // HashMap Tests
-        static test hashMapSetAndGet() {
+        test hashMapSetAndGet() {
             var map = new HashMap<String, String>()
             map.set("key1", "value1")
             map.set("key2", "value2")
@@ -72,7 +72,7 @@ namespace Am.Tests {
             Assert.assertEquals("value2", map.get("key2"))
         }
         
-        static test hashMapContainsKey() {
+        test hashMapContainsKey() {
             var map = new HashMap<String, String>()
             map.set("key1", "value1")
             
@@ -80,7 +80,7 @@ namespace Am.Tests {
             Assert.assertFalse(map.containsKey("key2"))
         }
         
-        static test hashMapContainsValue() {
+        test hashMapContainsValue() {
             var map = new HashMap<String, String>()
             map.set("key1", "value1")
             
@@ -88,7 +88,7 @@ namespace Am.Tests {
             Assert.assertFalse(map.containsValue("value2"))
         }
         
-        static test hashMapRemove() {
+        test hashMapRemove() {
             var map = new HashMap<String, String>()
             map.set("key1", "value1")
             map.set("key2", "value2")
@@ -100,7 +100,7 @@ namespace Am.Tests {
             Assert.assertFalse(map.containsKey("key1"))
         }
         
-        static test hashMapClear() {
+        test hashMapClear() {
             var map = new HashMap<String, String>()
             map.set("key1", "value1")
             map.set("key2", "value2")
@@ -112,7 +112,7 @@ namespace Am.Tests {
         }
         
         // HashSet Tests
-        static test hashSetAddAndHas() {
+        test hashSetAddAndHas() {
             var set = new HashSet<Int>()
             set.add(1)
             set.add(2)
@@ -124,7 +124,7 @@ namespace Am.Tests {
             Assert.assertFalse(set.has(4))
         }
         
-        static test hashSetNoDuplicates() {
+        test hashSetNoDuplicates() {
             var set = new HashSet<Int>()
             set.add(1)
             set.add(2)
@@ -135,7 +135,7 @@ namespace Am.Tests {
         }
         
         // TreeSet Tests
-        static test treeSetAddAndHas() {
+        test treeSetAddAndHas() {
             var treeSet = new TreeSet<Int>((a, b) => {
                 if (a < b) {
                     return -1
@@ -156,7 +156,7 @@ namespace Am.Tests {
             Assert.assertFalse(treeSet.has(10))
         }
         
-        static test treeSetSorting() {
+        test treeSetSorting() {
             var treeSet = new TreeSet<Int>((a, b) => {
                 if (a < b) {
                     return -1
@@ -182,7 +182,7 @@ namespace Am.Tests {
             Assert.assertEquals(9, sortedList.get(4))
         }
         
-        static test treeSetNoDuplicates() {
+        test treeSetNoDuplicates() {
             var treeSet = new TreeSet<Int>((a, b) => {
                 if (a < b) {
                     return -1
@@ -201,7 +201,7 @@ namespace Am.Tests {
             Assert.assertEquals(3, treeSet.getSize())
         }
         
-        static test treeSetRemove() {
+        test treeSetRemove() {
             var treeSet = new TreeSet<Int>((a, b) => {
                 if (a < b) {
                     return -1
@@ -224,7 +224,7 @@ namespace Am.Tests {
             Assert.assertTrue(treeSet.has(15))
         }
         
-        static test treeSetReverseOrder() {
+        test treeSetReverseOrder() {
             var reverseTreeSet = new TreeSet<Int>((a, b) => {
                 if (a > b) {
                     return -1
@@ -252,7 +252,7 @@ namespace Am.Tests {
             Assert.assertEquals(1, reverseSortedList.get(5))
         }
         
-        static test treeSetWithStrings() {
+        test treeSetWithStrings() {
             var stringTreeSet = new TreeSet<String>((a, b) => {
                 // Basic string comparison - compare character by character
                 var lenA = a.getLength()

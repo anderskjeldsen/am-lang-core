@@ -5,7 +5,7 @@ namespace Am.Collections {
 
 // predicate must be able to get the type of T from the function signature
         ext fun filter<T>(collection: Iterable<T>, predicate: (t: T) => Bool): Iterable<T> {
-            var result = List<T>.newList<T>()
+            var result = List.newList<T>()
             each(collection, item) {
                 if (predicate(item)) {
                     result.add(item)
@@ -22,7 +22,7 @@ namespace Am.Collections {
         }
 
         ext fun toList<T>(iterable: Iterable<T>): List<T> {
-            var result = List<T>.newList<T>()
+            var result = List.newList<T>()
             each(iterable, item) {
                 result.add(item)
             }

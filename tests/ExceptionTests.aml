@@ -1,11 +1,11 @@
-namespace Am.Tests {
+namespace Tests {
 
     class ExceptionTests {
         import Am.Lang
         import Am.Collections
-        import Am.Testing
+        import Am.Tests
         
-        static test throwAndCatch() {
+        test throwAndCatch() {
             var caught = false
             try {
                 throw new Exception("Test exception")
@@ -16,18 +16,18 @@ namespace Am.Tests {
             Assert.assertTrue(caught)
         }
         
-        static test exceptionMessage() {
+        test exceptionMessage() {
             var message = ""
             try {
                 throw new Exception("Custom message")
             } catch(e: Exception) {
-                message = e.getMessage()
+                message = e.message
             }
             
             Assert.assertEquals("Custom message", message)
         }
         
-        static test listIndexOutOfBounds() {
+        test listIndexOutOfBounds() {
             var caught = false
             var list = List.newList<Int>()
             list.add(1)
