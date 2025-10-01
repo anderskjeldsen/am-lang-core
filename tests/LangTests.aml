@@ -1,0 +1,104 @@
+namespace Am.Tests {
+
+    class LangTests {
+        import Am.Lang
+        import Am.Testing
+        
+        static fun main() {
+            var runner = new TestRunner()
+            
+            "=== Language Tests ===".println()
+            "".println()
+            
+            // Array tests
+            LangTests.testArrayLiterals(runner)
+            LangTests.testArrayIteration(runner)
+            
+            // Type tests
+            LangTests.testIntMaxValue(runner)
+            LangTests.testCharToInt(runner)
+            LangTests.testBooleanOperations(runner)
+            
+            // ClassRef tests
+            LangTests.testClassRefForString(runner)
+            LangTests.testClassRefForInt(runner)
+            
+            runner.printSummary()
+        }
+        
+        static fun testArrayLiterals(runner: TestRunner) {
+            runner.test("Array - literal initialization", () => {
+                var array: String[] = ["Hello", "World"]
+                
+                var pass = runner.assertEquals("Hello", array[0], "first element")
+                pass = pass && runner.assertEquals("World", array[1], "second element")
+                pass = pass && runner.assertEquals(2, array.length(), "array length")
+                return pass
+            })
+        }
+        
+        static fun testArrayIteration(runner: TestRunner) {
+            runner.test("Array - iteration with each", () => {
+                var myArray: Int[] = [1, 2, 3, 4, 5]
+                var sum = 0
+                
+                var ac = myArray.asIterable()
+                each(ac, item) {
+                    sum = sum + item
+                }
+                
+                return runner.assertEquals(15, sum, "sum of array elements")
+            })
+        }
+        
+        static fun testIntMaxValue(runner: TestRunner) {
+            runner.test("Int - maxValue property", () => {
+                var max = Int.maxValue
+                
+                // Int.maxValue should be 2147483647 for 32-bit signed integer
+                return runner.assertTrue(max > 0, "maxValue should be positive")
+            })
+        }
+        
+        static fun testCharToInt(runner: TestRunner) {
+            runner.test("Char - convert to int", () => {
+                var c = 'a'
+                var i = c.toInt()
+                
+                // ASCII value of 'a' is 97
+                return runner.assertEquals(97, i, "char 'a' to int")
+            })
+        }
+        
+        static fun testBooleanOperations(runner: TestRunner) {
+            runner.test("Boolean - NOT operation", () => {
+                var trueVal = true
+                var falseVal = false
+                
+                var pass = runner.assertFalse(!trueVal, "NOT true should be false")
+                pass = pass && runner.assertTrue(!falseVal, "NOT false should be true")
+                return pass
+            })
+        }
+        
+        static fun testClassRefForString(runner: TestRunner) {
+            runner.test("ClassRef - get from string", () => {
+                var s = "hello"
+                var cr = s.getClassRef()
+                var className = cr.toString()
+                
+                return runner.assertTrue(className.getLength() > 0, "class name should not be empty")
+            })
+        }
+        
+        static fun testClassRefForInt(runner: TestRunner) {
+            runner.test("ClassRef - get from int", () => {
+                var i = 20
+                var cri = i.getClassRef()
+                var className = cri.toString()
+                
+                return runner.assertTrue(className.getLength() > 0, "class name should not be empty")
+            })
+        }
+    }
+}

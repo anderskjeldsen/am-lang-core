@@ -1,0 +1,308 @@
+namespace Am.Tests {
+
+    class CollectionsTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Testing
+        
+        static fun main() {
+            var runner = new TestRunner()
+            
+            "=== Collections Tests ===".println()
+            "".println()
+            
+            // List tests
+            CollectionsTests.testListBasicOperations(runner)
+            CollectionsTests.testListRemove(runner)
+            CollectionsTests.testListContains(runner)
+            CollectionsTests.testListIsEmpty(runner)
+            CollectionsTests.testListClear(runner)
+            
+            // HashMap tests
+            CollectionsTests.testHashMapBasicOperations(runner)
+            CollectionsTests.testHashMapContainsKey(runner)
+            CollectionsTests.testHashMapContainsValue(runner)
+            CollectionsTests.testHashMapRemove(runner)
+            CollectionsTests.testHashMapClear(runner)
+            
+            // HashSet tests
+            CollectionsTests.testHashSetBasicOperations(runner)
+            CollectionsTests.testHashSetNoDuplicates(runner)
+            
+            // TreeSet tests
+            CollectionsTests.testTreeSetBasicOperations(runner)
+            CollectionsTests.testTreeSetSorting(runner)
+            CollectionsTests.testTreeSetNoDuplicates(runner)
+            CollectionsTests.testTreeSetRemove(runner)
+            
+            runner.printSummary()
+        }
+        
+        // List Tests
+        static fun testListBasicOperations(runner: TestRunner) {
+            runner.test("List - add and get operations", () => {
+                var list = List.newList<Int>()
+                list.add(1)
+                list.add(2)
+                list.add(3)
+                
+                var pass = runner.assertEquals(3, list.getSize(), "size should be 3")
+                pass = pass && runner.assertEquals(1, list.get(0), "first element")
+                pass = pass && runner.assertEquals(2, list.get(1), "second element")
+                pass = pass && runner.assertEquals(3, list.get(2), "third element")
+                return pass
+            })
+        }
+        
+        static fun testListRemove(runner: TestRunner) {
+            runner.test("List - remove operations", () => {
+                var list = List.newList<Int>()
+                list.add(1)
+                list.add(2)
+                list.add(3)
+                
+                list.remove(2)
+                
+                var pass = runner.assertEquals(2, list.getSize(), "size after remove")
+                pass = pass && runner.assertEquals(1, list.get(0), "first element unchanged")
+                pass = pass && runner.assertEquals(3, list.get(1), "third element shifted")
+                return pass
+            })
+        }
+        
+        static fun testListContains(runner: TestRunner) {
+            runner.test("List - contains check", () => {
+                var list = List.newList<Int>()
+                list.add(1)
+                list.add(2)
+                list.add(3)
+                
+                var pass = runner.assertTrue(list.contains(2), "should contain 2")
+                pass = pass && runner.assertFalse(list.contains(5), "should not contain 5")
+                return pass
+            })
+        }
+        
+        static fun testListIsEmpty(runner: TestRunner) {
+            runner.test("List - isEmpty check", () => {
+                var list = List.newList<Int>()
+                
+                var pass = runner.assertTrue(list.isEmpty(), "new list should be empty")
+                list.add(1)
+                pass = pass && runner.assertFalse(list.isEmpty(), "list with item not empty")
+                return pass
+            })
+        }
+        
+        static fun testListClear(runner: TestRunner) {
+            runner.test("List - clear operation", () => {
+                var list = List.newList<Int>()
+                list.add(1)
+                list.add(2)
+                list.add(3)
+                
+                list.clear()
+                
+                var pass = runner.assertEquals(0, list.getSize(), "size after clear")
+                pass = pass && runner.assertTrue(list.isEmpty(), "should be empty after clear")
+                return pass
+            })
+        }
+        
+        // HashMap Tests
+        static fun testHashMapBasicOperations(runner: TestRunner) {
+            runner.test("HashMap - set and get operations", () => {
+                var map = new HashMap<String, String>()
+                map.set("key1", "value1")
+                map.set("key2", "value2")
+                
+                var pass = runner.assertEquals(2, map.getSize(), "size should be 2")
+                pass = pass && runner.assertEquals("value1", map.get("key1"), "get key1")
+                pass = pass && runner.assertEquals("value2", map.get("key2"), "get key2")
+                return pass
+            })
+        }
+        
+        static fun testHashMapContainsKey(runner: TestRunner) {
+            runner.test("HashMap - containsKey check", () => {
+                var map = new HashMap<String, String>()
+                map.set("key1", "value1")
+                
+                var pass = runner.assertTrue(map.containsKey("key1"), "should contain key1")
+                pass = pass && runner.assertFalse(map.containsKey("key2"), "should not contain key2")
+                return pass
+            })
+        }
+        
+        static fun testHashMapContainsValue(runner: TestRunner) {
+            runner.test("HashMap - containsValue check", () => {
+                var map = new HashMap<String, String>()
+                map.set("key1", "value1")
+                
+                var pass = runner.assertTrue(map.containsValue("value1"), "should contain value1")
+                pass = pass && runner.assertFalse(map.containsValue("value2"), "should not contain value2")
+                return pass
+            })
+        }
+        
+        static fun testHashMapRemove(runner: TestRunner) {
+            runner.test("HashMap - remove operation", () => {
+                var map = new HashMap<String, String>()
+                map.set("key1", "value1")
+                map.set("key2", "value2")
+                
+                var removed = map.remove("key1")
+                
+                var pass = runner.assertEquals("value1", removed, "removed value")
+                pass = pass && runner.assertEquals(1, map.getSize(), "size after remove")
+                pass = pass && runner.assertFalse(map.containsKey("key1"), "key1 should be gone")
+                return pass
+            })
+        }
+        
+        static fun testHashMapClear(runner: TestRunner) {
+            runner.test("HashMap - clear operation", () => {
+                var map = new HashMap<String, String>()
+                map.set("key1", "value1")
+                map.set("key2", "value2")
+                
+                map.clear()
+                
+                var pass = runner.assertEquals(0, map.getSize(), "size after clear")
+                pass = pass && runner.assertTrue(map.isEmpty(), "should be empty after clear")
+                return pass
+            })
+        }
+        
+        // HashSet Tests
+        static fun testHashSetBasicOperations(runner: TestRunner) {
+            runner.test("HashSet - add and has operations", () => {
+                var set = new HashSet<Int>()
+                set.add(1)
+                set.add(2)
+                set.add(3)
+                
+                var pass = runner.assertTrue(set.has(1), "should have 1")
+                pass = pass && runner.assertTrue(set.has(2), "should have 2")
+                pass = pass && runner.assertTrue(set.has(3), "should have 3")
+                pass = pass && runner.assertFalse(set.has(4), "should not have 4")
+                return pass
+            })
+        }
+        
+        static fun testHashSetNoDuplicates(runner: TestRunner) {
+            runner.test("HashSet - no duplicates", () => {
+                var set = new HashSet<Int>()
+                set.add(1)
+                set.add(2)
+                set.add(2)  // Duplicate
+                set.add(3)
+                
+                var pass = runner.assertEquals(3, set.getSize(), "size should be 3 (no duplicates)")
+                return pass
+            })
+        }
+        
+        // TreeSet Tests
+        static fun testTreeSetBasicOperations(runner: TestRunner) {
+            runner.test("TreeSet - add and has operations", () => {
+                var treeSet = new TreeSet<Int>((a, b) => {
+                    if (a < b) {
+                        return -1
+                    } else if (a > b) {
+                        return 1
+                    } else {
+                        return 0
+                    }
+                })
+                
+                treeSet.add(5)
+                treeSet.add(2)
+                treeSet.add(8)
+                
+                var pass = runner.assertTrue(treeSet.has(5), "should have 5")
+                pass = pass && runner.assertTrue(treeSet.has(2), "should have 2")
+                pass = pass && runner.assertTrue(treeSet.has(8), "should have 8")
+                pass = pass && runner.assertFalse(treeSet.has(10), "should not have 10")
+                return pass
+            })
+        }
+        
+        static fun testTreeSetSorting(runner: TestRunner) {
+            runner.test("TreeSet - maintains sorted order", () => {
+                var treeSet = new TreeSet<Int>((a, b) => {
+                    if (a < b) {
+                        return -1
+                    } else if (a > b) {
+                        return 1
+                    } else {
+                        return 0
+                    }
+                })
+                
+                treeSet.add(5)
+                treeSet.add(2)
+                treeSet.add(8)
+                treeSet.add(1)
+                treeSet.add(9)
+                
+                var sortedList = treeSet.toList()
+                
+                var pass = runner.assertEquals(1, sortedList.get(0), "first element should be 1")
+                pass = pass && runner.assertEquals(2, sortedList.get(1), "second element should be 2")
+                pass = pass && runner.assertEquals(5, sortedList.get(2), "third element should be 5")
+                pass = pass && runner.assertEquals(8, sortedList.get(3), "fourth element should be 8")
+                pass = pass && runner.assertEquals(9, sortedList.get(4), "fifth element should be 9")
+                return pass
+            })
+        }
+        
+        static fun testTreeSetNoDuplicates(runner: TestRunner) {
+            runner.test("TreeSet - no duplicates", () => {
+                var treeSet = new TreeSet<Int>((a, b) => {
+                    if (a < b) {
+                        return -1
+                    } else if (a > b) {
+                        return 1
+                    } else {
+                        return 0
+                    }
+                })
+                
+                treeSet.add(5)
+                treeSet.add(2)
+                treeSet.add(2)  // Duplicate
+                treeSet.add(8)
+                
+                var pass = runner.assertEquals(3, treeSet.getSize(), "size should be 3 (no duplicates)")
+                return pass
+            })
+        }
+        
+        static fun testTreeSetRemove(runner: TestRunner) {
+            runner.test("TreeSet - remove operation", () => {
+                var treeSet = new TreeSet<Int>((a, b) => {
+                    if (a < b) {
+                        return -1
+                    } else if (a > b) {
+                        return 1
+                    } else {
+                        return 0
+                    }
+                })
+                
+                treeSet.add(10)
+                treeSet.add(5)
+                treeSet.add(15)
+                
+                treeSet.remove(5)
+                
+                var pass = runner.assertEquals(2, treeSet.getSize(), "size after remove")
+                pass = pass && runner.assertFalse(treeSet.has(5), "should not have 5 after remove")
+                pass = pass && runner.assertTrue(treeSet.has(10), "should still have 10")
+                pass = pass && runner.assertTrue(treeSet.has(15), "should still have 15")
+                return pass
+            })
+        }
+    }
+}

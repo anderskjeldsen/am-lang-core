@@ -1,0 +1,172 @@
+namespace Am.Tests {
+
+    class ControlFlowTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Testing
+        
+        static fun main() {
+            var runner = new TestRunner()
+            
+            "=== Control Flow Tests ===".println()
+            "".println()
+            
+            // Switch tests
+            ControlFlowTests.testSwitchWithInt(runner)
+            ControlFlowTests.testSwitchWithString(runner)
+            
+            // Loop tests
+            ControlFlowTests.testForLoop(runner)
+            ControlFlowTests.testWhileLoop(runner)
+            ControlFlowTests.testForLoopWithBreak(runner)
+            ControlFlowTests.testForLoopWithContinue(runner)
+            ControlFlowTests.testWhileLoopWithContinue(runner)
+            ControlFlowTests.testEachLoopWithContinue(runner)
+            
+            // Increment tests
+            ControlFlowTests.testPreIncrement(runner)
+            
+            runner.printSummary()
+        }
+        
+        static fun testSwitchWithInt(runner: TestRunner) {
+            runner.test("Switch - with integer", () => {
+                var result = ""
+                var x = 1
+                switch(x) {
+                    case 1:
+                        result = "x is 1"
+                    case 2:
+                        result = "x is 2"
+                    default:
+                        result = "x is something else"
+                }
+                
+                return runner.assertEquals("x is 1", result, "Switch with int value 1")
+            })
+        }
+        
+        static fun testSwitchWithString(runner: TestRunner) {
+            runner.test("Switch - with string", () => {
+                var result = ""
+                var y = "hello"
+                switch(y) {
+                    case "world":
+                        result = "y is world"
+                    case "5":
+                        result = "y is 5"
+                    case "hello":
+                        result = "y is hello"
+                    default:
+                        result = "y is something else"
+                }
+                
+                return runner.assertEquals("y is hello", result, "Switch with string value hello")
+            })
+        }
+        
+        static fun testForLoop(runner: TestRunner) {
+            runner.test("For loop - basic iteration", () => {
+                var sum = 0
+                for (i = 0 to 5) {
+                    sum = sum + i
+                }
+                
+                // 0 + 1 + 2 + 3 + 4 = 10
+                return runner.assertEquals(10, sum, "For loop sum 0 to 4")
+            })
+        }
+        
+        static fun testWhileLoop(runner: TestRunner) {
+            runner.test("While loop - basic iteration", () => {
+                var i = 0
+                var sum = 0
+                while (i < 5) {
+                    sum = sum + i
+                    i++
+                }
+                
+                return runner.assertEquals(10, sum, "While loop sum")
+            })
+        }
+        
+        static fun testForLoopWithBreak(runner: TestRunner) {
+            runner.test("For loop - with break", () => {
+                var count = 0
+                for (i = 0 to 10) {
+                    count++
+                    if (i == 5) {
+                        break
+                    }
+                }
+                
+                return runner.assertEquals(6, count, "For loop breaks at i=5")
+            })
+        }
+        
+        static fun testForLoopWithContinue(runner: TestRunner) {
+            runner.test("For loop - with continue", () => {
+                var sum = 0
+                for (i = 0 to 10) {
+                    if (i == 5) {
+                        continue  // Skip when i equals 5
+                    }
+                    sum = sum + i
+                }
+                
+                // 0 + 1 + 2 + 3 + 4 + 6 + 7 + 8 + 9 = 40
+                return runner.assertEquals(40, sum, "For loop with continue skips 5")
+            })
+        }
+        
+        static fun testWhileLoopWithContinue(runner: TestRunner) {
+            runner.test("While loop - with continue", () => {
+                var j = 0
+                var sum = 0
+                while (j < 10) {
+                    j++
+                    if (j % 2 == 0) {
+                        continue  // Skip even numbers
+                    }
+                    sum = sum + j
+                }
+                
+                // 1 + 3 + 5 + 7 + 9 = 25
+                return runner.assertEquals(25, sum, "While loop with continue (odd numbers only)")
+            })
+        }
+        
+        static fun testEachLoopWithContinue(runner: TestRunner) {
+            runner.test("Each loop - with continue", () => {
+                var myArray = List.newList<Int>()
+                myArray.add(1)
+                myArray.add(-2)
+                myArray.add(3)
+                myArray.add(-4)
+                myArray.add(5)
+                
+                var sum = 0
+                each(myArray, item) {
+                    if (item < 0) {
+                        continue  // Skip negative values
+                    }
+                    sum = sum + item
+                }
+                
+                // 1 + 3 + 5 = 9
+                return runner.assertEquals(9, sum, "Each loop with continue (positive only)")
+            })
+        }
+        
+        static fun testPreIncrement(runner: TestRunner) {
+            runner.test("Pre-increment operator", () => {
+                var i = 0
+                var j = ++i
+                
+                var pass = runner.assertEquals(1, i, "i should be 1")
+                pass = pass && runner.assertEquals(1, j, "j should be 1")
+                return pass
+            })
+        }
+    }
+}

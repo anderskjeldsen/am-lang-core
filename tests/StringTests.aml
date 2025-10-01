@@ -1,0 +1,78 @@
+namespace Am.Tests {
+
+    class StringTests {
+        import Am.Lang
+        import Am.Testing
+        
+        static fun main() {
+            var runner = new TestRunner()
+            
+            "=== String Tests ===".println()
+            "".println()
+            
+            // StringBuilder tests
+            StringTests.testStringBuilder(runner)
+            StringTests.testStringBuilderMultipleAdds(runner)
+            
+            // String interpolation tests
+            StringTests.testStringInterpolation(runner)
+            StringTests.testStringInterpolationWithExpression(runner)
+            
+            // String operations
+            StringTests.testStringConcatenation(runner)
+            
+            runner.printSummary()
+        }
+        
+        static fun testStringBuilder(runner: TestRunner) {
+            runner.test("StringBuilder - basic usage", () => {
+                var sb = new StringBuilder()
+                sb.add("hello").add(" ").add("world")
+                var str = sb.toString()
+                
+                return runner.assertEquals("hello world", str, "StringBuilder concatenation")
+            })
+        }
+        
+        static fun testStringBuilderMultipleAdds(runner: TestRunner) {
+            runner.test("StringBuilder - multiple adds", () => {
+                var sb = new StringBuilder()
+                sb.add("a")
+                sb.add("b")
+                sb.add("c")
+                var str = sb.toString()
+                
+                return runner.assertEquals("abc", str, "StringBuilder multiple adds")
+            })
+        }
+        
+        static fun testStringInterpolation(runner: TestRunner) {
+            runner.test("String interpolation - simple variable", () => {
+                var x = 5
+                var s = "x = $x"
+                
+                return runner.assertEquals("x = 5", s, "String interpolation with variable")
+            })
+        }
+        
+        static fun testStringInterpolationWithExpression(runner: TestRunner) {
+            runner.test("String interpolation - with expression", () => {
+                var x = 5
+                var b = 10
+                var s = "x = $x, b = ${b}"
+                
+                return runner.assertEquals("x = 5, b = 10", s, "String interpolation with expression")
+            })
+        }
+        
+        static fun testStringConcatenation(runner: TestRunner) {
+            runner.test("String concatenation", () => {
+                var str1 = "hello"
+                var str2 = "world"
+                var result = str1 + " " + str2
+                
+                return runner.assertEquals("hello world", result, "String concatenation")
+            })
+        }
+    }
+}
