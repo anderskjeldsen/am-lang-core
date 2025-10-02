@@ -1,0 +1,70 @@
+namespace Tests {
+
+    class GenericsTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+        
+        test genericListWithStrings() {
+            var list = List<String>.newList<String>()
+            list.add("hello")
+            list.add("world")
+            
+            Assert.assertEquals(2, list.getSize())
+            Assert.assertEquals("hello", list.get(0))
+            Assert.assertEquals("world", list.get(1))
+        }
+        
+        test genericListWithInts() {
+            var list = List.newList<Int>()
+            list.add(10)
+            list.add(20)
+            list.add(30)
+            
+            Assert.assertEquals(3, list.getSize())
+            Assert.assertEquals(10, list.get(0))
+            Assert.assertEquals(20, list.get(1))
+            Assert.assertEquals(30, list.get(2))
+        }
+        
+        test listFilter() {
+            var l = List.newList<Int>()
+            l.add(1)
+            l.add(2)
+            l.add(3)
+            var l2 = l.filter((i) => {
+                if (i == 1) {
+                    return false
+                }
+                return true
+            }).toList()
+
+            Assert.assertEquals(2, l2.getSize())
+            Assert.assertEquals(2, l2.get(0))
+            Assert.assertEquals(3, l2.get(1))
+        }
+
+        test interfaceExtensionFunctionOnImplementation() {
+            var l = List.newList<Int>()
+            l.add(1)
+            l.add(2)
+            var l2 = l.toList()
+
+        }
+        
+        test listFirstOr() {
+            var l = List.newList<Int>()
+            l.add(1)
+            l.add(2)
+            
+            var first = l.firstOr(3)
+            
+            Assert.assertEquals(1, first)
+            
+            var emptyList = List.newList<Int>()
+            var firstEmpty = emptyList.firstOr(99)
+            
+            Assert.assertEquals(99, firstEmpty)
+        }
+    }
+}

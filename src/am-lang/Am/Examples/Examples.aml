@@ -467,21 +467,7 @@ namespace Am.Examples {
             "end".println()
         }
 
-        static fun main2() {
-            "connect to localhost".println()
-            var s = Socket.create(AddressFamily.inet, SocketType.stream, ProtocolFamily.unspecified)
-            s.connect("localhost", 9030)
-            "connected".println()
 
-            var socketStream = new SocketStream(s)
-            var istream = socketStream as Stream
-            var ts = new TextStream(istream)
-            ts.writeString("GET / HTTP/1.1\r\nHost:localhost\r\n\r\n")
-
-            var rs = ts.readString()
-            rs.println()        
-            s.close()    
-        }
 /*
         static fun main6() {
             var host = "www.kelson.no"

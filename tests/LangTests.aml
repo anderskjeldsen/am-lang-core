@@ -1,0 +1,74 @@
+namespace Tests {
+
+    class LangTests {
+        import Am.Lang
+        import Am.Tests
+        
+        static var testStaticValue: String = "static hello"
+        
+        test arrayLiterals() {
+            var array: String[] = ["Hello", "World"]
+            
+            Assert.assertEquals("Hello", array[0])
+            Assert.assertEquals("World", array[1])
+            Assert.assertEquals(2UI, array.length())
+        }
+        
+        test arrayIteration() {
+            var myArray: Int[] = [1, 2, 3, 4, 5]
+            var sum = 0
+            
+            var ac = myArray.asIterable()
+            each(ac, item) {
+                sum = sum + item
+            }
+            
+            Assert.assertEquals(15, sum)
+        }
+        
+        test intMaxValue() {
+            var max = Int.maxValue
+            
+            // Int.maxValue should be 2147483647 for 32-bit signed integer
+            Assert.assertTrue(max > 0)
+        }
+        
+        test charToInt() {
+            var c = 'a'
+            var i = c.toInt()
+            
+            // ASCII value of 'a' is 97
+            Assert.assertEquals(97, i)
+        }
+        
+        test booleanOperations() {
+            var trueVal = true
+            var falseVal = false
+            
+            Assert.assertFalse(!trueVal)
+            Assert.assertTrue(!falseVal)
+        }
+        
+        test classRefForString() {
+            var s = "hello"
+            var cr = s.getClassRef()
+            var className = cr.toString()
+            
+            Assert.assertTrue(className.getLength() > 0)
+        }
+        
+        test classRefForInt() {
+            var i = 20
+            var cri = i.getClassRef()
+            var className = cri.toString()
+            
+            Assert.assertTrue(className.getLength() > 0)
+        }
+        
+        test staticFieldAccess() {
+            var value = LangTests.testStaticValue
+            
+            Assert.assertEquals("static hello", value)
+        }
+    }
+}

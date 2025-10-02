@@ -1,0 +1,129 @@
+namespace Tests {
+
+    class ControlFlowTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+        
+        static test switchWithInt() {
+            var result = ""
+            var x = 1
+            switch(x) {
+                case 1:
+                    result = "x is 1"
+                case 2:
+                    result = "x is 2"
+                default:
+                    result = "x is something else"
+            }
+            
+            Assert.assertEquals("x is 1", result)
+        }
+        
+        static test switchWithString() {
+            var result = ""
+            var y = "hello"
+            switch(y) {
+                case "world":
+                    result = "y is world"
+                case "5":
+                    result = "y is 5"
+                case "hello":
+                    result = "y is hello"
+                default:
+                    result = "y is something else"
+            }
+            
+            Assert.assertEquals("y is hello", result)
+        }
+        
+        static test forLoop() {
+            var sum = 0
+            for (i = 0 to 5) {
+                sum = sum + i
+            }
+            
+            // 0 + 1 + 2 + 3 + 4 = 10
+            Assert.assertEquals(10, sum)
+        }
+        
+        static test whileLoop() {
+            var i = 0
+            var sum = 0
+            while (i < 5) {
+                sum = sum + i
+                i++
+            }
+            
+            Assert.assertEquals(10, sum)
+        }
+        
+        static test forLoopWithBreak() {
+            var count = 0
+            for (i = 0 to 10) {
+                count++
+                if (i == 5) {
+                    break
+                }
+            }
+            
+            Assert.assertEquals(6, count)
+        }
+        
+        static test forLoopWithContinue() {
+            var sum = 0
+            for (i = 0 to 10) {
+                if (i == 5) {
+                    continue  // Skip when i equals 5
+                }
+                sum = sum + i
+            }
+            
+            // 0 + 1 + 2 + 3 + 4 + 6 + 7 + 8 + 9 = 40
+            Assert.assertEquals(40, sum)
+        }
+        
+        static test whileLoopWithContinue() {
+            var j = 0
+            var sum = 0
+            while (j < 10) {
+                j++
+                if (j % 2 == 0) {
+                    continue  // Skip even numbers
+                }
+                sum = sum + j
+            }
+            
+            // 1 + 3 + 5 + 7 + 9 = 25
+            Assert.assertEquals(25, sum)
+        }
+        
+        static test eachLoopWithContinue() {
+            var myArray = List.newList<Int>()
+            myArray.add(1)
+            myArray.add(-2)
+            myArray.add(3)
+            myArray.add(-4)
+            myArray.add(5)
+            
+            var sum = 0
+            each(myArray, item) {
+                if (item < 0) {
+                    continue  // Skip negative values
+                }
+                sum = sum + item
+            }
+            
+            // 1 + 3 + 5 = 9
+            Assert.assertEquals(9, sum)
+        }
+        
+        static test preIncrement() {
+            var i = 0
+            var j = ++i
+            
+            Assert.assertEquals(1, i)
+            Assert.assertEquals(1, j)
+        }
+    }
+}

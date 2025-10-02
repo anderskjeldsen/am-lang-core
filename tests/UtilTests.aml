@@ -1,0 +1,35 @@
+namespace Tests {
+
+    class UtilTests {
+        import Am.Lang
+        import Am.Util.Parsers.Text
+        import Am.Tests
+        
+        test textParserParseUntil() {
+            var tp = new TextParser("Hello World")
+            var parsed = tp.parseUntil((c) => {
+                if (c == 0x20) {  // Space character
+                    return true
+                }
+                return false
+            })
+            
+            Assert.assertEquals("Hello", parsed)
+        }
+        
+        test textParserPeek() {
+            var tp = new TextParser("Hello World")
+            var peeked = tp.peek(5.toUInt())
+            
+            Assert.assertEquals("Hello", peeked)
+        }
+        
+        test textParserSkip() {
+            var tp = new TextParser("Hello World")
+            tp.skip(6.toUInt())  // Skip "Hello "
+            var peeked = tp.peek(5.toUInt())
+            
+            Assert.assertEquals("World", peeked)
+        }
+    }
+}

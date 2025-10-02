@@ -1,0 +1,44 @@
+namespace Tests {
+
+    class ExceptionTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+        
+        test throwAndCatch() {
+            var caught = false
+            try {
+                throw new Exception("Test exception")
+            } catch(e: Exception) {
+                caught = true
+            }
+            
+            Assert.assertTrue(caught)
+        }
+        
+        test exceptionMessage() {
+            var message = ""
+            try {
+                throw new Exception("Custom message")
+            } catch(e: Exception) {
+                message = e.message
+            }
+            
+            Assert.assertEquals("Custom message", message)
+        }
+        
+        test listIndexOutOfBounds() {
+            var caught = false
+            var list = List.newList<Int>()
+            list.add(1)
+            
+            try {
+                var item = list.get(10)  // Index out of bounds
+            } catch(e: Exception) {
+                caught = true
+            }
+            
+            Assert.assertTrue(caught)
+        }
+    }
+}
