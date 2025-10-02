@@ -79,10 +79,17 @@ namespace Am.Collections {
             var hash = value.hash()
             var index = hash % this.bucketSize
 
+            var valueIndex = this.valueIndexes[index] - 1 // index of values and next arrays
+            
+            // Check if value already exists
+            var existingIndex = this.findEntry(valueIndex, value)
+            if (existingIndex >= 0) {
+                // Value already exists, don't add it again (Set behavior)
+                return
+            }
+
             this.values[this.currentValueIndex] = value
 //            this.nextIndexes[this.currentValueIndex] = 0
-
-            var valueIndex = this.valueIndexes[index] - 1 // index of values and next arrays
 
             if (valueIndex < 0) {
                 this.valueIndexes[index] = this.currentValueIndex + 1 // cause all are initially set to 0, then a real 0 will be 1
