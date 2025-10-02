@@ -42,9 +42,15 @@ namespace Tests {
                 return true
             })
             "3".println()
+            each(it, i) {
+                i.toString().println()
+            }
             
             var l2 = it.toList()
             "4".println()
+
+            var l3 = l2.toList()
+            "5".println()
 
             Assert.assertEquals(2, l2.getSize())
             Assert.assertEquals(2, l2.get(0))
