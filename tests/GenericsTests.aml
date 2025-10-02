@@ -32,29 +32,24 @@ namespace Tests {
             l.add(1)
             l.add(2)
             l.add(3)
-            "1".println()
-            var it = l.filter((i) => {
-                "2".println()
-
+            var l2 = l.filter((i) => {
                 if (i == 1) {
                     return false
                 }
                 return true
-            })
-            "3".println()
-            each(it, i) {
-                i.toString().println()
-            }
-            
-            var l2 = it.toList()
-            "4".println()
-
-            var l3 = l2.toList()
-            "5".println()
+            }).toList()
 
             Assert.assertEquals(2, l2.getSize())
             Assert.assertEquals(2, l2.get(0))
             Assert.assertEquals(3, l2.get(1))
+        }
+
+        test interfaceExtensionFunctionOnImplementation() {
+            var l = List.newList<Int>()
+            l.add(1)
+            l.add(2)
+            var l2 = l.toList()
+
         }
         
         test listFirstOr() {

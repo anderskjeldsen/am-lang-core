@@ -11,7 +11,7 @@ namespace Tests {
             
             Assert.assertEquals("Hello", array[0])
             Assert.assertEquals("World", array[1])
-            Assert.assertEquals(2, array.length())
+            Assert.assertEquals(2UI, array.length())
         }
         
         test arrayIteration() {
