@@ -11,7 +11,6 @@ namespace Am.Examples {
         import Am.Lang
         import Am.Lang.Diagnostics
         import Am.IO
-        import Am.IO.Networking
         import Am.Collections
         import Am.Util.Parsers.Json
         import Am.Util.Parsers.Text
@@ -466,30 +465,6 @@ namespace Am.Examples {
 
             "end".println()
         }
-
-
-/*
-        static fun main6() {
-            var host = "www.kelson.no"
-            ("connect to " + host).println()
-            var s = Socket.create(AddressFamily.inet, SocketType.stream, ProtocolFamily.unspecified)
-            s.connect(host, 443)
-            "connected".println()
-
-            var sslCert = SslCert.load("cacert.pem")
-
-            var socketStream = new SslSocketStream(s, host, sslCert)
-            var istream = socketStream as Stream
-            var ts = new TextStream(istream)
-            ts.writeString("GET / HTTP/1.1\r\nHost: " + host + "\r\n\r\n")
-
-            var rs = ts.readString()
-            "data read".println()
-            rs.println()        
-            s.close()    
-            "closed".println()
-        }
-*/
 
         // TreeSet example with lambda comparison functions
         static fun main28() {
