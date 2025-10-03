@@ -13,13 +13,15 @@ AmLang is inspired by other programming languages like Kotlin, Java, C#, TypeScr
 - classes
 - interfaces
 - namespaces
+- for-loops
+- switch statements
 - suspendable functions
 - lambda expressions
-- native c support, 
-- exceptions (try,catch,throw) 
+- native c support
+- exceptions (try,catch,throw)
 - and a lot more. 
 
-There are still some major features missing, like for example for-loops. I have to use while loops until I prioritize for-loops 🙂 Currently it compiles only on Mac/Linux/Windows (using Docker), but one of the ultimate goals is to re-write the compiler in its own language. The compiler doesn't generate any machine code on its own, it writes C-code and lets GCC make the machine code. Performance-wise it's not as efficient as C (obviously?), but one can easily let c/asm do the heavy lifting and use this for orchestration. 
+Currently it compiles only on Mac/Linux/Windows (using Docker), but one of the ultimate goals is to re-write the compiler in its own language. The compiler doesn't generate any machine code on its own, it writes C-code and lets GCC make the machine code. Performance-wise it's not as efficient as C (obviously?), but one can easily let c/asm do the heavy lifting and use this for orchestration. 
 
 # Requirements
 - Java 11+
