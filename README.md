@@ -47,7 +47,7 @@ The option "-bt" specifies which build target (from package.yml) you want to use
 
 # Code example
 
-The following code fills up a HashSet2 (will be renamed to HashSet) and times it.
+The following code fills up a HashSet and times it.
 
     namespace Am.Examples {    
 
@@ -59,7 +59,7 @@ The following code fills up a HashSet2 (will be renamed to HashSet) and times it
             import Am.Collections
 
             static fun main() {
-                var set = new HashSet2<Int>()
+                var set = new HashSet<Int>()
                 var startDate = Date.now()
                 var i = 1
                 var max = 1000000
