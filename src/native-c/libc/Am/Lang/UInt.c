@@ -114,14 +114,14 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_Lang_UInt_parse_1(nullable_value const s)
+function_result Am_Lang_UInt_parse_0(aobject * const s)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 	
-	__increase_reference_count_nullable_value(s);
+	__increase_reference_count(s);
 	
-	string_holder *holder = s.value.object_value->object_properties.class_object_properties.object_data.value.custom_value;
+	string_holder *holder = s->object_properties.class_object_properties.object_data.value.custom_value;
 	char *str = holder->string_value;
 	char *endptr;
 	
@@ -130,7 +130,7 @@ function_result Am_Lang_UInt_parse_1(nullable_value const s)
 	__result.return_value = (nullable_value) { .value = { .uint_value = (unsigned int)result }, .flags = 0 };
 
 __exit: ;
-	__decrease_reference_count_nullable_value(s);
+	__decrease_reference_count(s);
 	return __result;
 };
 
