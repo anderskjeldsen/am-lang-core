@@ -11,6 +11,8 @@ namespace Am.Lang
         native fun toUShort(): UShort
         native fun toUInt(): UInt
         native fun toULong(): ULong
+        native fun toFloat(): Float
+        native fun toDouble(): Double
         native fun toBool(): Bool
 
         static const var maxValue: Int = 0x7fffffff

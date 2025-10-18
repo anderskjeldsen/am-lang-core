@@ -120,3 +120,23 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_Lang_Long_toFloat_0(long long const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	__result.return_value = (nullable_value) { .value = { .float_value = (float)this }, .flags = 0 };
+
+__exit: ;
+	return __result;
+};
+
+function_result Am_Lang_Long_toDouble_0(long long const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	__result.return_value = (nullable_value) { .value = { .double_value = (double)this }, .flags = 0 };
+
+__exit: ;
+	return __result;
+};
+

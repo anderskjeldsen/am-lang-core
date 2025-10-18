@@ -17,6 +17,8 @@
 #include <Am/Lang/UInt.h>
 #include <Am/Lang/ULong.h>
 #include <Am/Lang/UShort.h>
+#include <Am/Lang/Float.h>
+#include <Am/Lang/Double.h>
 
 #include <libc/memory_pools.h>
 #include <libc/core_inline_functions.h>
@@ -816,6 +818,12 @@ bool primitive_or_object_equals(const value a, const value b, const ctype type) 
     } else if (type == ulong_type) {
         // ulong comparison
         return a.ulong_value == b.ulong_value;
+    } else if (type == float_type) {
+        // float comparison
+        return a.float_value == b.float_value;
+    } else if (type == double_type) {
+        // double comparison
+        return a.double_value == b.double_value;
     } else if (a.object_value == b.object_value) {
         return true;
     } else if (a.object_value != NULL && b.object_value != NULL) {
@@ -998,10 +1006,10 @@ aclass * const get_class_from_any(nullable_value const value) {
             return &Am_Lang_Int;
         case long_type:
             return &Am_Lang_Long;
-//        case float_type:
-//            return &Am_Lang_Float;
-//        case double_type:
-//            return &Am_Lang_Double;
+        case float_type:
+            return &Am_Lang_Float;
+        case double_type:
+            return &Am_Lang_Double;
         case bool_type:
             return &Am_Lang_Bool;
         case uchar_type:

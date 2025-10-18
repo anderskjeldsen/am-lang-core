@@ -11,5 +11,7 @@
 #include <Am/Lang/UShort.h>
 #include <Am/Lang/UInt.h>
 #include <Am/Lang/ULong.h>
+#include <Am/Lang/Float.h>
+#include <Am/Lang/Double.h>
 #include <Am/Lang/Bool.h>
 
