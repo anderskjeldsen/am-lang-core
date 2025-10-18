@@ -70,5 +70,117 @@ namespace Tests {
             
             Assert.assertEquals("static hello", value)
         }
+        
+        test parseLong() {
+            var l1 = Long.parse("123")
+            Assert.assertEquals(123L, l1)
+            
+            var l2 = Long.parse("-456")
+            Assert.assertEquals(-456L, l2)
+            
+            var l3 = Long.parse("9223372036854775807")
+            Assert.assertEquals(Long.maxValue, l3)
+            
+            var l4 = Long.parse("-9223372036854775808")
+            Assert.assertEquals(Long.minValue, l4)
+            
+            var l5 = Long.parse("0")
+            Assert.assertEquals(0L, l5)
+        }
+        
+        test parseInt() {
+            var i1 = Int.parse("123")
+            Assert.assertEquals(123, i1)
+            
+            var i2 = Int.parse("-456")
+            Assert.assertEquals(-456, i2)
+            
+            var i3 = Int.parse("2147483647")
+            Assert.assertEquals(Int.maxValue, i3)
+            
+            var i4 = Int.parse("-2147483648")
+            Assert.assertEquals(Int.minValue, i4)
+            
+            var i5 = Int.parse("0")
+            Assert.assertEquals(0, i5)
+        }
+        
+        test parseShort() {
+            var s1 = Short.parse("123")
+            Assert.assertEquals(123S, s1)
+            
+            var s2 = Short.parse("-456")
+            Assert.assertEquals(-456S, s2)
+            
+            var s3 = Short.parse("32767")
+            Assert.assertEquals(Short.maxValue, s3)
+            
+            var s4 = Short.parse("-32768")
+            Assert.assertEquals(Short.minValue, s4)
+            
+            var s5 = Short.parse("0")
+            Assert.assertEquals(0S, s5)
+        }
+        
+        test parseByte() {
+            var b1 = Byte.parse("123")
+            Assert.assertEquals(123B, b1)
+            
+            var b2 = Byte.parse("-45")
+            Assert.assertEquals(-45B, b2)
+            
+            var b3 = Byte.parse("127")
+            Assert.assertEquals(Byte.maxValue, b3)
+            
+            var b4 = Byte.parse("-128")
+            Assert.assertEquals(Byte.minValue, b4)
+            
+            var b5 = Byte.parse("0")
+            Assert.assertEquals(0B, b5)
+        }
+        
+        test parseULong() {
+            var ul1 = ULong.parse("123")
+            Assert.assertEquals(123UL, ul1)
+            
+            var ul2 = ULong.parse("18446744073709551615")
+            Assert.assertEquals(ULong.maxValue, ul2)
+            
+            var ul3 = ULong.parse("0")
+            Assert.assertEquals(ULong.minValue, ul3)
+        }
+        
+        test parseUInt() {
+            var ui1 = UInt.parse("123")
+            Assert.assertEquals(123UI, ui1)
+            
+            var ui2 = UInt.parse("4294967295")
+            Assert.assertEquals(UInt.maxValue, ui2)
+            
+            var ui3 = UInt.parse("0")
+            Assert.assertEquals(UInt.minValue, ui3)
+        }
+        
+        test parseUShort() {
+            var us1 = UShort.parse("123")
+            Assert.assertEquals(123US, us1)
+            
+            var us2 = UShort.parse("65535")
+            Assert.assertEquals(UShort.maxValue, us2)
+            
+            var us3 = UShort.parse("0")
+            Assert.assertEquals(UShort.minValue, us3)
+        }
+        
+        test parseUByte() {
+            var ub1 = UByte.parse("123")
+            Assert.assertEquals(123UB, ub1)
+            
+            var ub2 = UByte.parse("255")
+            Assert.assertEquals(UByte.maxValue, ub2)
+            
+            var ub3 = UByte.parse("0")
+            Assert.assertEquals(UByte.minValue, ub3)
+        }
     }
 }
