@@ -15,6 +15,8 @@ namespace Am.Lang
         native fun toULong(): ULong
         native fun toBool(): Bool
 
+        static native fun parse(s: String): UByte
+
         static const var maxValue: UByte = 0xffUB
         static const var minValue: UByte = 0x00UB
 

@@ -114,3 +114,23 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_Lang_Int_parse_0(aobject * const s)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	
+	__increase_reference_count(s);
+	
+	string_holder *holder = s->object_properties.class_object_properties.object_data.value.custom_value;
+	char *str = holder->string_value;
+	char *endptr;
+	
+	long result = strtol(str, &endptr, 10);
+	
+	__result.return_value = (nullable_value) { .value = { .int_value = (int)result }, .flags = 0 };
+
+__exit: ;
+	__decrease_reference_count(s);
+	return __result;
+};
+
