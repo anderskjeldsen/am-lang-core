@@ -8,11 +8,15 @@ namespace Am.Lang
         native fun toShort(): Short
         native fun toInt(): Int
         native fun toLong(): Long
+        native fun toUByte(): UByte
+        native fun toUShort(): UShort
+        native fun toUInt(): UInt
+        native fun toULong(): ULong
         native fun toDouble(): Double
         native fun toBool(): Bool
 
-        static const var maxValue: Float = 3.4028235e38
-        static const var minValue: Float = -3.4028235e38
+        static const var maxValue: Float = 3.4028235e38F
+        static const var minValue: Float = -3.4028235e38F
 
         static fun min(a: Float, b: Float): Float {
             if (a < b) {
