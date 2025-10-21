@@ -1,6 +1,7 @@
 
 namespace Am.Lang 
 {
+    @RequireFeature("floats")
     primitive native class Double {
         override native fun toString(): String
         override native fun hash(): UInt
