@@ -1,0 +1,8 @@
+namespace Am.Lang.Annotations 
+{
+    class RequireFeature(var feature: String) : Annotation
+    {
+        import Am.Lang
+        // This class does nothing. When applying this annotation to a class, the compiler knows to require a specific feature for this class.
+    }
+}
