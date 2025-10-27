@@ -6,7 +6,9 @@ namespace Tests {
 
         test testReadExistingFile() {
             // Read a file we created manually
+            "Hello".writeToFile("test_input.txt")
             var readContent = String.readFromFile("test_input.txt")
+            File.delete("test_input.txt")
             
             if (readContent.getLength() == 0) {
                 throw new Exception("Expected content but got empty string")
