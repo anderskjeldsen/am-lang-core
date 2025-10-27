@@ -1,0 +1,91 @@
+namespace Tests {
+
+    class LeapYearTests {
+        import Am.Lang
+        import Am.Tests
+    
+    test leapYearFebruary29() {
+        // Test creating a date on February 29th in a leap year
+        var leapDay = DateTime.create(2024, 2, 29, 12, 0, 0, 0) // 2024 is a leap year
+        
+        Assert.assertEquals(2024, leapDay.getYear())
+        Assert.assertEquals(2, leapDay.getMonth())
+        Assert.assertEquals(29, leapDay.getDay())
+        Assert.assertEquals(12, leapDay.getHour())
+    }
+    
+    test addYearFromLeapDay() {
+        // Test adding a year from February 29th (leap day)
+        // What happens when we go from Feb 29, 2024 to 2025 (non-leap year)?
+        var leapDay = DateTime.create(2024, 2, 29, 15, 30, 0, 0)
+        var nextYear = leapDay.addYears(1)
+        
+        // Should this become Feb 28, 2025 or March 1, 2025?
+        Assert.assertEquals(2025, nextYear.getYear())
+        // Let's see what month and day we get
+        // Most implementations either go to Feb 28 or March 1
+    }
+    
+    test addMonthsFromJanuary31() {
+        // Edge case: January 31st + 1 month
+        // February doesn't have 31 days - what happens?
+        var jan31 = DateTime.create(2024, 1, 31, 10, 0, 0, 0)
+        var february = jan31.addMonths(1)
+        
+        // Should become last day of February (Feb 29 in 2024, leap year)
+        Assert.assertEquals(2024, february.getYear())
+        Assert.assertEquals(2, february.getMonth())
+        // Day should be adjusted to valid day in February
+    }
+    
+    test addMonthsFromJanuary31NonLeapYear() {
+        // Same test but in non-leap year
+        var jan31 = DateTime.create(2023, 1, 31, 10, 0, 0, 0)
+        var february = jan31.addMonths(1)
+        
+        // Should become Feb 28, 2023 (non-leap year)
+        Assert.assertEquals(2023, february.getYear())
+        Assert.assertEquals(2, february.getMonth())
+        // Day should be 28 in non-leap year
+    }
+    
+    test addMonthsFromMarch31() {
+        // March 31 + 1 month = April (30 days)
+        var march31 = DateTime.create(2024, 3, 31, 14, 45, 0, 0)
+        var april = march31.addMonths(1)
+        
+        // April only has 30 days
+        Assert.assertEquals(2024, april.getYear())
+        Assert.assertEquals(4, april.getMonth())
+        // Should be adjusted to April 30
+    }
+    
+    test leapYearIdentification() {
+        // Test the isLeapYear function with various years
+        // 2024: divisible by 4, is leap year
+        Assert.assertTrue(DateTime.isLeapYear(2024))
+        
+        // 2023: not divisible by 4, not leap year  
+        Assert.assertFalse(DateTime.isLeapYear(2023))
+        
+        // 2000: divisible by 400, is leap year
+        Assert.assertTrue(DateTime.isLeapYear(2000))
+        
+        // 1900: divisible by 100 but not 400, not leap year
+        Assert.assertFalse(DateTime.isLeapYear(1900))
+        
+        // 2100: divisible by 100 but not 400, not leap year
+        Assert.assertFalse(DateTime.isLeapYear(2100))
+    }
+    
+    test daysInMonthLeapYear() {
+        // Test getDaysInMonth for February in leap years
+        Assert.assertEquals(29, DateTime.getDaysInMonth(2024, 2)) // Leap year
+        Assert.assertEquals(28, DateTime.getDaysInMonth(2023, 2)) // Non-leap year
+        Assert.assertEquals(28, DateTime.getDaysInMonth(1900, 2)) // Century year, not leap
+        Assert.assertEquals(29, DateTime.getDaysInMonth(2000, 2)) // Century year, is leap
+    }
+    
+    }
+
+}

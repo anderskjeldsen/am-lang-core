@@ -86,6 +86,13 @@ namespace Am.Collections {
             return this.items[index]
         }
 
+        fun set(index: Int, item: T) {
+            if (index < 0 || index >= this.size) {
+                throw new Exception("Index out of bounds: " + index.toString())                
+            }
+            this.items[index] = item
+        }
+
         fun toArray(): T[] {
             var arr = new T[this.size]
             var i = 0

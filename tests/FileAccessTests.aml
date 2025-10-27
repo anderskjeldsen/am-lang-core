@@ -1,0 +1,76 @@
+namespace Tests {
+
+    class FileAccessTests {
+        import Am.Lang
+        import Am.IO
+
+        test testEnumValues() {
+            // Test that enum values are correctly assigned
+            if (FileAccess.readOnly != 1) {
+                throw new Exception("FileAccess.readOnly should be 1 but was " + FileAccess.readOnly.toString())
+            }
+            if (FileAccess.writeOnly != 2) {
+                throw new Exception("FileAccess.writeOnly should be 2 but was " + FileAccess.writeOnly.toString())
+            }
+            if (FileAccess.appendOnly != 3) {
+                throw new Exception("FileAccess.appendOnly should be 3 but was " + FileAccess.appendOnly.toString())
+            }
+            if (FileAccess.readWrite != 4) {
+                throw new Exception("FileAccess.readWrite should be 4 but was " + FileAccess.readWrite.toString())
+            }
+            if (FileAccess.readWriteTruncate != 5) {
+                throw new Exception("FileAccess.readWriteTruncate should be 5 but was " + FileAccess.readWriteTruncate.toString())
+            }
+            if (FileAccess.readAppend != 6) {
+                throw new Exception("FileAccess.readAppend should be 6 but was " + FileAccess.readAppend.toString())
+            }
+        }
+        
+        test testWriteAndRead() {
+            var filename = "/tmp/fileaccess_test.txt"
+            
+            // Test write mode - creates new file
+            var file = new File(filename)
+            var stream = new FileStream(file, FileAccess.writeOnly)
+            var textStream = new TextStream(stream)
+            textStream.writeString("Test content")
+            
+            // Test read mode
+            var readFile = new File(filename)
+            var readStream = new FileStream(readFile, FileAccess.readOnly)
+            var readTextStream = new TextStream(readStream)
+            var content = readTextStream.readString()
+            
+            if (content != "Test content") {
+                throw new Exception("Expected 'Test content' but got '" + content + "'")
+            }
+        }
+        
+        test testAppendMode() {
+            var filename = "/tmp/append_test.txt"
+            
+            // Create initial content using writeOnly
+            var file1 = new File(filename)
+            var stream1 = new FileStream(file1, FileAccess.writeOnly)
+            var textStream1 = new TextStream(stream1)
+            textStream1.writeString("Initial")
+            
+            // Test appendOnly mode
+            var file2 = new File(filename)
+            var stream2 = new FileStream(file2, FileAccess.appendOnly)
+            var textStream2 = new TextStream(stream2)
+            textStream2.writeString(" added")
+            
+            // Read back and verify
+            var readFile = new File(filename)
+            var readStream = new FileStream(readFile, FileAccess.readOnly)
+            var readTextStream = new TextStream(readStream)
+            var finalContent = readTextStream.readString()
+            
+            if (finalContent != "Initial added") {
+                throw new Exception("Expected 'Initial added' but got '" + finalContent + "'")
+            }
+        }
+    }
+}
+}

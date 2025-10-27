@@ -228,7 +228,6 @@ struct _aobject {
     // this object will also hold a reference to the implementation object, and will remove that once this has reached 0.
     int reference_count;
     int property_reference_count;
-    bool memory_pooled;
     object_properties object_properties;
     bool marked;
     bool pending_deallocation;

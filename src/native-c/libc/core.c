@@ -18,7 +18,6 @@
 #include <Am/Lang/ULong.h>
 #include <Am/Lang/UShort.h>
 
-#include <libc/memory_pools.h>
 #include <libc/core_inline_functions.h>
 
 bool __conditional_logging_on = false;
@@ -271,28 +270,13 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
 
     aobject * __obj = NULL;
 
-    if (__class->memory_pool == NULL) {
-        for(int i = 0; i < __class->statics->annotations_count; i++) {
-            if (__class->statics->annotations[i]->class_ptr == &__use_memory_pool_class_alias) {
-                __class->memory_pool = create_memory_pool(size_with_properties);
-            }
+    for(int i = 0; i < __class->statics->annotations_count; i++) {
+        if (__class->statics->annotations[i]->class_ptr == &__use_memory_pool_class_alias) {
+            __class->memory_pool = create_memory_pool(size_with_properties);
         }
     }
 
-    if (__class->memory_pool != NULL) {
-        __obj = alloc_from_pool(__class->memory_pool);
-        __obj->memory_pooled = false;
-    } else if (size_with_properties <= small_object_memory_pool->unit_size) {
-        if (small_object_memory_pool->first_bank == NULL) {
-            small_object_memory_pool->first_bank = create_pool_bank(small_object_memory_pool, 256); // calloc(1, sizeof(pool_bank));
-        }
-        __obj = alloc_from_pool(small_object_memory_pool);
-        __obj->memory_pooled = true;
-    } else {
-        __obj = (aobject *) calloc(1, size_with_properties);
-        __obj->memory_pooled = false;
-//        __obj = (aobject *) malloc(size_with_properties + extra_size);
-    }
+    __obj = (aobject *) calloc(1, size_with_properties);
 
     if (__class->statics->type == class && __class->properties_count > 0) {
         __obj->object_properties.class_object_properties.properties = (property *) (__obj + 1);;
@@ -444,13 +428,7 @@ void __deallocate_detached_object(aobject * const __obj) {
     }
     #endif
 
-    if (__obj->class_ptr->memory_pool != NULL) {
-        free_from_pool(__obj->class_ptr->memory_pool, __obj);
-    } else if (__obj->memory_pooled) {
-        free_from_pool(small_object_memory_pool, __obj);
-    } else {
-        free(__obj);
-    }
+    free(__obj);
 }
 
 void __deallocate_object(aobject * const __obj) {
@@ -508,13 +486,16 @@ void __deallocate_object(aobject * const __obj) {
     }
     #endif
 
-    if (__obj->class_ptr->memory_pool != NULL) {
-        free_from_pool(__obj->class_ptr->memory_pool, __obj);
-    } else if (__obj->memory_pooled) {
-        free_from_pool(small_object_memory_pool, __obj);
-    } else {
-        free(__obj);
+    #ifdef DEBUG
+    printf("About to free object %s (address: %p)\n", __obj->class_ptr->name, __obj);
+    printf("Object validation - class_ptr: %p\n", __obj->class_ptr);
+    if (__obj->class_ptr != NULL) {
+        printf("Class name: %s\n", __obj->class_ptr->name);
     }
+    printf("Reference counts: ref=%d, prop_ref=%d\n", __obj->reference_count, __obj->property_reference_count);
+    #endif
+
+    free(__obj);
 
     #ifdef DEBUG
     #ifdef CONDLOG 
@@ -575,6 +556,14 @@ void __detach_object(aobject * const __obj) {
     }
     #endif
     #endif
+
+    // Prevent double-detachment of the same object
+    if (__obj->pending_deallocation) {
+        #ifdef DEBUG
+        printf("WARNING: Attempted double-detachment of object %s (address: %p)\n", __obj->class_ptr->name, __obj);
+        #endif
+        return;
+    }
 
     __obj->pending_deallocation = true;
 

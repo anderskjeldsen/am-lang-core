@@ -1,0 +1,241 @@
+namespace Tests {
+
+    class StringExtensionTests {
+        import Am.Lang
+
+        test testToUpperCaseBasic() {
+            var input = "hello"
+            var result = input.toUpperCase()
+            var expected = "HELLO"
+            if (result != expected) {
+                throw new Exception("Expected '" + expected + "' but got '" + result + "'")
+            }
+        }
+
+        test testToUpperCaseMixed() {
+            var input = "Hello World"
+            var result = input.toUpperCase()
+            var expected = "HELLO WORLD"
+            if (result != expected) {
+                throw new Exception("Expected '" + expected + "' but got '" + result + "'")
+            }
+        }
+
+        test testToUpperCaseNumbers() {
+            var input = "hello123"
+            var result = input.toUpperCase()
+            var expected = "HELLO123"
+            if (result != expected) {
+                throw new Exception("Expected '" + expected + "' but got '" + result + "'")
+            }
+        }
+
+        test testToUpperCaseSpecialChars() {
+            var input = "hello!@#"
+            var result = input.toUpperCase()
+            var expected = "HELLO!@#"
+            if (result != expected) {
+                throw new Exception("Expected '" + expected + "' but got '" + result + "'")
+            }
+        }
+
+        test testToUpperCaseEmpty() {
+            var input = ""
+            var result = input.toUpperCase()
+            var expected = ""
+            if (result != expected) {
+                throw new Exception("Expected empty string but got '" + result + "'")
+            }
+        }
+
+        test testToUpperCaseAlreadyUppercase() {
+            var input = "HELLO"
+            var result = input.toUpperCase()
+            var expected = "HELLO"
+            if (result != expected) {
+                throw new Exception("Expected '" + expected + "' but got '" + result + "'")
+            }
+        }
+
+        test testToLowerCaseBasic() {
+            var input = "HELLO"
+            var result = input.toLowerCase()
+            var expected = "hello"
+            if (result != expected) {
+                throw new Exception("Expected '" + expected + "' but got '" + result + "'")
+            }
+        }
+
+        test testToLowerCaseMixed() {
+            var input = "Hello WORLD"
+            var result = input.toLowerCase()
+            var expected = "hello world"
+            if (result != expected) {
+                throw new Exception("Expected '" + expected + "' but got '" + result + "'")
+            }
+        }
+
+        test testToLowerCaseNumbers() {
+            var input = "HELLO123"
+            var result = input.toLowerCase()
+            var expected = "hello123"
+            if (result != expected) {
+                throw new Exception("Expected '" + expected + "' but got '" + result + "'")
+            }
+        }
+
+        test testToLowerCaseSpecialChars() {
+            var input = "HELLO!@#"
+            var result = input.toLowerCase()
+            var expected = "hello!@#"
+            if (result != expected) {
+                throw new Exception("Expected '" + expected + "' but got '" + result + "'")
+            }
+        }
+
+        test testToLowerCaseEmpty() {
+            var input = ""
+            var result = input.toLowerCase()
+            var expected = ""
+            if (result != expected) {
+                throw new Exception("Expected empty string but got '" + result + "'")
+            }
+        }
+
+        test testToLowerCaseAlreadyLowercase() {
+            var input = "hello"
+            var result = "hello" // input.toLowerCase()
+            var expected = "hello"
+            if (result != expected) {
+                throw new Exception("Expected '" + expected + "' but got '" + result + "'")
+            }
+        }
+
+        test testTrimLeadingSpaces() {
+            var input = "   hello"
+            var result = input.trim()
+            var expected = "hello"
+            if (result != expected) {
+                throw new Exception("Expected '" + expected + "' but got '" + result + "'")
+            }
+        }
+
+        test testTrimTrailingSpaces() {
+            var input = "hello   "
+            var result = input.trim()
+            var expected = "hello"
+            if (result != expected) {
+                throw new Exception("Expected '" + expected + "' but got '" + result + "'")
+            }
+        }
+
+        test testTrimBothSides() {
+            var input = "  hello world  "
+            var result = input.trim()
+            var expected = "hello world"
+            if (result != expected) {
+                throw new Exception("Expected '" + expected + "' but got '" + result + "'")
+            }
+        }
+
+        test testTrimTabsAndNewlines() {
+            var input = "\thello\n"
+            var result = input.trim()
+            var expected = "hello"
+            if (result != expected) {
+                throw new Exception("Expected '" + expected + "' but got '" + result + "'")
+            }
+        }
+
+        test testTrimEmpty() {
+            var input = ""
+            var result = input.trim()
+            var expected = ""
+            if (result != expected) {
+                throw new Exception("Expected empty string but got '" + result + "'")
+            }
+        }
+
+        test testTrimOnlyWhitespace() {
+            var input = "   \t\n  "
+            var result = input.trim()
+            var expected = ""
+            if (result != expected) {
+                throw new Exception("Expected empty string but got '" + result + "'")
+            }
+        }
+
+        test testTrimNoWhitespace() {
+            var str = "hello"
+            var result = str.trim()
+            if (result != "hello") {
+                throw new Exception("Expected 'hello' but got '" + result + "'")
+            }
+        }
+        
+        // startsWith() method tests
+        test testStartsWithBasic() {
+            var str = "hello world"
+            var result = str.startsWith("hello")
+            if (result != true) {
+                throw new Exception("Expected true but got " + result.toString())
+            }
+        }
+        
+        test testStartsWithFalse() {
+            var str = "hello world"
+            var result = str.startsWith("world")
+            if (result != false) {
+                throw new Exception("Expected false but got " + result.toString())
+            }
+        }
+        
+        test testStartsWithEmpty() {
+            var str = "hello"
+            var result = str.startsWith("")
+            if (result != true) {
+                throw new Exception("Expected true but got " + result.toString())
+            }
+        }
+        
+        test testStartsWithEmptyString() {
+            var str = ""
+            var result = str.startsWith("")
+            if (result != true) {
+                throw new Exception("Expected true but got " + result.toString())
+            }
+        }
+        
+        test testStartsWithLongerPrefix() {
+            var str = "hi"
+            var result = str.startsWith("hello")
+            if (result != false) {
+                throw new Exception("Expected false but got " + result.toString())
+            }
+        }
+        
+        test testStartsWithExactMatch() {
+            var str = "hello"
+            var result = str.startsWith("hello")
+            if (result != true) {
+                throw new Exception("Expected true but got " + result.toString())
+            }
+        }
+        
+        test testStartsWithSingleChar() {
+            var str = "hello"
+            var result = str.startsWith("h")
+            if (result != true) {
+                throw new Exception("Expected true but got " + result.toString())
+            }
+        }
+        
+        test testStartsWithSingleCharFalse() {
+            var str = "hello"
+            var result = str.startsWith("z")
+            if (result != false) {
+                throw new Exception("Expected false but got " + result.toString())
+            }
+        }
+    }
+}

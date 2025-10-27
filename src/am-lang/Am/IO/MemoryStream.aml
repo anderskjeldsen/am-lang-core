@@ -1,0 +1,125 @@
+namespace Am.IO
+{
+    class MemoryStream() : Stream
+    {
+        import Am.Lang
+        import Am.Collections
+
+        private var data: List<UByte> = List.newList<UByte>()
+        private var position: Long = 0L
+
+        fun read(buffer: UByte[], offset: Long, length: UInt): UInt {
+            if (buffer == null) {
+                return 0UI
+            }
+
+            var bytesRead = 0UI
+            var bufferIndex = offset
+            var maxLength = length
+
+            while (bytesRead < maxLength && this.position < this.data.getSize().toLong()) {
+                if (bufferIndex < buffer.length().toLong()) {
+                    buffer[bufferIndex] = this.data.get(this.position.toInt())
+                    bufferIndex++
+                    this.position++
+                    bytesRead++
+                } else {
+                    break
+                }
+            }
+
+            return bytesRead
+        }
+
+        fun write(buffer: UByte[], offset: Long, length: UInt) {
+            if (buffer == null) {
+                return
+            }
+
+            var bytesWritten = 0UI
+            var bufferIndex = offset
+
+            while (bytesWritten < length && bufferIndex < buffer.length().toLong()) {
+                var byteToWrite = buffer[bufferIndex]
+                
+                if (this.position < this.data.getSize().toLong()) {
+                    // Overwrite existing byte
+                    this.data.set(this.position.toInt(), byteToWrite)
+                } else {
+                    // Append new byte
+                    this.data.add(byteToWrite)
+                }
+                
+                this.position++
+                bufferIndex++
+                bytesWritten++
+            }
+        }
+
+        fun seekFromStart(offset: Long) {
+            this.position = offset
+            if (this.position < 0L) {
+                this.position = 0L
+            }
+        }
+
+        fun readByte(): Int {
+            if (this.position >= this.data.getSize().toLong()) {
+                return -1  // EOF
+            }
+
+            var result = this.data.get(this.position.toInt()).toInt()
+            this.position++
+            return result
+        }
+
+        fun writeByte(byte: Int) {
+            var byteToWrite = byte.toUByte()
+            
+            if (this.position < this.data.getSize().toLong()) {
+                // Overwrite existing byte
+                this.data.set(this.position.toInt(), byteToWrite)
+            } else {
+                // Append new byte
+                this.data.add(byteToWrite)
+            }
+            
+            this.position++
+        }
+
+        // Additional utility methods for memory stream
+        fun getLength(): Long {
+            return this.data.getSize().toLong()
+        }
+
+        fun getPosition(): Long {
+            return this.position
+        }
+
+        fun toArray(): UByte[] {
+            return this.data.toArray()
+        }
+
+        fun clear() {
+            this.data.clear()
+            this.position = 0L
+        }
+
+        fun getCapacity(): Int {
+            return this.data.getSize()
+        }
+
+        // Static factory method for creating MemoryStream with initial data
+        static fun newMemoryStream(initialData: UByte[]): MemoryStream {
+            var stream = new MemoryStream()
+            if (initialData != null) {
+                var i = 0
+                while (i < initialData.length()) {
+                    stream.data.add(initialData[i])
+                    i++
+                }
+            }
+            return stream
+        }
+    }
+}

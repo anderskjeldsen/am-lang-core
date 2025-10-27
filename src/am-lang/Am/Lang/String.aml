@@ -3,6 +3,7 @@ namespace Am.Lang
 {
     native class String {
         import Am.Collections
+        import Am.IO
 
         override native fun hash(): UInt
         override fun toString(): String {
@@ -47,6 +48,121 @@ namespace Am.Lang
         fun println() {
             var s = this + "\n"
             s.print()
+        }
+
+        fun toUpperCase(): String {
+            var sb = new StringBuilder()
+            var len = this.getLength()
+            var i = 0UI
+            while(i < len) {
+                var c = this.characterAt(i)
+                // Convert lowercase letters to uppercase
+                if (c >= 97US && c <= 122US) { // 'a' to 'z'
+                    var upperC = c - 32US // Convert to uppercase
+                    sb.addChar(upperC)
+                } else {
+                    sb.addChar(c)
+                }
+                i++
+            }
+            return sb.toString()
+        }
+
+        fun toLowerCase(): String {
+            var sb = new StringBuilder()
+            var len = this.getLength()
+            var i = 0UI
+            while(i < len) {
+                var c = this.characterAt(i)
+                // Convert uppercase letters to lowercase
+                if (c >= 65US && c <= 90US) { // 'A' to 'Z'
+                    var lowerC = c + 32US // Convert to lowercase
+                    sb.addChar(lowerC)
+                } else {
+                    sb.addChar(c)
+                }
+                i++
+            }
+            return sb.toString()
+        }
+
+        fun trim(): String {
+            var len = this.getLength().toUInt()
+            if (len == 0UI) {
+                return this
+            }
+            
+            // Find start index (skip whitespace from beginning)
+            var start = 0UI
+            while(start < len) {
+                var c = this.characterAt(start)
+                if (c != 32US && c != 9US && c != 10US && c != 13US) { // space, tab, newline, carriage return
+                    break
+                }
+                start++
+            }
+            
+            // If all characters are whitespace
+            if (start == len) {
+                return ""
+            }
+            
+            // Find end index (skip whitespace from end)
+            var end = len - 1UI
+            while(end > start) {
+                var c = this.characterAt(end)
+                if (c != 32US && c != 9US && c != 10US && c != 13US) { // space, tab, newline, carriage return
+                    break
+                }
+                end--
+            }
+            
+            // Return substring without leading/trailing whitespace
+            // Break down the calculation to avoid operator precedence issues
+            var lengthPart = end - start
+            var trimmedLength = lengthPart + 1UI
+            return this.substring(start, trimmedLength)
+        }
+        
+        fun startsWith(prefix: String): Bool {
+            var prefixLen = prefix.getLength().toUInt()
+            var thisLen = this.getLength().toUInt()
+            
+            // Empty prefix should always return true
+            if (prefixLen == 0UI) {
+                return true
+            }
+            
+            // If prefix is longer than this string, it cannot be a prefix
+            if (prefixLen > thisLen) {
+                return false
+            }
+            
+            // Check each character
+            var i = 0UI
+            while(i < prefixLen) {
+                if (this.characterAt(i) != prefix.characterAt(i)) {
+                    return false
+                }
+                i++
+            }
+            
+            return true
+        }
+        
+        // File operations
+        fun writeToFile(filename: String) {
+            var file = new File(filename)
+            var fileStream = new FileStream(file, FileAccess.readWriteTruncate)
+            var textStream = new TextStream(fileStream)
+            textStream.writeString(this)
+        }
+        
+        static fun readFromFile(filename: String): String {
+            var file = new File(filename)
+            var fileStream = new FileStream(file, FileAccess.readOnly)
+            var textStream = new TextStream(fileStream)
+            return textStream.readString()
         }
     }
 }
