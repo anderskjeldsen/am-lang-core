@@ -45,6 +45,26 @@ namespace Am.IO
 
         native fun isDirectory(): Bool
 
+        // File metadata methods
+        native fun exists(): Bool
+        native fun getSize(): Long
+        native fun getLastModified(): Long
+        native fun canRead(): Bool
+        native fun canWrite(): Bool
+
+        // File operations methods
+        native fun delete(): Bool
+        static fun delete(filename: String): Bool {
+            var file = new File(filename)
+            return file.delete()
+        }
+        static native fun createDirectory(path: String): Bool
+        native fun copy(destination: String): Bool
+        native fun move(destination: String): Bool
+
+        // Temporary file support
+        static native fun createTempFile(prefix: String, suffix: String): File
+
         fun getName(): String {
             var index = this.filename.lastIndexOf("/")
             if (index < 0) {

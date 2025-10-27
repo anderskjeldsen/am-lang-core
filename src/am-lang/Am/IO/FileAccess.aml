@@ -7,13 +7,13 @@ namespace Am.IO
         readOnly = 1
         
         // Write only - truncates existing file or creates new (C mode: "w")
-        writeOnly = 2W
+        writeOnly = 2
         
         // Append only - writes to end, creates if doesn't exist (C mode: "a")
         appendOnly = 3
         
         // Read and write - file must exist (C mode: "r+")
-        readWrite a= 4
+        readWrite = 4
         
         // Read and write - creates file if doesn't exist, truncates if exists (C mode: "w+")
         readWriteTruncate = 5
