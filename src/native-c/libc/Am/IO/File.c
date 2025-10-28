@@ -1,5 +1,6 @@
 #include <libc/core.h>
 #include <Am/IO/File.h>
+#include <Am/IO/TempFile.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/String.h>
 #include <Am/Lang/Long.h>
@@ -388,7 +389,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_IO_File_createTempFile_0(aobject * prefix, aobject * suffix)
+function_result Am_IO_File_createTempFileInternal_0(aobject * prefix, aobject * suffix)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;

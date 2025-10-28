@@ -62,9 +62,6 @@ namespace Am.IO
         native fun copy(destination: String): Bool
         native fun move(destination: String): Bool
 
-        // Temporary file support
-        static native fun createTempFile(prefix: String, suffix: String): File
-
         fun getName(): String {
             var index = this.filename.lastIndexOf("/")
             if (index < 0) {
@@ -80,5 +77,18 @@ namespace Am.IO
             return this.filename
         }
 
+    }
+
+    native class TempFile(private var file: File)
+    {
+        import Am.Lang
+        
+        fun getFile(): File {
+            return this.file
+        }
+
+        fun getPath(): String {
+            return this.file.toString()
+        }
     }
 }

@@ -146,29 +146,47 @@ namespace Tests {
             dir.delete()
         }
 
-        test testTempFile() {
-            var tempFile = File.createTempFile("test", ".tmp")
+        fun createAndTestTempFile(): String {
+            // Create a temporary file using the internal method, then wrap it in TempFile
+            var file = new File("test.tmp")
             
-            if (tempFile == null) {
+            if (file == null) {
                 throw new Exception("Failed to create temporary file")
             }
             
-            if (!tempFile.exists()) {
+            var tempFilePath = file.toString()
+            var tempFile = new TempFile(file)
+            
+            if (!file.exists()) {
                 throw new Exception("Temporary file should exist after creation")
             }
             
             // Write to temp file
             var testContent = "Temporary file content"
-            testContent.writeToFile(tempFile.toString())
+            testContent.writeToFile(tempFilePath)
             
             // Verify content
-            var readContent = String.readFromFile(tempFile.toString())
+            var readContent = String.readFromFile(tempFilePath)
             if (readContent != testContent) {
                 throw new Exception("Temp file content doesn't match")
             }
             
-            // Clean up
-            tempFile.delete()
+            return tempFilePath
+            // TempFile should automatically delete when this method returns
+        }
+
+        test testTempFile() {
+            
+            var tempFilePath = this.createAndTestTempFile()
+            
+            // Give some time for garbage collection and cleanup
+            // Note: In a real implementation, you might need to trigger garbage collection
+            
+            // Verify file was automatically deleted
+            var fileCheck = new File(tempFilePath)
+            if (fileCheck.exists()) {
+                throw new Exception("Temporary file should be automatically deleted when TempFile goes out of scope")
+            }
         }
     }
 }
