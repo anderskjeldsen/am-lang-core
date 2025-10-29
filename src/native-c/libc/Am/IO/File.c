@@ -1,6 +1,5 @@
 #include <libc/core.h>
 #include <Am/IO/File.h>
-#include <Am/IO/TempFile.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/String.h>
 #include <Am/Lang/Long.h>
@@ -33,6 +32,14 @@ function_result Am_IO_File__native_release_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
+	
+	// Check if this is a temporary file and delete it if so
+	bool isTemporary = this->object_properties.class_object_properties.properties[Am_IO_File_P_temporary].nullable_value.value.bool_value;
+	if (isTemporary) {
+		// Delete the temporary file
+		Am_IO_File_delete_0(this);
+	}
+	
 __exit: ;
 	return __result;
 };
@@ -389,10 +396,13 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_IO_File_createTempFileInternal_0(aobject * prefix, aobject * suffix)
+function_result Am_IO_File_createTempFileInternal_0(aobject * directory, aobject * prefix, aobject * suffix)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
+	if (directory != NULL) {
+		__increase_reference_count(directory);
+	}
 	if (prefix != NULL) {
 		__increase_reference_count(prefix);
 	}
@@ -400,47 +410,45 @@ function_result Am_IO_File_createTempFileInternal_0(aobject * prefix, aobject * 
 		__increase_reference_count(suffix);
 	}
 
+	aobject *dir_filename = directory->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
+	string_holder *dir_string_holder = (string_holder *) (dir_filename + 1);
 	string_holder *prefix_string_holder = (string_holder *) (prefix + 1);
 	string_holder *suffix_string_holder = (string_holder *) (suffix + 1);
 	
-	// Create temporary filename
-	char temp_template[256];
-	snprintf(temp_template, sizeof(temp_template), "/tmp/%s_XXXXXX%s", 
-		prefix_string_holder->string_value, suffix_string_holder->string_value);
+	// Create temporary filename in the specified directory
+	char temp_template[512];
+	snprintf(temp_template, sizeof(temp_template), "%s/%s_XXXXXX", 
+		dir_string_holder->string_value, prefix_string_holder->string_value);
 	
 	// Use mkstemp for safe temporary file creation
-	char temp_filename[256];
+	char temp_filename[512];
 	strcpy(temp_filename, temp_template);
 	
 	int fd = mkstemp(temp_filename);
 	if (fd == -1) {
 		__result.return_value.value.object_value = NULL;
 	} else {
-		close(fd); // Close the file descriptor, we just needed the name
+		close(fd); // Close the file descriptor, the file now exists on disk
 		
-		// Create File object with the temporary filename
-		aobject *temp_name_str = __create_string(temp_filename, &Am_Lang_String);
-		aobject *file_obj = __allocate_object(&Am_IO_File);
+		// Now add the suffix by renaming the file
+		char final_filename[512];
+		snprintf(final_filename, sizeof(final_filename), "%s%s", temp_filename, suffix_string_holder->string_value);
 		
-		if (file_obj && temp_name_str) {
-			// Initialize the File object
-			nullable_value file_nv = { .flags = 0, .value = { .object_value = file_obj } };
-			Am_IO_File___init_instance(file_nv);
-			
-			// Call the File constructor with the filename
-			Am_IO_File_f_File_0(file_obj, temp_name_str);
-			
-			__result.return_value.value.object_value = file_obj;
-		} else {
+		if (rename(temp_filename, final_filename) != 0) {
+			// If rename fails, clean up and return null
+			unlink(temp_filename);
 			__result.return_value.value.object_value = NULL;
-		}
-		
-		if (temp_name_str) {
-			__decrease_reference_count(temp_name_str);
+		} else {
+			// Return the final filename as a String
+			aobject *temp_name_str = __create_string(final_filename, &Am_Lang_String);
+			__result.return_value.value.object_value = temp_name_str;
 		}
 	}
 
 __exit: ;
+	if (directory != NULL) {
+		__decrease_reference_count(directory);
+	}
 	if (prefix != NULL) {
 		__decrease_reference_count(prefix);
 	}

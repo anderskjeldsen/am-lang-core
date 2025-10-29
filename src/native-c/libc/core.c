@@ -22,6 +22,19 @@
 
 bool __conditional_logging_on = false;
 
+#ifdef DEBUG
+void __print_memory_header(aobject * const obj, const char * prefix) {
+    if (obj != NULL && obj->object_properties.class_object_properties.object_id == 946) {
+        unsigned char *p = (unsigned char *)obj - 16;
+        printf("%s - Memory header bytes: ", prefix);
+        for (int i = 0; i < 16; i++) {
+            printf("%02x ", p[i]);
+        }
+        printf("\n");
+    }
+}
+#endif
+
 int __allocation_count = 0;
 #define MAX_ALLOCATIONS 1024 * 50
 #if defined(DEBUG) || defined(TRACKOBJECTS)
@@ -34,6 +47,22 @@ aobject * __first_object = NULL;
 aobject * __first_detached_object = NULL;
 //aclass * __first_class = NULL;
 class_static *__first_class_static = NULL;
+
+#ifdef DEBUG
+void __debug_print_string_if_string(aobject * const obj, const char * prefix) {
+    if (obj != NULL && obj->class_ptr != NULL && strcmp(obj->class_ptr->name, "Am.Lang.String") == 0) {
+        string_holder * holder = (string_holder *) obj->object_properties.class_object_properties.object_data.value.custom_value;
+        if (holder != NULL && holder->string_value != NULL) {
+            printf("%s: String content: \"%s\" (len=%u, hash=%u, const=%s, addr=%p)\n", 
+                   prefix, holder->string_value, holder->length, holder->hash, 
+                   holder->is_string_constant ? "true" : "false", obj);
+        } else {
+            printf("%s: String object with NULL holder or string_value (addr=%p)\n", prefix, obj);
+        }
+    }
+}
+#endif 
+
 
 void __mark_root_objects() {    
     class_static *current = __first_class_static;
@@ -270,46 +299,55 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
 
     aobject * __obj = NULL;
 
-    for(int i = 0; i < __class->statics->annotations_count; i++) {
-        if (__class->statics->annotations[i]->class_ptr == &__use_memory_pool_class_alias) {
-            __class->memory_pool = create_memory_pool(size_with_properties);
-        }
-    }
-
     __obj = (aobject *) calloc(1, size_with_properties);
 
-    if (__class->statics->type == class && __class->properties_count > 0) {
-        __obj->object_properties.class_object_properties.properties = (property *) (__obj + 1);;
+    if (__obj != NULL) {
+
+        #ifdef DEBUG
+        #ifdef CONDLOG 
+        if (__conditional_logging_on) {
+        #endif
+        printf("Allocated object of type %s at address %p\n", __class->name, __obj);
+        __debug_print_string_if_string(__obj, "allocate string");
+        #ifdef CONDLOG 
+        }
+        #endif
+        #endif
+
+        if (__class->statics->type == class && __class->properties_count > 0) {
+            __obj->object_properties.class_object_properties.properties = (property *) (__obj + 1);;
+        }
+
+            __obj->class_ptr = __class;
+            __obj->reference_count = 1;
+
+            #if defined(DEBUG) || defined(TRACKOBJECTS)
+            allocations[allocation_index++] = __obj;
+            if (allocation_index % 1000 == 0) {
+                printf("Another 1000 allocations: %d\n", allocation_index);
+            }
+
+            __obj->object_properties.class_object_properties.object_id = __last_object_id;
+            #endif
+        } else {
+            #ifdef DEBUG
+            #ifdef CONDLOG 
+            if (__conditional_logging_on) {
+            #endif
+            printf("Failed to allocate object of type %s\n", __class->name);
+            #ifdef CONDLOG 
+            }
+            #endif
+            #endif
+        }
+ 
+    #ifdef DEBUG
+    if (__obj->object_properties.class_object_properties.object_id == 946) {
+        printf("Allocated File\n");
+        __print_memory_header(__obj, "Allocation");
     }
-
-    __obj->class_ptr = __class;
-    __obj->reference_count = 1;
-
-    #if defined(DEBUG) || defined(TRACKOBJECTS)
-    allocations[allocation_index++] = __obj;
-    if (allocation_index % 1000 == 0) {
-        printf("Another 1000 allocations: %d\n", allocation_index);
-    }
-
-    __obj->object_properties.class_object_properties.object_id = __last_object_id;
     #endif
 
-    // memset(__obj, 0, sizeof(aobject));
-    // __obj->class_ptr = __class;
-
-    // if (__class->type == class) {
-    //     __obj->properties = malloc(sizeof(property) * __class->properties_count);
-    //     memset(__obj->properties, 0, sizeof(property) * __class->properties_count);
-    // }
-
-/*
-    __obj->next = __first_object;
-
-    if (__first_object != NULL) {
-        __first_object->prev = __obj;
-    }
-    __first_object = __obj;
-*/
 
     return __obj;
 }
@@ -495,6 +533,14 @@ void __deallocate_object(aobject * const __obj) {
     printf("Reference counts: ref=%d, prop_ref=%d\n", __obj->reference_count, __obj->property_reference_count);
     #endif
 
+    #ifdef DEBUG
+    if (__obj->object_properties.class_object_properties.object_id == 946) {
+        printf("Deallocating File, quitting\n");
+        __print_memory_header(__obj, "Before free()");
+//        exit(1);
+    }
+    #endif
+
     free(__obj);
 
     #ifdef DEBUG
@@ -579,6 +625,17 @@ void __detach_object(aobject * const __obj) {
 
     if (__obj->class_ptr->statics->type == interface) {
         iface_reference const *ref = &__obj->object_properties.iface_reference;
+        #ifdef DEBUG
+        #ifdef CONDLOG 
+        if (__conditional_logging_on) {
+        #endif
+
+        aobject * impl_obj = ref->implementation_object;
+        printf("Detach interface object of type %s, implementation type %s (address: %p, object_id: %d, total object allocation count: %d)\n", __obj->class_ptr->name, impl_obj->class_ptr->name, impl_obj, impl_obj->object_properties.class_object_properties.object_id,  __allocation_count);
+        #ifdef CONDLOG 
+        }
+        #endif
+        #endif  
 
         __decrease_reference_count(ref->implementation_object);
     }
@@ -719,6 +776,8 @@ void print_allocated_objects() {
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         if ( allocations[i] != NULL) {
             printf("Object still alive: %s (address: %p, object_id: %d, property refs: %d, inline refs: %d)\n", allocations[i]->class_ptr->name, allocations[i], allocations[i]->object_properties.class_object_properties.object_id, allocations[i]->property_reference_count, allocations[i]->reference_count);
+            __debug_print_string_if_string(allocations[i], "String alive");
+ 
         }
     }
     printf("End of list of allocated objects\n");

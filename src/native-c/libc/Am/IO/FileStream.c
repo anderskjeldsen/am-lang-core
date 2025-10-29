@@ -18,7 +18,7 @@ struct _file_holder {
 
 char * const get_file_access_mode(aobject * const this) {
 	// Get the FileAccess enum from the FileStream's access property (index 1, file is index 0)
-	property access_prop = this->object_properties.class_object_properties.properties[1];
+	property access_prop = this->object_properties.class_object_properties.properties[Am_IO_FileStream_P_access];
 	
 	// FileAccess enum is stored directly as an int in the nullable_value
 	int access_value = access_prop.nullable_value.value.int_value;
@@ -37,12 +37,12 @@ char * const get_file_access_mode(aobject * const this) {
 
 char * const get_file_path(aobject * const this) {
 	// Get the File object from the FileStream's file property (index 0)
-	property file_prop = this->object_properties.class_object_properties.properties[0];
+	property file_prop = this->object_properties.class_object_properties.properties[Am_IO_FileStream_P_file];
 	if (file_prop.nullable_value.flags == 0 && file_prop.nullable_value.value.object_value != NULL) {
 		aobject * const file = file_prop.nullable_value.value.object_value;
 		
 		// Get the filename string from the File object's filename property (index 0)
-		property filename_prop = file->object_properties.class_object_properties.properties[0];
+		property filename_prop = file->object_properties.class_object_properties.properties[Am_IO_File_P_filename];
 		if (filename_prop.nullable_value.flags == 0 && filename_prop.nullable_value.value.object_value != NULL) {
 			aobject * const path = filename_prop.nullable_value.value.object_value;
 			string_holder *holder = path->object_properties.class_object_properties.object_data.value.custom_value;

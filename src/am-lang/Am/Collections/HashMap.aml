@@ -10,7 +10,7 @@ namespace Am.Collections {
         private var keyIndexes: Int[]
         private var keys: K[]
         private var values: V[] 
-        private var bucketSize: Int
+        private var bucketSize: Int = 10
         private var currentIndex: Int
 
         static fun createWithInitialSize<K, V>(initialSize: Int): HashMap<K, V> {

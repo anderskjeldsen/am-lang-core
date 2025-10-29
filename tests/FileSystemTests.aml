@@ -147,18 +147,22 @@ namespace Tests {
         }
 
         fun createAndTestTempFile(): String {
-            // Create a temporary file using the internal method, then wrap it in TempFile
-            var file = new File("test.tmp")
+            // Create a temporary file using File.createTempFile in current directory
+            var tempDir = new File(".")
+            var tempFile = File.createTempFile(tempDir, "test", ".tmp")
             
-            if (file == null) {
+            if (tempFile == null) {
                 throw new Exception("Failed to create temporary file")
             }
             
-            var tempFilePath = file.toString()
-            var tempFile = new TempFile(file)
+            var tempFilePath = tempFile.toString()
             
-            if (!file.exists()) {
+            if (!tempFile.exists()) {
                 throw new Exception("Temporary file should exist after creation")
+            }
+            
+            if (!tempFile.isTemporary()) {
+                throw new Exception("File should be marked as temporary")
             }
             
             // Write to temp file
@@ -172,20 +176,16 @@ namespace Tests {
             }
             
             return tempFilePath
-            // TempFile should automatically delete when this method returns
+            // File should automatically delete when tempFile goes out of scope
         }
 
         test testTempFile() {
-            
             var tempFilePath = this.createAndTestTempFile()
             
-            // Give some time for garbage collection and cleanup
-            // Note: In a real implementation, you might need to trigger garbage collection
-            
-            // Verify file was automatically deleted
+            // Verify file was automatically deleted when the temporary File went out of scope
             var fileCheck = new File(tempFilePath)
             if (fileCheck.exists()) {
-                throw new Exception("Temporary file should be automatically deleted when TempFile goes out of scope")
+                throw new Exception("Temporary file should be automatically deleted when File goes out of scope")
             }
         }
     }

@@ -270,7 +270,7 @@ function_result Am_Lang_String_toBytes_0(aobject * const this, aobject * encodin
 	aobject *array = __create_array(string_holder->length, 1, &Am_Lang_Array_ta_Am_Lang_UByte, uchar_type);
 
 	array_holder *a_holder = (array_holder *) &array[1]; // array->object_properties.class_object_properties.object_data.value.custom_value;
-	strcpy(a_holder->array_data, string_holder->string_value);
+	memcpy(a_holder->array_data, string_holder->string_value, string_holder->length);
 	__result.return_value.flags = 0;
 	__result.return_value.value.object_value = array;
 

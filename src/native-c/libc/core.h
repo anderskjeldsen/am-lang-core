@@ -354,6 +354,10 @@ void __clear_marks();
 aclass * const get_class_from_any(nullable_value const value);
 aobject * __concatenate_strings(int count, ...);
 
+#ifdef DEBUG
+void __print_memory_header(aobject * const obj, const char * prefix);
+#endif
+
 // aliases for generated code
 #include <Am/Lang/Object.h>
 #include <Am/Lang/ClassRef.h>

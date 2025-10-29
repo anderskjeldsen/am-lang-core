@@ -52,12 +52,17 @@ static inline aobject * __allocate_object(aclass * const __class) {
 
 static inline void __decrease_reference_count(aobject * const __obj) {
     if ( __obj != NULL) {
+        #ifdef DEBUG
+        __print_memory_header(__obj, "Decrease reference count");
+        #endif
+
+
         __obj->reference_count--;
         #if defined(DEBUG) && defined(ARCLOG)
         #ifdef CONDLOG 
         if (__conditional_logging_on) {
         #endif
-        printf("decrease reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
+        printf("decrease reference count of object of type %s (address: %p, object_id: %d), property reference count %d, new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->property_reference_count, __obj->reference_count);
         #ifdef CONDLOG 
         }
         #endif        
@@ -70,19 +75,24 @@ static inline void __decrease_reference_count(aobject * const __obj) {
 }
 
 static inline void __increase_reference_count(aobject * const __obj) {
+    #ifdef DEBUG
+    __print_memory_header(__obj, "Increase reference count");
+    #endif
+
     __obj->reference_count++;
     #if defined(DEBUG) && defined(ARCLOG)
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
     #endif
-//    printf("increase reference count of object of type %s (address: %p, object_id: %d), new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count);
+    printf("increase reference count of object of type %s (address: %p, object_id: %d), propert_reference_count: %d, new reference count: %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->property_reference_count, __obj->reference_count);
+/*
     printf("increase reference count (address: %p)\n", __obj);
     printf("increase reference count (address: %p)\n", __obj->class_ptr);
     printf("increase reference count (address: %p)\n", __obj->class_ptr->name);
     printf("increase reference count of object of type %s\n", __obj->class_ptr->name);
     printf("increase reference count (object_id: %d)\n", __obj->object_properties.class_object_properties.object_id);
     printf("increase reference count (new reference count %d)\n", __obj->reference_count);
-
+*/
     #ifdef CONDLOG 
     }
     #endif        
