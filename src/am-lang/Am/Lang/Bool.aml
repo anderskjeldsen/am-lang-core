@@ -15,6 +15,17 @@ namespace Am.Lang
             } // should work: else {
             return 0UI
         }
+
+        static fun parse(s: String): Bool {
+            var trimmed = s.trim()
+            if (trimmed == "true") {
+                return true
+            } else if (trimmed == "false") {
+                return false
+            } else {
+                throw new Am.Lang.Exception("Invalid boolean value: '${s}'. Expected 'true' or 'false'.")
+            }
+        }
     }
 
 }
