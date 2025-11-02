@@ -14,8 +14,7 @@ namespace Am.Util.Parsers.Text {
                     this.sb.addChar(c)
                     this.index++
                 } else {
-                    // TODO: implement "break"
-                    this.index = this.string.getLength()
+                    break
                 }
             }
             return this.sb.toString()
@@ -31,6 +30,10 @@ namespace Am.Util.Parsers.Text {
                 }
             }
             return false
+        }
+
+        fun hasMore(): Bool {
+            return this.index < this.string.getLength()
         }
 
         fun peek(len: UInt) : String {

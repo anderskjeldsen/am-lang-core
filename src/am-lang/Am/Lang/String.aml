@@ -9,16 +9,29 @@ namespace Am.Lang
         override fun toString(): String {
             return this
         }
+        // TODO: change to length
         native fun getLength(): Int
+        fun length(): Int {
+            return this.getLength()
+        }
         native fun print()
         native override fun equals(other: Object): Bool
         native op + (s: String): String
         native static fun fromBytes(bytes: UByte[], encoding: String): String
         native fun toBytes(encoding: String): UByte[]
-        native fun characterAt(index: UInt): UShort
         native fun indexOf(s: String): Int
         native fun lastIndexOf(s: String): Int
         native fun substring(start: UInt, length: UInt): String
+
+        native private fun characterAtNative(index: UInt): UShort
+        fun characterAt(index: UInt): UShort {
+            if (index >= this.getLength().toUInt()) {
+                throw new IndexOutOfBoundsException(index.toInt(), this.length().toUInt())
+            }
+            return this.characterAtNative(index)
+        }
+
+
 
         fun endsWith(s: String): Bool {
             return this.lastIndexOf(s) == (this.getLength() - s.getLength()).toUInt()
