@@ -1,6 +1,15 @@
 
 namespace Am.Lang 
 {
+    class IndexOutOfBoundsException(var index: Int, var length: UInt) : Exception("Index out of bounds $index for length $length") {
+    }
+
+    class NullReferenceException() : Exception("Null reference exception") {
+    }
+
+    class KeyNotFoundException(var key: String) : Exception("Key not found: " + key) {
+    }
+
     class Exception(var message: String) {
         import Am.Collections
 

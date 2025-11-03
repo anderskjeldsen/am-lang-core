@@ -22,6 +22,43 @@ namespace Am.Lang
         native fun indexOf(s: String): Int
         native fun lastIndexOf(s: String): Int
         native fun substring(start: UInt, length: UInt): String
+        
+        fun substringToEnd(start: UInt): String {
+            var totalLength = this.getLength().toUInt()
+            if (start >= totalLength) {
+                return ""
+            }
+            var remainingLength = totalLength - start
+            return this.substring(start, remainingLength)
+        }
+        
+        fun indexOfAfter(s: String, startIndex: Int): Int {
+            var searchText = this
+            var searchLen = searchText.getLength()
+            var patternLen = s.getLength()
+            
+            if (startIndex < 0 || startIndex >= searchLen || patternLen == 0) {
+                return -1
+            }
+            
+            var i = startIndex
+            while (i <= (searchLen - patternLen)) {
+                var found = true
+                var j = 0
+                while (j < patternLen) {
+                    if (searchText.characterAt((i + j).toUInt()) != s.characterAt(j.toUInt())) {
+                        found = false
+                        break
+                    }
+                    j++
+                }
+                if (found) {
+                    return i
+                }
+                i++
+            }
+            return -1
+        }
 
         native private fun characterAtNative(index: UInt): UShort
         fun characterAt(index: UInt): UShort {
@@ -55,6 +92,44 @@ namespace Am.Lang
             if (sb.getLength() > 0) {
                 result.add(sb.toString())
             }
+            return result.toArray()
+        }
+        
+        fun splitByString(separator: String): String[] {
+            var result = List<String>.newList<String>()
+            var separatorLen = separator.getLength()
+            
+            if (separatorLen == 0) {
+                // If separator is empty, return array with original string
+                result.add(this)
+                return result.toArray()
+            }
+            
+            var lastIndex = 0
+            var currentIndex = this.indexOf(separator)
+            
+            while (currentIndex >= 0) {
+                // Add the substring before the separator
+                var partLength = (currentIndex - lastIndex).toUInt()
+                if (partLength > 0UI) {
+                    result.add(this.substring(lastIndex.toUInt(), partLength))
+                } else {
+                    result.add("")
+                }
+                
+                // Move past the separator
+                lastIndex = currentIndex + separatorLen
+                currentIndex = this.indexOfAfter(separator, lastIndex)
+            }
+            
+            // Add the remaining part after the last separator
+            var remainingLength = (this.getLength() - lastIndex).toUInt()
+            if (remainingLength > 0UI) {
+                result.add(this.substring(lastIndex.toUInt(), remainingLength))
+            } else {
+                result.add("")
+            }
+            
             return result.toArray()
         }
 
@@ -176,6 +251,30 @@ namespace Am.Lang
             var fileStream = new FileStream(file, FileAccess.readOnly)
             var textStream = new TextStream(fileStream)
             return textStream.readString()
+        }
+        
+        static fun join(strings: String[], separator: String): String {
+            if (strings.length() == 0) {
+                return ""
+            }
+            
+            if (strings.length() == 1) {
+                return strings[0]
+            }
+            
+            var sb = new StringBuilder()
+            var i = 0
+            var maxIndex = strings.length() - 1
+            
+            while (i <= maxIndex) {
+                sb.add(strings[i])
+                if (i < maxIndex) {
+                    sb.add(separator)
+                }
+                i++
+            }
+            
+            return sb.toString()
         }
     }
 }

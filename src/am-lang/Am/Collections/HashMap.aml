@@ -30,7 +30,7 @@ namespace Am.Collections {
 
         fun get(key: K): V {
             if (this.keyIndexes == null) {
-                return null
+                throw new KeyNotFoundException(key.toString())
             }
             var hash = key.hash()
             var index = hash % this.bucketSize
@@ -39,7 +39,7 @@ namespace Am.Collections {
             if (entryIndex >= 0) {
                 return this.values[entryIndex]
             }
-            return null
+            throw new KeyNotFoundException(key.toString())
         }
 
         private fun findEntry(keyIndex: Int, key: K): Int {
@@ -123,22 +123,21 @@ namespace Am.Collections {
             this.currentEntryIndex++
         }
 
-        fun remove(key: K): V {
+        fun remove(key: K): Bool {
             if (this.keyIndexes == null) {
-                return null
+                return false
             }
             var hash = key.hash()
             var index = hash % this.bucketSize
             var keyIndex = this.keyIndexes[index] - 1
             
             if (keyIndex < 0) {
-                return null
+                return false
             }
             
             // Check if it's the first item in the chain
             var firstKey = this.keys[keyIndex]
             if (firstKey == key) {
-                var oldValue = this.values[keyIndex]
                 // Remove first item - update bucket to point to next
                 var nextIndex = this.nextIndexes[keyIndex] - 1
                 if (nextIndex >= 0) {
@@ -147,7 +146,7 @@ namespace Am.Collections {
                     this.keyIndexes[index] = 0
                 }
                 this.size--
-                return oldValue
+                return true
             }
             
             // Look for item in the chain
@@ -156,7 +155,6 @@ namespace Am.Collections {
             while(keyIndex > -1) {
                 var key2 = this.keys[keyIndex]
                 if (key2 == key) {
-                    var oldValue = this.values[keyIndex]
                     // Remove item by updating previous to point to next
                     var nextIndex = this.nextIndexes[keyIndex] - 1
                     if (nextIndex >= 0) {
@@ -165,12 +163,12 @@ namespace Am.Collections {
                         this.nextIndexes[previousIndex] = 0
                     }
                     this.size--
-                    return oldValue
+                    return true
                 }
                 previousIndex = keyIndex
                 keyIndex = this.nextIndexes[keyIndex] - 1
             }
-            return null
+            return false
         }
 
         fun clear() {
@@ -218,6 +216,29 @@ namespace Am.Collections {
 
         fun isEmpty(): Bool {
             return this.size == 0
+        }
+
+        fun buildKeys(): List<K> {
+            var keyList = List.newList<K>()
+            if (this.keys == null) {
+                return keyList
+            }
+
+            var i = 0
+            while(i < this.currentEntryIndex) {
+                var key = this.keys[i]
+
+                if (key != null && this.containsKey(key)) {
+                    keyList.add(key)
+                }
+                i++
+            }
+
+            return keyList
+        }
+
+        fun keys(): List<K> {
+            return this.buildKeys()
         }
     }
 }

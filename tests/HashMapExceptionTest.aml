@@ -1,0 +1,32 @@
+namespace Tests {
+    class HashMapExceptionTest {
+        import Am.Collections
+        import Am.Lang
+        import Am.Tests
+
+        test testGetNonExistentKeyThrowsException() {
+            var map = new HashMap<String, String>()
+            map.set("exists", "value")
+            
+            var exceptionThrown = false
+            try {
+                var result = map.get("nonexistent")
+                Assert.fail("Expected KeyNotFoundException to be thrown for non-existent key")
+            } catch (e: KeyNotFoundException) {
+                exceptionThrown = true
+                Assert.assertEquals("nonexistent", e.key)
+            }
+            
+            Assert.assertTrue(exceptionThrown)
+        }
+
+        test testGetAfterSetWorks() {
+            var map = new HashMap<String, String>()
+            map.set("key1", "value1")
+            
+            var result = map.get("key1")
+            Assert.assertEquals("value1", result)
+            Assert.assertNotNull(result)
+        }
+    }
+}
