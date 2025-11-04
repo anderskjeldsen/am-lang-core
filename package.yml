@@ -114,14 +114,17 @@ buildTargets:
       - docker run -v ${build_dir}:/host -i 0205cf669adf make -f amigaos.makefile -C /host all
   - id: macos
     platform: macos
+    features: ["floatingPoint"]
     commands:
       - make -f macos.makefile
   - id: macos-arm
     platform: macos-arm
+    features: ["floatingPoint"]
     commands:
       - make -f macos-arm.makefile
   - id: linux-x64
     platform: linux-x64
+    features: ["floatingPoint"]
   - id: windows_docker
     commands: 
       - docker run --rm -v "${build_dir}":/usr/src/ -w /usr/src/ gcc:12.1 make -f linux-x64.makefile
@@ -143,11 +146,13 @@ buildTargets:
       - docker run --rm -v "${build_dir}":/work -i amigadev/crosstools:x86_64-aros make aros-x86-64.makefile all
   - id: linux-x64_docker
     platform: linux-x64
+    features: ["floatingPoint"]
     dockerBuild:
       image: gcc:14.2.0
       buildPath: /usr/src/myapp
   - id: linux-arm64v8_docker
     platform: linux-arm64v8
+    features: ["floatingPoint"]
     dockerBuild:
       image: arm64v8/gcc:14.2.0
       buildPath: /usr/src/myapp
