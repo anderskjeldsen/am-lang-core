@@ -1,7 +1,8 @@
 
 id: am-lang-core
-version: 0.1.0
+version: 0.7.0
 type: library
+availableFeatures: ["floatingPoint"]
 dependencies:
   - id: am-tests
     testOnly: true
