@@ -1,0 +1,37 @@
+namespace Tests {
+
+    class StringFileSimpleTests {
+        import Am.Lang
+        import Am.IO
+
+        test testWriteAndReadFile() {
+            var content = "Hello, World! This is a test file."
+            var filename = "test_write.txt"
+            
+            // Write content to file
+            content.writeToFile(filename)
+            
+            // Read content back from file
+            var readContent = String.readFromFile(filename)
+            
+            if (readContent != content) {
+                throw new Exception("Content mismatch: expected '" + content + "' but got '" + readContent + "'")
+            }
+        }
+
+        test testWriteAndReadEmptyFile() {
+            var content = ""
+            var filename = "test_empty.txt"
+            
+            // Write empty content to file
+            content.writeToFile(filename)
+            
+            // Read content back from file            
+            var readContent = String.readFromFile(filename)
+            
+            if (readContent != content) {
+                throw new Exception("Expected empty string but got '" + readContent + "'")
+            }
+        }
+    }
+}

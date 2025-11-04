@@ -1,0 +1,192 @@
+namespace Tests {
+
+    class FileSystemTests {
+        import Am.Lang
+        import Am.IO
+
+        test testFileExists() {
+            // Create a test file
+            var testContent = "Hello, World!"
+            var testFile = "test_exists.txt"
+            testContent.writeToFile(testFile)
+            
+            var file = new File(testFile)
+            
+            // Test exists()
+            if (!file.exists()) {
+                throw new Exception("File should exist after creation")
+            }
+            
+            // Test delete()
+            if (!file.delete()) {
+                throw new Exception("Failed to delete file")
+            }
+            
+            // Test exists() after delete
+            if (file.exists()) {
+                throw new Exception("File should not exist after deletion")
+            }
+        }
+
+        test testFileMetadata() {
+            var testContent = "Hello, World!\nThis is a test file."
+            var testFile = "test_metadata.txt"
+            testContent.writeToFile(testFile)
+            
+            var file = new File(testFile)
+            
+            // Test getSize()
+            var size = file.getSize()
+            if (size <= 0L) {
+                throw new Exception("File size should be greater than 0, got: " + size.toString())
+            }
+            
+            // Test getLastModified()
+            var lastModified = file.getLastModified()
+            if (lastModified <= 0L) {
+                throw new Exception("Last modified time should be greater than 0, got: " + lastModified.toString())
+            }
+            
+            // Test canRead() and canWrite()
+            if (!file.canRead()) {
+                throw new Exception("File should be readable")
+            }
+            
+            if (!file.canWrite()) {
+                throw new Exception("File should be writable")
+            }
+            
+            // Clean up
+            file.delete()
+        }
+
+        test testFileCopy() {
+            var testContent = "This is test content for copy operation."
+            var sourceFile = "test_copy_source.txt"
+            var destFile = "test_copy_dest.txt"
+            
+            testContent.writeToFile(sourceFile)
+            
+            var source = new File(sourceFile)
+            var dest = new File(destFile)
+            
+            // Test copy()
+            if (!source.copy(destFile)) {
+                throw new Exception("Failed to copy file")
+            }
+            
+            // Verify copy worked
+            if (!dest.exists()) {
+                throw new Exception("Destination file should exist after copy")
+            }
+            
+            var copiedContent = String.readFromFile(destFile)
+            if (copiedContent != testContent) {
+                throw new Exception("Copied content doesn't match original")
+            }
+            
+            // Clean up
+            source.delete()
+            dest.delete()
+        }
+
+        test testFileMove() {
+            var testContent = "This is test content for move operation."
+            var sourceFile = "test_move_source.txt"
+            var destFile = "test_move_dest.txt"
+            
+            testContent.writeToFile(sourceFile)
+            
+            var source = new File(sourceFile)
+            var dest = new File(destFile)
+            
+            // Test move()
+            if (!source.move(destFile)) {
+                throw new Exception("Failed to move file")
+            }
+            
+            // Verify move worked
+            if (source.exists()) {
+                throw new Exception("Source file should not exist after move")
+            }
+            
+            if (!dest.exists()) {
+                throw new Exception("Destination file should exist after move")
+            }
+            
+            var movedContent = String.readFromFile(destFile)
+            if (movedContent != testContent) {
+                throw new Exception("Moved content doesn't match original")
+            }
+            
+            // Clean up
+            dest.delete()
+        }
+
+        test testCreateDirectory() {
+            var dirName = "test_directory"
+            
+            // Create directory
+            if (!File.createDirectory(dirName)) {
+                throw new Exception("Failed to create directory")
+            }
+            
+            var dir = new File(dirName)
+            
+            // Verify directory exists and is a directory
+            if (!dir.exists()) {
+                throw new Exception("Directory should exist after creation")
+            }
+            
+            if (!dir.isDirectory()) {
+                throw new Exception("Created file should be a directory")
+            }
+            
+            // Clean up
+            dir.delete()
+        }
+
+        fun createAndTestTempFile(): String {
+            // Create a temporary file using File.createTempFile in current directory
+            var tempDir = new File(".")
+            var tempFile = File.createTempFile(tempDir, "test", ".tmp")
+            
+            if (tempFile == null) {
+                throw new Exception("Failed to create temporary file")
+            }
+            
+            var tempFilePath = tempFile.toString()
+            
+            if (!tempFile.exists()) {
+                throw new Exception("Temporary file should exist after creation")
+            }
+            
+            if (!tempFile.isTemporary()) {
+                throw new Exception("File should be marked as temporary")
+            }
+            
+            // Write to temp file
+            var testContent = "Temporary file content"
+            testContent.writeToFile(tempFilePath)
+            
+            // Verify content
+            var readContent = String.readFromFile(tempFilePath)
+            if (readContent != testContent) {
+                throw new Exception("Temp file content doesn't match")
+            }
+            
+            return tempFilePath
+            // File should automatically delete when tempFile goes out of scope
+        }
+
+        test testTempFile() {
+            var tempFilePath = this.createAndTestTempFile()
+            
+            // Verify file was automatically deleted when the temporary File went out of scope
+            var fileCheck = new File(tempFilePath)
+            if (fileCheck.exists()) {
+                throw new Exception("Temporary file should be automatically deleted when File goes out of scope")
+            }
+        }
+    }
+}

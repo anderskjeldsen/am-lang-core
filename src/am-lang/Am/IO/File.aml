@@ -4,11 +4,27 @@ namespace Am.IO
     {
         import Am.Lang
         import Am.Collections
+        
+        private var temporary: Bool = false
 
         static native fun getCurrentDirectory(): String
 
         static fun getCurrentDirectoryFile(): File {
             return new File(File.getCurrentDirectory())
+        }
+
+        // Internal native method that creates the physical temporary file
+        static native fun createTempFileInternal(directory: File, prefix: String, suffix: String): String
+
+        // Public method that creates a File object and marks it as temporary
+        static fun createTempFile(directory: File, prefix: String, suffix: String): File {
+            var tempFilePath = File.createTempFileInternal(directory, prefix, suffix)
+            if (tempFilePath == null) {
+                throw new Exception("Failed to create temporary file")
+            }
+            var file = new File(tempFilePath)  // Create File with normal constructor
+            file.temporary = true           // Set the temporary flag
+            return file
         }
 
         fun listFiles(): File[] {
@@ -44,6 +60,28 @@ namespace Am.IO
         private native fun listNative(folderFilename: String, list: List<String>)
 
         native fun isDirectory(): Bool
+
+        // File metadata methods
+        native fun exists(): Bool
+        native fun getSize(): Long
+        native fun getLastModified(): Long
+        native fun canRead(): Bool
+        native fun canWrite(): Bool
+
+        // File operations methods
+        native fun delete(): Bool
+        static fun delete(filename: String): Bool {
+            var file = new File(filename)
+            return file.delete()
+        }
+        static native fun createDirectory(path: String): Bool
+        native fun copy(destination: String): Bool
+        native fun move(destination: String): Bool
+
+        // Check if this file is marked as temporary
+        fun isTemporary(): Bool {
+            return this.temporary
+        }
 
         fun getName(): String {
             var index = this.filename.lastIndexOf("/")

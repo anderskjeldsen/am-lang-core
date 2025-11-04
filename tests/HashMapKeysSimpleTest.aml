@@ -1,0 +1,33 @@
+namespace Tests {
+    class HashMapKeysSimpleTest {
+        import Am.Collections
+        import Am.Lang
+        import Am.Tests
+        
+        test testHashMapKeys() {
+            var map = new HashMap<String, String>()
+            
+            map.set("key1", "value1")
+            map.set("key2", "value2")
+            
+            var keys = map.buildKeys()
+            
+            Assert.assertEquals(2, keys.getSize())
+            
+            // Verify both keys are present
+            var hasKey1 = false
+            var hasKey2 = false
+            
+            each(keys, key) {
+                if (key == "key1") {
+                    hasKey1 = true
+                } else if (key == "key2") {
+                    hasKey2 = true
+                }
+            }
+            
+            Assert.assertTrue(hasKey1)
+            Assert.assertTrue(hasKey2)
+        }
+    }
+}

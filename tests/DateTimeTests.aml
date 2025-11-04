@@ -1,0 +1,134 @@
+namespace Tests {
+
+    class DateTimeTests {
+        import Am.Lang
+        import Am.Tests
+        
+        test createCurrentDateTime() {
+            var now = DateTime.now()
+            
+            // Basic validation that we got a valid DateTime
+            Assert.assertTrue(now.getYear() >= 2024)
+            Assert.assertTrue(now.getMonth() >= 1 && now.getMonth() <= 12)
+            Assert.assertTrue(now.getDay() >= 1 && now.getDay() <= 31)
+            Assert.assertTrue(now.getHour() >= 0 && now.getHour() <= 23)
+            Assert.assertTrue(now.getMinute() >= 0 && now.getMinute() <= 59)
+            Assert.assertTrue(now.getSecond() >= 0 && now.getSecond() <= 59)
+        }
+        
+        test createSpecificDateTime() {
+            var specificDate = DateTime.create(2024, 12, 25, 10, 30, 15)
+            
+            Assert.assertEquals(2024, specificDate.getYear())
+            Assert.assertEquals(12, specificDate.getMonth())
+            Assert.assertEquals(25, specificDate.getDay())
+            Assert.assertEquals(10, specificDate.getHour())
+            Assert.assertEquals(30, specificDate.getMinute())
+            Assert.assertEquals(15, specificDate.getSecond())
+        }
+        
+        test dateFormatting() {
+            var date = DateTime.create(2024, 12, 25, 10, 30, 15)
+            
+            var formatted = date.format("yyyy-MM-dd HH:mm:ss")
+            Assert.assertEquals("2024-12-25 10:30:15", formatted)
+            
+            var simpleFormat = date.format("dd/MM/yyyy")
+            Assert.assertEquals("25/12/2024", simpleFormat)
+        }
+        
+        test addDays() {
+            var date = DateTime.create(2024, 1, 15, 12, 0, 0)
+            var tomorrow = date.addDays(1)
+            
+            Assert.assertEquals(16, tomorrow.getDay())
+            Assert.assertEquals(1, tomorrow.getMonth())
+            Assert.assertEquals(2024, tomorrow.getYear())
+        }
+        
+        test addMonths() {
+            var date = DateTime.create(2024, 1, 15, 12, 0, 0)
+            var nextMonth = date.addMonths(1)
+            
+            Assert.assertEquals(15, nextMonth.getDay())
+            Assert.assertEquals(2, nextMonth.getMonth())
+            Assert.assertEquals(2024, nextMonth.getYear())
+        }
+        
+        test addYears() {
+            var date = DateTime.create(2024, 6, 15, 12, 0, 0)
+            var nextYear = date.addYears(1)
+            
+            Assert.assertEquals(15, nextYear.getDay())
+            Assert.assertEquals(6, nextYear.getMonth())
+            Assert.assertEquals(2025, nextYear.getYear())
+        }
+        
+        test addHours() {
+            var date = DateTime.create(2024, 1, 15, 10, 30, 0)
+            var laterTime = date.addHours(5)
+            
+            Assert.assertEquals(15, laterTime.getHour())
+            Assert.assertEquals(30, laterTime.getMinute())
+            Assert.assertEquals(15, laterTime.getDay())
+        }
+        
+        test subtractDays() {
+            var date = DateTime.create(2024, 1, 15, 12, 0, 0)
+            var yesterday = date.subtractDays(1)
+            
+            Assert.assertEquals(14, yesterday.getDay())
+            Assert.assertEquals(1, yesterday.getMonth())
+            Assert.assertEquals(2024, yesterday.getYear())
+        }
+        
+        test dateComparison() {
+            var earlier = DateTime.create(2024, 1, 10, 12, 0, 0)
+            var later = DateTime.create(2024, 1, 15, 12, 0, 0)
+            
+            Assert.assertTrue(later.isAfter(earlier))
+            Assert.assertTrue(earlier.isBefore(later))
+            Assert.assertFalse(earlier.isAfter(later))
+            Assert.assertFalse(later.isBefore(earlier))
+        }
+        
+        test dateEquality() {
+            var date1 = DateTime.create(2024, 6, 15, 10, 30, 45)
+            var date2 = DateTime.create(2024, 6, 15, 10, 30, 45)
+            
+            Assert.assertTrue(date1.isEqual(date2))
+            Assert.assertTrue(date1.equals(date2))
+        }
+        
+        test leapYearCheck() {
+            Assert.assertTrue(DateTime.isLeapYear(2024))
+            Assert.assertFalse(DateTime.isLeapYear(2023))
+            Assert.assertTrue(DateTime.isLeapYear(2000))
+            Assert.assertFalse(DateTime.isLeapYear(1900))
+        }
+        
+        test daysInMonth() {
+            Assert.assertEquals(31, DateTime.getDaysInMonth(2024, 1))  // January
+            Assert.assertEquals(29, DateTime.getDaysInMonth(2024, 2))  // February (leap year)
+            Assert.assertEquals(28, DateTime.getDaysInMonth(2023, 2))  // February (non-leap year)
+            Assert.assertEquals(30, DateTime.getDaysInMonth(2024, 4))  // April
+            Assert.assertEquals(31, DateTime.getDaysInMonth(2024, 12)) // December
+        }
+        
+        test utcConversion() {
+            var localTime = DateTime.now()
+            var utcTime = localTime.toUtc()
+            
+            // UTC time should have zero timezone offset
+            Assert.assertEquals(0, utcTime.getTimezoneOffsetMinutes())
+        }
+        
+        test timezoneOffset() {
+            var now = DateTime.now()
+            var offsetMinutes = now.getTimezoneOffsetMinutes()
+            
+            // Timezone offset should be reasonable (between -12 and +14 hours)
+            Assert.assertTrue(offsetMinutes >= -720 && offsetMinutes <= 840)
+        }
+    }
+}

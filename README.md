@@ -89,6 +89,30 @@ The following code fills up a HashSet and times it.
     }
 
 
+# Build System Notes
+
+## Testing
+- **All tests are compiled regardless of which you want to run** - the build system compiles everything in the tests/ directory
+- **You cannot build or test a single .aml file - it's all or nothing**
+- The entire project (src/ and tests/) is compiled together as one unit
+- Tests are built into `builds/test-bin/linux-x64/test_app` (or similar for other platforms)
+- Use `make test` to run all tests
+- Use `make gdb-test` for automatic crash analysis with GDB
+- Use `make gdb-test-interactive` for manual debugging with GDB
+
+## Debugging
+- The build system includes comprehensive GDB integration
+- `make gdb-test` - Runs tests under GDB and automatically analyzes crashes
+- `make gdb-test-interactive` - Drops into interactive GDB session for manual debugging
+- `make test-verbose` - Runs tests with high logging output
+
+## Compiler Integration
+- Tests use the same compiler as the main build
+- The Java compiler (`amlc-0.6.4.jar`) translates AmLang to C code
+- GCC then compiles the generated C code
+- Native C implementations can override AmLang implementations if present
+- Generated C code can be found in `builds/` directory for inspection
+
 # Try AmLang for yourself
 We've made a web-based playground (IDE) that you can try here: https://www.kelson.no/tools/amlangide
 

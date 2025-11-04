@@ -270,7 +270,7 @@ function_result Am_Lang_String_toBytes_0(aobject * const this, aobject * encodin
 	aobject *array = __create_array(string_holder->length, 1, &Am_Lang_Array_ta_Am_Lang_UByte, uchar_type);
 
 	array_holder *a_holder = (array_holder *) &array[1]; // array->object_properties.class_object_properties.object_data.value.custom_value;
-	strcpy(a_holder->array_data, string_holder->string_value);
+	memcpy(a_holder->array_data, string_holder->string_value, string_holder->length);
 	__result.return_value.flags = 0;
 	__result.return_value.value.object_value = array;
 
@@ -284,7 +284,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_Lang_String_characterAt_0(aobject * const this, unsigned int index)
+function_result Am_Lang_String_characterAtNative_0(aobject * const this, unsigned int index)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -292,7 +292,12 @@ function_result Am_Lang_String_characterAt_0(aobject * const this, unsigned int 
 		__increase_reference_count(this);
 	}
 
+
 	string_holder *string_holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+	if ( index >= string_holder->length ) {
+		__throw_simple_exception("Index out of bounds", "in Am_Lang_String_characterAt_0", &__result);
+		goto __exit;
+	}
 	__result.return_value.value.ushort_value = string_holder->string_value[index];
 
 __exit: ;

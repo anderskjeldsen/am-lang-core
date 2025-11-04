@@ -1,0 +1,60 @@
+namespace Tests {
+
+    class StringFileTests {
+        import Am.Lang
+        import Am.IO
+
+        test testReadExistingFile() {
+            // Read a file we created manually
+            "Hello".writeToFile("test_input.txt")
+            var readContent = String.readFromFile("test_input.txt")
+            File.delete("test_input.txt")
+            
+            if (readContent.getLength() == 0) {
+                throw new Exception("Expected content but got empty string")
+            }
+            
+            // Check if it contains the expected text
+            if (!readContent.startsWith("Hello")) {
+                throw new Exception("Expected content to start with 'Hello' but got '" + readContent + "'")
+            }
+        }
+
+        test testWriteAndReadFile() {
+            var content = "Hello, World!\nThis is a test file."
+            var filename = "test_output.txt"
+            
+            // Write content to file
+            content.writeToFile(filename)
+            
+            // Read content back from file
+            var readContent = String.readFromFile(filename)
+            
+            if (readContent != content) {
+                throw new Exception("Expected '" + content + "' but got '" + readContent + "'")
+            }
+        }
+
+        test testFileRoundTripWithStringMethods() {
+            var originalContent = "  Hello WORLD  "
+            var filename = "test_roundtrip.txt"
+            
+            // Write original content
+            originalContent.writeToFile(filename)
+            
+            // Read back and apply string methods
+            var readContent = String.readFromFile(filename)
+            var trimmed = readContent.trim()
+            var lowercase = trimmed.toLowerCase()
+            
+            if (lowercase != "hello world") {
+                throw new Exception("Expected 'hello world' but got '" + lowercase + "'")
+            }
+            
+            // Test with startsWith
+            if (!readContent.startsWith("  Hello")) {
+                throw new Exception("startsWith test failed for file content")
+            }
+        }
+    }
+}
