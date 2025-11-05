@@ -1,43 +1,40 @@
 
 namespace Am.Lang 
 {
-    primitive native class Int {
+    #require floatingPoint
+    primitive native class Double {
         override native fun toString(): String
         override native fun hash(): UInt
         native fun toByte(): Byte
         native fun toShort(): Short
+        native fun toInt(): Int
         native fun toLong(): Long
         native fun toUByte(): UByte
         native fun toUShort(): UShort
         native fun toUInt(): UInt
         native fun toULong(): ULong
-        #require floatingPoint
         native fun toFloat(): Float
-        #require floatingPoint
-        native fun toDouble(): Double
         native fun toBool(): Bool
 
-        static native fun parse(s: String): Int
+        static const var maxValue: Double = 1.7976931348623157e308
+        static const var minValue: Double = -1.7976931348623157e308
 
-        static const var maxValue: Int = 0x7fffffff
-        static const var minValue: Int = 0x80000000
-
-        static fun min(a: Int, b: Int): Int {
+        static fun min(a: Double, b: Double): Double {
             if (a < b) {
                 return a
             }
             return b
         }
 
-        static fun max(a: Int, b: Int): Int {
+        static fun max(a: Double, b: Double): Double {
             if (a > b) {
                 return a
             }
             return b
         }
 
-        fun abs(): Int {
-            if (this < 0) {
+        fun abs(): Double {
+            if (this < 0.0) {
                 return -this
             }
             return this

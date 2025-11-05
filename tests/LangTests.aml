@@ -182,5 +182,177 @@ namespace Tests {
             var ub3 = UByte.parse("0")
             Assert.assertEquals(UByte.minValue, ub3)
         }
+        
+        test floatBasicOperations() {
+            var f1: Float = 3.14F
+            var f2: Float = 2.71F
+            
+            // Test basic arithmetic
+            var sum = f1 + f2
+            Assert.assertTrue(sum > 5.8F && sum < 5.9F)
+            
+            var diff = f1 - f2
+            Assert.assertTrue(diff > 0.4F && diff < 0.5F)
+            
+            var product = f1 * f2
+            Assert.assertTrue(product > 8.5F && product < 8.6F)
+            
+            var quotient = f1 / f2
+            Assert.assertTrue(quotient > 1.1F && quotient < 1.2F)
+        }
+        
+        test floatConversions() {
+            var f = 42.7F
+            var i = 42
+            var i2 = f.toInt()
+            // Test conversions to integer types
+            Assert.assertEquals(i, i2)
+            Assert.assertEquals(42L, f.toLong())
+            Assert.assertEquals(42S, f.toShort())
+            Assert.assertEquals(42B, f.toByte())
+            
+            // Test conversion to double
+            var d = f.toDouble()
+            Assert.assertTrue(d > 42.69 && d < 42.71)
+            
+            // Test conversion to bool
+            Assert.assertTrue(f.toBool())
+            var zeroF: Float = 0.0F
+            Assert.assertFalse(zeroF.toBool())
+        }
+        
+        test floatStaticMethods() {
+            var a = 5.5F
+            var b = 3.2F
+            
+            // Test min/max
+            Assert.assertEquals(3.2F, Float.min(a, b))
+            Assert.assertEquals(5.5F, Float.max(a, b))
+            
+            // Test abs
+            var negative = -7.8F
+            Assert.assertEquals(7.8F, negative.abs())
+            
+            var positive = 7.8F
+            Assert.assertEquals(7.8F, positive.abs())
+        }
+        
+        test floatConstants() {
+            // Test that maxValue and minValue are reasonable
+            Assert.assertTrue(Float.maxValue > 1000000.0F)
+            Assert.assertTrue(Float.minValue < -1000000.0F)
+            Assert.assertTrue(Float.maxValue > 0.0F)
+            Assert.assertTrue(Float.minValue < 0.0F)
+        }
+        
+        test floatToString() {
+            var f = 123.45F
+            var str = f.toString()
+            
+            // Should contain the digits and decimal point
+            Assert.assertTrue(str.getLength() > 3)
+        }
+        
+        test doubleBasicOperations() {
+            var d1 = 3.141592653589793
+            var d2 = 2.718281828459045
+            
+            // Test basic arithmetic
+            var sum = d1 + d2
+            Assert.assertTrue(sum > 5.85 && sum < 5.87)
+            
+            var diff = d1 - d2
+            Assert.assertTrue(diff > 0.42 && diff < 0.43)
+            
+            var product = d1 * d2
+            Assert.assertTrue(product > 8.5 && product < 8.6)
+            
+            var quotient = d1 / d2
+            Assert.assertTrue(quotient > 1.15 && quotient < 1.16)
+        }
+        
+        test doubleConversions() {
+            var d = 42.7
+            
+            // Test conversions to integer types
+            Assert.assertEquals(42, d.toInt())
+            Assert.assertEquals(42L, d.toLong())
+            Assert.assertEquals(42S, d.toShort())
+            Assert.assertEquals(42B, d.toByte())
+            
+            // Test conversion to float
+            var f = d.toFloat()
+            Assert.assertTrue(f > 42.69F && f < 42.71F)
+            
+            // Test conversion to bool
+            Assert.assertTrue(d.toBool())
+            var zeroD = 0.0
+            Assert.assertFalse(zeroD.toBool())
+        }
+        
+        test doubleStaticMethods() {
+            var a = 5.5
+            var b = 3.2
+            
+            // Test min/max
+            Assert.assertEquals(3.2, Double.min(a, b))
+            Assert.assertEquals(5.5, Double.max(a, b))
+            
+            // Test abs
+            var negative = -7.8
+            Assert.assertEquals(7.8, negative.abs())
+            
+            var positive = 7.8
+            Assert.assertEquals(7.8, positive.abs())
+        }
+        
+        test doubleConstants() {
+            // Test that maxValue and minValue are reasonable
+            Assert.assertTrue(Double.maxValue > 1000000000000.0)
+            Assert.assertTrue(Double.minValue < -1000000000000.0)
+            Assert.assertTrue(Double.maxValue > 0.0)
+            Assert.assertTrue(Double.minValue < 0.0)
+        }
+        
+        test doubleToString() {
+            var d = 123.456789
+            var str = d.toString()
+            
+            // Should contain the digits and decimal point
+            Assert.assertTrue(str.getLength() > 3)
+        }
+        
+        test floatDoubleComparison() {
+            var f = 3.14F
+            var d = 3.14
+            
+            // Test that float to double conversion works
+            var fAsDouble = f.toDouble()
+            Assert.assertTrue(fAsDouble > 3.13 && fAsDouble < 3.15)
+            
+            // Test that double to float conversion works
+            var dAsFloat = d.toFloat()
+            Assert.assertTrue(dAsFloat > 3.13F && dAsFloat < 3.15F)
+        }
+        
+        test floatPrecision() {
+            // Test that float arithmetic maintains reasonable precision
+            var a = 1.0F
+            var b = 3.0F
+            var result = a / b
+            
+            // 1/3 should be approximately 0.333...
+            Assert.assertTrue(result > 0.33F && result < 0.34F)
+        }
+        
+        test doublePrecision() {
+            // Test that double arithmetic maintains higher precision than float
+            var a = 1.0
+            var b = 3.0
+            var result = a / b
+            
+            // 1/3 should be approximately 0.333...
+            Assert.assertTrue(result > 0.333 && result < 0.334)
+        }
     }
 }

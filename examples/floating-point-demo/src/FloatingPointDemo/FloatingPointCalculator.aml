@@ -1,0 +1,17 @@
+namespace FloatingPointDemo {
+    class FloatingPointCalculator {
+        import Am.Lang
+        
+        fun add(a: Float, b: Float): Float {
+            return a + b
+        }
+        
+        fun multiply(a: Double, b: Double): Double {
+            return a * b
+        }
+        
+        fun circleArea(radius: Float): Float {
+            return 3.14159F * radius * radius
+        }
+    }
+}

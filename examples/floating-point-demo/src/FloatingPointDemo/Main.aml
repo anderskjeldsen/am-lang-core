@@ -1,0 +1,45 @@
+namespace FloatingPointDemo {
+    class Main {
+        import Am.Lang
+        import Am.Examples
+        
+        static fun main() {
+            "Floating Point Demo Starting".println()
+            ""
+            
+            var calc = new FloatingPointCalculator()
+            
+            // Test basic float operations
+            var a: Float = 3.5F
+            var b: Float = 2.1F
+            var sum: Float = calc.add(a, b)
+            ("Float addition: " + a.toString() + " + " + b.toString() + " = " + sum.toString()).println()
+            
+            // Test double operations
+            var x: Double = 2.5
+            var y: Double = 4.0
+            var product: Double = calc.multiply(x, y)
+            ("Double multiplication: " + x.toString() + " * " + y.toString() + " = " + product.toString()).println()
+            
+            // Test circle area calculation
+            var radius: Float = 5.0F
+            var area: Float = calc.circleArea(radius)
+            ("Circle area with radius " + radius.toString() + " = " + area.toString()).println()
+            
+            // Test Float min/max
+            var minVal: Float = Float.min(a, b)
+            var maxVal: Float = Float.max(a, b)
+            ("Min of " + a.toString() + " and " + b.toString() + " = " + minVal.toString()).println()
+            ("Max of " + a.toString() + " and " + b.toString() + " = " + maxVal.toString()).println()
+            
+            // Test Double min/max
+            var minDouble: Double = Double.min(x, y)
+            var maxDouble: Double = Double.max(x, y)
+            ("Min of " + x.toString() + " and " + y.toString() + " = " + minDouble.toString()).println()
+            ("Max of " + x.toString() + " and " + y.toString() + " = " + maxDouble.toString()).println()
+            
+            ""
+            "Floating Point Demo Completed".println()
+        }
+    }
+}

@@ -87,10 +87,10 @@ function_result Am_Lang_ClassRef_initFromAny_0(aobject * const this, nullable_va
 			class_ptr = &Am_Lang_UShort;
 		} else if (__any_has_flags(any_ref, PRIMITIVE_UCHAR)) {
 			class_ptr = &Am_Lang_UByte;
-//		} else if (__any_has_flags(any_ref, PRIMITIVE_DOUBLE)) {
-//			class_ptr = &Am_Lang_Double;
-//		} else if (__any_has_flags(any_ref, PRIMITIVE_FLOAT)) {
-//			class_ptr = &Am_Lang_Float;
+		} else if (__any_has_flags(any_ref, PRIMITIVE_DOUBLE)) {
+			class_ptr = &Am_Lang_Double;
+		} else if (__any_has_flags(any_ref, PRIMITIVE_FLOAT)) {
+			class_ptr = &Am_Lang_Float;
 		} else {
 			__throw_simple_exception("Invalid primitive type", "initFromAny", &__result);
 			goto __exit;
@@ -151,14 +151,12 @@ function_result Am_Lang_ClassRef_getClassRefFromAny_0(nullable_value any)
 			case uchar_type:
 				class_ref = Am_Lang_UByte.class_ref_singleton;
 				break;
-				/* TODO: add float and double
 			case float_type:
-				class_ref = &Am_Lang_Float;
+				class_ref = Am_Lang_Float.class_ref_singleton;
 				break;
 			case double_type:
-				class_ref = &Am_Lang_Double;
+				class_ref = Am_Lang_Double.class_ref_singleton;
 				break;
-				*/
 			case bool_type:
 				class_ref = Am_Lang_Bool.class_ref_singleton;
 				break;

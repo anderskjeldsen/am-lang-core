@@ -137,6 +137,10 @@ union _value {
         char char_value; // 8
         unsigned char uchar_value; // 9
         bool bool_value; // 10
+        #ifdef FEATURE_FLOATING_POINT
+        float float_value; // 11
+        double double_value; // 12
+        #endif
 };
 
 struct _string_holder {
