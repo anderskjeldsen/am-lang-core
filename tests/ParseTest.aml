@@ -1,0 +1,113 @@
+namespace Am.Tests {
+    class ParseTest {
+        import Am.Lang
+        
+        test testBoolParseTrue() {
+            var result = Bool.parse("true")
+            if (result) {
+                "Bool.parse('true') test passed".println()
+            } else {
+                "Bool.parse('true') test failed - expected true, got false".println()
+            }
+        }
+        
+        test testBoolParseFalse() {
+            var result = Bool.parse("false")
+            if (!result) {
+                "Bool.parse('false') test passed".println()
+            } else {
+                "Bool.parse('false') test failed - expected false, got true".println()
+            }
+        }
+        
+        test testBoolParseTrueWithWhitespace() {
+            var result = Bool.parse("  true  ")
+            if (result) {
+                "Bool.parse('  true  ') test passed".println()
+            } else {
+                "Bool.parse('  true  ') test failed - expected true, got false".println()
+            }
+        }
+        
+        test testBoolParseFalseWithWhitespace() {
+            var result = Bool.parse("  false  ")
+            if (!result) {
+                "Bool.parse('  false  ') test passed".println()
+            } else {
+                "Bool.parse('  false  ') test failed - expected false, got true".println()
+            }
+        }
+        
+        test testIntParse() {
+            var result = Int.parse("42")
+            if (result == 42) {
+                "Int.parse('42') test passed".println()
+            } else {
+                "Int.parse('42') test failed - expected 42, got ${result}".println()
+            }
+        }
+        
+        test testLongParse() {
+            var result = Long.parse("1234567890")
+            if (result == 1234567890L) {
+                "Long.parse('1234567890') test passed".println()
+            } else {
+                "Long.parse('1234567890') test failed - expected 1234567890, got ${result}".println()
+            }
+        }
+        
+        test testShortParse() {
+            var result = Short.parse("123")
+            if (result == 123S) {
+                "Short.parse('123') test passed".println()
+            } else {
+                "Short.parse('123') test failed - expected 123, got ${result}".println()
+            }
+        }
+        
+        test testByteParse() {
+            var result = Byte.parse("50")
+            if (result == 50B) {
+                "Byte.parse('50') test passed".println()
+            } else {
+                "Byte.parse('50') test failed - expected 50, got ${result}".println()
+            }
+        }
+        
+        test testUIntParse() {
+            var result = UInt.parse("100")
+            if (result == 100UI) {
+                "UInt.parse('100') test passed".println()
+            } else {
+                "UInt.parse('100') test failed - expected 100, got ${result}".println()
+            }
+        }
+        
+        test testULongParse() {
+            var result = ULong.parse("9876543210")
+            if (result == 9876543210UL) {
+                "ULong.parse('9876543210') test passed".println()
+            } else {
+                "ULong.parse('9876543210') test failed - expected 9876543210, got ${result}".println()
+            }
+        }
+        
+        test testUShortParse() {
+            var result = UShort.parse("500")
+            if (result == 500US) {
+                "UShort.parse('500') test passed".println()
+            } else {
+                "UShort.parse('500') test failed - expected 500, got ${result}".println()
+            }
+        }
+        
+        test testUByteParse() {
+            var result = UByte.parse("200")
+            if (result == 200UB) {
+                "UByte.parse('200') test passed".println()
+            } else {
+                "UByte.parse('200') test failed - expected 200, got ${result}".println()
+            }
+        }
+    }
+}

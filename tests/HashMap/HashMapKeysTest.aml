@@ -1,0 +1,69 @@
+namespace Am.Collections.Tests {
+    class HashMapKeysTest {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+        
+        test testKeysMethodEmptyMap() {
+            var map = new HashMap<String, String>()
+            
+            var keys = map.buildKeys()
+            
+            Assert.assertEquals(0, keys.getSize())
+        }
+        
+        test testKeysMethodWithData() {
+            var map = new HashMap<String, Int>()
+            map.set("key1", 10)
+            map.set("key2", 20)
+            map.set("key3", 30)
+            
+            var keys = map.buildKeys()
+            
+            Assert.assertEquals(3, keys.getSize())
+            
+            // Check that all expected keys are present
+            var hasKey1 = false
+            var hasKey2 = false
+            var hasKey3 = false
+            
+            each(keys, key) {
+                if (key == "key1") {
+                    hasKey1 = true
+                } else if (key == "key2") {
+                    hasKey2 = true
+                } else if (key == "key3") {
+                    hasKey3 = true
+                }
+            }
+            
+            Assert.assertTrue(hasKey1)
+            Assert.assertTrue(hasKey2)
+            Assert.assertTrue(hasKey3)
+        }
+        
+        test testKeysMethodAfterRemoval() {
+            var map = new HashMap<String, Int>()
+            map.set("key1", 10)
+            map.set("key2", 20)
+            map.set("key3", 30)
+            
+            // Remove one key
+            map.remove("key2")
+            
+            var keys = map.buildKeys()
+            
+            Assert.assertEquals(2, keys.getSize())
+            
+            // Verify the removed key is not in the list
+            var hasRemovedKey = false
+            each(keys, key) {
+                if (key == "key2") {
+                    hasRemovedKey = true
+                }
+            }
+            
+            Assert.assertFalse(hasRemovedKey)
+        }
+    }
+}

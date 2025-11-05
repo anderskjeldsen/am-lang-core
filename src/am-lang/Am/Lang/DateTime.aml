@@ -1,0 +1,263 @@
+namespace Am.Lang 
+{
+    native class DateTime {
+        private var epochMillis: ULong = DateTime.getMillis()
+        private var timezoneOffsetMinutes: Int = DateTime.getLocalTimezoneOffset()
+
+        // Property accessors
+        fun getYear(): Int {
+            return DateTime.extractYear(this.epochMillis, this.timezoneOffsetMinutes)
+        }
+
+        fun getMonth(): Int {
+            return DateTime.extractMonth(this.epochMillis, this.timezoneOffsetMinutes)
+        }
+
+        fun getDay(): Int {
+            return DateTime.extractDay(this.epochMillis, this.timezoneOffsetMinutes)
+        }
+
+        fun getHour(): Int {
+            return DateTime.extractHour(this.epochMillis, this.timezoneOffsetMinutes)
+        }
+
+        fun getMinute(): Int {
+            return DateTime.extractMinute(this.epochMillis, this.timezoneOffsetMinutes)
+        }
+
+        fun getSecond(): Int {
+            return DateTime.extractSecond(this.epochMillis, this.timezoneOffsetMinutes)
+        }
+
+        fun getMillisecond(): Int {
+            return DateTime.extractMillisecond(this.epochMillis)
+        }
+
+        fun getDayOfWeek(): Int {
+            return DateTime.extractDayOfWeek(this.epochMillis, this.timezoneOffsetMinutes)
+        }
+
+        fun getTimezoneOffsetMinutes(): Int {
+            return this.timezoneOffsetMinutes
+        }
+
+        fun getEpochMillis(): ULong {
+            return this.epochMillis
+        }
+
+        // Set methods for construction
+        fun setEpochMillis(milliseconds: ULong) {
+            this.epochMillis = milliseconds
+        }
+
+        fun setTimezoneOffset(offsetMinutes: Int) {
+            this.timezoneOffsetMinutes = offsetMinutes
+        }
+
+        fun setDateTime(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int) {
+            this.epochMillis = DateTime.toEpochMillis(year, month, day, hour, minute, second, this.timezoneOffsetMinutes)
+        }
+
+        fun setDateTime(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int, timezoneOffsetMinutes: Int) {
+            this.epochMillis = DateTime.toEpochMillis(year, month, day, hour, minute, second, timezoneOffsetMinutes)
+            this.timezoneOffsetMinutes = timezoneOffsetMinutes
+        }
+
+        // Date arithmetic methods
+        fun addYears(years: Int): DateTime {
+            var year = this.getYear()
+            var month = this.getMonth()
+            var day = this.getDay()
+            var hour = this.getHour()
+            var minute = this.getMinute()
+            var second = this.getSecond()
+            
+            var newYear = year + years
+            var newDateTime = DateTime.create(newYear, month, day, hour, minute, second, this.timezoneOffsetMinutes)
+            return newDateTime
+        }
+
+        fun addMonths(months: Int): DateTime {
+            var year = this.getYear()
+            var month = this.getMonth()
+            var day = this.getDay()
+            var hour = this.getHour()
+            var minute = this.getMinute()
+            var second = this.getSecond()
+            
+            var totalMonths = month + months
+            var newYear = year + (totalMonths - 1) / 12
+            var newMonth = ((totalMonths - 1) % 12) + 1
+            
+            // Handle day overflow (e.g., Jan 31 + 1 month should be Feb 28/29)
+            var maxDayInMonth = DateTime.getDaysInMonth(newYear, newMonth)
+            var newDay = day
+            if (day > maxDayInMonth) {
+                newDay = maxDayInMonth
+            }
+            
+            var newDateTime = DateTime.create(newYear, newMonth, newDay, hour, minute, second, this.timezoneOffsetMinutes)
+            return newDateTime
+        }
+
+        fun addDays(days: Int): DateTime {
+            var newMillis = this.epochMillis + (days.toULong() * 86400000UL)  // 24 * 60 * 60 * 1000
+            var newDateTime = DateTime.fromEpochMillis(newMillis)
+            newDateTime.timezoneOffsetMinutes = this.timezoneOffsetMinutes
+            return newDateTime
+        }
+
+        fun addHours(hours: Int): DateTime {
+            var newMillis = this.epochMillis + (hours.toULong() * 3600000UL)  // 60 * 60 * 1000
+            var newDateTime = DateTime.fromEpochMillis(newMillis)
+            newDateTime.timezoneOffsetMinutes = this.timezoneOffsetMinutes
+            return newDateTime
+        }
+
+        fun addMinutes(minutes: Int): DateTime {
+            var newMillis = this.epochMillis + (minutes.toULong() * 60000UL)  // 60 * 1000
+            var newDateTime = DateTime.fromEpochMillis(newMillis)
+            newDateTime.timezoneOffsetMinutes = this.timezoneOffsetMinutes
+            return newDateTime
+        }
+
+        fun addSeconds(seconds: Int): DateTime {
+            var newMillis = this.epochMillis + (seconds.toULong() * 1000UL)
+            var newDateTime = DateTime.fromEpochMillis(newMillis)
+            newDateTime.timezoneOffsetMinutes = this.timezoneOffsetMinutes
+            return newDateTime
+        }
+
+        fun subtractYears(years: Int): DateTime {
+            return this.addYears(-years)
+        }
+
+        fun subtractMonths(months: Int): DateTime {
+            return this.addMonths(-months)
+        }
+
+        fun subtractDays(days: Int): DateTime {
+            return this.addDays(-days)
+        }
+
+        fun subtractHours(hours: Int): DateTime {
+            return this.addHours(-hours)
+        }
+
+        fun subtractMinutes(minutes: Int): DateTime {
+            return this.addMinutes(-minutes)
+        }
+
+        fun subtractSeconds(seconds: Int): DateTime {
+            return this.addSeconds(-seconds)
+        }
+
+        // Date formatting
+        fun format(pattern: String): String {
+            return DateTime.formatDateTime(this.epochMillis, this.timezoneOffsetMinutes, pattern)
+        }
+
+        // Timezone operations
+        fun toUtc(): DateTime {
+            var newDateTime = DateTime.fromEpochMillis(this.epochMillis)
+            newDateTime.timezoneOffsetMinutes = 0
+            return newDateTime
+        }
+
+        fun toTimezone(timezoneOffsetMinutes: Int): DateTime {
+            var newDateTime = DateTime.fromEpochMillis(this.epochMillis)
+            newDateTime.timezoneOffsetMinutes = timezoneOffsetMinutes
+            return newDateTime
+        }
+
+        // Comparison methods
+        fun isBefore(other: DateTime): Bool {
+            return this.epochMillis < other.epochMillis
+        }
+
+        fun isAfter(other: DateTime): Bool {
+            return this.epochMillis > other.epochMillis
+        }
+
+        fun isEqual(other: DateTime): Bool {
+            return this.epochMillis == other.epochMillis
+        }
+
+        // Override methods
+        override fun toString(): String {
+            return this.format("yyyy-MM-dd HH:mm:ss")
+        }
+
+        override fun hash(): UInt {
+            return this.epochMillis.toUInt()
+        }
+
+        override fun equals(other: Object): Bool {
+            if (other is DateTime) {
+                var otherDateTime = other as DateTime
+                return this.epochMillis == otherDateTime.epochMillis
+            }
+            return false
+        }
+
+        // Static factory methods
+        static fun now(): DateTime {
+            return new DateTime()
+        }
+
+        static fun utcNow(): DateTime {
+            var dt = new DateTime()
+            return dt.toUtc()
+        }
+
+        static fun fromEpochMillis(milliseconds: ULong): DateTime {
+            var dt = new DateTime()
+            dt.setEpochMillis(milliseconds)
+            dt.setTimezoneOffset(DateTime.getLocalTimezoneOffset())
+            return dt
+        }
+
+        static fun create(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int): DateTime {
+            var dt = new DateTime()
+            dt.setDateTime(year, month, day, hour, minute, second)
+            return dt
+        }
+
+        static fun create(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int, timezoneOffsetMinutes: Int): DateTime {
+            var dt = new DateTime()
+            dt.setDateTime(year, month, day, hour, minute, second, timezoneOffsetMinutes)
+            return dt
+        }
+
+        static fun parse(dateString: String, pattern: String): DateTime {
+            var epochMillis = DateTime.parseDateTime(dateString, pattern)
+            return DateTime.fromEpochMillis(epochMillis)
+        }
+
+        // Static utility methods
+        static fun isLeapYear(year: Int): Bool {
+            return DateTime.checkLeapYear(year)
+        }
+
+        static fun getDaysInMonth(year: Int, month: Int): Int {
+            return DateTime.calculateDaysInMonth(year, month)
+        }
+
+        // Native method declarations
+        private static native fun getMillis(): ULong
+        private static native fun getLocalTimezoneOffset(): Int
+        private static native fun toEpochMillis(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int, timezoneOffsetMinutes: Int): ULong
+        private static native fun extractYear(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
+        private static native fun extractMonth(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
+        private static native fun extractDay(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
+        private static native fun extractHour(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
+        private static native fun extractMinute(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
+        private static native fun extractSecond(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
+        private static native fun extractMillisecond(epochMillis: ULong): Int
+        private static native fun extractDayOfWeek(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
+        private static native fun formatDateTime(epochMillis: ULong, timezoneOffsetMinutes: Int, pattern: String): String
+        private static native fun parseDateTime(dateString: String, pattern: String): ULong
+        private static native fun checkLeapYear(year: Int): Bool
+        private static native fun calculateDaysInMonth(year: Int, month: Int): Int
+    }
+}

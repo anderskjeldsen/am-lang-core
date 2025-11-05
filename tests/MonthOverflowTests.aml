@@ -1,0 +1,62 @@
+namespace Tests {
+
+    class MonthOverflowTests {
+        import Am.Lang
+        import Am.Tests
+    
+    test addMonthsYearOverflow() {
+        // Test adding months that should overflow to next year
+        // December + 1 month = January of next year
+        var december = DateTime.create(2024, 12, 15, 10, 30, 0, 0)
+        var january = december.addMonths(1)
+        
+        // Should be January 2025
+        Assert.assertEquals(2025, january.getYear())
+        Assert.assertEquals(1, january.getMonth())
+        Assert.assertEquals(15, january.getDay()) // Day should remain the same
+        Assert.assertEquals(10, january.getHour()) // Time should remain the same
+        Assert.assertEquals(30, january.getMinute())
+    }
+    
+    test addMultipleMonthsYearOverflow() {
+        // Test adding multiple months that cross year boundary
+        // October + 5 months = March of next year
+        var october = DateTime.create(2024, 10, 20, 14, 45, 30, 0)
+        var march = october.addMonths(5)
+        
+        // Should be March 2025
+        Assert.assertEquals(2025, march.getYear())
+        Assert.assertEquals(3, march.getMonth())
+        Assert.assertEquals(20, march.getDay())
+        Assert.assertEquals(14, march.getHour())
+        Assert.assertEquals(45, march.getMinute())
+        Assert.assertEquals(30, march.getSecond())
+    }
+    
+    test addMonthsMultipleYears() {
+        // Test adding enough months to span multiple years
+        // January + 25 months = February two years later
+        var january2024 = DateTime.create(2024, 1, 10, 8, 0, 0, 0)
+        var february2026 = january2024.addMonths(25)
+        
+        // Should be February 2026 (24 months = 2 years, +1 month = February)
+        Assert.assertEquals(2026, february2026.getYear())
+        Assert.assertEquals(2, february2026.getMonth())
+        Assert.assertEquals(10, february2026.getDay())
+    }
+    
+    test subtractMonthsYearUnderflow() {
+        // Test subtracting months that should underflow to previous year
+        // February - 3 months = November of previous year
+        var february = DateTime.create(2024, 2, 28, 12, 0, 0, 0)
+        var november = february.subtractMonths(3)
+        
+        // Should be November 2023
+        Assert.assertEquals(2023, november.getYear())
+        Assert.assertEquals(11, november.getMonth())
+        Assert.assertEquals(28, november.getDay())
+    }
+    
+    }
+
+}

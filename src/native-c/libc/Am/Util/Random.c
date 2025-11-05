@@ -7,6 +7,9 @@
 #include <libc/core_inline_functions.h>
 
 #include <stdlib.h>
+#include <time.h>
+
+static bool random_seeded = false;
 
 function_result Am_Util_Random__native_init_0(aobject * const this)
 {
@@ -42,6 +45,12 @@ function_result Am_Util_Random_randomInt_0(int max)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = true;
+
+	// Seed the random number generator if not already done
+	if (!random_seeded) {
+		srand((unsigned int)time(NULL));
+		random_seeded = true;
+	}
 
 	__result.return_value.value.int_value = rand() % max;
 

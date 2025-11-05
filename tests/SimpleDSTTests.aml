@@ -1,0 +1,43 @@
+namespace Tests {
+
+    class SimpleDSTTests {
+        import Am.Lang
+        import Am.Tests
+    
+    test basicDSTDemo() {
+        // Demonstrate that DST requires manual timezone offset management
+        
+        // Same wall clock time (1:30 AM) but different timezone offsets
+        // This represents the ambiguous hour when DST ends
+        var dstTime = DateTime.create(2024, 11, 3, 1, 30, 0, -240)    // EDT: UTC-4
+        var standardTime = DateTime.create(2024, 11, 3, 1, 30, 0, -300) // EST: UTC-5
+        
+        // Verify the timezone offsets are stored correctly
+        Assert.assertEquals(-240, dstTime.getTimezoneOffsetMinutes())
+        Assert.assertEquals(-300, standardTime.getTimezoneOffsetMinutes())
+        
+        // Both times show the same hour and minute (1:30 AM)
+        Assert.assertEquals(1, dstTime.getHour())
+        Assert.assertEquals(30, dstTime.getMinute())
+        Assert.assertEquals(1, standardTime.getHour())
+        Assert.assertEquals(30, standardTime.getMinute())
+    }
+    
+    test manualDSTOffsets() {
+        // Show that users must manually specify correct DST offsets
+        
+        // Winter time in New York: EST (UTC-5)
+        var winterNY = DateTime.create(2024, 1, 15, 12, 0, 0, -300)
+        Assert.assertEquals(-300, winterNY.getTimezoneOffsetMinutes())
+        
+        // Summer time in New York: EDT (UTC-4)  
+        var summerNY = DateTime.create(2024, 7, 15, 12, 0, 0, -240)
+        Assert.assertEquals(-240, summerNY.getTimezoneOffsetMinutes())
+        
+        // The DateTime class doesn't automatically know about DST transitions
+        // Users must provide the correct offset for each time
+    }
+    
+    }
+
+}

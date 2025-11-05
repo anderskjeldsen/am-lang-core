@@ -1,0 +1,145 @@
+namespace Tests {
+
+    class MemoryStreamTests {
+        import Am.Lang
+        import Am.IO
+        import Am.Tests
+        
+        test memoryStreamBasicReadWrite() {
+            var stream = new MemoryStream()
+            
+            // Test writing bytes
+            stream.writeByte(65)  // 'A'
+            stream.writeByte(66)  // 'B'
+            stream.writeByte(67)  // 'C'
+            
+            Assert.assertEquals(3L, stream.getLength())
+            Assert.assertEquals(3L, stream.getPosition())
+            
+            // Test seeking and reading
+            stream.seekFromStart(0L)
+            Assert.assertEquals(0L, stream.getPosition())
+            
+            var byteA = stream.readByte()
+            var byteB = stream.readByte()
+            var byteC = stream.readByte()
+            var eof = stream.readByte()
+            
+            Assert.assertEquals(65, byteA)  // 'A'
+            Assert.assertEquals(66, byteB)  // 'B'
+            Assert.assertEquals(67, byteC)  // 'C'
+            Assert.assertEquals(-1, eof)    // EOF
+        }
+        
+        test memoryStreamBufferReadWrite() {
+            var stream = new MemoryStream()
+            
+            // Test writing buffer
+            var writeBuffer = new UByte[3]
+            writeBuffer[0] = 72UB   // 'H'
+            writeBuffer[1] = 105UB  // 'i'
+            writeBuffer[2] = 33UB   // '!'
+            
+            stream.write(writeBuffer, 0L, 3UI)
+            Assert.assertEquals(3L, stream.getLength())
+            
+            // Test reading buffer
+            stream.seekFromStart(0L)
+            var readBuffer = new UByte[3]
+            var bytesRead = stream.read(readBuffer, 0L, 3UI)
+            
+            Assert.assertEquals(3UI, bytesRead)
+            Assert.assertEquals(72UB, readBuffer[0])   // 'H'
+            Assert.assertEquals(105UB, readBuffer[1])  // 'i'
+            Assert.assertEquals(33UB, readBuffer[2])   // '!'
+        }
+        
+        test memoryStreamInitialData() {
+            var initialData = new UByte[3]
+            initialData[0] = 65UB  // 'A'
+            initialData[1] = 66UB  // 'B'
+            initialData[2] = 67UB  // 'C'
+            
+            var stream = MemoryStream.newMemoryStream(initialData)
+            
+            Assert.assertEquals(3L, stream.getLength())
+            Assert.assertEquals(65, stream.readByte())
+            Assert.assertEquals(66, stream.readByte())
+            Assert.assertEquals(67, stream.readByte())
+            Assert.assertEquals(-1, stream.readByte())  // EOF
+        }
+        
+        test memoryStreamSeeking() {
+            var stream = new MemoryStream()
+            
+            // Write some data
+            stream.writeByte(65)  // 'A'
+            stream.writeByte(66)  // 'B'
+            stream.writeByte(67)  // 'C'
+            
+            // Test seeking
+            stream.seekFromStart(1L)
+            Assert.assertEquals(1L, stream.getPosition())
+            Assert.assertEquals(66, stream.readByte())
+            
+            // Seek beyond end should be allowed
+            stream.seekFromStart(10L)
+            Assert.assertEquals(10L, stream.getPosition())
+            Assert.assertEquals(-1, stream.readByte())  // EOF
+            
+            // Seek to negative should clamp to 0
+            stream.seekFromStart(-5L)
+            Assert.assertEquals(0L, stream.getPosition())
+        }
+
+        test memoryStreamUtilityMethods() {
+            var stream = new MemoryStream()
+            
+            // Test initial state
+            Assert.assertEquals(0L, stream.getLength())
+            Assert.assertEquals(0L, stream.getPosition())
+            Assert.assertEquals(0, stream.getCapacity())
+            
+            // Add some data
+            stream.writeByte(1)
+            stream.writeByte(2)
+            stream.writeByte(3)
+            
+            Assert.assertEquals(3L, stream.getLength())
+            Assert.assertEquals(3L, stream.getPosition())
+            Assert.assertEquals(3, stream.getCapacity())
+            
+            // Test toArray
+            var array = stream.toArray()
+            Assert.assertEquals(3UI, array.length())
+            Assert.assertEquals(1UB, array[0])
+            Assert.assertEquals(2UB, array[1])
+            Assert.assertEquals(3UB, array[2])
+            
+            // Test clear
+            stream.clear()
+            Assert.assertEquals(0L, stream.getLength())
+            Assert.assertEquals(0L, stream.getPosition())
+        }
+
+        test memoryStreamOverwriteData() {
+            var stream = new MemoryStream()
+            
+            // Write initial data
+            stream.writeByte(1)
+            stream.writeByte(2)
+            stream.writeByte(3)
+            
+            // Seek back and overwrite
+            stream.seekFromStart(1L)
+            stream.writeByte(42)
+            
+            // Verify overwrite
+            stream.seekFromStart(0L)
+            Assert.assertEquals(1, stream.readByte())
+            Assert.assertEquals(42, stream.readByte())
+            Assert.assertEquals(3, stream.readByte())
+            Assert.assertEquals(3L, stream.getLength())
+        }
+    }
+}

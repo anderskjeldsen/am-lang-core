@@ -1,0 +1,15 @@
+namespace Am.Lang.Tests {
+    class StringInterpolationTest {
+        import Am.Lang
+        
+        test testMethodCallInStringTemplate() {
+            var text = "Hello, World!"
+            "String content: ${text}".println()
+            "String length: ${text.length()}".println()  // This should work now!
+            
+            var number = 42
+            "Number: ${number}".println()
+            "Number toString: ${number.toString()}".println()  // Test method calls on numbers too
+        }
+    }
+}

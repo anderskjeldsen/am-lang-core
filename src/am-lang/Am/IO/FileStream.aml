@@ -3,7 +3,7 @@ TODO: Make it as an interface
 */
 namespace Am.IO
 {
-    native class FileStream(private var file: File) : Stream
+    native class FileStream(private var file: File, private var access: FileAccess) : Stream
     {
         import Am.Lang
         import Am.Collections

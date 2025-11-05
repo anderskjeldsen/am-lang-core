@@ -8,6 +8,7 @@
 #include <libc/core_inline_functions.h>
 
 #include <stdio.h>
+#include <errno.h>
 
 typedef struct _file_holder file_holder;
 
@@ -15,11 +16,35 @@ struct _file_holder {
 	FILE *file;
 };
 
+char * const get_file_access_mode(aobject * const this) {
+	// Get the FileAccess enum from the FileStream's access property (index 1, file is index 0)
+	property access_prop = this->object_properties.class_object_properties.properties[Am_IO_FileStream_P_access];
+	
+	// FileAccess enum is stored directly as an int in the nullable_value
+	int access_value = access_prop.nullable_value.value.int_value;
+	
+	// Map enum values to C file mode strings
+	switch (access_value) {
+		case 1: return "r";    // readOnly
+		case 2: return "w";    // writeOnly
+		case 3: return "a";    // appendOnly
+		case 4: return "r+";   // readWrite
+		case 5: return "w+";   // readWriteTruncate
+		case 6: return "a+";   // readAppend
+		default: return "r+";  // Default fallback
+	}
+}
+
 char * const get_file_path(aobject * const this) {
-	aobject * const file = this->object_properties.class_object_properties.properties[Am_IO_FileStream_P_file].nullable_value.value.object_value;
-	if (file != NULL) {
-		aobject * const path = file->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
-		if (path != NULL) {
+	// Get the File object from the FileStream's file property (index 0)
+	property file_prop = this->object_properties.class_object_properties.properties[Am_IO_FileStream_P_file];
+	if (file_prop.nullable_value.flags == 0 && file_prop.nullable_value.value.object_value != NULL) {
+		aobject * const file = file_prop.nullable_value.value.object_value;
+		
+		// Get the filename string from the File object's filename property (index 0)
+		property filename_prop = file->object_properties.class_object_properties.properties[Am_IO_File_P_filename];
+		if (filename_prop.nullable_value.flags == 0 && filename_prop.nullable_value.value.object_value != NULL) {
+			aobject * const path = filename_prop.nullable_value.value.object_value;
 			string_holder *holder = path->object_properties.class_object_properties.object_data.value.custom_value;
 			if ( holder != NULL ) {
 				return holder->string_value;
@@ -38,7 +63,9 @@ function_result Am_IO_FileStream__native_init_0(aobject * const this)
 	}
 
 	char * const path = get_file_path(this);
-	FILE *f = fopen(path, "rw"); // TODO: Provide access mode
+	char * const mode = get_file_access_mode(this);
+	
+	FILE *f = fopen(path, mode);
 	// throw exception if not found or any other error
 	if (f == NULL) {
 		__throw_simple_exception("Failed to open file", "in Am_IO_FileStream__native_init_0", &__result);
@@ -119,6 +146,7 @@ function_result Am_IO_FileStream_write_0(aobject * const this, aobject * buffer,
 	array_holder *a_holder = (array_holder *) &buffer[1]; 
 	// buffer->object_properties.class_object_properties.object_data.value.custom_value;
 	fwrite(a_holder->array_data + offset, 1, length, holder->file);
+	fflush(holder->file);
 
 __exit: ;
 	if (this != NULL) {
@@ -180,6 +208,7 @@ function_result Am_IO_FileStream_writeByte_0(aobject * const this, int byte)
 	unsigned char bytes[1];
 	bytes[0] = byte;
 	fwrite(bytes, 1, 1, holder->file);
+	fflush(holder->file);
 
 __exit: ;
 	if (this != NULL) {

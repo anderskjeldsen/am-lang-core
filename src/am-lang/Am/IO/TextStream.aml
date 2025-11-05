@@ -32,7 +32,7 @@ namespace Am.IO
         fun readString(): String {
             var read = this.read(this.buffer, 0L, this.buffer.length())
             var list = List.newList<UByte>()
-
+            
             while(read > 0UI) {
                 var subArray = new UByte[read]
                 var i = 0UI
@@ -53,8 +53,6 @@ namespace Am.IO
             }
 
             var array = list.toArray()
-
-//            ("array len: " + array.length().toString()).println()
 
             var str = String.fromBytes(array, "UTF-8")
             return str

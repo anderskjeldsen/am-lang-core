@@ -4,14 +4,11 @@ namespace Am.Collections {
         import Am.Lang
 
         private var size: Int = 0
-        var capacity: Int = 0
-        private var items: T[]
+        private var capacity: Int = 5
+        private var items: T[] = new T[5]
 
         static fun newList<T>(): List<T> {
-            var l: List<T> = new List<T>()
-            l.capacity = 2
-            l.items = new T[l.capacity]
-            return l
+            return new List<T>()
         }
 
         fun addArray(items: T[]) {
@@ -84,6 +81,13 @@ namespace Am.Collections {
                 throw new Exception("Index out of bounds: " + index.toString())                
             }
             return this.items[index]
+        }
+
+        fun set(index: Int, item: T) {
+            if (index < 0 || index >= this.size) {
+                throw new Exception("Index out of bounds: " + index.toString())                
+            }
+            this.items[index] = item
         }
 
         fun toArray(): T[] {
