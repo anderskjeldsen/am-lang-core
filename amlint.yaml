@@ -1,0 +1,26 @@
+# AmLang Linter Configuration - Testing Custom Config
+# This file defines code quality and style rules for your AmLang project
+
+# Naming Conventions
+namingConventions:
+  # Enforce naming case styles
+  enforceClassNameCase: "PascalCase"        # PascalCase, camelCase, snake_case
+  enforceFunctionNameCase: "camelCase"      # camelCase, snake_case
+  enforceVariableNameCase: "camelCase"      # camelCase, snake_case
+
+# Code Style Rules - TESTING WITH VERY STRICT LIMITS
+codeStyle:
+  maxLineLength: 120                        # Maximum characters per line
+  maxFunctionLength: 5                      # Maximum lines per function (VERY LOW FOR TESTING)
+  maxParameterCount: 2                      # Maximum parameters per function (VERY LOW FOR TESTING)
+  requireBracesForSingleStatement: false    # Require braces for single statements
+  forbidEmptyBlocks: true                   # Forbid empty code blocks
+
+# Best Practices
+bestPractices:
+  forbidMagicNumbers: false                 # Forbid magic numbers (use constants)
+  requireDocComments: false                 # Require documentation comments
+  forbidUnusedVariables: true               # Forbid unused variables
+  forbidUnusedParameters: false             # Forbid unused parameters
+  requireExplicitTypes: false               # Require explicit type annotations
+  forbidDivisionByZeroLiteral: true         # Forbid literal division by zero

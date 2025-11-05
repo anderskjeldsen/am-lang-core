@@ -27,6 +27,10 @@ else
 	$(CMD) test . -bt linux-x64 -ll $(LOGLEVEL) -rl -rlarc
 endif
 
+lint:
+	$(CMD) lint .
+
+
 # Debug targets
 gdb-test:
 	gdb -batch -ex "set environment MALLOC_CHECK_=2" -ex "run" -ex "bt" -ex "quit" builds/test-bin/linux-x64/test_app
