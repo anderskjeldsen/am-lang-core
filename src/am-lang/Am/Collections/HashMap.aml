@@ -77,7 +77,7 @@ namespace Am.Collections {
                 this.keys = new K[newBucketSize]
                 this.values = new V[newBucketSize]
                 this.keyIndexes = new Int[newBucketSize * 2]
-                ("create new bucket in HashMap: " + this.bucketSize.toString() + ", copy " + entryLastIndex.toString() + " items").println()
+//                ("create new bucket in HashMap: " + this.bucketSize.toString() + ", copy " + entryLastIndex.toString() + " items").println()
 
                 var i = 0
                 while(i < entryLastIndex) {

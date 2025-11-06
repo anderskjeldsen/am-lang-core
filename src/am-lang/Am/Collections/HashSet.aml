@@ -62,7 +62,7 @@ namespace Am.Collections {
                 this.nextIndexes = new Int[newBucketSize]
                 this.values = new T[newBucketSize]
                 this.valueIndexes = new Int[newBucketSize * 2]
-                ("create new bucket in HashSet: " + this.bucketSize.toString() + ", copy " + valueLastIndex.toString() + " items").println()
+//                ("create new bucket in HashSet: " + this.bucketSize.toString() + ", copy " + valueLastIndex.toString() + " items").println()
 
                 var i = 0
                 while(i < valueLastIndex) {
