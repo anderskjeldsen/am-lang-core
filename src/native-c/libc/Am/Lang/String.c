@@ -197,6 +197,7 @@ function_result Am_Lang_String__op__plus_0(aobject * const this, aobject * s)
 		// Character count is sum of individual character counts
 		holder->is_string_constant = false;
 		holder->length = holder1->length + holder2->length;
+		holder->byte_length = byte_len1 + byte_len2; // Set byte length for UTF-8 parsing
 		holder->string_value = new_str;
 		holder->hash = hash;
 //		memcpy(holder, &t_holder, sizeof(string_holder));
@@ -270,6 +271,7 @@ function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
 	unsigned int hash = __string_hash(new_str);
     holder->is_string_constant = false;
     holder->length = char_count; // Use character count, not byte count
+    holder->byte_length = len; // Store original byte count for parsing
     holder->string_value = new_str;
     holder->hash = hash;
 
@@ -337,6 +339,7 @@ function_result Am_Lang_String_fromChars_0(aobject * chars)
     // Store character count in length field (not UTF-8 byte length)
     holder->is_string_constant = false;
     holder->length = char_count;
+    holder->byte_length = utf8_len; // Store UTF-8 byte length for parsing
     holder->string_value = new_str;
     holder->hash = hash;
 
@@ -393,7 +396,7 @@ function_result Am_Lang_String_characterAtNative_0(aobject * const this, unsigne
 	// Since we store UTF-8 internally, we need to count Unicode characters, not bytes
 	unsigned int char_count = 0;
 	unsigned int byte_pos = 0;
-	unsigned int str_byte_len = strlen(str); // Get actual byte length
+	unsigned int str_byte_len = string_holder->byte_length; // Use stored byte length
 	
 	while (byte_pos < str_byte_len && char_count <= index) {
 		if (char_count == index) {
@@ -559,6 +562,7 @@ function_result Am_Lang_String_substring_0(aobject * const this, unsigned int st
 	// Note: This substring implementation works with bytes, not proper UTF-8 characters
 	substr_holder->is_string_constant = false;
 	substr_holder->length = length;
+	substr_holder->byte_length = length; // For substring, length == byte_length since it's byte-based
 	substr_holder->string_value = new_str;
 	substr_holder->hash = hash;
 	__result.return_value.value.object_value = str_obj;

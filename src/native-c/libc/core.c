@@ -927,6 +927,35 @@ bool __any_equals(const nullable_value a, const nullable_value b) {
     }
 }
 
+/* UTF-8 utility function */
+static unsigned int __utf8_char_count(const char *str, size_t byte_length) {
+    unsigned int char_count = 0;
+    size_t i = 0;
+    
+    while (i < byte_length) {
+        unsigned char c = (unsigned char)str[i];
+        if ((c & 0x80) == 0) {
+            // ASCII (1 byte)
+            i += 1;
+        } else if ((c & 0xE0) == 0xC0) {
+            // 2-byte UTF-8
+            i += 2;
+        } else if ((c & 0xF0) == 0xE0) {
+            // 3-byte UTF-8
+            i += 3;
+        } else if ((c & 0xF8) == 0xF0) {
+            // 4-byte UTF-8
+            i += 4;
+        } else {
+            // Invalid UTF-8, treat as single byte
+            i += 1;
+        }
+        char_count++;
+    }
+    
+    return char_count;
+}
+
 /* From constant */
 aobject * __create_string_constant(char const * const str, aclass * const string_class) {
     size_t len = strlen(str);
@@ -937,6 +966,7 @@ aobject * __create_string_constant(char const * const str, aclass * const string
     int hash = __string_hash(str);
     holder->is_string_constant = true;
     holder->length = len; // For ASCII string constants, char count = byte count
+    holder->byte_length = len; // For ASCII, char count = byte count
     holder->string_value = (char *) str;
     holder->hash = hash;
 
@@ -949,15 +979,15 @@ aobject * __create_string_constant(char const * const str, aclass * const string
 }
 
 aobject * __create_string(char const * const str, aclass * const string_class) {
-    size_t len = strlen(str);
-    aobject * str_obj = __allocate_object_with_extra_size(string_class, sizeof(string_holder) + len + 1);
+    size_t byte_len = strlen(str);
+    aobject * str_obj = __allocate_object_with_extra_size(string_class, sizeof(string_holder) + byte_len + 1);
     string_holder * const holder = (string_holder *) (str_obj + 1);
     str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
     char * const newStr = (char * const) (holder + 1);
     strcpy(newStr, str);
     int hash = __string_hash(str);
     holder->is_string_constant = false;
-    holder->length = len; // For ASCII strings, char count = byte count 
+    holder->length = byte_len; // For now, assuming ASCII strings where char count = byte count 
     holder->string_value = newStr;
     holder->hash = hash;
 //    *holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = newStr, .hash = hash };
