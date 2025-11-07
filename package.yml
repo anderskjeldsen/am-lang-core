@@ -2,7 +2,7 @@
 id: am-lang-core
 version: 0.7.0
 type: library
-availableFeatures: ["floatingPoint"]
+availableFeatures: ["!floatingPoint"]
 dependencies:
   - id: am-tests
     testOnly: true

@@ -16,6 +16,8 @@ namespace Am.Lang
         native fun toFloat(): Float
         native fun toBool(): Bool
 
+        static native fun parse(s: String): Double
+
         static const var maxValue: Double = 1.7976931348623157e308
         static const var minValue: Double = -1.7976931348623157e308
 
