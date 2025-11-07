@@ -18,6 +18,7 @@ namespace Am.Lang
         native override fun equals(other: Object): Bool
         native op + (s: String): String
         native static fun fromBytes(bytes: UByte[], encoding: String): String
+        native static fun fromChars(chars: Char[]): String
         native fun toBytes(encoding: String): UByte[]
         native fun indexOf(s: String): Int
         native fun lastIndexOf(s: String): Int

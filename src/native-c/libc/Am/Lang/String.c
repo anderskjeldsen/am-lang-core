@@ -284,6 +284,64 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_Lang_String_fromChars_0(aobject * chars)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+
+	if (chars != NULL) {
+		__increase_reference_count(chars);
+	}
+
+	array_holder *a_holder = (array_holder *) &chars[1];
+    int const char_count = a_holder->size;
+    
+    // Convert chars to UTF-8 bytes - estimate worst case (3 bytes per char for UTF-8)
+    char *utf8_buffer = malloc(char_count * 3 + 1);
+    int utf8_len = 0;
+    
+    unsigned short *char_data = (unsigned short*) a_holder->array_data;
+    for (int i = 0; i < char_count; i++) {
+        unsigned short codepoint = char_data[i];
+        
+        if (codepoint < 0x80) {
+            // ASCII (0-127): single byte
+            utf8_buffer[utf8_len++] = (char) codepoint;
+        } else if (codepoint < 0x800) {
+            // Two-byte UTF-8 sequence (128-2047)
+            utf8_buffer[utf8_len++] = (char) (0xC0 | (codepoint >> 6));
+            utf8_buffer[utf8_len++] = (char) (0x80 | (codepoint & 0x3F));
+        } else {
+            // Three-byte UTF-8 sequence (2048-65535)
+            utf8_buffer[utf8_len++] = (char) (0xE0 | (codepoint >> 12));
+            utf8_buffer[utf8_len++] = (char) (0x80 | ((codepoint >> 6) & 0x3F));
+            utf8_buffer[utf8_len++] = (char) (0x80 | (codepoint & 0x3F));
+        }
+    }
+    utf8_buffer[utf8_len] = '\0';
+
+    // Create string object with the UTF-8 data
+	aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + utf8_len + 1);
+	string_holder *holder = (string_holder *) (str_obj + 1);
+	str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
+	char * new_str = (char *) (holder + 1);
+
+    strcpy(new_str, utf8_buffer);
+    free(utf8_buffer);
+    
+	unsigned int hash = __string_hash(new_str);
+    *holder = (string_holder) { .is_string_constant = false, .length = utf8_len, .string_value = new_str, .hash = hash };
+
+	__result.return_value.value.object_value = str_obj;
+	__result.return_value.flags = 0;
+
+__exit: ;
+	if (chars != NULL) {
+		__decrease_reference_count(chars);
+	}
+	return __result;
+};
+
 function_result Am_Lang_String_toBytes_0(aobject * const this, aobject * encoding)
 {
 	function_result __result = { .has_return_value = true };

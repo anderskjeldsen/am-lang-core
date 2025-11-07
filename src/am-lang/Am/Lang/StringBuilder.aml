@@ -5,71 +5,45 @@ namespace Am.Lang
 
         import Am.Collections
         
-        private var encoding: String = "UTF-8"
-        private var buffer: List<UByte> = List<UByte>.newList<UByte>()
+        private var chars: List<Char> = List<Char>.newList<Char>()
 
         override fun toString(): String {
-            var byteArray = this.buffer.toArray()
-            return String.fromBytes(byteArray, this.encoding)
+            var charArray = this.chars.toArray()
+            return String.fromChars(charArray)
         }
 
         fun getLength(): UInt {
-            return this.buffer.getSize().toUInt()
+            return this.chars.getSize().toUInt()
         }
 
 //        native fun getLength(): Int
         op + (s: String): StringBuilder {
-            var bytes = s.toBytes(this.encoding)
             var i = 0
-            var len = bytes.length()
-            var buf = this.buffer
+            var len = s.length()
             while(i < len) {
-                buf.add(bytes[i])
+                this.chars.add(s.characterAt(i.toUInt()))
                 i++
             }
             return this
         }
 
         fun add(s: String): StringBuilder {
-            var bytes = s.toBytes(this.encoding)
             var i = 0
-            var len = bytes.length()
-            var buf = this.buffer
+            var len = s.length()
             while(i < len) {
-                buf.add(bytes[i])
+                this.chars.add(s.characterAt(i.toUInt()))
                 i++
             }
             return this
         }
 
         fun addChar(c: Char) : StringBuilder {
-            // Proper UTF-8 encoding for Unicode characters
-            var codePoint = c.toUShort()
-            
-            if (codePoint < 128US) {
-                // ASCII (0-127): single byte
-                this.buffer.add(codePoint.toUByte())
-            } else if (codePoint < 2048US) {
-                // Two-byte UTF-8 sequence (128-2047)
-                var byte1 = (192US + (codePoint / 64US)).toUByte()  // 110xxxxx
-                var byte2 = (128US + (codePoint % 64US)).toUByte()  // 10xxxxxx
-                this.buffer.add(byte1)
-                this.buffer.add(byte2)
-            } else {
-                // Three-byte UTF-8 sequence (2048-65535)
-                var byte1 = (224US + (codePoint / 4096US)).toUByte()           // 1110xxxx
-                var byte2 = (128US + ((codePoint / 64US) % 64US)).toUByte()    // 10xxxxxx
-                var byte3 = (128US + (codePoint % 64US)).toUByte()             // 10xxxxxx
-                this.buffer.add(byte1)
-                this.buffer.add(byte2)
-                this.buffer.add(byte3)
-            }
-            
+            this.chars.add(c)
             return this
         }
 
         fun clear() {
-            this.buffer.clear()
+            this.chars.clear()
         }
 
     }
