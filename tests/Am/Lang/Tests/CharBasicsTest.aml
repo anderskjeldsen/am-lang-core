@@ -1,0 +1,103 @@
+namespace Am.Lang.Tests 
+{
+    class CharBasicsTest {
+        import Am.Lang
+
+        test testCharCreationAndComparison() {
+            // Test basic char creation
+            var letterA: Char = 'A'
+            var letterB: Char = 'B' 
+            var digit0: Char = '0'
+            var digit9: Char = '9'
+            var space: Char = ' '
+            
+            // Test character comparison
+            if (letterA < letterB) {
+                "✓ Character comparison works: A < B".println()
+            } else {
+                "✗ Character comparison failed".println()
+            }
+            
+            // Test equality
+            var anotherA: Char = 'A'
+            if (letterA == anotherA) {
+                "✓ Character equality works".println()
+            } else {
+                "✗ Character equality failed".println()
+            }
+        }
+        
+        test testCharacterClassification() {
+            var letter: Char = 'M'
+            var digit: Char = '5'
+            var space: Char = ' '
+            var lowercase: Char = 'm'
+            
+            // Test isLetter
+            if (letter.isLetter()) {
+                "✓ 'M' is correctly identified as letter".println()
+            } else {
+                "✗ Letter detection failed for 'M'".println()
+            }
+            
+            if (lowercase.isLetter()) {
+                "✓ 'm' is correctly identified as letter".println()
+            } else {
+                "✗ Letter detection failed for 'm'".println()
+            }
+            
+            // Test isDigit
+            if (digit.isDigit()) {
+                "✓ '5' is correctly identified as digit".println()
+            } else {
+                "✗ Digit detection failed for '5'".println()
+            }
+            
+            if (!letter.isDigit()) {
+                "✓ 'M' is correctly NOT identified as digit".println()
+            } else {
+                "✗ Digit detection incorrectly identified 'M' as digit".println()
+            }
+            
+            // Test isAlphaNumeric
+            if (letter.isAlphaNumeric()) {
+                "✓ 'M' is alphanumeric".println()
+            } else {
+                "✗ AlphaNumeric detection failed for 'M'".println()
+            }
+            
+            if (digit.isAlphaNumeric()) {
+                "✓ '5' is alphanumeric".println()
+            } else {
+                "✗ AlphaNumeric detection failed for '5'".println()
+            }
+            
+            // Test isWhitespace
+            if (space.isWhitespace()) {
+                "✓ Space is correctly identified as whitespace".println()
+            } else {
+                "✗ Whitespace detection failed for space".println()
+            }
+        }
+        
+        test testCharConversions() {
+            var letter: Char = 'A'
+            
+            // Test toString
+            var letterStr = letter.toString()
+            if (letterStr == "A") {
+                "✓ Char.toString() works correctly".println()
+            } else {
+                "✗ Char.toString() failed, got: ${letterStr}".println()
+            }
+            
+            // Test numeric conversions
+            var letterValue = letter.toUShort()
+            if (letterValue == 65US) {
+                "✓ 'A' converts to correct Unicode value 65".println()
+            } else {
+                "✗ Unicode conversion failed, got: ${letterValue}".println()
+            }
+        }
+    }
+}

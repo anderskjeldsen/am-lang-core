@@ -42,9 +42,9 @@ namespace Am.Lang
             return this
         }
 
-        fun addChar(c: UShort) : StringBuilder {
-            // TODO: convert to UTF-8
-            this.buffer.add(c.toUByte()) // ditching the upper 8 bits for now.
+        fun addChar(c: Char) : StringBuilder {
+            // Simplified implementation for now - just use the lower byte
+            this.buffer.add(c.toUByte())
             return this
         }
 

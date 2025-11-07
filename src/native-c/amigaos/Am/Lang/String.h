@@ -1,10 +1,21 @@
-#ifndef native_amigaos_aclass_Am_Lang_String_h
-#define native_amigaos_aclass_Am_Lang_String_h
+#pragma once
 #include <libc/core.h>
 #include <Am/Lang/String.h>
+#include <Am/Lang/ClassRef.h>
 #include <Am/Lang/Object.h>
+#include <Am/Lang/UInt.h>
 #include <Am/Lang/Int.h>
-#include <Am/Lang/Array.h>
+#include <Am/Lang/Bool.h>
 #include <Am/Lang/UByte.h>
-
-#endif
+#include <Am/Lang/Array.h>
+#include <Am/Lang/Char.h>
+#include <Am/Lang/Exception.h>
+#include <Am/Lang/IndexOutOfBoundsException.h>
+#include <Am/Collections/List.h>
+#include <Am/Lang/StringBuilder.h>
+#include <Am/Lang/UShort.h>
+#include <Am/IO/File.h>
+#include <Am/IO/FileStream.h>
+#include <Am/IO/FileAccess.h>
+#include <Am/IO/TextStream.h>
+#include <Am/IO/Stream.h>

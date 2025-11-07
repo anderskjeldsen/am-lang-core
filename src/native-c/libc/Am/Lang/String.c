@@ -82,17 +82,45 @@ __exit: ;
 
 function_result Am_Lang_String_getLength_0(aobject * const this)
 {
-	function_result __result = { .has_return_value = false };
+	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 	if (this != NULL) {
 		__increase_reference_count(this);
 	}
-	// TODO: implement native function Am_Lang_String_getLength_0
+	
 	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
-	if ( holder != NULL ) {
-		__result.return_value.value.int_value = holder->length;
-	} else {
+	if (holder == NULL || holder->string_value == NULL) {
 		__result.return_value.value.int_value = 0;
+	} else {
+		// Count Unicode characters in UTF-8 string
+		char *str = holder->string_value;
+		unsigned int byte_length = holder->length;
+		unsigned int char_count = 0;
+		unsigned int byte_pos = 0;
+		
+		while (byte_pos < byte_length) {
+			unsigned char first_byte = (unsigned char)str[byte_pos];
+			
+			if ((first_byte & 0x80) == 0) {
+				// ASCII character (0xxxxxxx)
+				byte_pos += 1;
+			} else if ((first_byte & 0xE0) == 0xC0) {
+				// 2-byte UTF-8 (110xxxxx 10xxxxxx)
+				byte_pos += 2;
+			} else if ((first_byte & 0xF0) == 0xE0) {
+				// 3-byte UTF-8 (1110xxxx 10xxxxxx 10xxxxxx)
+				byte_pos += 3;
+			} else if ((first_byte & 0xF8) == 0xF0) {
+				// 4-byte UTF-8 (11110xxx 10xxxxxx 10xxxxxx 10xxxxxx)
+				byte_pos += 4;
+			} else {
+				// Invalid UTF-8 start byte
+				byte_pos += 1;
+			}
+			char_count++;
+		}
+		
+		__result.return_value.value.int_value = char_count;
 	}
 
 __exit: ;
@@ -292,13 +320,68 @@ function_result Am_Lang_String_characterAtNative_0(aobject * const this, unsigne
 		__increase_reference_count(this);
 	}
 
-
 	string_holder *string_holder = this->object_properties.class_object_properties.object_data.value.custom_value;
-	if ( index >= string_holder->length ) {
-		__throw_simple_exception("Index out of bounds", "in Am_Lang_String_characterAt_0", &__result);
-		goto __exit;
+	char *str = string_holder->string_value;
+	
+	// Convert character index to Unicode character
+	// Since we store UTF-8 internally, we need to count Unicode characters, not bytes
+	unsigned int char_count = 0;
+	unsigned int byte_pos = 0;
+	
+	while (byte_pos < string_holder->length && char_count <= index) {
+		if (char_count == index) {
+			// Found the character at the requested index
+			unsigned char first_byte = (unsigned char)str[byte_pos];
+			unsigned short unicode_char = 0;
+			
+			if ((first_byte & 0x80) == 0) {
+				// ASCII character (0xxxxxxx)
+				unicode_char = first_byte;
+			} else if ((first_byte & 0xE0) == 0xC0) {
+				// 2-byte UTF-8 (110xxxxx 10xxxxxx)
+				if (byte_pos + 1 < string_holder->length) {
+					unsigned char second_byte = (unsigned char)str[byte_pos + 1];
+					unicode_char = ((first_byte & 0x1F) << 6) | (second_byte & 0x3F);
+				}
+			} else if ((first_byte & 0xF0) == 0xE0) {
+				// 3-byte UTF-8 (1110xxxx 10xxxxxx 10xxxxxx)
+				if (byte_pos + 2 < string_holder->length) {
+					unsigned char second_byte = (unsigned char)str[byte_pos + 1];
+					unsigned char third_byte = (unsigned char)str[byte_pos + 2];
+					unicode_char = ((first_byte & 0x0F) << 12) | ((second_byte & 0x3F) << 6) | (third_byte & 0x3F);
+				}
+			} else {
+				// Invalid UTF-8 or 4-byte sequence (not supported in 16-bit)
+				unicode_char = 0xFFFD; // Unicode replacement character
+			}
+			
+			__result.return_value.value.ushort_value = unicode_char;
+			goto __exit;
+		}
+		
+		// Move to next Unicode character
+		unsigned char first_byte = (unsigned char)str[byte_pos];
+		if ((first_byte & 0x80) == 0) {
+			// ASCII character
+			byte_pos += 1;
+		} else if ((first_byte & 0xE0) == 0xC0) {
+			// 2-byte UTF-8
+			byte_pos += 2;
+		} else if ((first_byte & 0xF0) == 0xE0) {
+			// 3-byte UTF-8
+			byte_pos += 3;
+		} else if ((first_byte & 0xF8) == 0xF0) {
+			// 4-byte UTF-8 (skip, not supported in 16-bit)
+			byte_pos += 4;
+		} else {
+			// Invalid UTF-8
+			byte_pos += 1;
+		}
+		char_count++;
 	}
-	__result.return_value.value.ushort_value = string_holder->string_value[index];
+	
+	// Index out of bounds
+	__throw_simple_exception("Index out of bounds", "in Am_Lang_String_characterAtNative_0", &__result);
 
 __exit: ;
 	if (this != NULL) {

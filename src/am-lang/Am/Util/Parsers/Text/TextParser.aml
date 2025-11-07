@@ -6,7 +6,7 @@ namespace Am.Util.Parsers.Text {
         private var index: Int
         private var sb: StringBuilder = new StringBuilder()
 
-        fun parseUntil(predicate: (c: UShort) => Bool) : String {
+        fun parseUntil(predicate: (c: Char) => Bool) : String {
             this.sb.clear()
             while(this.index < this.string.getLength()) {
                 var c = this.string.characterAt(this.index.toUInt())
@@ -20,7 +20,7 @@ namespace Am.Util.Parsers.Text {
             return this.sb.toString()
         }
 
-        fun skipUntil(predicate: (c: UShort) => Bool): Bool {
+        fun skipUntil(predicate: (c: Char) => Bool): Bool {
             while(this.index < this.string.getLength()) {
                 var c = this.string.characterAt(this.index.toUInt())
                 if (!(predicate(c))) {
@@ -40,7 +40,7 @@ namespace Am.Util.Parsers.Text {
             return this.string.substring(this.index.toUInt(), len)
         }
 
-        fun peekChar() : UShort {
+        fun peekChar() : Char {
             return this.string.characterAt(this.index.toUInt())
         }
 

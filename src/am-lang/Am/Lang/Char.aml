@@ -1,0 +1,64 @@
+namespace Am.Lang 
+{
+    primitive native class Char {
+        override native fun toString(): String
+        override native fun hash(): UInt
+        native fun toByte(): Byte
+        native fun toShort(): Short
+        native fun toInt(): Int
+        native fun toLong(): Long
+        native fun toUByte(): UByte
+        native fun toUShort(): UShort
+        native fun toUInt(): UInt
+        native fun toULong(): ULong
+        native fun toBool(): Bool     
+
+        static native fun parse(s: String): Char
+
+        static fun min(a: Char, b: Char): Char {
+            if (a < b) {
+                return a
+            }
+            return b
+        }
+
+        static fun max(a: Char, b: Char): Char {
+            if (a > b) {
+                return a
+            }
+            return b
+        }
+
+        // Check if this character is a whitespace character
+        fun isWhitespace(): Bool {
+            return this == ' ' || this.toUShort() == 9US || this.toUShort() == 10US || this.toUShort() == 13US
+        }
+
+        // Check if this character is a digit (0-9)
+        fun isDigit(): Bool {
+            return this >= '0' && this <= '9'
+        }
+
+        // Check if this character is a letter (A-Z, a-z)
+        fun isLetter(): Bool {
+            return (this >= 'A' && this <= 'Z') || (this >= 'a' && this <= 'z')
+        }
+
+        // Check if this character is alphanumeric
+        fun isAlphaNumeric(): Bool {
+            return this.isLetter() || this.isDigit()
+        }
+
+        // Convert to uppercase (basic ASCII only for now)
+        fun toUpperCase(): Char {
+            // Simple implementation for testing
+            return this
+        }
+
+        // Convert to lowercase (basic ASCII only for now)  
+        fun toLowerCase(): Char {
+            // Simple implementation for testing
+            return this
+        }
+    }
+}

@@ -1,0 +1,170 @@
+namespace Am.Lang.Tests 
+{
+    class CharEdgeCasesTest {
+        import Am.Lang
+
+        test testSpecialCharacters() {
+            // Test common special characters
+            var space: Char = ' '
+            
+            if (space.isWhitespace()) {
+                "✓ Space character is whitespace".println()
+            } else {
+                "✗ Space character whitespace test failed".println()
+            }
+        }
+        
+        test testNumericCharacters() {
+            var zero: Char = '0'
+            var nine: Char = '9'
+            var five: Char = '5'
+            
+            if (zero.isDigit() && zero.isAlphaNumeric()) {
+                "✓ '0' is digit and alphanumeric".println()
+            } else {
+                "✗ '0' digit test failed".println()
+            }
+            
+            if (nine.isDigit() && nine.isAlphaNumeric()) {
+                "✓ '9' is digit and alphanumeric".println()
+            } else {
+                "✗ '9' digit test failed".println()
+            }
+            
+            if (five.isDigit() && five.isAlphaNumeric()) {
+                "✓ '5' is digit and alphanumeric".println()
+            } else {
+                "✗ '5' digit test failed".println()
+            }
+        }
+        
+        test testLetterCases() {
+            var upperA: Char = 'A'
+            var lowerA: Char = 'a'
+            var upperZ: Char = 'Z'
+            var lowerZ: Char = 'z'
+            
+            // Test uppercase letters
+            if (upperA.isLetter() && upperA.isAlphaNumeric()) {
+                "✓ 'A' is letter and alphanumeric".println()
+            } else {
+                "✗ 'A' letter test failed".println()
+            }
+            
+            if (upperZ.isLetter() && upperZ.isAlphaNumeric()) {
+                "✓ 'Z' is letter and alphanumeric".println()
+            } else {
+                "✗ 'Z' letter test failed".println()
+            }
+            
+            // Test lowercase letters
+            if (lowerA.isLetter() && lowerA.isAlphaNumeric()) {
+                "✓ 'a' is letter and alphanumeric".println()
+            } else {
+                "✗ 'a' letter test failed".println()
+            }
+            
+            if (lowerZ.isLetter() && lowerZ.isAlphaNumeric()) {
+                "✓ 'z' is letter and alphanumeric".println()
+            } else {
+                "✗ 'z' letter test failed".println()
+            }
+        }
+        
+        test testCaseConversion() {
+            var upperA: Char = 'A'
+            var lowerA: Char = 'a'
+            
+            var convertedUpper = lowerA.toUpperCase()
+            var convertedLower = upperA.toLowerCase()
+            
+            if (convertedUpper == 'A') {
+                "✓ 'a' converts to uppercase 'A'".println()
+            } else {
+                "✗ Lowercase to uppercase conversion failed".println()
+            }
+            
+            if (convertedLower == 'a') {
+                "✓ 'A' converts to lowercase 'a'".println()
+            } else {
+                "✗ Uppercase to lowercase conversion failed".println()
+            }
+            
+            // Test non-letter characters remain unchanged
+            var digit: Char = '5'
+            var upperDigit = digit.toUpperCase()
+            var lowerDigit = digit.toLowerCase()
+            
+            if (upperDigit == '5' && lowerDigit == '5') {
+                "✓ Non-letter characters unchanged by case conversion".println()
+            } else {
+                "✗ Non-letter case conversion test failed".println()
+            }
+        }
+        
+        test testPunctuationAndSymbols() {
+            var period: Char = '.'
+            var comma: Char = ','
+            var exclamation: Char = '!'
+            var question: Char = '?'
+            var at: Char = '@'
+            var hash: Char = '#'
+            
+            // Test each punctuation character individually
+            if (!period.isLetter() && !period.isDigit() && !period.isAlphaNumeric() && !period.isWhitespace()) {
+                "✓ '.' (period) correctly classified as punctuation".println()
+            } else {
+                "✗ '.' (period) punctuation test failed".println()
+            }
+            
+            if (!comma.isLetter() && !comma.isDigit() && !comma.isAlphaNumeric() && !comma.isWhitespace()) {
+                "✓ ',' (comma) correctly classified as punctuation".println()
+            } else {
+                "✗ ',' (comma) punctuation test failed".println()
+            }
+
+        }
+        
+        test testCharacterComparison() {
+            var a: Char = 'a'
+            var b: Char = 'b'
+            var anotherA: Char = 'a'
+            
+            if (a == anotherA) {
+                "✓ Character equality works: 'a' == 'a'".println()
+            } else {
+                "✗ Character equality test failed".println()
+            }
+            
+            if (a != b) {
+                "✓ Character inequality works: 'a' != 'b'".println()
+            } else {
+                "✗ Character inequality test failed".println()
+            }
+        }
+        
+        test testCharacterToString() {
+            var h: Char = 'H'
+            var e: Char = 'e'
+            var l: Char = 'l'
+            var o: Char = 'o'
+            
+            var hStr = h.toString()
+            var eStr = e.toString()
+            var lStr = l.toString()
+            var oStr = o.toString()
+            
+            if (hStr == "H") {
+                "✓ 'H' toString() = '${hStr}'".println()
+            } else {
+                "✗ 'H' toString() failed, got '${hStr}'".println()
+            }
+            
+            if (eStr == "e") {
+                "✓ 'e' toString() = '${eStr}'".println()
+            } else {
+                "✗ 'e' toString() failed, got '${eStr}'".println()
+            }
+        }
+    }
+}

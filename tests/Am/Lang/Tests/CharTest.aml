@@ -1,0 +1,33 @@
+namespace Am.Lang.Tests 
+{
+    class CharTest {
+        import Am.Lang
+
+        static fun main() {
+            // Test basic char functionality
+            var c1: Char = 'A'
+            var c2: Char = '0'
+            
+            "Testing Char type".println()
+            "Character A: ".print()
+            c1.toString().println()
+            "Character 0: ".print()
+            c2.toString().println()
+            
+            "Testing character comparison".println()
+            if (c1 >= 'A' && c1 <= 'Z') {
+                "A is an uppercase letter".println()
+            }
+            
+            if (c2.isDigit()) {
+                "0 is a digit".println()
+            }
+            
+            if (c1.isLetter()) {
+                "A is a letter".println()
+            }
+            
+            "Char test completed".println()
+        }
+    }
+}

@@ -1,0 +1,150 @@
+namespace Am.Lang.Tests 
+{
+    class StringCharIntegrationTest {
+        import Am.Lang
+
+        test testStringCharacterAccess() {
+            var testStr: String = "Hello"
+            
+            // Test characterAt returns Char type
+            var firstChar = testStr.characterAt(0UI)
+            var lastChar = testStr.characterAt(4UI)
+            
+            if (firstChar == 'H') {
+                "✓ First character is 'H'".println()
+            } else {
+                "✗ First character test failed".println()
+            }
+            
+            if (lastChar == 'o') {
+                "✓ Last character is 'o'".println()
+            } else {
+                "✗ Last character test failed".println()
+            }
+        }
+        
+        test testStringLength() {
+            // Test Unicode character counting
+            var asciiStr: String = "ABC"
+            var length1 = asciiStr.length()
+            
+            if (length1 == 3) {
+                "✓ ASCII string length correct: ${length1}".println()
+            } else {
+                "✗ ASCII string length wrong: ${length1}".println()
+            }
+            
+            // Test with various characters
+            var mixedStr: String = "A1!"
+            var length2 = mixedStr.length()
+            
+            if (length2 == 3) {
+                "✓ Mixed string length correct: ${length2}".println()
+            } else {
+                "✗ Mixed string length wrong: ${length2}".println()
+            }
+        }
+        
+        test testStringCharacterIteration() {
+            var word: String = "Test"
+            var len = word.length()
+            
+            "Iterating through characters of '${word}':".println()
+            
+            var i = 0UI
+            while (i < len.toUInt()) {
+                var ch = word.characterAt(i)
+                var charStr = ch.toString()
+                var typeStr: String
+                if (ch.isLetter()) {
+                    typeStr = "letter"
+                } else {
+                    typeStr = "not letter"
+                }
+                "  Position ${i}: '${charStr}' (${typeStr})".println()
+                i++
+            }
+        }
+        
+        test testStringSplitWithChar() {
+            var sentence: String = "apple,banana,cherry"
+            var parts = sentence.split(',')
+            
+            if (parts.length() == 3) {
+                "✓ String split by comma works, got ${parts.length()} parts".println()
+                "  Parts: '${parts[0]}', '${parts[1]}', '${parts[2]}'".println()
+            } else {
+                "✗ String split failed, got ${parts.length()} parts instead of 3".println()
+            }
+        }
+        
+        test testStringTrimWithChar() {
+            var paddedStr: String = "  Hello World  "
+            var trimmed = paddedStr.trim()
+            
+            if (trimmed == "Hello World") {
+                "✓ String trim works correctly".println()
+            } else {
+                "✗ String trim failed, got: '${trimmed}'".println()
+            }
+            
+            // Test string with only whitespace
+            var spaceStr: String = "   "
+            var trimmedEmpty = spaceStr.trim()
+            
+            if (trimmedEmpty == "") {
+                "✓ Trimming whitespace-only string works".println()
+            } else {
+                "✗ Trimming whitespace-only string failed".println()
+            }
+        }
+        
+        test testStringBuilderWithChar() {
+            var sb = new StringBuilder()
+            
+            // Add individual characters
+            sb.addChar('H')
+            sb.addChar('e')
+            sb.addChar('l')
+            sb.addChar('l')
+            sb.addChar('o')
+            
+            var result = sb.toString()
+            
+            if (result == "Hello") {
+                "✓ StringBuilder with Char works: '${result}'".println()
+            } else {
+                "✗ StringBuilder with Char failed: '${result}'".println()
+            }
+        }
+        
+        test testCharacterRangeChecking() {
+            var testStr: String = "Hello123"
+            var letterCount = 0
+            var digitCount = 0
+            
+            var i = 0UI
+            var len = testStr.length().toUInt()
+            
+            while (i < len) {
+                var ch = testStr.characterAt(i)
+                
+                if (ch.isLetter()) {
+                    letterCount++
+                }
+                
+                if (ch.isDigit()) {
+                    digitCount++
+                }
+                
+                i++
+            }
+            
+            if (letterCount == 5 && digitCount == 3) {
+                "✓ Character classification in string works: ${letterCount} letters, ${digitCount} digits".println()
+            } else {
+                "✗ Character classification failed: ${letterCount} letters, ${digitCount} digits".println()
+            }
+        }
+    }
+}
