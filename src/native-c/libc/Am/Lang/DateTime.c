@@ -1,4 +1,6 @@
 #include <libc/core.h>
+#include <time.h>
+#include <sys/time.h>
 #include <Am/Lang/DateTime.h>
 #include <libc/Am/Lang/DateTime.h>
 #include <Am/Lang/Object.h>
@@ -11,6 +13,26 @@
 
 // External reference to the String class
 extern aclass Am_Lang_String;
+
+// Portable timegm implementation for platforms that don't have it (like AmigaOS)
+#ifndef HAVE_TIMEGM
+static time_t portable_timegm(struct tm *tm) {
+    time_t ret;
+    char *tz;
+    
+    tz = getenv("TZ");
+    setenv("TZ", "", 1);
+    tzset();
+    ret = mktime(tm);
+    if (tz)
+        setenv("TZ", tz, 1);
+    else
+        unsetenv("TZ");
+    tzset();
+    return ret;
+}
+#define timegm portable_timegm
+#endif
 
 // Standard object lifecycle methods
 function_result Am_Lang_DateTime__native_init_0(aobject * const this)
@@ -103,7 +125,7 @@ function_result Am_Lang_DateTime_toEpochMillis_0(int year, int month, int day, i
     tm_time.tm_sec = second;
     tm_time.tm_isdst = -1;  // let system determine DST
 
-    // Use timegm to get UTC time instead of mktime (which uses local time)
+    // Use timegm (with portable fallback) to get UTC time instead of mktime (which uses local time)
     time_t epoch_time = timegm(&tm_time);
     
     unsigned long long milliseconds = (unsigned long long)epoch_time * 1000LL;
