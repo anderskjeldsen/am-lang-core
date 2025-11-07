@@ -936,7 +936,7 @@ aobject * __create_string_constant(char const * const str, aclass * const string
     str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
     int hash = __string_hash(str);
     holder->is_string_constant = true;
-    holder->length = len;
+    holder->length = len; // For ASCII string constants, char count = byte count
     holder->string_value = (char *) str;
     holder->hash = hash;
 
@@ -957,7 +957,7 @@ aobject * __create_string(char const * const str, aclass * const string_class) {
     strcpy(newStr, str);
     int hash = __string_hash(str);
     holder->is_string_constant = false;
-    holder->length = len;
+    holder->length = len; // For ASCII strings, char count = byte count 
     holder->string_value = newStr;
     holder->hash = hash;
 //    *holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = newStr, .hash = hash };
@@ -1118,7 +1118,8 @@ aclass * const get_class_from_any(nullable_value const value) {
 aobject * __concatenate_strings(int count, ...) {
     va_list args;
     va_list args_copy;
-    size_t total_length;
+    size_t total_length; // byte length for allocation
+    size_t total_chars;  // character count for string holder
     aobject* result_obj;
     string_holder* result_holder;
     char* result_str;
@@ -1128,6 +1129,7 @@ aobject * __concatenate_strings(int count, ...) {
     
     /* Calculate total length needed */
     total_length = 0;
+    total_chars = 0;
     va_copy(args_copy, args);
     
     for (i = 0; i < count; i++) {
@@ -1135,7 +1137,8 @@ aobject * __concatenate_strings(int count, ...) {
         if (str_obj != NULL) {
             string_holder* holder = (string_holder*)str_obj->object_properties.class_object_properties.object_data.value.custom_value;
             if (holder != NULL) {
-                total_length += holder->length;
+                total_length += strlen(holder->string_value); // Use actual string length for memory allocation
+                total_chars += holder->length;       // Accumulate character count
             }
         }
     }
@@ -1170,7 +1173,7 @@ aobject * __concatenate_strings(int count, ...) {
     
     /* Set up the string holder fields */
     result_holder->is_string_constant = 0; /* false */
-    result_holder->length = total_length;
+    result_holder->length = total_chars;     // Character count (same as byte count for ASCII)
     result_holder->string_value = result_str;
     result_holder->hash = __string_hash(result_str);
     

@@ -146,6 +146,7 @@ union _value {
 struct _string_holder {
     bool is_string_constant;
     unsigned int length; // length of characters, not "char"/bytes
+    unsigned int byte_length; // length of UTF-8 bytes for memory allocation and parsing
     char * string_value;
     unsigned int hash;
 };

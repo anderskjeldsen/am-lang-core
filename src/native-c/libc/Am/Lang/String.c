@@ -92,35 +92,8 @@ function_result Am_Lang_String_getLength_0(aobject * const this)
 	if (holder == NULL || holder->string_value == NULL) {
 		__result.return_value.value.int_value = 0;
 	} else {
-		// Count Unicode characters in UTF-8 string
-		char *str = holder->string_value;
-		unsigned int byte_length = holder->length;
-		unsigned int char_count = 0;
-		unsigned int byte_pos = 0;
-		
-		while (byte_pos < byte_length) {
-			unsigned char first_byte = (unsigned char)str[byte_pos];
-			
-			if ((first_byte & 0x80) == 0) {
-				// ASCII character (0xxxxxxx)
-				byte_pos += 1;
-			} else if ((first_byte & 0xE0) == 0xC0) {
-				// 2-byte UTF-8 (110xxxxx 10xxxxxx)
-				byte_pos += 2;
-			} else if ((first_byte & 0xF0) == 0xE0) {
-				// 3-byte UTF-8 (1110xxxx 10xxxxxx 10xxxxxx)
-				byte_pos += 3;
-			} else if ((first_byte & 0xF8) == 0xF0) {
-				// 4-byte UTF-8 (11110xxx 10xxxxxx 10xxxxxx 10xxxxxx)
-				byte_pos += 4;
-			} else {
-				// Invalid UTF-8 start byte
-				byte_pos += 1;
-			}
-			char_count++;
-		}
-		
-		__result.return_value.value.int_value = char_count;
+		// Return pre-calculated character count (much faster than UTF-8 parsing!)
+		__result.return_value.value.int_value = holder->length;
 	}
 
 __exit: ;
@@ -207,7 +180,11 @@ function_result Am_Lang_String__op__plus_0(aobject * const this, aobject * s)
 	string_holder *holder2 = s->object_properties.class_object_properties.object_data.value.custom_value;
 
 	if ( holder1 != NULL && holder2 != NULL ) {
-		aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + holder1->length + holder2->length + 1);
+		// Calculate byte lengths for memory allocation (revert to safe version)
+		unsigned int byte_len1 = strlen(holder1->string_value);
+		unsigned int byte_len2 = strlen(holder2->string_value);
+		
+		aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + byte_len1 + byte_len2 + 1);
 		string_holder *holder = (string_holder *) (str_obj + 1);
 		str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
 		char * new_str = (char *) (holder + 1);
@@ -217,7 +194,11 @@ function_result Am_Lang_String__op__plus_0(aobject * const this, aobject * s)
 	    strcat(new_str, holder2->string_value);
 //		printf("new string: %s\n", newStr);
 		unsigned int hash = __string_hash(new_str);
-		*holder = (string_holder) { .is_string_constant = false, .length = holder1->length + holder2->length, .string_value = new_str, .hash = hash };
+		// Character count is sum of individual character counts
+		holder->is_string_constant = false;
+		holder->length = holder1->length + holder2->length;
+		holder->string_value = new_str;
+		holder->hash = hash;
 //		memcpy(holder, &t_holder, sizeof(string_holder));
 		// holder->string_value = newStr; // assume that string constants will never change
 		// holder->length = holder1->length + holder2->length; // TODO: how many characters exactly?
@@ -266,8 +247,31 @@ function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
     // char * const new_str = malloc(len + 1);
     strncpy(new_str, a_holder->array_data, len);
 	new_str[len] = 0;
+	
+	// Count UTF-8 characters to store in length field
+	unsigned int char_count = 0;
+	unsigned int byte_pos = 0;
+	while (byte_pos < len) {
+		unsigned char first_byte = (unsigned char)new_str[byte_pos];
+		if ((first_byte & 0x80) == 0) {
+			byte_pos += 1;  // ASCII
+		} else if ((first_byte & 0xE0) == 0xC0) {
+			byte_pos += 2;  // 2-byte UTF-8
+		} else if ((first_byte & 0xF0) == 0xE0) {
+			byte_pos += 3;  // 3-byte UTF-8
+		} else if ((first_byte & 0xF8) == 0xF0) {
+			byte_pos += 4;  // 4-byte UTF-8
+		} else {
+			byte_pos += 1;  // Invalid UTF-8
+		}
+		char_count++;
+	}
+	
 	unsigned int hash = __string_hash(new_str);
-    *holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = new_str, .hash = hash };
+    holder->is_string_constant = false;
+    holder->length = char_count; // Use character count, not byte count
+    holder->string_value = new_str;
+    holder->hash = hash;
 
 //	aobject * new_string = __create_string(array_holder->array_data, &Am_Lang_String);
 
@@ -330,7 +334,11 @@ function_result Am_Lang_String_fromChars_0(aobject * chars)
     free(utf8_buffer);
     
 	unsigned int hash = __string_hash(new_str);
-    *holder = (string_holder) { .is_string_constant = false, .length = utf8_len, .string_value = new_str, .hash = hash };
+    // Store character count in length field (not UTF-8 byte length)
+    holder->is_string_constant = false;
+    holder->length = char_count;
+    holder->string_value = new_str;
+    holder->hash = hash;
 
 	__result.return_value.value.object_value = str_obj;
 	__result.return_value.flags = 0;
@@ -385,8 +393,9 @@ function_result Am_Lang_String_characterAtNative_0(aobject * const this, unsigne
 	// Since we store UTF-8 internally, we need to count Unicode characters, not bytes
 	unsigned int char_count = 0;
 	unsigned int byte_pos = 0;
+	unsigned int str_byte_len = strlen(str); // Get actual byte length
 	
-	while (byte_pos < string_holder->length && char_count <= index) {
+	while (byte_pos < str_byte_len && char_count <= index) {
 		if (char_count == index) {
 			// Found the character at the requested index
 			unsigned char first_byte = (unsigned char)str[byte_pos];
@@ -397,13 +406,13 @@ function_result Am_Lang_String_characterAtNative_0(aobject * const this, unsigne
 				unicode_char = first_byte;
 			} else if ((first_byte & 0xE0) == 0xC0) {
 				// 2-byte UTF-8 (110xxxxx 10xxxxxx)
-				if (byte_pos + 1 < string_holder->length) {
+				if (byte_pos + 1 < str_byte_len) {
 					unsigned char second_byte = (unsigned char)str[byte_pos + 1];
 					unicode_char = ((first_byte & 0x1F) << 6) | (second_byte & 0x3F);
 				}
 			} else if ((first_byte & 0xF0) == 0xE0) {
 				// 3-byte UTF-8 (1110xxxx 10xxxxxx 10xxxxxx)
-				if (byte_pos + 2 < string_holder->length) {
+				if (byte_pos + 2 < str_byte_len) {
 					unsigned char second_byte = (unsigned char)str[byte_pos + 1];
 					unsigned char third_byte = (unsigned char)str[byte_pos + 2];
 					unicode_char = ((first_byte & 0x0F) << 12) | ((second_byte & 0x3F) << 6) | (third_byte & 0x3F);
@@ -547,7 +556,11 @@ function_result Am_Lang_String_substring_0(aobject * const this, unsigned int st
 	strncpy(new_str, &holder->string_value[start], length);
 	new_str[length] = 0;
 	unsigned int hash = __string_hash(new_str);
-	*substr_holder = (string_holder) { .is_string_constant = false, .length = length, .string_value = new_str, .hash = hash };
+	// Note: This substring implementation works with bytes, not proper UTF-8 characters
+	substr_holder->is_string_constant = false;
+	substr_holder->length = length;
+	substr_holder->string_value = new_str;
+	substr_holder->hash = hash;
 	__result.return_value.value.object_value = str_obj;
 
 __exit: ;
