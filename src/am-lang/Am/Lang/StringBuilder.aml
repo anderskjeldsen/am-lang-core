@@ -43,8 +43,28 @@ namespace Am.Lang
         }
 
         fun addChar(c: Char) : StringBuilder {
-            // Simplified implementation for now - just use the lower byte
-            this.buffer.add(c.toUByte())
+            // Proper UTF-8 encoding for Unicode characters
+            var codePoint = c.toUShort()
+            
+            if (codePoint < 128US) {
+                // ASCII (0-127): single byte
+                this.buffer.add(codePoint.toUByte())
+            } else if (codePoint < 2048US) {
+                // Two-byte UTF-8 sequence (128-2047)
+                var byte1 = (192US + (codePoint / 64US)).toUByte()  // 110xxxxx
+                var byte2 = (128US + (codePoint % 64US)).toUByte()  // 10xxxxxx
+                this.buffer.add(byte1)
+                this.buffer.add(byte2)
+            } else {
+                // Three-byte UTF-8 sequence (2048-65535)
+                var byte1 = (224US + (codePoint / 4096US)).toUByte()           // 1110xxxx
+                var byte2 = (128US + ((codePoint / 64US) % 64US)).toUByte()    // 10xxxxxx
+                var byte3 = (128US + (codePoint % 64US)).toUByte()             // 10xxxxxx
+                this.buffer.add(byte1)
+                this.buffer.add(byte2)
+                this.buffer.add(byte3)
+            }
+            
             return this
         }
 

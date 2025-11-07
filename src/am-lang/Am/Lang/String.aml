@@ -144,13 +144,7 @@ namespace Am.Lang
             var i = 0UI
             while(i < len) {
                 var c = this.characterAt(i)
-                // Convert lowercase letters to uppercase
-                if (c >= 'a' && c <= 'z') {
-                    // Simple conversion for now
-                    sb.addChar(c)
-                } else {
-                    sb.addChar(c)
-                }
+                sb.addChar(c.toUpperCase())
                 i++
             }
             return sb.toString()
@@ -162,13 +156,7 @@ namespace Am.Lang
             var i = 0UI
             while(i < len) {
                 var c = this.characterAt(i)
-                // Convert uppercase letters to lowercase 
-                if (c >= 'A' && c <= 'Z') {
-                    // Simple conversion for now
-                    sb.addChar(c)
-                } else {
-                    sb.addChar(c)
-                }
+                sb.addChar(c.toLowerCase())
                 i++
             }
             return sb.toString()

@@ -11,7 +11,8 @@ namespace Am.Lang
         native fun toUByte(): UByte
         native fun toUInt(): UInt
         native fun toULong(): ULong
-        native fun toBool(): Bool        
+        native fun toBool(): Bool
+        native fun toChar(): Char        
 
         static native fun parse(s: String): UShort
 

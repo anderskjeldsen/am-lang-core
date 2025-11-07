@@ -117,6 +117,15 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_Lang_UShort_toChar_0(unsigned short const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	__result.return_value = (nullable_value) { .value = { .ushort_value = this }, .flags = PRIMITIVE_CHAR };
+__exit: ;
+	return __result;
+};
+
 function_result Am_Lang_UShort_parse_0(aobject * const s)
 {
 	function_result __result = { .has_return_value = true };

@@ -1,0 +1,263 @@
+namespace Am.Lang.Tests {
+    class CharUnicodeEdgeCasesTest {
+        import Am.Lang
+        import Am.Tests
+
+        test testUnicodeSymbols() {
+            // Test various Unicode symbols using numeric values (due to parsing limitations)
+            var heart = 9829US.toChar()  // U+2665 = ♥
+            var diamond = 9830US.toChar() // U+2666 = ♦
+            var club = 9827US.toChar()    // U+2663 = ♣
+            var spade = 9824US.toChar()   // U+2660 = ♠
+            
+            "Testing Unicode card suits:".println()
+            ("Heart: " + heart.toString()).println()
+            ("Diamond: " + diamond.toString()).println() 
+            ("Club: " + club.toString()).println()
+            ("Spade: " + spade.toString()).println()
+            
+            // Verify they're not classified as letters/digits
+            if (heart.isLetter()) {
+                throw new Exception("Heart symbol should not be classified as letter")
+            }
+            if (heart.isDigit()) {
+                throw new Exception("Heart symbol should not be classified as digit") 
+            }
+            if (heart.isAlphaNumeric()) {
+                throw new Exception("Heart symbol should not be classified as alphanumeric")
+            }
+            
+            "✓ Unicode symbols correctly classified as non-alphanumeric".println()
+        }
+
+        test testMathematicalSymbols() {
+            // Test mathematical Unicode symbols using numeric values
+            var pi = 960US.toChar()      // U+03C0 = π
+            var infinity = 8734US.toChar() // U+221E = ∞
+            var sum = 8721US.toChar()     // U+2211 = ∑
+            var integral = 8747US.toChar() // U+222B = ∫
+            
+            "Testing mathematical symbols:".println()
+            ("Pi: " + pi.toString()).println()
+            ("Infinity: " + infinity.toString()).println()
+            ("Sum: " + sum.toString()).println() 
+            ("Integral: " + integral.toString()).println()
+            
+            // Pi is technically a Greek letter, but our simple isLetter() only checks A-Z, a-z
+            if (pi.isDigit()) {
+                throw new Exception("Pi should not be classified as digit")
+            }
+            
+            "✓ Mathematical symbols handled correctly".println()
+        }
+
+        test testCurrencySymbols() {
+            // Test currency symbols using numeric values
+            var euro = 8364US.toChar()    // U+20AC = €
+            var pound = 163US.toChar()   // U+00A3 = £
+            var yen = 165US.toChar()     // U+00A5 = ¥
+            var cent = 162US.toChar()    // U+00A2 = ¢
+            
+            "Testing currency symbols:".println()
+            ("Euro: " + euro.toString()).println()
+            ("Pound: " + pound.toString()).println()
+            ("Yen: " + yen.toString()).println()
+            ("Cent: " + cent.toString()).println()
+            
+            // Verify currency symbols are not alphanumeric
+            if (euro.isLetter() || euro.isDigit() || euro.isAlphaNumeric()) {
+                throw new Exception("Euro should not be classified as alphanumeric")
+            }
+            
+            "✓ Currency symbols correctly classified".println()
+        }
+
+        test testArrowSymbols() {
+            // Test arrow symbols using numeric values
+            var leftArrow = 8592US.toChar()  // U+2190 = ←
+            var rightArrow = 8594US.toChar() // U+2192 = →
+            var upArrow = 8593US.toChar()    // U+2191 = ↑
+            var downArrow = 8595US.toChar()  // U+2193 = ↓
+            
+            "Testing arrow symbols:".println()
+            ("Left: " + leftArrow.toString()).println()
+            ("Right: " + rightArrow.toString()).println()
+            ("Up: " + upArrow.toString()).println()
+            ("Down: " + downArrow.toString()).println()
+            
+            // Test character comparison with arrows
+            if (leftArrow == rightArrow) {
+                throw new Exception("Left and right arrows should be different")
+            }
+            
+            "✓ Arrow symbols work correctly".println()
+        }
+
+        test testUpperRangeUnicodeChars() {
+            // Test characters near the upper limit of 16-bit range using numeric values
+            var highChar1 = 65500US.toChar()  // U+FFDC (close to max 16-bit)
+            var highChar2 = 65498US.toChar()  // U+FFDA
+            
+            "Testing high-range Unicode characters:".println()
+            ("High char 1: " + highChar1.toString()).println()
+            ("High char 2: " + highChar2.toString()).println()
+            
+            // Test that they convert to high numeric values
+            var value1 = highChar1.toUShort()
+            var value2 = highChar2.toUShort()
+            
+            if (value1 <= 1000US) {
+                throw new Exception("High Unicode char should have high numeric value")
+            }
+            
+            ("High char numeric value: " + value1.toString()).println()
+            "✓ High-range Unicode characters work".println()
+        }
+
+        test testControlCharacters() {
+            // Test some control characters using numeric conversion
+            // Tab = 9, Newline = 10, Carriage Return = 13
+            var tab = 9US.toChar()        // U+0009
+            var newline = 10US.toChar()   // U+000A  
+            var carriageReturn = 13US.toChar() // U+000D
+            
+            "Testing control characters:".println()
+            // Note: These might not display visibly but should work programmatically
+            
+            // Tab and newline should be whitespace
+            if (!tab.isWhitespace()) {
+                throw new Exception("Tab should be classified as whitespace")
+            }
+            
+            if (!newline.isWhitespace()) {
+                throw new Exception("Newline should be classified as whitespace") 
+            }
+            
+            if (!carriageReturn.isWhitespace()) {
+                throw new Exception("Carriage return should be classified as whitespace")
+            }
+            
+            "✓ Control characters classified correctly as whitespace".println()
+        }
+
+        test testCharacterComparisons() {
+            // Test various character comparisons across Unicode ranges
+            var a = 'a'
+            var z = 'z'
+            var heart = 9829US.toChar()  // U+2665 = ♥
+            var euro = 8364US.toChar()   // U+20AC = €
+            
+            "Testing character comparisons:".println()
+            
+            // Basic ASCII comparisons should work
+            if (a >= z) {
+                throw new Exception("'a' should be less than 'z'")
+            }
+            
+            // Unicode comparisons based on code point values
+            if (a >= heart) {
+                throw new Exception("ASCII 'a' should have lower code point than heart symbol")
+            }
+            
+            // Test equality
+            var anotherA = 'a'
+            if (a != anotherA) {
+                throw new Exception("Same characters should be equal")
+            }
+            
+            "✓ Character comparisons work across Unicode ranges".println()
+        }
+
+        test testStringWithUnicodeChars() {
+            // Test Unicode character handling by creating a string manually
+            // Note: Direct Unicode literals in strings have parsing issues
+            var sb = new StringBuilder()
+            sb.add("Hello ")
+            sb.addChar(9829US.toChar()) // ♥
+            sb.add(" World ")
+            sb.addChar(8364US.toChar()) // €
+            sb.add(" Pi ")
+            sb.addChar(960US.toChar())  // π
+            
+            var unicodeString = sb.toString()
+            var length = unicodeString.getLength()
+            
+            "Testing string with Unicode characters:".println()
+            ("String: " + unicodeString).println()
+            ("Length: " + length.toString()).println()
+            
+            // Get some Unicode characters from the string
+            var heart = unicodeString.characterAt(6UI)
+            var euro = unicodeString.characterAt(14UI)
+            var pi = unicodeString.characterAt(19UI)
+            
+            if (heart.toUShort() != 9829US) {
+                throw new Exception("Should extract heart symbol from string correctly")
+            }
+            
+            if (euro.toUShort() != 8364US) {
+                throw new Exception("Should extract euro symbol from string correctly") 
+            }
+            
+            if (pi.toUShort() != 960US) {
+                throw new Exception("Should extract pi symbol from string correctly")
+            }
+            
+            "✓ Unicode characters work properly in strings".println()
+        }
+
+        test testCharCaseConversionEdgeCases() {
+            // Test case conversion on non-ASCII characters using numeric values
+            var accented_a = 225US.toChar()  // U+00E1 = á - lowercase a with acute
+            var accented_A = 193US.toChar()  // U+00C1 = Á - uppercase A with acute
+            
+            "Testing case conversion on accented characters:".println()
+            ("Lowercase á: " + accented_a.toString()).println()
+            ("Uppercase Á: " + accented_A.toString()).println()
+            
+            // Our simple case conversion only handles A-Z, a-z
+            // So accented characters should remain unchanged
+            var upperResult = accented_a.toUpperCase()
+            var lowerResult = accented_A.toLowerCase()
+            
+            if (upperResult != accented_a) {
+                throw new Exception("Accented lowercase should remain unchanged by toUpperCase()")
+            }
+            
+            if (lowerResult != accented_A) {
+                throw new Exception("Accented uppercase should remain unchanged by toLowerCase()")
+            }
+            
+            "✓ Case conversion correctly handles non-ASCII characters (leaves unchanged)".println()
+        }
+
+        test testZeroAndMaxCharacters() {
+            // Test edge characters at boundaries
+            var nullChar = 0US.toChar()   // U+0000 - null character
+            // Note: We can't easily test U+FFFF in a character literal, 
+            // but we can create one from numeric value
+            
+            "Testing boundary characters:".println()
+            ("Null char numeric value: " + nullChar.toUShort().toString()).println()
+            
+            if (nullChar.toUShort() != 0US) {
+                throw new Exception("Null character should have numeric value 0")
+            }
+            
+            // Test that null char is not alphanumeric
+            if (nullChar.isLetter() || nullChar.isDigit() || nullChar.isAlphaNumeric()) {
+                throw new Exception("Null character should not be alphanumeric")
+            }
+            
+            // Create a high-value character from numeric value
+            var maxChar = 65535US.toChar()  // U+FFFF
+            ("Max char numeric value: " + maxChar.toUShort().toString()).println()
+            
+            if (maxChar.toUShort() != 65535US) {
+                throw new Exception("Max character should have numeric value 65535")
+            }
+            
+            "✓ Boundary characters work correctly".println()
+        }
+    }
+}

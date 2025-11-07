@@ -51,13 +51,21 @@ namespace Am.Lang
 
         // Convert to uppercase (basic ASCII only for now)
         fun toUpperCase(): Char {
-            // Simple implementation for testing
+            if (this >= 'a' && this <= 'z') {
+                // Convert lowercase to uppercase by subtracting 32 (difference between 'a' and 'A')
+                var upperValue = this.toUShort() - 32US
+                return upperValue.toChar()
+            }
             return this
         }
 
         // Convert to lowercase (basic ASCII only for now)  
         fun toLowerCase(): Char {
-            // Simple implementation for testing
+            if (this >= 'A' && this <= 'Z') {
+                // Convert uppercase to lowercase by adding 32 (difference between 'a' and 'A')
+                var lowerValue = this.toUShort() + 32US
+                return lowerValue.toChar()
+            }
             return this
         }
     }
