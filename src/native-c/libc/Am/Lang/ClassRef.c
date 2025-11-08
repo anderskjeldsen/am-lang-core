@@ -151,12 +151,14 @@ function_result Am_Lang_ClassRef_getClassRefFromAny_0(nullable_value any)
 			case uchar_type:
 				class_ref = Am_Lang_UByte.class_ref_singleton;
 				break;
+#ifdef FEATURE_FLOATING_POINT
 			case float_type:
 				class_ref = Am_Lang_Float.class_ref_singleton;
 				break;
 			case double_type:
 				class_ref = Am_Lang_Double.class_ref_singleton;
 				break;
+#endif
 			case bool_type:
 				class_ref = Am_Lang_Bool.class_ref_singleton;
 				break;

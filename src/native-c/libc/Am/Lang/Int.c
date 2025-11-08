@@ -114,6 +114,7 @@ __exit: ;
 	return __result;
 };
 
+#ifdef FEATURE_FLOATING_POINT
 function_result Am_Lang_Int_toFloat_0(int const this)
 {
 	function_result __result = { .has_return_value = true };
@@ -131,6 +132,8 @@ function_result Am_Lang_Int_toDouble_0(int const this)
 __exit: ;
 	return __result;
 };
+
+#endif
 
 function_result Am_Lang_Int_parse_0(aobject * const s)
 {

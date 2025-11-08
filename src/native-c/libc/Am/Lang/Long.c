@@ -120,6 +120,8 @@ __exit: ;
 	return __result;
 };
 
+#ifdef FEATURE_FLOATING_POINT
+
 function_result Am_Lang_Long_toFloat_0(long long const this)
 {
 	function_result __result = { .has_return_value = true };
@@ -139,6 +141,8 @@ function_result Am_Lang_Long_toDouble_0(long long const this)
 __exit: ;
 	return __result;
 };
+
+#endif
 
 function_result Am_Lang_Long_parse_0(aobject * const s)
 {

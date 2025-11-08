@@ -377,10 +377,12 @@ static inline ctype __value_flags_to_ctype(unsigned char flags) {
             return ushort_type;
         case PRIMITIVE_UCHAR:
             return uchar_type;
+        #ifdef FEATURE_FLOATING_POINT
         case PRIMITIVE_FLOAT:
             return float_type;
         case PRIMITIVE_DOUBLE:
             return double_type;
+        #endif
         default:
             return object_type;
     }
