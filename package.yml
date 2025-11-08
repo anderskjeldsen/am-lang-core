@@ -32,6 +32,7 @@ platforms:
         outputFilename: amiga.o
     gccAdditionalOptions:
       - -noixemul
+      - -UHAVE_TIMEGM
     gccAdditionalLibraries:
       - socket
   - id: linux-x64
