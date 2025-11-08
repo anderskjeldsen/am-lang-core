@@ -32,6 +32,7 @@ platforms:
         outputFilename: amiga.o
     gccAdditionalOptions:
       - -noixemul
+      - -UHAVE_TIMEGM
     gccAdditionalLibraries:
       - socket
   - id: linux-x64
@@ -96,22 +97,12 @@ platforms:
 #    gccAdditionalOptions:
 #      - -noixemul
 buildTargets:
-  - id: amigaos_docker_win_anders
+  - id: amigaos-docker
     platform: amigaos
-    commands:
-      - docker run -v ${build_dir}:/host -i d931759c3883 make -f amigaos.makefile -C /host all
-  - id: amigaos_docker_unix-x64
-    platform: amigaos
-    commands:
-      - docker run -v ${build_dir}:/host kjeldsenanders/dnf-dev:initial-x86 make -f amigaos.makefile -C /host ${make_target}
-  - id: amigaos_docker_unix-arm
-    platform: amigaos
-    commands:
-      - docker run -v ${build_dir}:/host kjeldsenanders/dnf-dev:initial make -f amigaos.makefile -C /host ${make_target}
-  - id: amigaos_docker_macm1_anders
-    platform: amigaos
-    commands:
-      - docker run -v ${build_dir}:/host -i 0205cf669adf make -f amigaos.makefile -C /host all
+    features: ["floatingPoint"]
+    dockerBuild:
+      image: amiga-gcc:latest
+      buildPath: /host
   - id: macos
     platform: macos
     features: ["floatingPoint"]
