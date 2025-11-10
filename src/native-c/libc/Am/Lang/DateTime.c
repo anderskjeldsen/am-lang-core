@@ -22,13 +22,22 @@ static time_t portable_timegm(struct tm *tm) {
     
     tz = getenv("TZ");
     setenv("TZ", "", 1);
+#ifdef __AMIGA__
+    // AmigaOS doesn't have tzset, but we can work without it
+    // since we're setting TZ to empty string anyway
+#else
     tzset();
+#endif
     ret = mktime(tm);
     if (tz)
         setenv("TZ", tz, 1);
     else
         unsetenv("TZ");
+#ifdef __AMIGA__
+    // AmigaOS doesn't have tzset
+#else
     tzset();
+#endif
     return ret;
 }
 #define timegm portable_timegm
