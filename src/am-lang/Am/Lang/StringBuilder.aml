@@ -48,6 +48,18 @@ namespace Am.Lang
             return this
         }
 
+        fun addCharAt(index: UInt, c: UShort) : StringBuilder {
+            // Insert character at specific index using List's insertAt method
+            if (index >= this.buffer.getSize().toUInt()) {
+                // If index is at or beyond end, just append
+                this.addChar(c)
+            } else {
+                // Use List's insertAt for efficient insertion
+                this.buffer.insertAt(index.toInt(), c.toUByte()) // TODO: proper UTF-8 conversion
+            }
+            return this
+        }
+
         fun clear() {
             this.buffer.clear()
         }

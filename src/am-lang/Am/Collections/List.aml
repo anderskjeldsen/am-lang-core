@@ -44,6 +44,37 @@ namespace Am.Collections {
 //           }
         }
 
+        fun insertAt(index: Int, item: T) {
+            if (index < 0 || index > this.size) {
+                throw new Exception("Index out of bounds: " + index.toString())
+            }
+            
+            // Ensure we have capacity
+            if (this.size >= this.capacity) {
+                var newCapacity = this.capacity * 150
+                newCapacity = newCapacity / 100
+                var newItems = new T[newCapacity]
+                var x = 0
+                while(x < this.size) {
+                    newItems[x] = this.items[x]                    
+                    x++
+                }
+                this.capacity = newCapacity
+                this.items = newItems
+            }
+            
+            // Shift elements to the right
+            var i = this.size
+            while(i > index) {
+                this.items[i] = this.items[i - 1]
+                i--
+            }
+            
+            // Insert the new item
+            this.items[index] = item
+            this.size++
+        }
+
         fun remove(item: T) {
 //            if (item != null) {
                 var i = 0
@@ -76,11 +107,26 @@ namespace Am.Collections {
             return value
         }
 
+        fun removeLast(): T {
+            if (this.size == 0) {
+                throw new Exception("Cannot remove last element from empty list")
+            }
+            this.size--
+            return this.items[this.size]
+        }
+
         fun get(index: Int): T {
             if (index < 0 || index > this.size) {
                 throw new Exception("Index out of bounds: " + index.toString())                
             }
             return this.items[index]
+        }
+
+        fun getLast(): T {
+            if (this.size == 0) {
+                throw new Exception("Cannot get last element from empty list")
+            }
+            return this.items[this.size - 1]
         }
 
         fun set(index: Int, item: T) {
