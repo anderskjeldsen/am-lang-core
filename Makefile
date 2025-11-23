@@ -5,6 +5,10 @@ LOGLEVEL:=1
 MAXONEERROR:=false
 RUNTIMELOGGING:=false
 
+.PHONY: build build-amigaos build-force-deps test test-rl lint docs \
+		gdb-test gdb-test-interactive gdb-app gdb-app-interactive \
+		test-verbose test-direct
+
 build:
 	$(CMD) build . -bt linux-x64 -ll5 -maxOneError
 
@@ -33,6 +37,9 @@ endif
 lint:
 	$(CMD) lint .
 
+
+docs:
+	$(CMD) docs .
 
 # Debug targets
 gdb-test:
