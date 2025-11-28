@@ -1,0 +1,60 @@
+namespace Am.Util {
+    class Base64 {
+        import Am.Lang
+        
+        static fun encode(data: Byte[], length: UInt): String {
+            // Base64 character set
+            const var base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+            
+            var result = new StringBuilder()
+            var i = 0
+            
+            // Process every 3 bytes
+            while (i < length.toInt()) {
+                var b1 = data[i].toInt() & 0xFF
+                var b2 = 0
+                if (i + 1 < length.toInt()) {
+                    b2 = data[i + 1].toInt() & 0xFF
+                }
+                var b3 = 0
+                if (i + 2 < length.toInt()) {
+                    b3 = data[i + 2].toInt() & 0xFF
+                }
+                
+                // Combine the 3 bytes into a 24-bit integer
+                var combined = (b1 << 16) | (b2 << 8) | b3
+                
+                // Extract 6-bit chunks and map to base64 characters
+                var idx1 = (combined >> 18) & 0x3F
+                var idx2 = (combined >> 12) & 0x3F
+                var idx3 = (combined >> 6) & 0x3F
+                var idx4 = combined & 0x3F
+                
+                // Use addChar for better performance
+                result.addChar(base64Chars.characterAt(idx1.toUInt()))
+                result.addChar(base64Chars.characterAt(idx2.toUInt()))
+                
+                if (i + 1 < length.toInt()) {
+                    result.addChar(base64Chars.characterAt(idx3.toUInt()))
+                } else {
+                    result.addChar('=')
+                }
+                
+                if (i + 2 < length.toInt()) {
+                    result.addChar(base64Chars.characterAt(idx4.toUInt()))
+                } else {
+                    result.addChar('=')
+                }
+                
+                i += 3
+            }
+            
+            return result.toString()
+        }
+        
+        // TODO: Add decode method in the future
+        // static fun decode(base64String: String): Byte[] {
+        //     // Implementation for base64 decoding
+        // }
+    }
+}
