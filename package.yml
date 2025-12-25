@@ -31,10 +31,10 @@ platforms:
       - inputFilename: amiga.c     
         outputFilename: amiga.o
     gccAdditionalOptions:
-      - -noixemul
+#      - -noixemul
       - -UHAVE_TIMEGM
     gccAdditionalLibraries:
-      - socket
+#      - socket
   - id: linux-x64
     extends: libc
     gccCommand: gcc -O3
@@ -85,7 +85,7 @@ platforms:
       - inputFilename: aros.c     
         outputFilename: aros.o
     gccAdditionalOptions:
-      - -noixemul
+#      - -noixemul
 #  - id: msdos-x86
 #    extends: libc
 #    gccCommand: gcc

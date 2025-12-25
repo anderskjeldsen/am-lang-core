@@ -189,6 +189,11 @@ numbers.add(1)
 numbers.add(2)
 numbers.add(3)
 
+// List methods
+var size = numbers.getSize()  // Get size of list
+var item = numbers.get(0)     // Get item at index
+numbers.set(0, 10)           // Set item at index
+
 // Array literals
 var fruits = ["apple", "banana", "orange"]
 
@@ -421,6 +426,10 @@ var boolValue: Bool = true
 
 ### Collections
 - `List<T>`: Dynamic array
+  - `add(item: T)`: Add item to list
+  - `get(index: Int): T`: Get item at index
+  - `set(index: Int, value: T)`: Set item at index
+  - `getSize(): Int`: Get number of items
 - `HashMap<K,V>`: Hash-based key-value storage
 - `HashSet<T>`: Hash-based unique value storage
 - `TreeSet<T>`: Sorted unique value storage
