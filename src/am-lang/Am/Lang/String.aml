@@ -267,7 +267,7 @@ namespace Am.Lang
             
             var sb = new StringBuilder()
             var i = 0
-            var maxIndex = strings.length() - 1
+            var maxIndex = strings.length() - 1UI
             
             while (i <= maxIndex) {
                 sb.add(strings[i])
