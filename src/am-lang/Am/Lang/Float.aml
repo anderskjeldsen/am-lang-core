@@ -40,6 +40,8 @@ namespace Am.Lang
             }
             return this
         }
+        
+        native fun sqrt(): Float
 
     }
 }

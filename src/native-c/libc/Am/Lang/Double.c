@@ -15,6 +15,7 @@
 #include <Am/Lang/Bool.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 #include <libc/core_inline_functions.h>
 
 function_result Am_Lang_Double_toString_0(nullable_value const this)
@@ -163,5 +164,14 @@ function_result Am_Lang_Double_parse_0(aobject * const s)
 
 __exit: ;
 	__decrease_reference_count(s);
+	return __result;
+};
+
+function_result Am_Lang_Double_sqrt_0(double const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	__result.return_value = (nullable_value) { .value = { .double_value = sqrt(this) }, .flags = 0 };
+__exit: ;
 	return __result;
 };
