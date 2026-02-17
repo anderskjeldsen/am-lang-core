@@ -836,7 +836,28 @@ bool __any_null(const nullable_value a) {
     if (__is_primitive_nullable(a)) {
         return __is_primitive_null(a);
     } else {
-        return a.value.object_value == NULL;
+        ctype type =__value_flags_to_ctype(a.flags);
+
+        switch(type) {
+            case char_type:
+            case short_type:
+            case int_type:
+            case long_type:
+    #ifdef FEATURE_FLOATING_POINT
+            case float_type:
+            case double_type:
+    #endif
+            case bool_type:
+            case uchar_type:
+            case ushort_type:
+            case uint_type:
+            case ulong_type:
+                return false;
+            case object_type:
+            default:
+                return a.value.object_value == NULL;
+
+        }
     }
 }
 
