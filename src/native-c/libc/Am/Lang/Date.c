@@ -43,9 +43,11 @@ function_result Am_Lang_Date_getMillis_0()
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	struct timeval tv;
-    gettimeofday(&tv, NULL);
-    unsigned long long milliseconds = tv.tv_sec * 1000LL + tv.tv_usec / 1000;
+//	struct timeval tv;
+	struct timespec tv;
+	clock_gettime(CLOCK_REALTIME, &tv);
+//    gettimeofday(&tv, NULL);
+    unsigned long long milliseconds = tv.tv_sec * 1000LL + tv.tv_nsec / 1000000;
 	__result.return_value.value.ulong_value = milliseconds;
 //	__result.return_value.flags = PRIMITIVE_ULONG;
 __exit: ;

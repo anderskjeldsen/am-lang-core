@@ -11,6 +11,10 @@ namespace Am.Lang
         native fun toUShort(): UShort
         native fun toInt(): Int
         native fun toULong(): ULong
+        #require floatingPoint
+        native fun toFloat(): Float
+        #require floatingPoint
+        native fun toDouble(): Double
         native fun toBool(): Bool
 
         static native fun parse(s: String): UInt
