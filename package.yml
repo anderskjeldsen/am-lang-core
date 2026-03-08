@@ -38,6 +38,8 @@ platforms:
   - id: linux-x64
     extends: libc
     gccCommand: gcc -O3
+#    gccAdditionalLibraries:
+#      - m
   - id: linux-arm64v8
     extends: linux-x64
     gccCommand: gcc -O3
