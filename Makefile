@@ -18,6 +18,9 @@ build-amigaos:
 build-force-deps:
 	$(CMD) build . -fld -bt linux-x64 ll 4
 
+deps:
+	$(CMD) deps . -fld
+
 test:
 # if MAXONEERROR is true, add -maxOneError flag
 ifeq ($(MAXONEERROR),true)
