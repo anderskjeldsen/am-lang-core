@@ -2,7 +2,11 @@
 id: am-lang-core
 version: 0.7.0
 type: library
-availableFeatures: ["!floatingPoint"]
+features:
+  - name: floatingPoint
+    global: true
+    additionalLibraries:
+      - m
 dependencies:
   - id: am-tests
     testOnly: true
@@ -10,6 +14,7 @@ dependencies:
     type: git-repo
     tag: latest
     url: https://github.com/anderskjeldsen/am-tests.git
+    features: ["floatingPoint"]
 platforms:
   - id: libc
     abstract: true
@@ -38,8 +43,6 @@ platforms:
   - id: linux-x64
     extends: libc
     gccCommand: gcc -O3
-#    gccAdditionalLibraries:
-#      - m
   - id: linux-arm64v8
     extends: linux-x64
     gccCommand: gcc -O3

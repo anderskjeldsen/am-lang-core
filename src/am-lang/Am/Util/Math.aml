@@ -1,0 +1,25 @@
+namespace Am.Util {
+    #require floatingPoint
+    native class Math {
+        import Am.Lang
+        
+        native static fun sin(angle: Double): Double
+        native static fun cos(angle: Double): Double
+        native static fun tan(angle: Double): Double
+        native static fun asin(value: Double): Double
+        native static fun acos(value: Double): Double
+        native static fun atan(value: Double): Double
+        native static fun atan2(y: Double, x: Double): Double
+        
+        static const var PI: Double = 3.14159265358979323846
+        static const var E: Double = 2.71828182845904523536
+        
+        static fun toRadians(degrees: Double): Double {
+            return degrees * Math.PI / 180.0
+        }
+        
+        static fun toDegrees(radians: Double): Double {
+            return radians * 180.0 / Math.PI
+        }
+    }
+}

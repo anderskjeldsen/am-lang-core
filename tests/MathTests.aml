@@ -1,0 +1,45 @@
+namespace Tests {
+
+    class MathTests {
+        import Am.Lang
+        import Am.Util
+        import Am.Tests
+
+        test toRadiansAndToDegrees() {
+            var ninetyRadians = Math.toRadians(90.0)
+            Assert.assertDoubleClose(Math.PI / 2.0, ninetyRadians, 0.000001)
+
+            var piDegrees = Math.toDegrees(Math.PI)
+            Assert.assertDoubleClose(180.0, piDegrees, 0.000001)
+        }
+
+        test sinKnownAngles() {
+            Assert.assertDoubleClose(0.0, Math.sin(0.0), 0.000001)
+            Assert.assertDoubleClose(1.0, Math.sin(Math.PI / 2.0), 0.000001)
+            Assert.assertDoubleClose(0.0, Math.sin(Math.PI), 0.000001)
+        }
+
+        test cosKnownAngles() {
+            Assert.assertDoubleClose(1.0, Math.cos(0.0), 0.000001)
+            Assert.assertDoubleClose(0.0, Math.cos(Math.PI / 2.0), 0.000001)
+            Assert.assertDoubleClose(-1.0, Math.cos(Math.PI), 0.000001)
+        }
+
+        test tanKnownAngles() {
+            Assert.assertDoubleClose(0.0, Math.tan(0.0), 0.000001)
+            Assert.assertDoubleClose(1.0, Math.tan(Math.PI / 4.0), 0.000001)
+        }
+
+        test inverseTrigFunctions() {
+            Assert.assertDoubleClose(Math.PI / 6.0, Math.asin(0.5), 0.000001)
+            Assert.assertDoubleClose(Math.PI / 3.0, Math.acos(0.5), 0.000001)
+            Assert.assertDoubleClose(Math.PI / 4.0, Math.atan(1.0), 0.000001)
+        }
+
+        test atan2Quadrants() {
+            Assert.assertDoubleClose(Math.PI / 4.0, Math.atan2(1.0, 1.0), 0.000001)
+            Assert.assertDoubleClose(-Math.PI / 4.0, Math.atan2(-1.0, 1.0), 0.000001)
+            Assert.assertDoubleClose(3.0 * Math.PI / 4.0, Math.atan2(1.0, -1.0), 0.000001)
+        }
+    }
+}
