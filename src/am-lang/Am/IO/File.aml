@@ -89,7 +89,9 @@ namespace Am.IO
                 index = this.filename.lastIndexOf(":")
             }
             if (index >= 0) {
-                return this.filename.substring(index.toUInt() + 1UI, this.filename.getLength().toUInt())
+                // TODO: const
+                var realIndex = (index + 1) as UInt
+                return this.filename.substring(realIndex, this.filename.getLength() as UInt - realIndex)
             }
             return this.filename
         }
