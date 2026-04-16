@@ -1,0 +1,39 @@
+namespace Am.Collections {
+    class HashSetIterator<T>(
+        private var valueIndexes: Int[],
+        private var nextIndexes: Int[],
+        private var values: T[],
+        private var bucketSize: Int
+    ) : Iterator<T> {
+        import Am.Lang
+        private var bucketIndex: Int = 0
+        private var valueIndex: Int = -1
+
+        fun hasNext(): Bool {
+            if (this.valueIndex >= 0) {
+                return true
+            }
+            while (this.bucketIndex < this.bucketSize) {
+                var vi = this.valueIndexes[this.bucketIndex] - 1
+                if (vi >= 0) {
+                    this.valueIndex = vi
+                    return true
+                }
+                this.bucketIndex++
+            }
+            return false
+        }
+
+        fun next(): T {
+            var item = this.values[this.valueIndex]
+            var nextVI = this.nextIndexes[this.valueIndex] - 1
+            if (nextVI >= 0) {
+                this.valueIndex = nextVI
+            } else {
+                this.valueIndex = -1
+                this.bucketIndex++
+            }
+            return item
+        }
+    }
+}

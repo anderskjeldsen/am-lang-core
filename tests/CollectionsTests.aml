@@ -133,7 +133,91 @@ namespace Tests {
             
             Assert.assertEquals(3, set.getSize())
         }
+
+        test hashSetIteratorEachLoop() {
+            var set = new HashSet<Int>()
+            set.add(10)
+            set.add(20)
+            set.add(30)
+
+            var count = 0
+            var sum = 0
+            each(item in set) {
+                count++
+                sum = sum + item
+            }
+
+            Assert.assertEquals(3, count)
+            Assert.assertEquals(60, sum)
+        }
+
+        test hashSetIteratorEachLoopAllItemsVisited() {
+            var set = new HashSet<Int>()
+            set.add(1)
+            set.add(2)
+            set.add(3)
+            set.add(4)
+            set.add(5)
+
+            var resultSet = new HashSet<Int>()
+            each(item in set) {
+                resultSet.add(item)
+            }
+
+            Assert.assertEquals(5, resultSet.getSize())
+            Assert.assertTrue(resultSet.has(1))
+            Assert.assertTrue(resultSet.has(2))
+            Assert.assertTrue(resultSet.has(3))
+            Assert.assertTrue(resultSet.has(4))
+            Assert.assertTrue(resultSet.has(5))
+        }
+
+        test hashSetIteratorEmptySet() {
+            var set = new HashSet<Int>()
+
+            var count = 0
+            each(item in set) {
+                count++
+            }
+
+            Assert.assertEquals(0, count)
+        }
+
+        test hashSetIteratorAfterRemove() {
+            var set = new HashSet<Int>()
+            set.add(1)
+            set.add(2)
+            set.add(3)
+            set.remove(2)
+
+            var count = 0
+            var sum = 0
+            each(item in set) {
+                count++
+                sum = sum + item
+            }
+
+            Assert.assertEquals(2, count)
+            Assert.assertEquals(4, sum)
+        }
         
+        test hashSetDowncastToSet() {
+            var hashSet = new HashSet<Int>()
+            hashSet.add(1)
+            hashSet.add(2)
+            hashSet.add(3)
+
+            var set = hashSet as Set<Int>
+
+            Assert.assertTrue(set.has(1))
+            Assert.assertTrue(set.has(2))
+            Assert.assertTrue(set.has(3))
+            Assert.assertFalse(set.has(4))
+            Assert.assertEquals(3, set.getSize())
+            Assert.assertFalse(set.isEmpty())
+            Assert.assertTrue(set.has(2))
+        }
+
         // TreeSet Tests
         test treeSetAddAndHas() {
             var treeSet = new TreeSet<Int>((a, b) => {

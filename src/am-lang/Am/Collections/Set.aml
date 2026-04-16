@@ -1,6 +1,6 @@
 namespace Am.Collections {
 
-    interface Set<T> {
+    interface Set<T> : Iterable<T> {
         import Am.Lang
 
         fun getSize(): Int
