@@ -37,7 +37,12 @@ namespace Am.Util.Parsers.Text {
         }
 
         fun peek(len: UInt) : String {
-            return this.string.substring(this.index.toUInt(), len)
+            var remaining = (this.string.getLength() - this.index).toUInt()
+            var actualLen = len
+            if (actualLen > remaining) {
+                actualLen = remaining
+            }
+            return this.string.substring(this.index as UInt, actualLen)
         }
 
         fun peekChar() : UShort {
