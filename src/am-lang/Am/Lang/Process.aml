@@ -1,0 +1,13 @@
+namespace Am.Lang
+{
+    native class Process
+    {
+        import Am.Lang
+
+        // Execute a shell command and return its exit code.
+        static native fun run(command: String): Int
+
+        // Execute a shell command and return its stdout output as a String.
+        static native fun runAndCaptureOutput(command: String): String
+    }
+}

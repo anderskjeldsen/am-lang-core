@@ -1,0 +1,16 @@
+namespace ExecuteProgram {
+    class Main {
+        import Am.Lang
+        import Am.Examples
+
+        static fun main() {
+            // Run echo and capture its output
+            var output = Process.runAndCaptureOutput("echo Hello from Process!")
+            ("Captured output: " + output).println()
+
+            // Run a command and check its exit code
+            var exitCode = Process.run("echo This is printed by the shell")
+            ("Exit code: " + exitCode.toString()).println()
+        }
+    }
+}

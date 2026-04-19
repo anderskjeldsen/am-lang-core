@@ -1,0 +1,21 @@
+id: "execute-program"
+version: "1.0.0"
+type: "application"
+dependencies:
+  - id: am-lang-core
+    type: local
+    path: ../..
+platforms:
+  - id: libc
+    abstract: true
+  - id: "linux-x64"
+    extends: libc
+    gccCommand: "gcc"
+  - id: "macos"
+    extends: libc
+    gccCommand: "gcc"
+buildTargets:
+  - id: "linux-x64"
+    platform: "linux-x64"
+  - id: "macos"
+    platform: "macos"
