@@ -1,5 +1,6 @@
 namespace Am.Lang
 {
+    #implementationPlatforms "libc", "amigaos"
     native class Process
     {
         import Am.Lang

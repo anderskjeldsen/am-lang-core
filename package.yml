@@ -36,10 +36,12 @@ platforms:
       - inputFilename: amiga.c     
         outputFilename: amiga.o
     gccAdditionalOptions:
-#      - -noixemul
+      - -noixemul
       - -UHAVE_TIMEGM
     gccAdditionalLibraries:
-#      - socket
+    additionalLinkerFlags:
+      - -noixemul
+
   - id: linux-x64
     extends: libc
     gccCommand: gcc -O3

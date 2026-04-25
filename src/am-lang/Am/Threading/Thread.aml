@@ -1,6 +1,7 @@
 
 namespace Am.Threading {
 
+    #implementationPlatforms "libc", "amigaos", "morphos-ppc"
     native class Thread(var runnable: Runnable) {
         import Am.Lang
         
