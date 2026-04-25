@@ -275,7 +275,7 @@ namespace Am.Examples {
                 pi++
             }
 
-            ("new filename: " + file.filename).println()
+            ("new filename: " + file.getName()).println()
 
             var hm = new HashMap<String, String>()
             var hmcr = hm.getClassRef()

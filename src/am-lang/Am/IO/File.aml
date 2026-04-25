@@ -91,7 +91,7 @@ namespace Am.IO
             if (index >= 0) {
                 // TODO: const
                 var realIndex = (index + 1) as UInt
-                return this.filename.substring(realIndex, this.filename.getLength() as UInt - realIndex)
+                return this.filename.substring(realIndex, ((this.filename.getLength() as UInt) - realIndex) as UInt)
             }
             return this.filename
         }
