@@ -54,9 +54,10 @@ function_result Am_Lang_Process_run_0(aobject * command)
 	string_holder *cmd_holder = (string_holder *) (command + 1);
 	STRPTR cmd_strptr = (STRPTR) cmd_holder->string_value;
 
+	// SYS_Input/SYS_Output omitted on purpose: SystemTagList then inherits the
+	// caller's stdin/stdout, so the command's output reaches the user's shell.
+	// Passing NULL would silently redirect to NIL:.
 	struct TagItem tags[] = {
-		{ SYS_Input,     (ULONG) NULL },
-		{ SYS_Output,    (ULONG) NULL },
 		{ SYS_Asynch,    FALSE },
 		{ SYS_UserShell, TRUE },
 		{ TAG_DONE,      0 },
@@ -83,7 +84,8 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 	string_holder *cmd_holder = (string_holder *) (command + 1);
 	STRPTR cmd_strptr = (STRPTR) cmd_holder->string_value;
 
-	// Build a unique temp filename in T: from the calling task's address.
+	// Build a unique temp filename in T: (the conventional AmigaOS temp dir,
+	// usually assigned to RAM:T so it self-cleans on reboot).
 	UBYTE temp_path[64];
 	struct Task *self = FindTask(NULL);
 	{
@@ -100,7 +102,19 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 
 	BPTR out_file = Open((CONST_STRPTR) temp_path, MODE_NEWFILE);
 	if (out_file == 0) {
-		__throw_simple_exception("Failed to open temp file for command output", "in Am_Lang_Process_runAndCaptureOutput_0", &__result);
+		// Build a message that includes the dos.library IoErr() code.
+		static char err_msg[80];
+		const char *prefix = "Failed to open temp file (IoErr=0x";
+		int p = 0;
+		while (prefix[p] != 0) { err_msg[p] = prefix[p]; p++; }
+		LONG ioerr = IoErr();
+		for (LONG nibble = 7; nibble >= 0; nibble--) {
+			LONG v = (ioerr >> (nibble * 4)) & 0xF;
+			err_msg[p++] = (char)(v < 10 ? ('0' + v) : ('a' + (v - 10)));
+		}
+		err_msg[p++] = ')';
+		err_msg[p] = 0;
+		__throw_simple_exception(err_msg, "in Am_Lang_Process_runAndCaptureOutput_0", &__result);
 		goto __exit;
 	}
 
@@ -113,7 +127,11 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 	};
 
 	LONG status = SystemTagList(cmd_strptr, run_tags);
-	// SystemTagList consumes the output stream; do not Close(out_file) here.
+	// In synchronous mode (SYS_Asynch=FALSE), SystemTagList does NOT close the
+	// streams — the caller owns them. Close before re-opening for read, otherwise
+	// the file stays locked and subsequent Open(MODE_NEWFILE) on the same path
+	// will fail with ERROR_OBJECT_IN_USE.
+	Close(out_file);
 	if (status == -1) {
 		DeleteFile((CONST_STRPTR) temp_path);
 		__throw_simple_exception("Failed to execute command", "in Am_Lang_Process_runAndCaptureOutput_0", &__result);
