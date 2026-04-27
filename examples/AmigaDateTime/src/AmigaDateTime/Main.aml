@@ -1,0 +1,67 @@
+namespace AmigaDateTime {
+    class Main {
+        import Am.Lang
+
+        static fun main() {
+            "=== AmigaDateTime Demo ===".println()
+
+            // 1) Current time via DateStamp() (amigaos) or clock_gettime (libc)
+            var now = DateTime.now()
+            ("Current epoch millis: " + now.getEpochMillis().toString()).println()
+            ("Year:                 " + now.getYear().toString()).println()
+            ("Month:                " + now.getMonth().toString()).println()
+            ("Day:                  " + now.getDay().toString()).println()
+            ("Hour:                 " + now.getHour().toString()).println()
+            ("Minute:               " + now.getMinute().toString()).println()
+            ("Second:               " + now.getSecond().toString()).println()
+            ("Day of week (0=Sun):  " + now.getDayOfWeek().toString()).println()
+            ("Formatted:            " + now.format("yyyy-MM-dd HH:mm:ss")).println()
+            ("toString:             " + now.toString()).println()
+
+            "".println()
+            "--- Specific date construction ---".println()
+
+            // Amiga 1000 launched on Tuesday, 1985-07-23. dayOfWeek should be 2.
+            var amigaLaunch = DateTime.create(1985, 7, 23, 14, 0, 0)
+            ("Amiga 1000 launch:    " + amigaLaunch.toString()).println()
+            ("Day of week (want 2): " + amigaLaunch.getDayOfWeek().toString()).println()
+
+            // 2026-01-01 was a Thursday — dayOfWeek 4.
+            var newYear2026 = DateTime.create(2026, 1, 1, 0, 0, 0)
+            ("2026-01-01:           " + newYear2026.toString()).println()
+            ("Day of week (want 4): " + newYear2026.getDayOfWeek().toString()).println()
+
+            "".println()
+            "--- Arithmetic ---".println()
+
+            var oneWeekFromNow = now.addDays(7)
+            ("Now + 7 days:         " + oneWeekFromNow.toString()).println()
+
+            var oneHourAgo = now.subtractHours(1)
+            ("Now - 1 hour:         " + oneHourAgo.toString()).println()
+
+            var nextMonth = now.addMonths(1)
+            ("Now + 1 month:        " + nextMonth.toString()).println()
+
+            "".println()
+            "--- Leap year and days-in-month ---".println()
+
+            ("Is 2024 a leap year? " + DateTime.isLeapYear(2024).toString()).println()
+            ("Is 2023 a leap year? " + DateTime.isLeapYear(2023).toString()).println()
+            ("Is 2000 a leap year? " + DateTime.isLeapYear(2000).toString()).println()
+            ("Is 1900 a leap year? " + DateTime.isLeapYear(1900).toString()).println()
+            ("Days in Feb 2024:     " + DateTime.getDaysInMonth(2024, 2).toString()).println()
+            ("Days in Feb 2023:     " + DateTime.getDaysInMonth(2023, 2).toString()).println()
+            ("Days in Apr 2026:     " + DateTime.getDaysInMonth(2026, 4).toString()).println()
+
+            "".println()
+            "--- Date class (millis only) ---".println()
+
+            var d = Date.now()
+            ("Date.now value:       " + d.getValue().toString()).println()
+
+            "".println()
+            "=== Done ===".println()
+        }
+    }
+}

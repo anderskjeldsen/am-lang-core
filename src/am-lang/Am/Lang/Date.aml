@@ -1,6 +1,7 @@
 
-namespace Am.Lang 
+namespace Am.Lang
 {
+    #implementationPlatforms "libc", "amigaos"
     native class Date {
         private var value: ULong
 

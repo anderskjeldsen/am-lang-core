@@ -1,5 +1,6 @@
-namespace Am.Lang 
+namespace Am.Lang
 {
+    #implementationPlatforms "libc", "amigaos"
     native class DateTime {
         private var epochMillis: ULong = DateTime.getMillis()
         private var timezoneOffsetMinutes: Int = DateTime.getLocalTimezoneOffset()

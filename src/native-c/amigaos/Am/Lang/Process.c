@@ -17,13 +17,6 @@
 #include <proto/dos.h>
 #include <utility/tagitem.h>
 
-static void __ensure_dos_base(void)
-{
-	if (DOSBase == NULL) {
-		DOSBase = (struct DosLibrary *) __ensure_library("dos.library", 0L);
-	}
-}
-
 function_result Am_Lang_Process__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
@@ -58,8 +51,6 @@ function_result Am_Lang_Process_run_0(aobject * command)
 		__increase_reference_count(command);
 	}
 
-	__ensure_dos_base();
-
 	string_holder *cmd_holder = (string_holder *) (command + 1);
 	STRPTR cmd_strptr = (STRPTR) cmd_holder->string_value;
 
@@ -88,8 +79,6 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 	if (command != NULL) {
 		__increase_reference_count(command);
 	}
-
-	__ensure_dos_base();
 
 	string_holder *cmd_holder = (string_holder *) (command + 1);
 	STRPTR cmd_strptr = (STRPTR) cmd_holder->string_value;
