@@ -1,0 +1,30 @@
+namespace AmigaExecute {
+    class Main {
+        import Am.Lang
+
+        static fun main() {
+            "=== AmigaExecute Demo ===".println()
+            "Exercises Process.run and Process.runAndCaptureOutput.".println()
+            "On AmigaOS, both are routed through dos.library SystemTagList.".println()
+            "".println()
+
+            // 1) Capture output: run "Dir" and read its output back as a String.
+            //    On AmigaOS this writes to T:am_proc_<task-addr>, then reads it
+            //    back; on libc it goes through popen().
+            "--- Process.runAndCaptureOutput(\"Dir\") ---".println()
+            var dirOutput = Process.runAndCaptureOutput("Dir")
+            ("Captured output:").println()
+            dirOutput.println()
+
+            "".println()
+
+            // 2) Run inheriting the caller's stdout, just collect the exit code.
+            "--- Process.run(\"Dir\") ---".println()
+            var exitCode = Process.run("Dir")
+            ("Exit code: " + exitCode.toString()).println()
+
+            "".println()
+            "=== Done ===".println()
+        }
+    }
+}
