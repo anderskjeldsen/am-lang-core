@@ -1,0 +1,42 @@
+namespace EnvVars {
+    class Main {
+        import Am.Lang
+
+        static fun main() {
+            // 1. Read a variable that almost certainly exists.
+            var path = Environment.get("PATH")
+            if (path == null) {
+                "PATH is not set (unexpected)".println()
+            } else {
+                ("PATH = " + path).println()
+            }
+
+            // 2. Read a variable that probably doesn't exist.
+            var missing = Environment.get("AML_DOES_NOT_EXIST")
+            if (missing == null) {
+                "AML_DOES_NOT_EXIST is not set (as expected)".println()
+            } else {
+                ("AML_DOES_NOT_EXIST = " + missing).println()
+            }
+
+            // 3. has() — Bool helper around get().
+            ("has(HOME) = " + Environment.has("HOME").toString()).println()
+            ("has(AML_DOES_NOT_EXIST) = " + Environment.has("AML_DOES_NOT_EXIST").toString()).println()
+
+            // 4. getOrDefault() — fall back when unset.
+            var lang = Environment.getOrDefault("AML_LANG", "en_US.UTF-8")
+            ("AML_LANG (with default) = " + lang).println()
+
+            // 5. set() / unset() round-trip.
+            "---".println()
+            ("Setting AML_DEMO=hello: " + Environment.set("AML_DEMO", "hello").toString()).println()
+            ("Reading AML_DEMO back: " + Environment.getOrDefault("AML_DEMO", "<unset>")).println()
+
+            ("Unsetting AML_DEMO: " + Environment.unset("AML_DEMO").toString()).println()
+            ("Reading AML_DEMO after unset: " + Environment.getOrDefault("AML_DEMO", "<unset>")).println()
+
+            // 6. unset() of a non-existent var should report false.
+            ("Unsetting missing var: " + Environment.unset("AML_DOES_NOT_EXIST").toString()).println()
+        }
+    }
+}

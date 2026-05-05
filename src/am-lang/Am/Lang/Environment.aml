@@ -1,0 +1,33 @@
+namespace Am.Lang
+{
+    #implementationPlatforms "libc", "amigaos"
+    native class Environment
+    {
+        import Am.Lang
+
+        // Returns the value of the named env var, or null if it isn't set.
+        static native fun get(name: String): String
+
+        // Sets the env var. Returns true on success.
+        static native fun set(name: String, value: String): Bool
+
+        // Removes the env var. Returns true if it existed and was removed.
+        static native fun unset(name: String): Bool
+
+        // Convenience: true if the variable is set.
+        static fun has(name: String): Bool
+        {
+            return Environment.get(name) != null
+        }
+
+        // Convenience: returns defaultValue if the var isn't set.
+        static fun getOrDefault(name: String, defaultValue: String): String
+        {
+            var v = Environment.get(name)
+            if (v == null) {
+                return defaultValue
+            }
+            return v
+        }
+    }
+}
