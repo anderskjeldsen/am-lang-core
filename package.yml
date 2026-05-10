@@ -32,9 +32,11 @@ platforms:
     gccCommand: m68k-amigaos-gcc -O3
     additionalHeaders:
       - amiga.h
-    additionalCSources: 
-      - inputFilename: amiga.c     
+    additionalCSources:
+      - inputFilename: amiga.c
         outputFilename: amiga.o
+      - inputFilename: errno.c
+        outputFilename: errno.o
     gccAdditionalOptions:
       - -noixemul
       - -UHAVE_TIMEGM
