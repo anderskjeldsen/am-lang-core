@@ -1,6 +1,5 @@
 #include <libc/core.h>
 #include <Am/Threading/Thread.h>
-#include <morphos-ppc/Am/Threading/Thread.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/Runnable.h>
 #include <Am/Lang/Long.h>
@@ -8,6 +7,7 @@
 #include <libc/core_inline_functions.h>
 
 #include <amigaos/amiga.h>
+
 
 #include <exec/types.h>
 #include <dos/dostags.h>
@@ -64,6 +64,14 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_Threading_Thread__native_mark_children_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = false };
+	bool __returning = false;
+__exit: ;
+	return __result;
+};
+
 void Am_Threading_Thread__InitTask()
 {
 //	printf("InitTask...\n");
@@ -95,8 +103,8 @@ void Am_Threading_Thread__InitTask()
 		{
 //			printf("Thread found\n");
 			aobject * runnable = thread->object_properties.class_object_properties.properties[0].nullable_value.value.object_value;
-			Am_Lang_Runnable_run_0_T rFunc = (Am_Lang_Runnable_run_0_T) runnable->class_ptr->functions[3]; // TODO: Create index constants
-			rFunc(runnable);
+			Am_Lang_Runnable_f_run_0_T rFunc = (Am_Lang_Runnable_f_run_0_T) runnable->class_ptr->functions[3]; // TODO: Create index constants
+			rFunc(runnable->object_properties.iface_reference.implementation_object);
 			Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) thread->object_properties.class_object_properties.object_data.value.custom_value;
 			data->done = true;
 		}

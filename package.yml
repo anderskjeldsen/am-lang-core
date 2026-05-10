@@ -45,12 +45,20 @@ platforms:
   - id: linux-x64
     extends: libc
     gccCommand: gcc -O3
+    gccAdditionalOptions:
+      - -pthread        # libc/Am/Threading/Thread.c uses pthread; macOS
+                        # ships pthread in libSystem so the flag is a
+                        # no-op there but it's required on Linux glibc.
   - id: linux-arm64v8
     extends: linux-x64
     gccCommand: gcc -O3
+    gccAdditionalOptions:
+      - -pthread
   - id: macos
     extends: libc
     gccCommand: gcc -O3
+    gccAdditionalOptions:
+      - -pthread
     # additionalIncludePaths:
     #   - c-libs/openssl/include
     # gccLibraryPaths:
@@ -64,6 +72,8 @@ platforms:
   - id: macos-arm
     extends: libc
     gccCommand: gcc -O3
+    gccAdditionalOptions:
+      - -pthread
     # additionalIncludePaths:
     #   - c-libs/openssl/include
     # gccLibraryPaths:

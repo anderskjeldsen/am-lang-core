@@ -10,15 +10,15 @@ namespace Am.Util {
             var i = 0
             
             // Process every 3 bytes
-            while (i < length.toInt()) {
-                var b1 = data[i].toInt() & 0xFF
+            while (i < length) {
+                var b1 = data[i] & 0xFF
                 var b2 = 0
-                if (i + 1 < length.toInt()) {
-                    b2 = data[i + 1].toInt() & 0xFF
+                if (i + 1 < length) {
+                    b2 = data[i + 1] & 0xFF
                 }
                 var b3 = 0
-                if (i + 2 < length.toInt()) {
-                    b3 = data[i + 2].toInt() & 0xFF
+                if (i + 2 < length) {
+                    b3 = data[i + 2] & 0xFF
                 }
                 
                 // Combine the 3 bytes into a 24-bit integer
@@ -34,13 +34,13 @@ namespace Am.Util {
                 result.addChar(base64Chars.characterAt(idx1.toUInt()))
                 result.addChar(base64Chars.characterAt(idx2.toUInt()))
                 
-                if (i + 1 < length.toInt()) {
+                if (i + 1 < length) {
                     result.addChar(base64Chars.characterAt(idx3.toUInt()))
                 } else {
                     result.addChar('=')
                 }
                 
-                if (i + 2 < length.toInt()) {
+                if (i + 2 < length) {
                     result.addChar(base64Chars.characterAt(idx4.toUInt()))
                 } else {
                     result.addChar('=')

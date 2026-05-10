@@ -1,0 +1,55 @@
+namespace Am.Lang
+{
+    class Runtime
+    {
+        import Am.Collections
+
+        private var properties: HashMap<String, String> = new HashMap<String, String>()
+        private static var instance: Runtime = new Runtime()
+
+        fun setProperty(key: String, value: String)
+        {
+            this.properties.set(key, value)
+        }
+
+        fun getProperty(key: String): String
+        {
+            return this.properties.get(key)
+        }
+
+        fun hasProperty(key: String): Bool
+        {
+            return this.properties.containsKey(key)
+        }
+
+        fun removeProperty(key: String): Bool
+        {
+            return this.properties.remove(key)
+        }
+
+        fun getProperties(): HashMap<String, String>
+        {
+            return this.properties
+        }
+
+        static fun set(key: String, value: String)
+        {
+            Runtime.instance.setProperty(key, value)
+        }
+
+        static fun get(key: String): String
+        {
+            return Runtime.instance.getProperty(key)
+        }
+
+        static fun has(key: String): Bool
+        {
+            return Runtime.instance.hasProperty(key)
+        }
+
+        static fun remove(key: String): Bool
+        {
+            return Runtime.instance.removeProperty(key)
+        }
+    }
+}

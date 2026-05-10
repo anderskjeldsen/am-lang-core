@@ -1,6 +1,6 @@
 namespace Am.Lang
 {
-    #implementationPlatforms "libc", "amigaos"
+    #implementationPlatforms "libc", "amigaos", "morphos-ppc"
     native class DateTime {
         private var epochMillis: ULong = DateTime.getMillis()
         private var timezoneOffsetMinutes: Int = DateTime.getLocalTimezoneOffset()

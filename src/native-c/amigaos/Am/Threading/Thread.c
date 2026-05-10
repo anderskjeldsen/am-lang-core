@@ -74,15 +74,12 @@ __exit: ;
 
 void Am_Threading_Thread__InitTask()
 {
-//	printf("InitTask...\n");
 	struct Task *own_task = NULL;
 	struct Process *own_process = NULL;
 	
 	own_task = FindTask(NULL);
 	if ( own_task != NULL )
 	{
-//		printf("Task found\n");
-
 		own_process = (struct Process *) own_task;
 //		OwnTask->tc_Switch = NULL; // SwitchEvent;
 //		OwnTask->tc_Launch = NULL; // LaunchEvent;
@@ -95,18 +92,24 @@ void Am_Threading_Thread__InitTask()
 
 		while ( thread == NULL )
 		{
-			Am_Threading_Thread_sleep_0(1000);
+			Am_Threading_Thread_sleep_0(100);
 			thread = (aobject *) own_task->tc_UserData;
 		}
 
 		if ( thread != NULL )
 		{
-//			printf("Thread found\n");
 			aobject * runnable = thread->object_properties.class_object_properties.properties[0].nullable_value.value.object_value;
 			Am_Lang_Runnable_f_run_0_T rFunc = (Am_Lang_Runnable_f_run_0_T) runnable->class_ptr->functions[3]; // TODO: Create index constants
 			rFunc(runnable->object_properties.iface_reference.implementation_object);
 			Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) thread->object_properties.class_object_properties.object_data.value.custom_value;
 			data->done = true;
+
+			// Drop the worker's reference on `thread` last — every
+			// access above this line happens while `thread` is still
+			// alive courtesy of the ref taken in `start_0`. Also
+			// closes the busy-wait race above where `tc_UserData` is
+			// set only AFTER the new task is already running.
+			__decrease_reference_count(thread);
 		}
 		else
 		{
@@ -151,12 +154,20 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 
 //	printf("CreateNewProc\n");
 
+	// Take an extra ref for the worker; _InitTask drops it at the end.
+	// Doing this BEFORE CreateNewProc closes the existing race where
+	// the new task starts running and busy-waits on `tc_UserData`
+	// while the caller could otherwise drop their last ref to `this`.
+	__increase_reference_count(this);
+
 	struct Process * process = CreateNewProc(tags);
-		
+
 //	printf("CreateNewProc Done %d\n", process);
 
 	if ( process == NULL )
 	{
+		// Worker won't run, so undo the ref we took above.
+		__decrease_reference_count(this);
 		printf("CreateNewProc returned a null-pointer\n");
 // TODO:		throw( new GException("CreateNewProc returned a null-pointer") );
 	}
