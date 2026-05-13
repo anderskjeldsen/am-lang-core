@@ -194,6 +194,14 @@ namespace Am.Lang
         }
 
         override fun equals(other: Object): Bool {
+            // Must null-check before `other is DateTime` — the `is`
+            // check faults on a null reference. Without this guard,
+            // `someDateTime == null` (which AmLang dispatches through
+            // this method) segfaults instead of cleanly returning
+            // false.
+            if (other == null) {
+                return false
+            }
             if (other is DateTime) {
                 var otherDateTime = other as DateTime
                 return this.epochMillis == otherDateTime.epochMillis

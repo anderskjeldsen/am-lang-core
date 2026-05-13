@@ -96,11 +96,19 @@ function_result Am_IO_File_listNative_0(aobject * const this, aobject * folderFi
 		goto __exit;
 	}
 	while ((dir = readdir(d)) != NULL) {
+		// Skip the synthetic self/parent entries — POSIX readdir
+		// surfaces them but virtually no caller of a high-level
+		// `listFiles()` wants them (recursive walks blow up on `.`,
+		// counts are off by 2, etc). Matches Java / Python / Node /
+		// Rust / Go stdlibs, which all filter at this same layer.
+		if (dir->d_name[0] == '.' &&
+		    (dir->d_name[1] == '\0' ||
+		     (dir->d_name[1] == '.' && dir->d_name[2] == '\0'))) {
+			continue;
+		}
 		aobject *filename_str = __create_string(dir->d_name, &Am_Lang_String);
 		Am_Collections_List_ta_Am_Lang_String_f_add_0(list, filename_str);
 		__decrease_reference_count(filename_str);
-
-//		printf("%s\n", dir->d_name);
 	}
 	closedir(d);
 
