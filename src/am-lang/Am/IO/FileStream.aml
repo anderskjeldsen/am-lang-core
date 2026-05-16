@@ -14,6 +14,15 @@ namespace Am.IO
         native fun readByte(): Int
         native fun writeByte(byte: Int)
 
+        // Release the underlying OS file handle now, instead of waiting
+        // for the runtime to release the FileStream object. Needed when
+        // a writer and a reader of the same path coexist briefly inside
+        // one process: on AmigaOS DOS the reader's fopen doesn't see
+        // the writer's bytes cleanly until the writer's FILE* is gone.
+        // Safe to call more than once; subsequent reads/writes after
+        // close are undefined.
+        native fun close()
+
         fun readAll(): UByte[] {
             var data = List<UByte>.newList<UByte>()
             var go = true

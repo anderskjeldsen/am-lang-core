@@ -23,15 +23,20 @@ char * const get_file_access_mode(aobject * const this) {
 	// FileAccess enum is stored directly as an int in the nullable_value
 	int access_value = access_prop.nullable_value.value.int_value;
 	
-	// Map enum values to C file mode strings
+	// Map enum values to C file mode strings. We always use binary
+	// mode ("b") because callers expect read/write to round-trip the
+	// raw bytes. On POSIX systems text and binary modes are identical
+	// so this changes nothing; on AmigaOS / Windows-style libcs the
+	// text mode performs LF↔CRLF translation, which silently corrupts
+	// binary payloads like zlib streams.
 	switch (access_value) {
-		case 1: return "r";    // readOnly
-		case 2: return "w";    // writeOnly
-		case 3: return "a";    // appendOnly
-		case 4: return "r+";   // readWrite
-		case 5: return "w+";   // readWriteTruncate
-		case 6: return "a+";   // readAppend
-		default: return "r+";  // Default fallback
+		case 1: return "rb";    // readOnly
+		case 2: return "wb";    // writeOnly
+		case 3: return "ab";    // appendOnly
+		case 4: return "rb+";   // readWrite
+		case 5: return "wb+";   // readWriteTruncate
+		case 6: return "ab+";   // readAppend
+		default: return "rb+";  // Default fallback
 	}
 }
 
@@ -88,11 +93,43 @@ function_result Am_IO_FileStream__native_release_0(aobject * const this)
 
 	file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	if (holder != NULL) {
-		fclose(holder->file);
+		// Holder->file may already be NULL if close() was called
+		// explicitly — see Am_IO_FileStream_close_0 below.
+		if (holder->file != NULL) {
+			fclose(holder->file);
+			holder->file = NULL;
+		}
 		free(holder);
+		this->object_properties.class_object_properties.object_data.value.custom_value = NULL;
 	}
 
 __exit: ;
+	return __result;
+};
+
+function_result Am_IO_FileStream_close_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = false };
+	bool __returning = false;
+	if (this != NULL) {
+		__increase_reference_count(this);
+	}
+
+	// Eagerly release the OS file handle. Needed on AmigaOS where
+	// a same-process write→read on one path doesn't round-trip
+	// while the writer's FILE* is still alive. Idempotent — a
+	// second close() (or the eventual native_release_0) is a no-op
+	// on the already-NULLed file pointer.
+	file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+	if (holder != NULL && holder->file != NULL) {
+		fclose(holder->file);
+		holder->file = NULL;
+	}
+
+__exit: ;
+	if (this != NULL) {
+		__decrease_reference_count(this);
+	}
 	return __result;
 };
 
