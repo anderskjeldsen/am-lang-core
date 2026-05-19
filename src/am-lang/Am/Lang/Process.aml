@@ -10,5 +10,14 @@ namespace Am.Lang
 
         // Execute a shell command and return its stdout output as a String.
         static native fun runAndCaptureOutput(command: String): String
+
+        // Same as runAndCaptureOutput, but with the process's current
+        // working directory temporarily set to `workingDir` for the
+        // duration of the command. The previous CWD is restored on
+        // return (including on error). Use this instead of prefixing
+        // commands with "cd ..." — the AmigaOS shell treats `;` as a
+        // comment so a chained cd doesn't actually move the shell.
+        // An empty `workingDir` behaves exactly like runAndCaptureOutput.
+        static native fun runAndCaptureOutputInDir(command: String, workingDir: String): String
     }
 }

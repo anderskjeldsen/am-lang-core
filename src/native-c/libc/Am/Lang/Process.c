@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <unistd.h>
 #include <libc/core_inline_functions.h>
 
 function_result Am_Lang_Process__native_init_0(aobject * const this)
@@ -119,6 +120,104 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 __exit: ;
 	if (command != NULL) {
 		__decrease_reference_count(command);
+	}
+	return __result;
+}
+
+function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, aobject * workingDir)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (command != NULL) {
+		__increase_reference_count(command);
+	}
+	if (workingDir != NULL) {
+		__increase_reference_count(workingDir);
+	}
+
+	string_holder *cmd_holder = (string_holder *) (command + 1);
+	string_holder *dir_holder = (workingDir != NULL) ? (string_holder *) (workingDir + 1) : NULL;
+	const char *dir_str = (dir_holder != NULL && dir_holder->length > 0) ? dir_holder->string_value : NULL;
+
+	// Snapshot the cwd so we can restore it on every exit path
+	// (success or error). Skip the whole save/chdir cycle when no
+	// dir was given so the call stays equivalent to
+	// runAndCaptureOutput and callers can use this method
+	// unconditionally.
+	char saved_cwd[4096];
+	bool did_chdir = false;
+	if (dir_str != NULL) {
+		if (getcwd(saved_cwd, sizeof(saved_cwd)) == NULL) {
+			__throw_simple_exception("getcwd failed", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+			goto __exit;
+		}
+		if (chdir(dir_str) != 0) {
+			__throw_simple_exception("Failed to chdir to working directory", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+			goto __exit;
+		}
+		did_chdir = true;
+	}
+
+	FILE *pipe = popen(cmd_holder->string_value, "r");
+	if (!pipe) {
+		if (did_chdir) {
+			(void) chdir(saved_cwd);
+		}
+		__throw_simple_exception("Failed to execute command", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+		goto __exit;
+	}
+
+	{
+		size_t capacity = 4096;
+		size_t size = 0;
+		char *buffer = (char *) malloc(capacity);
+		if (!buffer) {
+			pclose(pipe);
+			if (did_chdir) {
+				(void) chdir(saved_cwd);
+			}
+			__throw_simple_exception("Out of memory", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+			goto __exit;
+		}
+
+		char tmp[1024];
+		while (fgets(tmp, sizeof(tmp), pipe)) {
+			size_t len = strlen(tmp);
+			if (size + len + 1 > capacity) {
+				capacity = capacity * 2 + len;
+				char *new_buf = (char *) realloc(buffer, capacity);
+				if (!new_buf) {
+					free(buffer);
+					pclose(pipe);
+					if (did_chdir) {
+						(void) chdir(saved_cwd);
+					}
+					__throw_simple_exception("Out of memory", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+					goto __exit;
+				}
+				buffer = new_buf;
+			}
+			memcpy(buffer + size, tmp, len);
+			size += len;
+		}
+		buffer[size] = 0;
+		pclose(pipe);
+
+		if (did_chdir) {
+			(void) chdir(saved_cwd);
+		}
+
+		aobject *str = __create_string(buffer, &Am_Lang_String);
+		free(buffer);
+		__result.return_value.value.object_value = str;
+	}
+
+__exit: ;
+	if (command != NULL) {
+		__decrease_reference_count(command);
+	}
+	if (workingDir != NULL) {
+		__decrease_reference_count(workingDir);
 	}
 	return __result;
 }

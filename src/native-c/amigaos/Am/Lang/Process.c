@@ -185,3 +185,137 @@ __exit: ;
 	}
 	return __result;
 }
+
+function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, aobject * workingDir)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (command != NULL) {
+		__increase_reference_count(command);
+	}
+	if (workingDir != NULL) {
+		__increase_reference_count(workingDir);
+	}
+
+	string_holder *dir_holder = (workingDir != NULL) ? (string_holder *) (workingDir + 1) : NULL;
+	const char *dir_str = (dir_holder != NULL && dir_holder->length > 0) ? dir_holder->string_value : NULL;
+
+	// Swap the process's current dir to `workingDir` before running.
+	// CurrentDir() returns the previous lock so we can restore on
+	// the way out — we must NOT UnLock() that previous lock (it
+	// belongs to whoever set up our CD originally). We DO UnLock
+	// the lock we created here, once the previous CD is back in
+	// place.
+	BPTR new_lock = (BPTR) NULL;
+	BPTR old_lock = (BPTR) NULL;
+	bool did_swap = false;
+	if (dir_str != NULL) {
+		new_lock = Lock((CONST_STRPTR) dir_str, ACCESS_READ);
+		if (new_lock == (BPTR) NULL) {
+			__throw_simple_exception("Failed to lock working directory", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+			goto __exit;
+		}
+		old_lock = CurrentDir(new_lock);
+		did_swap = true;
+	}
+
+	// Body mirrors runAndCaptureOutput. Duplicated rather than
+	// refactored so the cwd save/restore stays tight against the
+	// actual SystemTagList call.
+	string_holder *cmd_holder = (string_holder *) (command + 1);
+	STRPTR cmd_strptr = (STRPTR) cmd_holder->string_value;
+
+	UBYTE temp_path[64];
+	struct Task *self = FindTask(NULL);
+	{
+		const STRPTR prefix = (STRPTR) "T:am_proc_";
+		ULONG i = 0;
+		while (prefix[i] != 0) { temp_path[i] = prefix[i]; i++; }
+		ULONG addr = (ULONG) self;
+		for (LONG nibble = 7; nibble >= 0; nibble--) {
+			ULONG v = (addr >> (nibble * 4)) & 0xF;
+			temp_path[i++] = (UBYTE) (v < 10 ? ('0' + v) : ('a' + (v - 10)));
+		}
+		temp_path[i] = 0;
+	}
+
+	BPTR out_file = Open((CONST_STRPTR) temp_path, MODE_NEWFILE);
+	if (out_file == 0) {
+		if (did_swap) { CurrentDir(old_lock); UnLock(new_lock); }
+		__throw_simple_exception("Failed to open temp file", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+		goto __exit;
+	}
+
+	struct TagItem run_tags[] = {
+		{ SYS_Input,     (ULONG) NULL },
+		{ SYS_Output,    (ULONG) out_file },
+		{ SYS_Asynch,    FALSE },
+		{ SYS_UserShell, TRUE },
+		{ TAG_DONE,      0 },
+	};
+
+	LONG status = SystemTagList(cmd_strptr, run_tags);
+	Close(out_file);
+	if (status == -1) {
+		DeleteFile((CONST_STRPTR) temp_path);
+		if (did_swap) { CurrentDir(old_lock); UnLock(new_lock); }
+		__throw_simple_exception("Failed to execute command", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+		goto __exit;
+	}
+
+	BPTR in_file = Open((CONST_STRPTR) temp_path, MODE_OLDFILE);
+	if (in_file == 0) {
+		DeleteFile((CONST_STRPTR) temp_path);
+		if (did_swap) { CurrentDir(old_lock); UnLock(new_lock); }
+		__throw_simple_exception("Failed to read back command output", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+		goto __exit;
+	}
+
+	(void) Seek(in_file, 0, OFFSET_END);
+	LONG size = Seek(in_file, 0, OFFSET_BEGINNING);
+	if (size < 0) {
+		Close(in_file);
+		DeleteFile((CONST_STRPTR) temp_path);
+		if (did_swap) { CurrentDir(old_lock); UnLock(new_lock); }
+		__throw_simple_exception("Failed to position in command-output file", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+		goto __exit;
+	}
+
+	UBYTE *buffer = (UBYTE *) AllocVec((ULONG) (size + 1), MEMF_ANY | MEMF_CLEAR);
+	if (buffer == NULL) {
+		Close(in_file);
+		DeleteFile((CONST_STRPTR) temp_path);
+		if (did_swap) { CurrentDir(old_lock); UnLock(new_lock); }
+		__throw_simple_exception("Out of memory reading command output", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+		goto __exit;
+	}
+
+	LONG read = (size > 0) ? Read(in_file, buffer, size) : 0;
+	Close(in_file);
+	DeleteFile((CONST_STRPTR) temp_path);
+
+	if (did_swap) {
+		CurrentDir(old_lock);
+		UnLock(new_lock);
+	}
+
+	if (read < 0) {
+		FreeVec(buffer);
+		__throw_simple_exception("Failed to read command output", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+		goto __exit;
+	}
+	buffer[read] = 0;
+
+	aobject *out_str = __create_string((char const *) buffer, &Am_Lang_String);
+	FreeVec(buffer);
+	__result.return_value.value.object_value = out_str;
+
+__exit: ;
+	if (command != NULL) {
+		__decrease_reference_count(command);
+	}
+	if (workingDir != NULL) {
+		__decrease_reference_count(workingDir);
+	}
+	return __result;
+}
