@@ -13,6 +13,7 @@
 #include <exec/memory.h>
 #include <dos/dos.h>
 #include <dos/dostags.h>
+#include <dos/dosextens.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <utility/tagitem.h>
@@ -182,6 +183,65 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 __exit: ;
 	if (command != NULL) {
 		__decrease_reference_count(command);
+	}
+	return __result;
+}
+
+function_result Am_Lang_Process_canonicalPath_0(aobject * path)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (path != NULL) {
+		__increase_reference_count(path);
+	}
+
+	string_holder *in_holder = (string_holder *) (path + 1);
+	const char *in_str = in_holder->string_value;
+
+	BPTR lock = Lock((CONST_STRPTR) in_str, ACCESS_READ);
+	if (lock == (BPTR) NULL) {
+		__result.return_value.value.object_value = path;
+		__increase_reference_count(path);
+		goto __exit;
+	}
+
+	UBYTE buffer[260];
+	if (NameFromLock(lock, buffer, sizeof(buffer)) == 0) {
+		UnLock(lock);
+		__result.return_value.value.object_value = path;
+		__increase_reference_count(path);
+		goto __exit;
+	}
+	UnLock(lock);
+	buffer[sizeof(buffer) - 1] = 0;
+
+	aobject *out_str = __create_string((char const *) buffer, &Am_Lang_String);
+	__result.return_value.value.object_value = out_str;
+
+__exit: ;
+	if (path != NULL) {
+		__decrease_reference_count(path);
+	}
+	return __result;
+}
+
+function_result Am_Lang_Process_getCwd_0()
+{
+	function_result __result = { .has_return_value = true };
+
+	// pr_CurrentDir is the lock the process inherited (or was set
+	// to via CurrentDir()). Read directly off the Process struct
+	// — no need to do the CurrentDir(BNULL)/CurrentDir(saved)
+	// dance, which would race against any other code that touches
+	// the current dir. NameFromLock fills `buffer` with the
+	// canonical (volume-name) form.
+	struct Process *proc = (struct Process *)FindTask(NULL);
+	BPTR currentLock = proc->pr_CurrentDir;
+	UBYTE buffer[260];
+	if (currentLock != (BPTR)NULL && NameFromLock(currentLock, (STRPTR)buffer, sizeof(buffer))) {
+		__result.return_value.value.object_value = __create_string((const char *)buffer, &Am_Lang_String);
+	} else {
+		__result.return_value.value.object_value = __create_string("", &Am_Lang_String);
 	}
 	return __result;
 }

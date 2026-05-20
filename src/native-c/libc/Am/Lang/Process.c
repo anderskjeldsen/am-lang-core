@@ -124,6 +124,54 @@ __exit: ;
 	return __result;
 }
 
+function_result Am_Lang_Process_canonicalPath_0(aobject * path)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	if (path != NULL) {
+		__increase_reference_count(path);
+	}
+
+	// realpath collapses symlinks and "..", returning the canonical
+	// absolute form. On failure (path missing, permission denied)
+	// just hand back the original so the caller still has something
+	// to work with.
+	string_holder *in_holder = (string_holder *) (path + 1);
+	const char *in_str = in_holder->string_value;
+
+	char resolved[4096];
+	if (realpath(in_str, resolved) == NULL) {
+		__result.return_value.value.object_value = path;
+		__increase_reference_count(path);
+		goto __exit;
+	}
+
+	aobject *out_str = __create_string(resolved, &Am_Lang_String);
+	__result.return_value.value.object_value = out_str;
+
+__exit: ;
+	if (path != NULL) {
+		__decrease_reference_count(path);
+	}
+	return __result;
+}
+
+function_result Am_Lang_Process_getCwd_0()
+{
+	function_result __result = { .has_return_value = true };
+
+	// PATH_MAX-ish buffer — every libc we target accepts at least
+	// 4096. Empty string on failure (permissions, deleted dir) so
+	// the caller has a sentinel to test instead of an NPE.
+	char buffer[4096];
+	if (getcwd(buffer, sizeof(buffer)) == NULL) {
+		__result.return_value.value.object_value = __create_string("", &Am_Lang_String);
+	} else {
+		__result.return_value.value.object_value = __create_string(buffer, &Am_Lang_String);
+	}
+	return __result;
+}
+
 function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, aobject * workingDir)
 {
 	function_result __result = { .has_return_value = true };

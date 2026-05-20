@@ -19,5 +19,21 @@ namespace Am.Lang
         // comment so a chained cd doesn't actually move the shell.
         // An empty `workingDir` behaves exactly like runAndCaptureOutput.
         static native fun runAndCaptureOutputInDir(command: String, workingDir: String): String
+
+        // Resolve `path` to its OS-canonical form. On AmigaOS /
+        // MorphOS this means "DH0:Tools/" becomes "Workbench:Tools/"
+        // (i.e. device name → mounted volume name) via Lock +
+        // NameFromLock. On libc it returns the realpath; if the path
+        // can't be resolved (doesn't exist, permission denied) the
+        // original input is returned unchanged so the caller still
+        // has something usable.
+        static native fun canonicalPath(path: String): String
+
+        // The process's current working directory. On AmigaOS /
+        // MorphOS this is the lock the IDE was launched with
+        // (NameFromLock of pr_CurrentDir); on libc it's getcwd().
+        // Returns "" if the OS can't resolve a name — the caller
+        // should treat empty as "unknown" rather than as a path.
+        static native fun getCwd(): String
     }
 }
