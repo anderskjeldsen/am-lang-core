@@ -99,7 +99,11 @@ void Am_Threading_Thread__InitTask()
 		if ( thread != NULL )
 		{
 			aobject * runnable = thread->object_properties.class_object_properties.properties[0].nullable_value.value.object_value;
-			Am_Lang_Runnable_f_run_0_T rFunc = (Am_Lang_Runnable_f_run_0_T) runnable->class_ptr->functions[3]; // TODO: Create index constants
+			// Runnable is an interface, so dispatch through the iface_implementation
+			// the wrapper carries (functions[0] = run). Going via runnable->class_ptr
+			// instead would pick up the Am.Lang.Runnable aclass's `functions` field,
+			// which is left NULL for interfaces — silent crash on the worker task.
+			Am_Lang_Runnable_f_run_0_T rFunc = (Am_Lang_Runnable_f_run_0_T) runnable->object_properties.iface_reference.iface_implementation->functions[0];
 			rFunc(runnable->object_properties.iface_reference.implementation_object);
 			Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) thread->object_properties.class_object_properties.object_data.value.custom_value;
 			data->done = true;

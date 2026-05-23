@@ -122,8 +122,12 @@ static void *Am_Threading_Thread__pthread_entry(void *arg)
 
     aobject *runnable =
         thread->object_properties.class_object_properties.properties[0].nullable_value.value.object_value;
+    // Runnable is an interface, so dispatch through the iface_implementation
+    // the wrapper carries (functions[0] = run). Going via runnable->class_ptr
+    // would index into Am.Lang.Runnable's `functions` field, which is left
+    // NULL for interfaces — segfault in the worker thread.
     Am_Lang_Runnable_f_run_0_T rFunc =
-        (Am_Lang_Runnable_f_run_0_T) runnable->class_ptr->functions[3]; // TODO: shared index constant
+        (Am_Lang_Runnable_f_run_0_T) runnable->object_properties.iface_reference.iface_implementation->functions[0];
     rFunc(runnable->object_properties.iface_reference.implementation_object);
 
     Am_Threading_Thread_data *data =
