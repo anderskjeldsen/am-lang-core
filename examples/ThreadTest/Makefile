@@ -28,6 +28,35 @@ run-amigaos-vamos:
 run-amigaos-fsuae:
 	./fs-uae/run-headless.sh
 
+# Run the amigaos binary headlessly inside Docker via Amiberry (arm64
+# JIT — finishes ThreadTest in ~5s on Apple Silicon, vs fs-uae-in-docker
+# which never makes visible boot progress). The image is baked by
+# ../../../am-lang-compiler-code/amiberry-docker/ and built on demand if
+# the local tag is missing. The kickstart 3.1 ROM is not redistributable,
+# so the caller must point KICK31 at their own copy:
+#   make run-amigaos-amiberry KICK31=/path/to/kick31.rom
+AMIBERRY_DOCKER_DIR := ../../../am-lang-compiler-code/amiberry-docker
+run-amigaos-amiberry:
+	@if [ -z "$(KICK31)" ]; then \
+		echo "KICK31 not set — point it at a kickstart 3.1 ROM:"; \
+		echo "  make run-amigaos-amiberry KICK31=/path/to/kick31.rom"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(KICK31)" ]; then \
+		echo "KICK31 file not found: $(KICK31)"; \
+		exit 1; \
+	fi
+	@if [ -z "$$(docker images -q amiberry:latest)" ]; then \
+		echo "amiberry:latest not found — building..."; \
+		$(AMIBERRY_DOCKER_DIR)/build.sh; \
+	else \
+		echo "Using cached amiberry:latest image."; \
+	fi
+	docker run --rm \
+		-v "$(KICK31):/rom/kick31.rom:ro" \
+		-v "$(CURDIR)/builds/bin/amigaos:/app" \
+		amiberry:latest
+
 clean:
 	$(CMD) clean . -bt linux-x64
 	$(CMD) clean . -bt amigaos-docker
