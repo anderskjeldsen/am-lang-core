@@ -1,0 +1,38 @@
+namespace Am.Async {
+
+    // Handle on a suspended computation. Eventually exactly one of
+    // `resume()` or `resumeWithError(ex)` should be called; the first
+    // call drives the parent suspend chain to its resume point.
+    // Subsequent calls are silently dropped — so a
+    // `whoever-finishes-first-wins` race between two completion
+    // sources is safe by construction.
+    //
+    // `resume` is callable from any thread. The parent suspend chain
+    // resumes on whichever thread invoked `resume` — there is no
+    // implicit hop back to the originating thread. If main-thread
+    // affinity is needed, wire it up explicitly (e.g. enqueue
+    // `cont.resume()` onto a developer-managed task queue pumped by
+    // the main loop).
+    //
+    // Phase 1 (this version): non-generic, value-less. Only the
+    // "fired exactly once" semantics are wired up. Useful for testing
+    // the C runtime, and lets cooperating code wait for a flag.
+    //
+    // Phase 2: the language-level `suspend(cont) { ... }` block will
+    // hand the user a `Continuation<T>` whose `resume(value: T)` both
+    // sets the value into the parent's suspend_state result slot and
+    // re-enters the parent. The compiler will reject native generic
+    // classes other than Array today, so we keep Phase 1 non-generic
+    // and let the Phase 2 language change relax that.
+    #implementationPlatforms "libc"
+    native class Continuation() {
+        import Am.Lang
+
+        // Fire the continuation. Idempotent: first call wins, every
+        // subsequent call is a no-op (no error, no corruption).
+        native fun resume()
+
+        // Has resume() already been called?
+        native fun isDone(): Bool
+    }
+}

@@ -48,6 +48,36 @@ void __release_libraries() {
 		CloseLibrary(__current_lib_node->lib_base);
 		free(__current_lib_node);
 		__current_lib_node = next;
-	}	
+	}
+}
+
+/*
+ * libgcc helper shim. m68k 68000-68030 has no native compare-and-
+ * swap, so gcc lowers C11 atomic_compare_exchange on a 1-byte
+ * variable to a call to __atomic_compare_exchange_1, which libgcc
+ * for our amigaos toolchain doesn't provide. Forbid()/Permit()
+ * gives task-level atomicity, which is sufficient for the only
+ * caller we have today (Am.Async.Continuation's `done` flag — not
+ * touched from interrupts). Signature matches the libgcc form;
+ * the weak / memorder args are ignored (always a strong, fully-
+ * ordered exchange).
+ */
+bool __atomic_compare_exchange_1(
+	volatile void *ptr, void *expected, unsigned char desired,
+	bool weak, int success_memmodel, int failure_memmodel)
+{
+	volatile unsigned char *p = (volatile unsigned char *) ptr;
+	unsigned char *e = (unsigned char *) expected;
+	bool ok;
+	Forbid();
+	if (*p == *e) {
+		*p = desired;
+		ok = true;
+	} else {
+		*e = *p;
+		ok = false;
+	}
+	Permit();
+	return ok;
 }
 

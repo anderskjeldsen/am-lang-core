@@ -1,0 +1,116 @@
+namespace Am.Threading {
+
+    // Single-threaded worker that drains a FIFO of Tasks. Owned 1:1
+    // by TaskScheduler, one per registered TaskThreadType. Internal
+    // class — applications use TaskScheduler.schedule(), not this.
+    //
+    // The thread starts on first `start()` and runs forever until
+    // `stop()` is called. Tasks queued via `submit()` get appended
+    // under `mutex`; the worker pops them under the same mutex but
+    // releases it before invoking task.execute() so long-running
+    // tasks do not block schedule() callers.
+    //
+    // Wake-up today is short-poll (Thread.sleep(IDLE_SLEEP_MS) when
+    // the queue is empty). This is the simplest thing that works on
+    // every backend — AmLang has no Condition primitive yet. The
+    // sleep granularity caps schedule-to-start latency at
+    // IDLE_SLEEP_MS milliseconds, which is fine for "short-lived
+    // tasks" like the user's HTTP requests. When a real Condition
+    // lands, replace the sleep with `condition.wait()` and have
+    // submit() call `condition.signal()`.
+    class TaskRunner : Runnable {
+        import Am.Lang
+        import Am.Collections
+
+        // Display name surfaced as the Amiga task / pthread name —
+        // helps when reading process listings. Set by TaskScheduler
+        // before `start()`.
+        var name: String
+
+        private var queue: List<Task>
+        private var mutex: Mutex
+        private var stopRequested: Bool
+        private var thread: Thread
+
+        // Polling interval while the queue is empty. 20 ms is short
+        // enough to feel instant for UI-driven scheduling without
+        // chewing CPU on an idle worker.
+        private static var IDLE_SLEEP_MS: Long = 20L
+
+        init {
+            this.queue = List.newList<Task>()
+            this.mutex = new Mutex()
+            this.stopRequested = false
+        }
+
+        // Append a task to the runner's queue. Safe to call from any
+        // thread — the mutex serialises producer-side modification
+        // against the runner thread's poll().
+        fun submit(task: Task) {
+            this.mutex.lock()
+            try {
+                this.queue.add(task)
+            } finally {
+                this.mutex.unlock()
+            }
+        }
+
+        // Spawn the worker thread. Must be called exactly once per
+        // TaskRunner, before any submit() — TaskScheduler enforces
+        // this by creating + starting the runner inside its own
+        // ensureRunner() critical section.
+        fun start() {
+            var t = new Thread(this as Runnable)
+            var n = this.name
+            if (n == null) {
+                n = "task-runner"
+            }
+            t.name = n
+            this.thread = t
+            t.start()
+        }
+
+        // Request a graceful stop. The runner finishes its current
+        // task (if any), drains nothing further, then exits its loop
+        // within at most IDLE_SLEEP_MS of the next poll. Does NOT
+        // join — the caller can `getThread().join()` if it needs to.
+        fun stop() {
+            this.stopRequested = true
+        }
+
+        fun getThread(): Thread {
+            return this.thread
+        }
+
+        // Worker loop. Pulls one task at a time, executes it, repeats.
+        // The lock is released around `task.execute()` so a slow task
+        // does not block submitters — that's the whole point of the
+        // worker-with-queue pattern.
+        override fun run() {
+            while (!this.stopRequested) {
+                var task = this.poll()
+                if (task != null) {
+                    task.execute()
+                } else {
+                    Thread.sleep(TaskRunner.IDLE_SLEEP_MS)
+                }
+            }
+        }
+
+        // Pop the head task under the mutex. Returns null when the
+        // queue is empty — caller (run loop) sleeps in that case.
+        private fun poll(): Task {
+            var task: Task = null
+            this.mutex.lock()
+            try {
+                if (this.queue.getSize() > 0) {
+                    task = this.queue.get(0)
+                    this.queue.removeAt(0)
+                }
+            } finally {
+                this.mutex.unlock()
+            }
+            return task
+        }
+    }
+}

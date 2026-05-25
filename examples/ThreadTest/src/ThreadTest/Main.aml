@@ -1,0 +1,68 @@
+namespace ThreadTest {
+
+    class Worker(var label: String, var iterations: Int, var delayMs: Long) : Runnable {
+        import Am.Lang
+        import Am.Threading
+
+        override fun run() {
+            for (i = 0 to this.iterations) {
+                ("[" + this.label + "] tick " + i.toString()).println()
+                Thread.sleep(this.delayMs)
+            }
+            ("[" + this.label + "] done").println()
+        }
+    }
+
+    class Main {
+        import Am.Lang
+        import Am.Threading
+
+        static fun main() {
+            "=== ThreadTest Demo ===".println()
+
+            // 1) Single worker: start, join, observe ordering.
+            "--- Single worker ---".println()
+            var w1 = new Worker("solo", 3, 100L)
+            var r1 = w1 as Runnable
+            var t1 = new Thread(r1)
+            t1.name = "solo-thread"
+
+            "main: starting solo worker".println()
+            t1.start()
+            "main: joining solo worker".println()
+            t1.join()
+            "main: solo worker joined".println()
+
+            "".println()
+
+            // 2) Two workers running in parallel — output should interleave.
+            "--- Two parallel workers ---".println()
+            var wa = new Worker("A", 4, 150L)
+            var wb = new Worker("B", 4, 220L)
+
+            var ra = wa as Runnable
+            var rb = wb as Runnable
+
+            var ta = new Thread(ra)
+            ta.name = "worker-a"
+
+            var tb = new Thread(rb)
+            tb.name = "worker-b"
+
+            "main: starting A and B".println()
+            ta.start()
+            tb.start()
+
+            "main: main thread sleeps 500ms while A and B run".println()
+            Thread.sleep(500L)
+            "main: main thread woke; joining A".println()
+            ta.join()
+            "main: joining B".println()
+            tb.join()
+            "main: both workers joined".println()
+
+            "".println()
+            "=== Done ===".println()
+        }
+    }
+}

@@ -1,0 +1,29 @@
+namespace Am.Threading {
+
+    // Conventional task-thread categories used as keys into the
+    // TaskScheduler's runner map. Plain Int constants on a class
+    // rather than a true enum — AmLang doesn't have first-class
+    // enums yet, and this lets us key a HashMap<Int, TaskRunner>
+    // without boxing.
+    //
+    // Each unique value spawns a *separate* worker thread the first
+    // time it is scheduled to; tasks scheduled with the same value
+    // run serially on that one worker. Pick the smallest set that
+    // matches your application's concurrency model.
+    //
+    //   IO         — network / disk; one worker drains long blocking calls
+    //   Main       — UI-affine work; today still its own worker thread,
+    //                until TaskScheduler grows a `pumpMainThread()` for
+    //                proper main-thread dispatch (see TaskScheduler.aml)
+    //   Background — low-priority misc work that's safe to defer
+    //
+    // Callers can pass any Int — these constants are conventions, not
+    // a closed set.
+    class TaskThreadType {
+        import Am.Lang
+
+        static var IO: Int = 1
+        static var Main: Int = 2
+        static var Background: Int = 3
+    }
+}

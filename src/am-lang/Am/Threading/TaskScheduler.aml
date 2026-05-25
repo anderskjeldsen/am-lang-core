@@ -1,0 +1,157 @@
+namespace Am.Threading {
+
+    // Process-wide scheduler that dispatches short-lived tasks onto
+    // per-category worker threads. One TaskRunner per distinct
+    // threadType — created lazily on first schedule() — drains its
+    // own FIFO of tasks in submission order.
+    //
+    // Typical use:
+    //
+    //   TaskScheduler.schedule(TaskThreadType.IO, () => {
+    //       var client = new AminetClient()
+    //       var r = client.search("lha")
+    //       // hand the result back to the UI somehow
+    //       return true
+    //   })
+    //
+    // Tasks must be short-lived: they run *serially* per threadType,
+    // so a single blocking task on `IO` blocks every other IO task
+    // behind it. Pick a different threadType (or rework the call)
+    // when that's not what you want.
+    //
+    // Shutdown: TaskScheduler stops all runners automatically when
+    // the process exits via the compiler's `#runOnExit` hook on
+    // `stopAll()`. Applications don't (and shouldn't) need to call it
+    // directly — getting it wrong leaves runners alive past their
+    // dependencies' teardown, which is exactly the failure mode the
+    // hook prevents.
+    //
+    // Improvements worth pursuing once the basics are exercised:
+    //
+    //   1. Wake the runner with a Condition variable instead of the
+    //      20 ms idle poll in TaskRunner. Needs a new native sync
+    //      primitive (libc: pthread_cond_*; amigaos: SignalSemaphore
+    //      + Signal()/Wait()). Drops latency to ~0 and idle CPU to 0.
+    //
+    //   2. Return a handle (Promise<T> / Future<T>) from schedule()
+    //      so callers can `await` the result instead of capturing a
+    //      mutable variable in the lambda. Depends on
+    //      Am.Async.Continuation gaining a value-carrying generic.
+    //
+    //   3. True main-thread dispatch. Today TaskThreadType.Main is
+    //      just another worker thread. For real "marshal back to the
+    //      UI thread" semantics, add a `pumpMainThread()` that the
+    //      application's event loop calls and have the Main runner
+    //      hand its queue to that pump rather than spawning a thread.
+    //
+    //   4. Per-task initialisation hooks on Amiga — OpenLibrary
+    //      bsdsocket.library and InitAmiSSL inside each worker task
+    //      so HTTP/HTTPS calls just work cross-task. (Without this,
+    //      worker-thread network calls fail because bsdsocket and
+    //      AmiSSL state are per-task on AmigaOS.)
+    //
+    //   5. Bounded queue / backpressure — today the queue can grow
+    //      without limit. A high-water mark with either drop-oldest
+    //      or block-submitter behaviour would prevent runaway.
+    //
+    //   6. Cancellation — schedule() returns a token whose cancel()
+    //      either removes the task from the queue if not yet started
+    //      or signals it via a flag the lambda can poll.
+    //
+    //   7. Drain on shutdown — wait for the queue to empty (or up to
+    //      a deadline) before stopAll() signals stop, so in-flight
+    //      work isn't dropped.
+    class TaskScheduler {
+        import Am.Lang
+        import Am.Collections
+
+        // threadType → its dedicated TaskRunner. Lazy. Guarded by
+        // `runnersMutex` so the very first schedule()s on the same
+        // threadType from two callers don't double-spawn the runner.
+        private static var runners: HashMap<Int, TaskRunner> = new HashMap<Int, TaskRunner>()
+
+        // Parallel list of every runner ever created. Used by
+        // stopAll() to iterate without going through `runners.keys()`
+        // — that chain trips the binder, see stopAll() comment.
+        private static var allRunners: List<TaskRunner> = List.newList<TaskRunner>()
+
+        private static var runnersMutex: Mutex = new Mutex()
+
+        // Queue a lambda for execution on the runner associated with
+        // `threadType`. Returns once the task has been enqueued — the
+        // runner picks it up on its next poll.
+        //
+        // `task` is invoked at most once. Its return value is ignored
+        // (the Bool is there because AmLang has no `() => Void`).
+        static fun schedule(threadType: Int, task: () => Bool) {
+            var runner = TaskScheduler.ensureRunner(threadType)
+            var wrapper = new Task(task)
+            runner.submit(wrapper)
+        }
+
+        // Look up — and on first use create + start — the runner for
+        // `threadType`. Held under `runnersMutex` so that two
+        // concurrent first-schedule() calls cannot both miss the map
+        // and each spawn their own runner.
+        //
+        // HashMap.get throws KeyNotFoundException on missing key (not
+        // null), so we gate the lookup with containsKey().
+        private static fun ensureRunner(threadType: Int): TaskRunner {
+            TaskScheduler.runnersMutex.lock()
+            try {
+                var runner: TaskRunner = null
+                if (TaskScheduler.runners.containsKey(threadType)) {
+                    runner = TaskScheduler.runners.get(threadType)
+                } else {
+                    runner = new TaskRunner()
+                    runner.name = "task-runner-" + threadType.toString()
+                    TaskScheduler.runners.set(threadType, runner)
+                    TaskScheduler.allRunners.add(runner)
+                    runner.start()
+                }
+                return runner
+            } finally {
+                TaskScheduler.runnersMutex.unlock()
+            }
+        }
+
+        // Signal every active runner to stop, then wait briefly for
+        // them to exit their poll loop. Invoked automatically by the
+        // generated startup.c via `#runOnExit`, between `main()` returning
+        // and the runtime tearing down static properties — that ordering
+        // matters because runners may hold references to AmLang objects
+        // we need to release cleanly.
+        //
+        // `private` so application code cannot call it — the compiler
+        // is the only legitimate caller. Visibility is enforced at
+        // AmLang resolution time only; the generated C symbol the
+        // compiler emits a call to from startup.c is unaffected by
+        // the `private` modifier.
+        #runOnExit
+        private static fun stopAll() {
+            TaskScheduler.runnersMutex.lock()
+            try {
+                // Walk `allRunners` rather than `runners.keys()` — the
+                // HashMap-keys-into-List chain trips the binder
+                // ("Can't inject as operator on expression …").
+                // ensureRunner keeps the two structures in sync.
+                var list = TaskScheduler.allRunners
+                var i = 0
+                while (i < list.getSize()) {
+                    var runner = list.get(i)
+                    runner.stop()
+                    i = i + 1
+                }
+            } finally {
+                TaskScheduler.runnersMutex.unlock()
+            }
+
+            // Give the runners one idle-poll's worth of time to notice
+            // the flag and leave their loop. We don't bother joining —
+            // the workers themselves never touch shared state after
+            // setting the flag, and the runtime teardown that follows
+            // doesn't depend on the threads being fully reaped.
+            Thread.sleep(50L)
+        }
+    }
+}

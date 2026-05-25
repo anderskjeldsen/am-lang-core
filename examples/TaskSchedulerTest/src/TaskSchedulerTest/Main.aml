@@ -1,0 +1,76 @@
+namespace TaskSchedulerTest {
+
+    class Main {
+        import Am.Lang
+        import Am.Threading
+
+        static fun main() {
+            "=== TaskScheduler smoke test ===".println()
+
+            // Schedule three IO tasks; they should run serially on the
+            // IO runner in submission order.
+            //
+            // Lambdas hoisted to local `var x: () => Bool = ...` so the
+            // amlc renderer sees a concrete function type — passing the
+            // lambda inline trips the "Unable to convert AnonymousFunction
+            // to ..." validator the same way `new Foo(() => {...})` does.
+            "main: scheduling 3 IO tasks".println()
+            var io1: () => Bool = () => {
+                "[IO] task 1 start".println()
+                Thread.sleep(150L)
+                "[IO] task 1 done".println()
+                return true
+            }
+            TaskScheduler.schedule(TaskThreadType.IO, io1)
+
+            var io2: () => Bool = () => {
+                "[IO] task 2 start".println()
+                Thread.sleep(150L)
+                "[IO] task 2 done".println()
+                return true
+            }
+            TaskScheduler.schedule(TaskThreadType.IO, io2)
+
+            var io3: () => Bool = () => {
+                "[IO] task 3 start".println()
+                Thread.sleep(150L)
+                "[IO] task 3 done".println()
+                return true
+            }
+            TaskScheduler.schedule(TaskThreadType.IO, io3)
+
+            // Schedule two Background tasks. These run on a SEPARATE
+            // worker, so they overlap with the IO tasks in time even
+            // though each runner is internally serial.
+            "main: scheduling 2 Background tasks".println()
+            var bgA: () => Bool = () => {
+                "[BG] task A start".println()
+                Thread.sleep(200L)
+                "[BG] task A done".println()
+                return true
+            }
+            TaskScheduler.schedule(TaskThreadType.Background, bgA)
+
+            var bgB: () => Bool = () => {
+                "[BG] task B start".println()
+                Thread.sleep(200L)
+                "[BG] task B done".println()
+                return true
+            }
+            TaskScheduler.schedule(TaskThreadType.Background, bgB)
+
+            // Main ticks while everything runs. Total work is
+            // 3 * 150 = 450 ms on IO, 2 * 200 = 400 ms on Background;
+            // they should both finish well within 1.5 s.
+            for (i = 0 to 8) {
+                ("main: tick " + i.toString()).println()
+                Thread.sleep(200L)
+            }
+
+            // No manual stop — the compiler injects a call to
+            // TaskScheduler.stopAll() into startup.c via #runOnExit
+            // so application code never has to think about it.
+            "=== Done ===".println()
+        }
+    }
+}
