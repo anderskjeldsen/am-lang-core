@@ -115,6 +115,14 @@ function_result Am_Lang_String_print_0(aobject * const this)
 	} else {
 		printf("null");
 	}
+	// When stdout is redirected to a file on AmigaOS (Startup-Sequence
+	// `app >output.log` pattern), libnix's stdio defaults to full
+	// buffering. A long-running program that doesn't exit cleanly
+	// (e.g. cli-search waiting on async network) never flushes — so a
+	// reader watching output.log sees nothing even though the prints
+	// ran. Flushing after every line is the simplest fix and matches
+	// what a developer reading print output expects.
+	fflush(stdout);
 
 
 __exit: ;

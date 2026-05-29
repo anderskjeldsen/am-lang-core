@@ -43,6 +43,7 @@ void free_memory_pool(memory_pool *pool) {
 }
 
 void free_pool_banks(memory_pool *pool) {
+    printf("[teardown] free_pool_banks: enter\n"); fflush(stdout);
     pool_bank *current = pool->first_bank;
     while(current != NULL) {
         if (current->used_units > 0) {
@@ -52,6 +53,7 @@ void free_pool_banks(memory_pool *pool) {
         free(current);
         current = next;
     }
+    printf("[teardown] free_pool_banks: done\n"); fflush(stdout);
 }
 
 pool_bank *create_pool_bank(memory_pool *pool, size_t units) {

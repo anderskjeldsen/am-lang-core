@@ -38,27 +38,21 @@ namespace Am.Threading {
     //      mutable variable in the lambda. Depends on
     //      Am.Async.Continuation gaining a value-carrying generic.
     //
-    //   3. True main-thread dispatch. Today TaskThreadType.Main is
-    //      just another worker thread. For real "marshal back to the
-    //      UI thread" semantics, add a `pumpMainThread()` that the
-    //      application's event loop calls and have the Main runner
-    //      hand its queue to that pump rather than spawning a thread.
-    //
-    //   4. Per-task initialisation hooks on Amiga — OpenLibrary
+    //   3. Per-task initialisation hooks on Amiga — OpenLibrary
     //      bsdsocket.library and InitAmiSSL inside each worker task
     //      so HTTP/HTTPS calls just work cross-task. (Without this,
     //      worker-thread network calls fail because bsdsocket and
     //      AmiSSL state are per-task on AmigaOS.)
     //
-    //   5. Bounded queue / backpressure — today the queue can grow
+    //   4. Bounded queue / backpressure — today the queue can grow
     //      without limit. A high-water mark with either drop-oldest
     //      or block-submitter behaviour would prevent runaway.
     //
-    //   6. Cancellation — schedule() returns a token whose cancel()
+    //   5. Cancellation — schedule() returns a token whose cancel()
     //      either removes the task from the queue if not yet started
     //      or signals it via a flag the lambda can poll.
     //
-    //   7. Drain on shutdown — wait for the queue to empty (or up to
+    //   6. Drain on shutdown — wait for the queue to empty (or up to
     //      a deadline) before stopAll() signals stop, so in-flight
     //      work isn't dropped.
     class TaskScheduler {
@@ -77,16 +71,81 @@ namespace Am.Threading {
 
         private static var runnersMutex: Mutex = new Mutex()
 
-        // Queue a lambda for execution on the runner associated with
-        // `threadType`. Returns once the task has been enqueued — the
-        // runner picks it up on its next poll.
+        // Queue + lock for the special TaskThreadType.Main bucket.
+        // Main tasks are NOT drained by a worker thread — the
+        // application's main thread drains them by calling
+        // `handleMainTasks()` from its own event loop. Until that call
+        // happens, tasks just accumulate here; if it never happens,
+        // they sit until process exit.
+        private static var mainQueue: List<Task> = List.newList<Task>()
+        private static var mainMutex: Mutex = new Mutex()
+
+        // Queue a lambda for execution. Routing depends on `threadType`:
         //
-        // `task` is invoked at most once. Its return value is ignored
-        // (the Bool is there because AmLang has no `() => Void`).
+        //   * TaskThreadType.Main — appended to the main-thread queue.
+        //     Runs on whichever thread next calls `handleMainTasks()`
+        //     (the application is expected to call it from main).
+        //
+        //   * anything else — appended to that threadType's runner.
+        //     The runner is created + started on first schedule().
+        //
+        // Returns once the task has been enqueued. `task` is invoked
+        // at most once; its return value is ignored (the Bool is there
+        // because AmLang has no `() => Void`).
         static fun schedule(threadType: Int, task: () => Bool) {
-            var runner = TaskScheduler.ensureRunner(threadType)
             var wrapper = new Task(task)
+            if (threadType == TaskThreadType.Main) {
+                TaskScheduler.mainMutex.lock()
+                try {
+                    TaskScheduler.mainQueue.add(wrapper)
+                } finally {
+                    TaskScheduler.mainMutex.unlock()
+                }
+                return
+            }
+            var runner = TaskScheduler.ensureRunner(threadType)
             runner.submit(wrapper)
+        }
+
+        // Drain every Main task currently in the queue and run each
+        // synchronously on the calling thread. Returns the number of
+        // tasks executed (0 if the queue was empty). Blocks the caller
+        // for the combined runtime of the drained tasks — there is no
+        // worker, no async dispatch; this *is* the dispatch.
+        //
+        // Intended to be called from the program's main thread, on
+        // whatever cadence its event loop allows (between input ticks,
+        // at the top of a frame, etc.). Tasks scheduled while
+        // handleMainTasks() is running do NOT run in this call — the
+        // queue snapshot is taken under the mutex, then drained without
+        // the lock held, so new producers can keep submitting without
+        // waiting. Anything they add is picked up by the next call.
+        //
+        // Each task's exceptions are caught by Task.execute(), so one
+        // misbehaving task does not stop subsequent tasks in this drain.
+        static fun handleMainTasks(): Int {
+            var drained = List.newList<Task>()
+            TaskScheduler.mainMutex.lock()
+            try {
+                var q = TaskScheduler.mainQueue
+                var i = 0
+                while (i < q.getSize()) {
+                    drained.add(q.get(i))
+                    i = i + 1
+                }
+                TaskScheduler.mainQueue = List.newList<Task>()
+            } finally {
+                TaskScheduler.mainMutex.unlock()
+            }
+
+            var count = 0
+            var j = 0
+            while (j < drained.getSize()) {
+                drained.get(j).execute()
+                count = count + 1
+                j = j + 1
+            }
+            return count
         }
 
         // Look up — and on first use create + start — the runner for

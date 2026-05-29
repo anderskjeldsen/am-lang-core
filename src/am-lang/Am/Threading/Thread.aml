@@ -1,16 +1,74 @@
-
 namespace Am.Threading {
 
     #implementationPlatforms "libc", "amigaos", "morphos-ppc"
     native class Thread(var runnable: Runnable) {
         import Am.Lang
-        
+        import Am.Collections
+
         var name: String
+
+        // Per-thread finalizers run on the thread itself, in reverse
+        // registration order, after `runnable.run()` returns but before
+        // the native task is torn down. Used by code that has to clean
+        // up task-bound state — most importantly per-task AmigaOS
+        // library opens (bsdsocket.library, amissl), which the library
+        // tracks by `FindTask(NULL)` and would leak if not closed from
+        // the same task that opened them.
+        //
+        // Wrapped in `ThreadFinalizer` rather than stored as a bare
+        // `List<() => Bool>` because direct lists of function types
+        // trip the binder; the wrapper class mirrors how
+        // `Am.Threading.Task` carries its `() => Bool`.
+        //
+        // Initialised lazily on first `addFinalizer()` rather than in
+        // an init block so threads that never touch task-bound libs
+        // pay zero overhead.
+        private var finalizers: List<ThreadFinalizer> = null
+
+        fun addFinalizer(fn: () => Bool) {
+            if (this.finalizers == null) {
+                this.finalizers = List.newList<ThreadFinalizer>()
+            }
+            this.finalizers.add(new ThreadFinalizer(fn))
+        }
+
+        // Dispatched by the native thread cleanup path (amigaos
+        // Thread.c#_InitTask) right after the user runnable returns.
+        // Reverse order matches the typical stack-of-cleanups idiom —
+        // a later registrant assumes earlier registrants are still live.
+        // `private` so application code doesn't trigger the cleanup
+        // mid-flight; the native side is the only legitimate caller.
+        private fun runFinalizers() {
+            if (this.finalizers == null) {
+                return
+            }
+            var i = this.finalizers.getSize() - 1
+            while (i >= 0) {
+                var w = this.finalizers.get(i)
+                w.invoke()
+                i--
+            }
+        }
 
         native fun start()
         native fun join()
 
-        native static fun getCurrent()
+        native static fun getCurrent(): Thread
         native static fun sleep(milliseconds: Long)
+    }
+
+    // Box for a single thread-finalizer lambda. Same shape as
+    // `Am.Threading.Task` — keeps `List<ThreadFinalizer>` off the
+    // List-of-function-type binder path.
+    class ThreadFinalizer(var fn: () => Bool) {
+        import Am.Lang
+
+        fun invoke() {
+            var f = this.fn
+            if (f == null) {
+                return
+            }
+            f()
+        }
     }
 }

@@ -33,12 +33,9 @@ function_result Am_Threading_Thread__native_init_0(aobject * const this)
 	}
 
 	SysBase = *((struct ExecBase **)4UL);
-	printf("Dos base: %d\n", (unsigned int) DOSBase);
-	if (DOSBase == NULL) {
-		DOSBase = (struct DosLibrary *) __ensure_library("dos.library", 0L);
-	}
-
-	printf("TODO: implement native function Am_Threading_Thread__native_init_0\n");
+	// dos.library is opened by amiga-gcc's C runtime before main()
+	// runs (printf above would crash without it), so the previous
+	// defensive __ensure_library("dos.library") here was dead code.
 	Am_Threading_Thread_data *data = malloc(sizeof(Am_Threading_Thread_data));
 	this->object_properties.class_object_properties.object_data.value.custom_value = data;
 	data->stack_size = 4000 * 1024; // TODO
@@ -105,8 +102,26 @@ void Am_Threading_Thread__InitTask()
 			// which is left NULL for interfaces — silent crash on the worker task.
 			Am_Lang_Runnable_f_run_0_T rFunc = (Am_Lang_Runnable_f_run_0_T) runnable->object_properties.iface_reference.iface_implementation->functions[0];
 			rFunc(runnable->object_properties.iface_reference.implementation_object);
+
+			printf("[_InitTask] rFunc returned; about to runFinalizers (task=%p, thread=%p)\n",
+			       (void *) own_task, (void *) thread);
+			fflush(stdout);
+
+			// Run user-registered finalizers on this task, in reverse
+			// order, before flipping `done`. The typical caller is the
+			// per-task bsdsocket / amissl cleanup that needs to call
+			// CloseLibrary from inside the same task that called
+			// OpenLibrary — see Am.Net.Socket's nativeInit pattern.
+			// Calling on this task (not the joiner) means finalizers
+			// still see FindTask(NULL) == own_task.
+			Am_Threading_Thread_f_runFinalizers_0(thread);
+			printf("[_InitTask] runFinalizers returned\n");
+			fflush(stdout);
+
 			Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) thread->object_properties.class_object_properties.object_data.value.custom_value;
 			data->done = true;
+			printf("[_InitTask] flagged done; dropping worker ref\n");
+			fflush(stdout);
 
 			// Drop the worker's reference on `thread` last — every
 			// access above this line happens while `thread` is still
@@ -114,6 +129,8 @@ void Am_Threading_Thread__InitTask()
 			// closes the busy-wait race above where `tc_UserData` is
 			// set only AFTER the new task is already running.
 			__decrease_reference_count(thread);
+			printf("[_InitTask] worker exiting cleanly\n");
+			fflush(stdout);
 		}
 		else
 		{
@@ -148,10 +165,29 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 //	printf("stack_size: %d\n", data->stack_size);
 //	printf("thread name: %s\n", name_holder->string_value);
 
+	// Inherit the calling process's CLI streams so println in the
+	// worker shows up alongside main's println (notably under
+	// `Startup-Sequence: app >output.log` headless setups). Without
+	// NP_Output/NP_Input the new process gets NULL handles and any
+	// printf is silently dropped — which masks runtime errors emitted
+	// from worker tasks. NP_CloseOutput/NP_CloseInput=FALSE keeps the
+	// parent owning the handles so a worker exit doesn't close the
+	// CLI's stdout from under main.
+	struct Process *parent_proc = (struct Process *) FindTask(NULL);
+	BPTR parent_out = parent_proc->pr_COS;
+	BPTR parent_in = parent_proc->pr_CIS;
+	BPTR parent_err = parent_proc->pr_CES;
+
 	struct TagItem tags[] = {
 		NP_Entry, (ULONG) fptr,
 		NP_StackSize, data->stack_size,
 		NP_Name, (ULONG) name_strptr,
+		NP_Output, (ULONG) parent_out,
+		NP_Input, (ULONG) parent_in,
+		NP_Error, (ULONG) parent_err,
+		NP_CloseOutput, FALSE,
+		NP_CloseInput, FALSE,
+		NP_CloseError, FALSE,
 		TAG_DONE, TAG_DONE,
 	};
 

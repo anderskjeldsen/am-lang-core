@@ -39,8 +39,19 @@ void * __ensure_library(unsigned char * __lib_name, unsigned int version)
 	}
 }
 
+// Auto-runs from the C runtime's atexit chain after main() returns,
+// so every library that came in through __ensure_library
+// (intuition, asl, cybergraphics, …) gets CloseLibrary'd on shutdown
+// without the AmLang side having to plumb #runOnExit for it. The
+// constructor/destructor attribute is GCC syntax that amiga-gcc
+// honours; m68k crt0 calls the destructor chain on normal exit.
+//
+// Was orphaned before — defined, never called — so libs we opened
+// stayed open across program exit. Wiring it to __attribute__((destructor))
+// makes the existing tracker actually do its job.
+__attribute__((destructor))
 void __release_libraries() {
-	printf("Release libraries");
+	printf("Release libraries\n");
 	lib_node * __current_lib_node = __first_lib_node;
 	__first_lib_node = NULL;
 	while ( __current_lib_node != NULL) {

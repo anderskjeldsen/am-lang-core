@@ -12,9 +12,11 @@ namespace Am.Threading {
     // matches your application's concurrency model.
     //
     //   IO         — network / disk; one worker drains long blocking calls
-    //   Main       — UI-affine work; today still its own worker thread,
-    //                until TaskScheduler grows a `pumpMainThread()` for
-    //                proper main-thread dispatch (see TaskScheduler.aml)
+    //   Main       — UI-affine work that must run on the program's main
+    //                thread. NOT auto-drained: the application calls
+    //                TaskScheduler.handleMainTasks() from its event loop
+    //                to run anything queued. Tasks scheduled here that
+    //                never get a pump call sit until process exit.
     //   Background — low-priority misc work that's safe to defer
     //
     // Callers can pass any Int — these constants are conventions, not
@@ -25,5 +27,11 @@ namespace Am.Threading {
         static var IO: Int = 1
         static var Main: Int = 2
         static var Background: Int = 3
+        // Heavier CPU work that would block the IO worker if it
+        // shared the queue — HTML / JSON parsing of a fetched
+        // body, expensive transforms over a buffer, etc. Lives on
+        // a dedicated runner so a long parse doesn't stall the
+        // next IO task waiting behind it.
+        static var Worker: Int = 4
     }
 }

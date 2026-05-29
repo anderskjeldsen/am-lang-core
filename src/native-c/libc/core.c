@@ -68,7 +68,8 @@ void __debug_print_string_if_string(aobject * const obj, const char * prefix) {
 #endif 
 
 
-void __mark_root_objects() {    
+void __mark_root_objects() {
+    printf("[teardown] __mark_root_objects: enter\n"); fflush(stdout);
     class_static *current = __first_class_static;
     while(current != NULL) {
         if (current->type == class) {
@@ -76,6 +77,7 @@ void __mark_root_objects() {
         }
         current = current->next;
     }
+    printf("[teardown] __mark_root_objects: done\n"); fflush(stdout);
 }
 
 void __mark_object(aobject * const obj) {
@@ -138,11 +140,15 @@ void __sweep_unmarked_objects() {
     #endif
     #endif
 
+    printf("[teardown] __sweep_unmarked_objects: enter\n"); fflush(stdout);
+
     int old_count = 1;
     int new_count = 0;
     aobject * current = NULL;
+    int pass = 0;
 
     while(old_count != new_count) {
+        printf("[teardown] sweep pass %d (was %d swept)\n", pass++, new_count); fflush(stdout);
         old_count = new_count;
         new_count = 0;
         current = __first_object;
@@ -150,10 +156,11 @@ void __sweep_unmarked_objects() {
             sweep_result result = __sweep_object(current);
             if (result.is_swept) {
                 new_count++;
-            } 
+            }
             current = result.next;
         }
     }
+    printf("[teardown] sweep main loop done after %d passes\n", pass); fflush(stdout);
 
     current = __first_detached_object;
     while(current != NULL) {
@@ -162,9 +169,10 @@ void __sweep_unmarked_objects() {
         current = next;
     }
     __first_detached_object = NULL;
+    printf("[teardown] sweep detached list done\n"); fflush(stdout);
 
     __clear_marks();
-
+    printf("[teardown] __sweep_unmarked_objects: done\n"); fflush(stdout);
 }
 
 void __clear_marks() {
@@ -683,6 +691,7 @@ void __detach_object(aobject * const __obj) {
 }
 
 void __dereference_static_properties() {
+    printf("[teardown] __dereference_static_properties: enter\n"); fflush(stdout);
     class_static *c = __first_class_static;
     aclass *class_ref = &__class_ref_class_alias;
 
@@ -698,6 +707,7 @@ void __dereference_static_properties() {
         }
         c = c->next;
     }
+    printf("[teardown] __dereference_static_properties: done\n"); fflush(stdout);
 }
 
 void __dereference_static_properties_for_class(class_static * const __class_static) {
@@ -753,6 +763,7 @@ void __mark_static_properties(class_static * const __class_static) {
 }
 
 void print_allocated_objects() {
+    printf("[teardown] print_allocated_objects: enter (then process returns to amisslauto destructor)\n"); fflush(stdout);
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     printf("Allocated objects %d\n", __allocation_count);
 
