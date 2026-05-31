@@ -188,6 +188,7 @@ namespace Am.Threading {
         // the `private` modifier.
         #runOnExit
         private static fun stopAll() {
+            "Close all schedulers".println()
             TaskScheduler.runnersMutex.lock()
             try {
                 // Walk `allRunners` rather than `runners.keys()` — the

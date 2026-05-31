@@ -20,7 +20,40 @@ static inline void __set_primitive_nullable(nullable_value * nullable_value, boo
     unsigned char f = nullable_value->flags;
     f &= ~PRIMITIVE_NULLABLE;
     f |= is_primitive_nullable ? PRIMITIVE_NULLABLE : 0;
-    nullable_value->flags = f; 
+    nullable_value->flags = f;
+}
+
+// Predicate: does `v` match the corruption fingerprint we keep hitting
+// at __first_object? Non-null pointer with low 16 bits zero and high
+// 16 bits non-zero — real malloc'd aobjects don't land on 64K-aligned
+// addresses by chance.
+static inline int __is_suspicious_object_ptr(aobject *v) {
+    if (v == NULL) return 0;
+    long lv = (long) v;
+    if (lv > 0) {
+        return 0;
+    }
+/*
+    unsigned long uv = (unsigned long) v;
+    if ((uv & 0xFFFFUL) != 0) return 0;
+    if ((uv >> 16) == 0) return 0;
+    */
+    return 1;
+}
+
+// Instrumented setter for the global object-list head. Quiet on normal
+// writes — only logs when the new value matches the corruption
+// fingerprint we're hunting. The site label says which of the three
+// active __first_object writers (increase / decrease / detach) saw
+// the bad value, so the chain back to the caller is one greppable
+// hop away.
+static inline void __set_first_object(aobject *v, const char *site) {
+    if (__is_suspicious_object_ptr(v)) {
+        printf("[firstobj.set] SUSPICIOUS site=%s value=%p\n", site, (void*)v);
+        fflush(stdout);
+        exit(0);
+    }
+    __first_object = v;
 }
 
 static inline void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null) {
@@ -191,13 +224,36 @@ static inline void __decrease_property_reference_count(aobject * const __obj) {
 }
 */
 static inline void __increase_property_reference_count(aobject * const __obj) {
+    // Bottleneck tripwire — every path that eventually mutates
+    // __first_object via increase comes through here, including the
+    // direct calls amlc emits in generated C (Array.c / File.c /
+    // etc.) that skip the higher-level __set_property wrappers.
+    // Dumps as much context as we can safely read off the bad ptr,
+    // then exits so the user has a clean log to share.
+    if (__is_suspicious_object_ptr(__obj)) {
+        printf("[increase_propref] SUSPICIOUS obj=%p", (void*)__obj); fflush(stdout);
+        // Defensively probe class_ptr without trusting it.
+        unsigned long uc = (unsigned long)__obj->class_ptr;
+        printf(" class_ptr=%p", (void*)uc); fflush(stdout);
+        if (__obj->class_ptr != NULL) {
+            const char *nm = __obj->class_ptr->name;
+            printf(" name_ptr=%p", (void*)nm); fflush(stdout);
+            if (nm != NULL) {
+                printf(" name=%s", nm); fflush(stdout);
+            }
+        }
+        printf(" propref=%d ref=%d\n",
+            __obj->property_reference_count, __obj->reference_count);
+        fflush(stdout);
+        exit(0);
+    }
     if (__obj->property_reference_count == 0) {
         __obj->next = __first_object;
 
         if (__first_object != NULL) {
             __first_object->prev = __obj;
         }
-        __first_object = __obj;
+        __set_first_object(__obj, "increase_property_reference_count");
     }
     __obj->property_reference_count++;
     #if defined(DEBUG) && defined(ARCLOG)
@@ -217,6 +273,24 @@ static inline void __set_property(aobject * const __obj, int const __index, null
         __decrease_property_reference_count(__prop->nullable_value.value.object_value);
     }
     if ( !__is_primitive(__prop_value) && __prop_value.value.object_value != NULL ) {
+        // Tripwire: when the value being assigned to a property is a
+        // suspicious object pointer (the 0xff1d0000 / 0xffd10000
+        // fingerprint, generalised as "low 16 bits zero"), log the
+        // parent class + property index so we can map back to the
+        // exact field. Property name itself isn't easy to look up
+        // safely from here — grep the build output for
+        // `create_property_info(<index>, "<name>", ..., &<parent>)`
+        // to translate.
+        if (__is_suspicious_object_ptr(__prop_value.value.object_value)) {
+            const char *parent = "(unknown)";
+            if (__obj != NULL && __obj->class_ptr != NULL && __obj->class_ptr->name != NULL) {
+                parent = __obj->class_ptr->name;
+            }
+            printf("[set_property] SUSPICIOUS parent=%s index=%d value=%p\n",
+                parent, __index, (void*)__prop_value.value.object_value);
+            fflush(stdout);
+            exit(0);
+        }
         __increase_property_reference_count(__prop_value.value.object_value);
     }
 
@@ -242,9 +316,19 @@ static inline bool __set_property_safe(aobject * const __obj, int const __index,
     }
 
     if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
-        __decrease_property_reference_count(__prop->nullable_value.value.object_value);        
+        __decrease_property_reference_count(__prop->nullable_value.value.object_value);
     }
     if ( !__is_primitive(__prop_value) && __prop_value.value.object_value != NULL ) {
+        if (__is_suspicious_object_ptr(__prop_value.value.object_value)) {
+            const char *parent = "(unknown)";
+            if (__obj != NULL && __obj->class_ptr != NULL && __obj->class_ptr->name != NULL) {
+                parent = __obj->class_ptr->name;
+            }
+            printf("[set_property_safe] SUSPICIOUS parent=%s index=%d value=%p\n",
+                parent, __index, (void*)__prop_value.value.object_value);
+            fflush(stdout);
+            exit(0);
+        }
         __increase_property_reference_count(__prop_value.value.object_value);
     }
 
@@ -259,6 +343,16 @@ static inline void __set_static_property(class_static * const __class_static, in
     }
 
     if ( !__is_primitive(__prop_value) && __prop_value.value.object_value != NULL ) {
+        if (__is_suspicious_object_ptr(__prop_value.value.object_value)) {
+            const char *parent = "(unknown)";
+            if (__class_static != NULL && __class_static->name != NULL) {
+                parent = __class_static->name;
+            }
+            printf("[set_static_property] SUSPICIOUS parent=%s index=%d value=%p\n",
+                parent, __index, (void*)__prop_value.value.object_value);
+            fflush(stdout);
+            exit(0);
+        }
         __increase_property_reference_count(__prop_value.value.object_value);
     }
     __prop->nullable_value = __prop_value;
@@ -290,6 +384,11 @@ static inline void __increase_reference_count_nullable_value(nullable_value __va
 
 static inline void __increase_property_reference_count_nullable_value(nullable_value __value) {
     if ( !__is_primitive(__value) && __value.value.object_value != NULL ) {
+        if (__is_suspicious_object_ptr(__value.value.object_value)) {
+            printf("[increase_propref_nv] SUSPICIOUS value=%p\n", (void*)__value.value.object_value);
+            fflush(stdout);
+            exit(0);
+        }
         __increase_property_reference_count(__value.value.object_value);
     }
 }

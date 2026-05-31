@@ -26,8 +26,11 @@
 
 bool __conditional_logging_on = false;
 
-#ifdef DEBUG
+// Always-defined so callers compiled with DEBUG can link even when
+// core.c itself was compiled without DEBUG. Body only does anything
+// when DEBUG/TRACKOBJECTS is on (object_id only exists then).
 void __print_memory_header(aobject * const obj, const char * prefix) {
+#if defined(DEBUG) || defined(TRACKOBJECTS)
     if (obj != NULL && obj->object_properties.class_object_properties.object_id == 946) {
         unsigned char *p = (unsigned char *)obj - 16;
         printf("%s - Memory header bytes: ", prefix);
@@ -36,8 +39,10 @@ void __print_memory_header(aobject * const obj, const char * prefix) {
         }
         printf("\n");
     }
-}
+#else
+    (void)obj; (void)prefix;
 #endif
+}
 
 int __allocation_count = 0;
 #define MAX_ALLOCATIONS 1024 * 50
@@ -47,6 +52,7 @@ aobject * allocations[MAX_ALLOCATIONS];
 int allocation_index = 0;
 #endif
 
+aobject * __bla = NULL;
 aobject * __first_object = NULL;
 aobject * __first_detached_object = NULL;
 //aclass * __first_class = NULL;
@@ -149,10 +155,53 @@ void __sweep_unmarked_objects() {
 
     while(old_count != new_count) {
         printf("[teardown] sweep pass %d (was %d swept)\n", pass++, new_count); fflush(stdout);
+        // Diagnostic enumeration: walk the global object list and
+        // print every entry's pointer + class name BEFORE we start
+        // sweeping this pass. The last line printed before any hang
+        // names the object whose release function blocked.
+        // Defensive about null class_ptr / null name so a corrupted
+        // entry can't itself hang inside printf's "%s" walk —
+        // staged prints with fflush between each step.
+        {
+            aobject *probe = __first_object;
+            int idx = 0;
+            while (probe != NULL) {
+                printf("[teardown] queue[%d] obj=%p", idx, (void*)probe); fflush(stdout);
+                printf(" class=%p", (void*)probe->class_ptr); fflush(stdout);
+                if (probe->class_ptr != NULL) {
+                    const char *nm = probe->class_ptr->name;
+                    printf(" name_ptr=%p", (void*)nm); fflush(stdout);
+                    if (nm != NULL) {
+                        printf(" name=%s", nm); fflush(stdout);
+                    }
+                }
+                printf(" rc=%d propref=%d marked=%d pending=%d\n",
+                    probe->reference_count,
+                    probe->property_reference_count,
+                    probe->marked,
+                    probe->pending_deallocation);
+                fflush(stdout);
+                probe = probe->next;
+                idx++;
+                if (idx > 100000) {
+                    printf("[teardown] queue walk aborted: >100000 entries — cycle?\n"); fflush(stdout);
+                    break;
+                }
+            }
+            printf("[teardown] queue total = %d\n", idx); fflush(stdout);
+        }
+
         old_count = new_count;
         new_count = 0;
         current = __first_object;
         while(current != NULL) {
+            // Stage the per-object print so a hang inside the release
+            // function still leaves the pointer visible in the log.
+            printf("[teardown] sweep -> obj=%p", (void*)current); fflush(stdout);
+            if (current->class_ptr != NULL && current->class_ptr->name != NULL) {
+                printf(" name=%s", current->class_ptr->name);
+            }
+            printf("\n"); fflush(stdout);
             sweep_result result = __sweep_object(current);
             if (result.is_swept) {
                 new_count++;
@@ -409,11 +458,11 @@ sweep_result __detach_object_from_sweep(aobject * const __obj) {
 
     if (__obj == __first_object) {
 //        printf("Detaching first object\n");
-        __first_object = __obj->next;
+        __set_first_object(__obj->next, "detach_object_from_sweep");
         if (__first_object != NULL) {
             __first_object->prev = NULL;
         }
-    } else {        
+    } else {
 //        printf("Detaching not first object\n");
         if (__obj->prev == NULL) {
 //            printf("prev is null\n");
@@ -583,7 +632,7 @@ void __decrease_property_reference_count(aobject * const __obj) {
         if (__obj->property_reference_count == 0 && !__obj->pending_deallocation) {
             if (__obj == __first_object) {
 
-                __first_object = __obj->next;                
+                __set_first_object(__obj->next, "decrease_property_reference_count");
                 __obj->next = NULL;
                 if (__first_object != NULL) {
                     __first_object->prev = NULL;
@@ -1073,6 +1122,12 @@ void create_property_info(const unsigned char index, char * const name, aobject 
     __set_property(property_info, Am_Lang_PropertyInfo_P_name, (nullable_value) { .flags = 0, .value.object_value = property_name});
     __set_property(property_info, Am_Lang_PropertyInfo_P_index, (nullable_value) { .flags = PRIMITIVE_UCHAR, .value.uchar_value = index });
 	property_infos[index] = property_info;
+    if (__is_suspicious_object_ptr(property_info)) {
+        printf("[create_property_info] SUSPICIOUS index=%d name=%s value=%p\n",
+            index, name, (void*)property_info);
+        fflush(stdout);
+        exit(0);
+    }
     __increase_property_reference_count(property_info);
     __decrease_reference_count(property_info);
     __decrease_reference_count(property_name);

@@ -82,7 +82,10 @@ namespace Am.Collections {
                     var x = this.items[i]
                     if (x == item) {
                         while(i < this.size) {
-                            this.items[i] = this.items[i + 1]
+                            var j = i + 1
+                            if (j < this.size) {
+                                this.items[i] = this.items[j]
+                            }
                             i++
                         }
                         this.size--

@@ -8,6 +8,9 @@ build:
 build-amigaos:
 	$(CMD) build . -bt amigaos-docker -ll5
 
+build-morphos:
+	$(CMD) build . -bt morphos-ppc_docker -ll5
+
 build-fld: # force load dependencies
 	$(CMD) build . -fld -bt linux-x64 -ll5 -maxOneError
 
@@ -60,3 +63,4 @@ run-amigaos-amiberry:
 clean:
 	$(CMD) clean . -bt linux-x64
 	$(CMD) clean . -bt amigaos-docker
+	$(CMD) clean . -bt morphos-ppc_docker

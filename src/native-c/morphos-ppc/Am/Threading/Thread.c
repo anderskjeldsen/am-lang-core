@@ -32,17 +32,17 @@ function_result Am_Threading_Thread__native_init_0(aobject * const this)
 		__increase_reference_count(this);
 	}
 
+	printf("[native_init] enter (this=%p)\n", (void *) this); fflush(stdout);
 	SysBase = *((struct ExecBase **)4UL);
-	printf("Dos base: %d\n", (unsigned int) DOSBase);
-	if (DOSBase == NULL) {
-		DOSBase = (struct DosLibrary *) __ensure_library("dos.library", 0L);
-	}
-
-	printf("TODO: implement native function Am_Threading_Thread__native_init_0\n");
+	// dos.library is opened by amiga-gcc's C runtime before main()
+	// runs (printf above would crash without it), so the previous
+	// defensive __ensure_library("dos.library") here was dead code.
 	Am_Threading_Thread_data *data = malloc(sizeof(Am_Threading_Thread_data));
 	this->object_properties.class_object_properties.object_data.value.custom_value = data;
 	data->stack_size = 4000 * 1024; // TODO
 	data->done = false;
+	printf("[native_init] done (this=%p, data=%p, stack=%lu)\n",
+	       (void *) this, (void *) data, (unsigned long) data->stack_size); fflush(stdout);
 
 __exit: ;
 	if (this != NULL) {
@@ -74,15 +74,17 @@ __exit: ;
 
 void Am_Threading_Thread__InitTask()
 {
-//	printf("InitTask...\n");
+	// Very first thing: prove the worker process actually started.
+	// If this print never lands, CreateNewProc handed control to
+	// something else (or trance never bridged to our entry).
+	printf("[_InitTask] entry (FindTask=%p)\n", (void *) FindTask(NULL)); fflush(stdout);
+
 	struct Task *own_task = NULL;
 	struct Process *own_process = NULL;
-	
+
 	own_task = FindTask(NULL);
 	if ( own_task != NULL )
 	{
-//		printf("Task found\n");
-
 		own_process = (struct Process *) own_task;
 //		OwnTask->tc_Switch = NULL; // SwitchEvent;
 //		OwnTask->tc_Launch = NULL; // LaunchEvent;
@@ -92,21 +94,60 @@ void Am_Threading_Thread__InitTask()
 //		OwnTask->tc_Flags = Flags;
 
 		aobject * thread = (aobject *) own_task->tc_UserData;
+		printf("[_InitTask] initial tc_UserData=%p\n", (void *) thread); fflush(stdout);
 
 		while ( thread == NULL )
 		{
-			Am_Threading_Thread_sleep_0(1000);
+			Am_Threading_Thread_sleep_0(100);
 			thread = (aobject *) own_task->tc_UserData;
 		}
+		printf("[_InitTask] tc_UserData resolved (thread=%p)\n", (void *) thread); fflush(stdout);
 
 		if ( thread != NULL )
 		{
-//			printf("Thread found\n");
 			aobject * runnable = thread->object_properties.class_object_properties.properties[0].nullable_value.value.object_value;
-			Am_Lang_Runnable_f_run_0_T rFunc = (Am_Lang_Runnable_f_run_0_T) runnable->class_ptr->functions[3]; // TODO: Create index constants
+			printf("[_InitTask] runnable=%p iface_impl=%p impl_obj=%p\n",
+			       (void *) runnable,
+			       (void *) (runnable ? runnable->object_properties.iface_reference.iface_implementation : NULL),
+			       (void *) (runnable ? runnable->object_properties.iface_reference.implementation_object : NULL));
+			fflush(stdout);
+
+			// Runnable is an interface, so dispatch through the iface_implementation
+			// the wrapper carries (functions[0] = run). Going via runnable->class_ptr
+			// instead would pick up the Am.Lang.Runnable aclass's `functions` field,
+			// which is left NULL for interfaces — silent crash on the worker task.
+			Am_Lang_Runnable_f_run_0_T rFunc = (Am_Lang_Runnable_f_run_0_T) runnable->object_properties.iface_reference.iface_implementation->functions[0];
+			printf("[_InitTask] rFunc=%p (functions[0]); calling run()\n", (void *) rFunc); fflush(stdout);
 			rFunc(runnable->object_properties.iface_reference.implementation_object);
+
+			printf("[_InitTask] rFunc returned; about to runFinalizers (task=%p, thread=%p)\n",
+			       (void *) own_task, (void *) thread);
+			fflush(stdout);
+
+			// Run user-registered finalizers on this task, in reverse
+			// order, before flipping `done`. The typical caller is the
+			// per-task bsdsocket / amissl cleanup that needs to call
+			// CloseLibrary from inside the same task that called
+			// OpenLibrary — see Am.Net.Socket's nativeInit pattern.
+			// Calling on this task (not the joiner) means finalizers
+			// still see FindTask(NULL) == own_task.
+			Am_Threading_Thread_f_runFinalizers_0(thread);
+			printf("[_InitTask] runFinalizers returned\n");
+			fflush(stdout);
+
 			Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) thread->object_properties.class_object_properties.object_data.value.custom_value;
 			data->done = true;
+			printf("[_InitTask] flagged done; dropping worker ref\n");
+			fflush(stdout);
+
+			// Drop the worker's reference on `thread` last — every
+			// access above this line happens while `thread` is still
+			// alive courtesy of the ref taken in `start_0`. Also
+			// closes the busy-wait race above where `tc_UserData` is
+			// set only AFTER the new task is already running.
+			__decrease_reference_count(thread);
+			printf("[_InitTask] worker exiting cleanly\n");
+			fflush(stdout);
 		}
 		else
 		{
@@ -127,6 +168,7 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 		__increase_reference_count(this);
 	}
 
+	printf("[start] enter (this=%p)\n", (void *) this); fflush(stdout);
 	void (*fptr)() = Am_Threading_Thread__InitTask;
 
 	aobject * name = this->object_properties.class_object_properties.properties[1].nullable_value.value.object_value;
@@ -135,34 +177,72 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 	if ( name_holder->string_value != NULL ) {
 		name_strptr = name_holder->string_value;
 	}
+	printf("[start] fptr=%p name=\"%s\"\n", (void *) fptr, name_strptr); fflush(stdout);
 
 	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
 
 //	printf("stack_size: %d\n", data->stack_size);
 //	printf("thread name: %s\n", name_holder->string_value);
 
+	// Inherit the calling process's CLI streams so println in the
+	// worker shows up alongside main's println (notably under
+	// `Startup-Sequence: app >output.log` headless setups). Without
+	// NP_Output/NP_Input the new process gets NULL handles and any
+	// printf is silently dropped — which masks runtime errors emitted
+	// from worker tasks. NP_CloseOutput/NP_CloseInput=FALSE keeps the
+	// parent owning the handles so a worker exit doesn't close the
+	// CLI's stdout from under main.
+	struct Process *parent_proc = (struct Process *) FindTask(NULL);
+	BPTR parent_out = parent_proc->pr_COS;
+	BPTR parent_in = parent_proc->pr_CIS;
+	BPTR parent_err = parent_proc->pr_CES;
+
+	// NP_CodeType, CODETYPE_PPC is required on MorphOS: dos.library
+	// is 68k, so CreateNewProc defaults to a 68k entry point. Without
+	// this tag our PPC `_InitTask` pointer is interpreted as a 68k
+	// instruction address — the process is spawned, tc_UserData is
+	// set, but the entry never executes (silent: the new process
+	// just sits or dies on its first emulated step). Tag is a no-op
+	// on AmigaOS m68k builds since it's never reached there.
 	struct TagItem tags[] = {
 		NP_Entry, (ULONG) fptr,
+		NP_CodeType, CODETYPE_PPC,
 		NP_StackSize, data->stack_size,
 		NP_Name, (ULONG) name_strptr,
+		NP_Output, (ULONG) parent_out,
+		NP_Input, (ULONG) parent_in,
+		NP_Error, (ULONG) parent_err,
+		NP_CloseOutput, FALSE,
+		NP_CloseInput, FALSE,
+		NP_CloseError, FALSE,
 		TAG_DONE, TAG_DONE,
 	};
 
 
 //	printf("CreateNewProc\n");
 
+	// Take an extra ref for the worker; _InitTask drops it at the end.
+	// Doing this BEFORE CreateNewProc closes the existing race where
+	// the new task starts running and busy-waits on `tc_UserData`
+	// while the caller could otherwise drop their last ref to `this`.
+	__increase_reference_count(this);
+
+	printf("[start] calling CreateNewProc\n"); fflush(stdout);
 	struct Process * process = CreateNewProc(tags);
-		
-//	printf("CreateNewProc Done %d\n", process);
+	printf("[start] CreateNewProc returned (process=%p)\n", (void *) process); fflush(stdout);
 
 	if ( process == NULL )
 	{
+		// Worker won't run, so undo the ref we took above.
+		__decrease_reference_count(this);
 		printf("CreateNewProc returned a null-pointer\n");
 // TODO:		throw( new GException("CreateNewProc returned a null-pointer") );
 	}
 	else
 	{
 		process->pr_Task.tc_UserData = (void *) this;
+		printf("[start] set tc_UserData=%p on task=%p\n",
+		       (void *) this, (void *) &process->pr_Task); fflush(stdout);
 	}
 
 __exit: ;
@@ -180,14 +260,14 @@ function_result Am_Threading_Thread_join_0(aobject * const this)
 		__increase_reference_count(this);
 	}
 
-	printf("Start Joining...\n");
+	printf("[join] start (thread=%p)\n", (void *) this); fflush(stdout);
 	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
 
 	while( !data->done )
 	{
-		printf("Done %d\n", data->done);
 		Am_Threading_Thread_sleep_0(200);
 	}
+	printf("[join] done (thread=%p)\n", (void *) this); fflush(stdout);
 
 __exit: ;
 	if (this != NULL) {
