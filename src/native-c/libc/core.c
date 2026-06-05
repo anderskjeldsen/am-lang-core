@@ -75,7 +75,6 @@ void __debug_print_string_if_string(aobject * const obj, const char * prefix) {
 
 
 void __mark_root_objects() {
-    printf("[teardown] __mark_root_objects: enter\n"); fflush(stdout);
     class_static *current = __first_class_static;
     while(current != NULL) {
         if (current->type == class) {
@@ -83,7 +82,6 @@ void __mark_root_objects() {
         }
         current = current->next;
     }
-    printf("[teardown] __mark_root_objects: done\n"); fflush(stdout);
 }
 
 void __mark_object(aobject * const obj) {
@@ -146,62 +144,15 @@ void __sweep_unmarked_objects() {
     #endif
     #endif
 
-    printf("[teardown] __sweep_unmarked_objects: enter\n"); fflush(stdout);
-
     int old_count = 1;
     int new_count = 0;
     aobject * current = NULL;
-    int pass = 0;
 
     while(old_count != new_count) {
-        printf("[teardown] sweep pass %d (was %d swept)\n", pass++, new_count); fflush(stdout);
-        // Diagnostic enumeration: walk the global object list and
-        // print every entry's pointer + class name BEFORE we start
-        // sweeping this pass. The last line printed before any hang
-        // names the object whose release function blocked.
-        // Defensive about null class_ptr / null name so a corrupted
-        // entry can't itself hang inside printf's "%s" walk —
-        // staged prints with fflush between each step.
-        {
-            aobject *probe = __first_object;
-            int idx = 0;
-            while (probe != NULL) {
-                printf("[teardown] queue[%d] obj=%p", idx, (void*)probe); fflush(stdout);
-                printf(" class=%p", (void*)probe->class_ptr); fflush(stdout);
-                if (probe->class_ptr != NULL) {
-                    const char *nm = probe->class_ptr->name;
-                    printf(" name_ptr=%p", (void*)nm); fflush(stdout);
-                    if (nm != NULL) {
-                        printf(" name=%s", nm); fflush(stdout);
-                    }
-                }
-                printf(" rc=%d propref=%d marked=%d pending=%d\n",
-                    probe->reference_count,
-                    probe->property_reference_count,
-                    probe->marked,
-                    probe->pending_deallocation);
-                fflush(stdout);
-                probe = probe->next;
-                idx++;
-                if (idx > 100000) {
-                    printf("[teardown] queue walk aborted: >100000 entries — cycle?\n"); fflush(stdout);
-                    break;
-                }
-            }
-            printf("[teardown] queue total = %d\n", idx); fflush(stdout);
-        }
-
         old_count = new_count;
         new_count = 0;
         current = __first_object;
         while(current != NULL) {
-            // Stage the per-object print so a hang inside the release
-            // function still leaves the pointer visible in the log.
-            printf("[teardown] sweep -> obj=%p", (void*)current); fflush(stdout);
-            if (current->class_ptr != NULL && current->class_ptr->name != NULL) {
-                printf(" name=%s", current->class_ptr->name);
-            }
-            printf("\n"); fflush(stdout);
             sweep_result result = __sweep_object(current);
             if (result.is_swept) {
                 new_count++;
@@ -209,7 +160,6 @@ void __sweep_unmarked_objects() {
             current = result.next;
         }
     }
-    printf("[teardown] sweep main loop done after %d passes\n", pass); fflush(stdout);
 
     current = __first_detached_object;
     while(current != NULL) {
@@ -218,10 +168,8 @@ void __sweep_unmarked_objects() {
         current = next;
     }
     __first_detached_object = NULL;
-    printf("[teardown] sweep detached list done\n"); fflush(stdout);
 
     __clear_marks();
-    printf("[teardown] __sweep_unmarked_objects: done\n"); fflush(stdout);
 }
 
 void __clear_marks() {
@@ -740,7 +688,6 @@ void __detach_object(aobject * const __obj) {
 }
 
 void __dereference_static_properties() {
-    printf("[teardown] __dereference_static_properties: enter\n"); fflush(stdout);
     class_static *c = __first_class_static;
     aclass *class_ref = &__class_ref_class_alias;
 
@@ -756,7 +703,6 @@ void __dereference_static_properties() {
         }
         c = c->next;
     }
-    printf("[teardown] __dereference_static_properties: done\n"); fflush(stdout);
 }
 
 void __dereference_static_properties_for_class(class_static * const __class_static) {
@@ -812,7 +758,6 @@ void __mark_static_properties(class_static * const __class_static) {
 }
 
 void print_allocated_objects() {
-    printf("[teardown] print_allocated_objects: enter (then process returns to amisslauto destructor)\n"); fflush(stdout);
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     printf("Allocated objects %d\n", __allocation_count);
 
