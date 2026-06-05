@@ -1,0 +1,89 @@
+namespace Am.Lang
+{
+    // An async child process bound to a pseudo-terminal owned by the
+    // IDE. The pseudo-tty is implemented natively as a custom
+    // dos.library handler Process so the child sees what looks like
+    // a real CON: window — Read() blocks until we feed it bytes via
+    // writeInput, Write() lines flow back through tryReadOutput.
+    //
+    // Spawned via Process.start. The caller polls tryReadOutput()
+    // (non-blocking) for stdout chunks as they arrive and writeInput()
+    // to send data to the child's stdin. Replaces the earlier PIPE:
+    // experiment — PIPE-Handler's WaitForChar doesn't behave the way
+    // the docs suggest, and bytes written by a child via inherited
+    // Output() didn't reach the parent reader reliably. The handler
+    // approach owns both ends of the I/O protocol directly, so
+    // there's no third-party device to rely on.
+    //
+    // Lifecycle:
+    //   var p = Process.start("bebbossh user@host", "amStudio:")
+    //   while (p.isAlive() || p.tryReadOutput().length() > 0) {
+    //       Thread.sleep(20L)
+    //   }
+    //   p.close()
+    //
+    // close() is safe to call at any time; the destructor calls it
+    // implicitly via _native_release_0.
+    #implementationPlatforms "libc", "amigaos", "morphos-ppc"
+    native class RunningProcess {
+        import Am.Lang
+
+        // Spawn the handler Process AND the child. Called by
+        // Process.start after `new RunningProcess()`. Throws if the
+        // handler Process can't be created or the SystemTagList
+        // spawn fails. Empty `workingDir` means "current dir".
+        native fun startNative(command: String, workingDir: String)
+
+        // Non-blocking read. Returns whatever bytes are currently
+        // queued in the handler's stdout ring buffer; empty when
+        // nothing's available. Never blocks. After the child has
+        // exited AND its final output has been drained, subsequent
+        // calls return empty — combine with isAlive() to know when
+        // to stop polling.
+        native fun tryReadOutput(): String
+
+        // Send `text` to the child's stdin verbatim. Append "\n"
+        // yourself if the program expects line-buffered input
+        // (most do). Writing after close() is a no-op.
+        native fun writeInput(text: String)
+
+        // True until the child has exited. After exit, may still
+        // return true once more while the stdout ring drains.
+        native fun isAlive(): Bool
+
+        // True iff the child has put stdin into raw mode via
+        // SetMode(fh, 1) — the AmigaOS equivalent of a Unix
+        // terminal's "ECHO off + line-discipline off". Set when the
+        // child issues ACTION_SCREEN_MODE with dp_Arg1 != 0; cleared
+        // on the matching SetMode(fh, 0). A CLI panel should switch
+        // to char-at-a-time passthrough (no local echo, special
+        // keys translated to ANSI sequences) while this is true,
+        // and on the way back to FALSE return to its line-buffered
+        // default. Read every paint / keyboard tick — cheap.
+        native fun isRawMode(): Bool
+
+        // Tell the handler what to answer when the child queries
+        // terminal dimensions (CSI 0 SP q on AmigaOS — bebbossh's
+        // getConsoleSize() sends this on Write(stdin,...) and reads
+        // the reply on Read(stdin,...)). Set when the CliView
+        // allocates / resizes its TerminalEmulator grid so the
+        // remote PTY matches the local viewport. Defaults to 24x80
+        // until called.
+        native fun setReportedSize(rows: Int, cols: Int)
+
+        // Force-terminate the child if still running, tear down the
+        // handler Process. Idempotent; called automatically by the
+        // GC via _native_release_0, so explicit calls are only
+        // needed when you want to release the handler early.
+        native fun close()
+
+        // Register a task + signal-bit to be Signal()'d whenever the
+        // child writes output. Lets the AmLang main loop (whose
+        // Wait() blocks on that signal) wake up immediately when
+        // streaming output arrives, instead of relying on a poller.
+        // Pass `taskPtr` = Window.getUserPortTaskPtr() and
+        // `sigBit`  = Window.getUserPortSigBit().
+        // Pass taskPtr=0 to disable.
+        native static fun setGlobalWake(taskPtr: Long, sigBit: Int)
+    }
+}

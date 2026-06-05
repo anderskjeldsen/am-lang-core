@@ -35,5 +35,18 @@ namespace Am.Lang
         // Returns "" if the OS can't resolve a name — the caller
         // should treat empty as "unknown" rather than as a path.
         static native fun getCwd(): String
+
+        // Spawn `command` asynchronously with piped stdin/stdout.
+        // Returns a [[RunningProcess]] handle the caller polls for
+        // output and writes to for stdin. Use this for interactive
+        // programs (ssh, REPLs, anything that prompts the user) —
+        // runAndCaptureOutput blocks until the child exits and gives
+        // it a NULL stdin, which won't work for password prompts.
+        // `workingDir` empty means "current dir".
+        static fun start(command: String, workingDir: String): RunningProcess {
+            var p = new RunningProcess()
+            p.startNative(command, workingDir)
+            return p
+        }
     }
 }
