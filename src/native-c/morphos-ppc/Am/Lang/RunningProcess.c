@@ -942,3 +942,16 @@ function_result Am_Lang_RunningProcess_close_0(aobject * const this) {
     if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
+
+// Stubs for the AmLang-declared statics. Wire real shutdown
+// sweeps here if morphos starts spawning handler Processes
+// the way amigaos does.
+function_result Am_Lang_RunningProcess_setGlobalWake_0(long long var_taskPtr, int var_sigBit) {
+    function_result __result = { .has_return_value = false };
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
+    function_result __result = { .has_return_value = false };
+    return __result;
+}

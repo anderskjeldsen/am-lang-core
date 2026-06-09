@@ -191,7 +191,90 @@ struct rp_state {
     // AmLang side calls setReportedSize() to override.
     volatile LONG reported_rows;
     volatile LONG reported_cols;
+
+    // Single-linked-list pointer threading every live handler
+    // state into `g_handler_list_head`. Used by the runOnExit
+    // hook (shutdownAllNative) to find every still-running
+    // amStudioTTY Process and tell it to die before the AmLang
+    // program's seglist gets unloaded. Pure bookkeeping — the
+    // handler itself never touches it.
+    struct rp_state * next_handler;
 };
+
+// Singly-linked list of every live handler state. Mutated only
+// under Forbid(). Walked by shutdownAllNative on exit.
+static struct rp_state * g_handler_list_head = NULL;
+
+// Count of handler Processes whose entry function has NOT yet
+// returned. Polled by shutdownAllNative — when this reaches 0
+// we know no handler is still executing in this program's
+// seglist and exit is safe. Tracked separately from the list
+// because the list only empties when rp_state is freed, which
+// requires _native_release_0 — and that doesn't run if the
+// AmLang RunningProcess instance is alive in a static field
+// at exit time.
+static volatile LONG g_live_handler_count = 0;
+
+// Diagnostic counters that the handler increments at three
+// known points. Comparing them at shutdownAllNative tells us
+// which segment of the handler's lifecycle is hanging:
+//   entered  — first thing in rp_handler_entry (after st check).
+//   die_seen — incremented under Forbid the moment a handler
+//              observes shutdown_requested == TRUE.
+//   exited   — last thing before rp_handler_entry returns.
+//
+// Pure exec stores — no DOS / IO involved, so they're safe to
+// touch from the handler task.
+static volatile LONG g_handler_entered_count = 0;
+static volatile LONG g_handler_die_seen_count = 0;
+static volatile LONG g_handler_exited_count = 0;
+
+// FH captured at first startNative — amStudio's main task's
+// Output(), which is the redirected stdout the user reads in
+// closedown.log. We hold onto this so handler-task code can
+// log there too: handlers are spawned without NP_Output set,
+// so calling Output() from inside the handler returns NIL:
+// (default) and any writes silently vanish. Capturing once
+// from the main task gives every handler a real FH to write
+// to.
+static BPTR g_parent_stdout = 0;
+
+// Write a NUL-terminated string to the parent task's stdout
+// (captured at startNative time). Best-effort — silent no-op
+// if we never captured one. Falls back to the current task's
+// Output() if the global isn't set yet (e.g. shutdownAllNative
+// being called before any handler started — though that path
+// is the no-handlers fast-return).
+static void rp_stdout_line(const char * msg) {
+    BPTR out = g_parent_stdout;
+    if (out == 0) {
+        out = Output();
+    }
+    if (out == 0) return;
+    int n = 0; while (msg[n] != 0) n++;
+    Write(out, (APTR) msg, (LONG) n);
+    Write(out, (APTR) "\n", 1);
+}
+
+// Add to the global list (call under Forbid).
+static void rp_list_add(struct rp_state * st) {
+    st->next_handler = g_handler_list_head;
+    g_handler_list_head = st;
+}
+
+// Remove from the global list (call under Forbid). Tolerates
+// st not being on the list (a no-op).
+static void rp_list_remove(struct rp_state * st) {
+    struct rp_state ** link = &g_handler_list_head;
+    while (*link != NULL) {
+        if (*link == st) {
+            *link = st->next_handler;
+            st->next_handler = NULL;
+            return;
+        }
+        link = &(*link)->next_handler;
+    }
+}
 
 // Process-global wake target — set once by the AmLang main thread
 // via setGlobalWake(); used by every handler's ACTION_WRITE to
@@ -234,6 +317,12 @@ struct _running_process_data {
 // =================================================================
 
 static void rp_state_free(rp_state * st) {
+    // Unlink from the global handler list so shutdownAllNative
+    // doesn't race against a freed pointer. Forbid for the list
+    // mutation only — the FreeMems below don't need it.
+    Forbid();
+    rp_list_remove(st);
+    Permit();
     if (st->in.data  != NULL) { FreeMem(st->in.data,  RP_RING_SIZE); st->in.data  = NULL; }
     if (st->out.data != NULL) { FreeMem(st->out.data, RP_RING_SIZE); st->out.data = NULL; }
     FreeMem(st, sizeof(*st));
@@ -247,7 +336,11 @@ static void rp_state_release(rp_state * st) {
     count = st->refcount;
     Permit();
     if (count <= 0) {
-        rp_log_event("rp_state_free refcount=", count);
+        // No rp_log_event here — rp_state_release can be called
+        // from the handler's exit path, and DOS calls (Write
+        // included) from a custom DOS handler recurse through
+        // its own pr_MsgPort and ate the DIE messages, leaving
+        // the handler stuck. See banner in rp_handler_entry.
         rp_state_free(st);
     }
 }
@@ -292,7 +385,24 @@ static void rp_handler_entry(void) {
     if (st == NULL) return;
     struct MsgPort * port = &self->pr_MsgPort;
 
-    rp_log_event("handler started, refcount=", st->refcount);
+    // NO DOS CALLS FROM HERE (Write/Read/Open/Close/printf/etc).
+    // This is a custom DOS handler — its main loop reads packets
+    // from `port`. Any DOS function we call internally PutMsg's
+    // a request to a target FH's handler and then WaitPort's on
+    // OUR OWN port for the reply, which can consume DIE/other
+    // messages meant for us. The first such call (originally
+    // `rp_log_event("handler started", ...)` here) ate the
+    // first ACTION_DIE that close() sent right after, so the
+    // handler stayed in WaitPort forever and amStudio's
+    // seglist got UnLoadSeg'd while the handler was still
+    // alive — causing the #80000004 / #87000004 alerts. We
+    // log via the still-safe (main-task-only) callers in
+    // rp_handler_die / shutdownAllNative instead. Confirmed
+    // 2026-06-08 — also a "[rp] handler: shutdown observed"
+    // rp_stdout_line was enough to crash with #87000004.
+    // crash with #87000004 right after.
+
+    g_handler_entered_count++;
 
     BOOL running = TRUE;
     while (running) {
@@ -325,6 +435,9 @@ static void rp_handler_entry(void) {
 
             Forbid();
             if (st->shutdown_requested) {
+                g_handler_die_seen_count++;
+                // Reply to the packet that woke us into the
+                // shutdown branch.
                 switch (type) {
                     case ACTION_READ:       rp_pkt_reply(pkt, 0, 0); break;
                     case ACTION_WRITE:      rp_pkt_reply(pkt, pkt->dp_Arg3, 0); break;
@@ -332,9 +445,45 @@ static void rp_handler_entry(void) {
                     case ACTION_FINDOUTPUT: rp_pkt_reply(pkt, DOSFALSE, 0); break;
                     default:                rp_pkt_reply(pkt, DOSTRUE, 0); break;
                 }
+                // Drain whatever is CURRENTLY in the queue with
+                // quick replies. Two things matter here:
+                //
+                // 1) The child's `ACTION_END` packets for its
+                //    pr_CIS/pr_COS/pr_CES often arrive shortly
+                //    before/after close()'s DIE. If we exit
+                //    without replying to them, the FakeFile-
+                //    Handles' Close() blocks (or worse, the OS
+                //    later does PutMsg to our pr_MsgPort after
+                //    the handler Process is gone — instant
+                //    #80000004).
+                //
+                // 2) A run-away flooder (~1.5M packets/sec; root
+                //    cause uncertain, possibly pr_ConsoleTask
+                //    inheritance) traps a naïve `continue` in
+                //    the inner GetMsg loop forever — confirmed
+                //    2026-06-08 via HeadlessLoad. So this drain
+                //    has a hard cap so we can never spin.
+                int drain_left = 64;
+                struct Message * drain_msg;
+                while (drain_left > 0 && (drain_msg = GetMsg(port)) != NULL) {
+                    drain_left--;
+                    if (drain_msg->mn_Node.ln_Type == NT_REPLYMSG) {
+                        FreeMem(drain_msg, drain_msg->mn_Length);
+                        continue;
+                    }
+                    struct DosPacket * dp = (struct DosPacket *) drain_msg->mn_Node.ln_Name;
+                    if (dp == NULL) continue;
+                    switch (dp->dp_Type) {
+                        case ACTION_READ:       rp_pkt_reply(dp, 0, 0); break;
+                        case ACTION_WRITE:      rp_pkt_reply(dp, dp->dp_Arg3, 0); break;
+                        case ACTION_FINDINPUT:
+                        case ACTION_FINDOUTPUT: rp_pkt_reply(dp, DOSFALSE, 0); break;
+                        default:                rp_pkt_reply(dp, DOSTRUE, 0); break;
+                    }
+                }
                 running = FALSE;
                 Permit();
-                continue;
+                break;
             }
 
             switch (type) {
@@ -593,7 +742,8 @@ static void rp_handler_entry(void) {
                     break;
                 }
                 default:
-                    rp_log_event("hnd unhandled type=", type);
+                    // No rp_log_event here — DOS-in-handler rule
+                    // (see banner at function entry).
                     rp_pkt_reply(pkt, DOSTRUE, 0);
                     break;
             }
@@ -606,9 +756,22 @@ static void rp_handler_entry(void) {
         rp_pkt_reply(st->deferred_read_pkt, 0, 0);
         st->deferred_read_pkt = NULL;
     }
+    // Null handler_port so any subsequent rp_handler_die call
+    // (e.g. when the AmLang side gets ARC-released during
+    // teardown) sees NULL and skips the PutMsg. Otherwise the
+    // pr_MsgPort backing it is freed when this Process exits
+    // and the PutMsg goes into freed memory.
+    st->handler_port = NULL;
+    // Drop the live counter so shutdownAllNative's poll can
+    // unblock. We do this BEFORE rp_state_release because
+    // release may free `st`.
+    g_live_handler_count--;
+    g_handler_exited_count++;
     Permit();
 
-    rp_log_event("handler exiting", 0);
+    // No rp_log_event here — DOS-in-handler rule (see banner
+    // at rp_handler_entry top). rp_state_release also avoids
+    // its log line for the same reason.
     rp_state_release(st);
 }
 
@@ -684,7 +847,15 @@ function_result Am_Lang_RunningProcess__native_mark_children_0(aobject * const t
 // consumed by the next GetMsg / falls on the floor when the handler
 // exits.
 static void rp_handler_die(rp_state * st) {
-    if (st == NULL || st->handler_port == NULL) return;
+    if (st == NULL) {
+        rp_stdout_line("[rp] handler_die: st=NULL, skipping");
+        return;
+    }
+    if (st->handler_port == NULL) {
+        rp_stdout_line("[rp] handler_die: handler_port=NULL, skipping");
+        return;
+    }
+    rp_stdout_line("[rp] handler_die: sending ACTION_DIE");
     Forbid(); st->shutdown_requested = TRUE; Permit();
 
     struct StandardPacket * sp = (struct StandardPacket *)
@@ -761,6 +932,111 @@ static void rp_split_cmd(const char * src, char * cmd_out, int cmd_max,
     args_out[a]   = 0;
 }
 
+// True iff `name` already contains a path separator — either '/' for
+// a subdir or ':' for a volume / assign reference. Such names are
+// taken verbatim and we don't do any PATH walking on them.
+static BOOL rp_name_has_path(const char * name) {
+    for (int i = 0; name[i] != 0; i++) {
+        if (name[i] == '/' || name[i] == ':') return TRUE;
+    }
+    return FALSE;
+}
+
+// PathNode in AmigaOS dos.library is two BPTRs back-to-back:
+//   offset 0: BPTR path_Next   (BPTR to next PathNode, 0 = end)
+//   offset 4: BPTR path_Lock   (BPTR lock to the directory)
+// The struct isn't in the public NDK headers but the layout is
+// documented and stable across V36+. We model it locally.
+struct rp_path_node {
+    BPTR path_Next;
+    BPTR path_Lock;
+};
+
+// Locate `name` along the AmigaShell PATH (pr_CLI->cli_CommandDir) +
+// the C: assign, then LoadSeg() it. Returns the loaded segment BPTR
+// or 0 if no candidate succeeded.
+//
+// Why we do this ourselves instead of relying on LoadSeg's own
+// resolution: V40 dos.library's LoadSeg() honours only the current
+// directory; it does NOT walk the Shell's PATH (cli_CommandDir
+// chain) the way the Shell itself does when you type a bare
+// command name. So a binary that lives in
+// `amStudio:extensions/bebbossh/C/bebbosshkeygen`, added to PATH at
+// install time via `Path amStudio:extensions/bebbossh/C ADD`, would
+// be unspawnable from our handler even though the same bare command
+// runs fine from a Shell window.
+//
+// We try in this order:
+//   1. The name verbatim — handles absolute paths, volume-prefixed
+//      names, and binaries that happen to be in the current dir.
+//   2. Each entry in cli_CommandDir, prepended via NameFromLock so
+//      we don't need to flip CurrentDir() per attempt.
+//   3. "C:" prefix — every Workbench install has C: assigned and
+//      most standard commands live there.
+//
+// Returns 0 if all attempts failed; the caller logs IoErr() of the
+// LAST attempt for diagnostics.
+static BPTR rp_loadseg_with_path(const char * name) {
+    if (name == NULL || name[0] == 0) return 0;
+
+    // 1. Verbatim. Also catches the case where the caller already
+    //    passed a fully-qualified name.
+    BPTR seg = LoadSeg((CONST_STRPTR) name);
+    if (seg != 0) return seg;
+
+    // If there's already a path separator, don't walk PATH — the
+    // caller meant exactly that path; failing was the answer.
+    if (rp_name_has_path(name)) return 0;
+
+    // 2. Walk pr_CLI->cli_CommandDir.
+    struct Process * self = (struct Process *) FindTask(NULL);
+    struct CommandLineInterface * cli = (struct CommandLineInterface *) BADDR(self->pr_CLI);
+    if (cli != NULL) {
+        struct rp_path_node * node = (struct rp_path_node *) BADDR(cli->cli_CommandDir);
+        char buf[260];
+        while (node != NULL) {
+            BPTR lock = node->path_Lock;
+            if (lock != 0) {
+                if (NameFromLock(lock, (STRPTR) buf, (LONG) sizeof(buf) - 1) != DOSFALSE) {
+                    // Append the command name, inserting a '/' only
+                    // when the dir name doesn't already end on a
+                    // path separator (volume root "DH1:" ends in
+                    // ':' and needs no slash).
+                    int len = 0;
+                    while (buf[len] != 0 && len < (int) sizeof(buf) - 2) len++;
+                    if (len > 0 && buf[len - 1] != '/' && buf[len - 1] != ':'
+                            && len < (int) sizeof(buf) - 2) {
+                        buf[len++] = '/';
+                        buf[len] = 0;
+                    }
+                    int n = 0;
+                    while (name[n] != 0 && len + n < (int) sizeof(buf) - 1) {
+                        buf[len + n] = name[n];
+                        n++;
+                    }
+                    buf[len + n] = 0;
+                    seg = LoadSeg((CONST_STRPTR) buf);
+                    if (seg != 0) return seg;
+                }
+            }
+            node = (struct rp_path_node *) BADDR(node->path_Next);
+        }
+    }
+
+    // 3. C: fallback. Every standard Workbench install has C:
+    //    assigned to wherever the shell commands live.
+    char buf[260];
+    buf[0] = 'C'; buf[1] = ':';
+    int n = 0;
+    while (name[n] != 0 && n < (int) sizeof(buf) - 3) {
+        buf[2 + n] = name[n];
+        n++;
+    }
+    buf[2 + n] = 0;
+    seg = LoadSeg((CONST_STRPTR) buf);
+    return seg;  // 0 on failure
+}
+
 function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobject * command, aobject * workingDir) {
     function_result __result = { .has_return_value = false };
     if (this != NULL) __increase_reference_count(this);
@@ -795,6 +1071,14 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     }
     d->state = st;
 
+    // Capture the parent task's Output() FH so handler tasks
+    // (which inherit NIL: as their stdout) have a real FH to
+    // log to. Idempotent — first call wins, subsequent calls
+    // are no-ops.
+    if (g_parent_stdout == 0) {
+        g_parent_stdout = Output();
+    }
+
     // Spawn handler Process.
     Forbid();
     st->handler_proc = CreateNewProcTags(
@@ -806,6 +1090,16 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         st->handler_proc->pr_ExitData = (LONG) st;
         st->handler_port = &st->handler_proc->pr_MsgPort;
         st->refcount++;
+        // Register on the global list NOW (still inside Forbid)
+        // so shutdownAllNative can find us if the AmLang program
+        // exits before this RunningProcess is otherwise released.
+        rp_list_add(st);
+        // Independent counter shutdownAllNative polls. The list
+        // alone isn't enough because rp_state_release only frees
+        // (and thus unlinks) when refcount hits 0 — which means
+        // the AmLang object also has to be released. At runOnExit
+        // the AmLang object may still be live in a static field.
+        g_live_handler_count++;
     }
     Permit();
     if (st->handler_proc == NULL) {
@@ -893,7 +1187,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     rp_log_str("[rp] LoadSeg "); rp_log_str(g_cmd_buf); rp_log_str("\n");
     rp_log_str("[rp] args=");    rp_log_str(g_arg_buf);
 
-    BPTR seg = LoadSeg((CONST_STRPTR) g_cmd_buf);
+    BPTR seg = rp_loadseg_with_path(g_cmd_buf);
     if (seg == 0) {
         rp_log_event("[rp] LoadSeg failed, IoErr=", IoErr());
         if (d->has_old_cwd) {
@@ -1178,5 +1472,166 @@ function_result Am_Lang_RunningProcess_setGlobalWake_0(long long var_taskPtr, in
     }
     rp_log_event("[rp] setGlobalWake taskPtr=", (LONG) var_taskPtr);
     rp_log_event("[rp] setGlobalWake sigBit=", (LONG) var_sigBit);
+    return __result;
+}
+
+// Force every still-running handler Process to terminate, then
+// wait briefly for each to actually go away. Called from the
+// `#runOnExit` hook in RunningProcess.aml so it fires after
+// `main()` returns but before the runtime tears down statics.
+//
+// Why we can't just rely on per-instance release: when the
+// AmLang program exits "the hard way" (window-close → main
+// returns without explicitly close()-ing each CliApp's
+// RunningProcess), the AmLang GC never runs and the handler
+// Processes stay in WaitPort forever. The C runtime then
+// UnLoadSeg()s the program; the handlers' code pages get
+// freed; the next time an idle handler is dispatched it
+// executes garbage and the user sees an alert with the stale
+// `amStudioTTY` name. Solving that needs a sweep at exit time
+// that walks every live handler and tells it to die.
+//
+// Strategy: snapshot the list of handler Processes (so we
+// don't have to hold Forbid for the duration of the wait),
+// send each one an ACTION_DIE + flag shutdown_requested, then
+// poll-with-Delay until the global list empties. Capped at
+// ~1.2s total wait so a wedged handler can't block exit
+// forever — in that bad case the user might still see a
+// stale alert, but that's strictly better than today's
+// "every exit shows one".
+#define RP_SHUTDOWN_TIMEOUT_TICKS  60   // 60 ticks = ~1.2 seconds
+#define RP_SHUTDOWN_POLL_TICKS      2   // 2 ticks  = ~40 ms per poll
+
+function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
+    function_result __result = { .has_return_value = false };
+
+    // Print a single combined diagnostic line covering all four
+    // counters so we can tell at a glance which segment of the
+    // handler lifecycle is hanging:
+    //   live     — handlers tracked as alive (++start, --end)
+    //   entered  — handler entry function actually ran
+    //   die_seen — handler observed shutdown_requested
+    //   exited   — handler reached its exit cleanup
+    {
+        char msg[160]; int p = 0;
+        const char * pre = "[rp] shutdownAll: live=";
+        while (*pre) msg[p++] = *pre++;
+        LONG values[4] = {
+            g_live_handler_count,
+            g_handler_entered_count,
+            g_handler_die_seen_count,
+            g_handler_exited_count
+        };
+        const char * labels[4] = { "", " entered=", " die_seen=", " exited=" };
+        for (int k = 0; k < 4; k++) {
+            const char * lab = labels[k];
+            while (*lab) msg[p++] = *lab++;
+            LONG v = values[k]; BOOL neg = (v < 0); if (neg) v = -v;
+            char tmp[12]; int t = 0;
+            if (v == 0) tmp[t++] = '0';
+            while (v > 0) { tmp[t++] = (char)('0' + v % 10); v /= 10; }
+            if (neg) msg[p++] = '-';
+            while (t > 0) msg[p++] = tmp[--t];
+        }
+        msg[p] = 0;
+        rp_stdout_line(msg);
+    }
+
+    LONG live = g_live_handler_count;
+    if (live <= 0) {
+        rp_stdout_line("[rp] shutdownAll: no live handlers");
+        return __result;
+    }
+
+    // Walk the list once under Forbid, mark every handler for
+    // shutdown, and snapshot the ports we still need to DIE
+    // into a local array. We send the DIEs OUTSIDE Forbid
+    // because rp_handler_die calls AllocMem internally.
+    //
+    // 64 handlers is way more than any realistic amStudio
+    // session — if you exceed this you've got bigger problems
+    // than menu-item cleanup. Excess handlers fall through to
+    // the poll loop and time out unkilled.
+    #define RP_MAX_SHUTDOWN_TARGETS 64
+    rp_state * targets[RP_MAX_SHUTDOWN_TARGETS];
+    int n_targets = 0;
+
+    Forbid();
+    rp_state * cur = g_handler_list_head;
+    while (cur != NULL && n_targets < RP_MAX_SHUTDOWN_TARGETS) {
+        cur->shutdown_requested = TRUE;
+        if (cur->handler_port != NULL) {
+            targets[n_targets++] = cur;
+        }
+        cur = cur->next_handler;
+    }
+    Permit();
+
+    // Probe whether the handler Task we tracked is actually
+    // still in exec's task list. FindTask returns NULL if no
+    // task with that name exists. If we see live=1 but
+    // FindTask returns NULL, the handler died via some path
+    // that bypassed our counter decrement (e.g. a crash /
+    // RemTask). If FindTask returns non-NULL, the handler is
+    // alive but ignoring DIE.
+    {
+        struct Task * found = FindTask((STRPTR) "amStudioTTY");
+        char msg[80]; int p = 0;
+        const char * pre = "[rp] shutdownAll: FindTask(amStudioTTY)=";
+        while (*pre) msg[p++] = *pre++;
+        if (found == NULL) {
+            const char * tag = "NULL";
+            while (*tag) msg[p++] = *tag++;
+        } else {
+            const char * tag = "ALIVE";
+            while (*tag) msg[p++] = *tag++;
+        }
+        msg[p] = 0;
+        rp_stdout_line(msg);
+    }
+
+    // Send DIE to each captured handler. Each one wakes the
+    // handler out of WaitPort; it sees shutdown_requested and
+    // exits its main loop, ending with g_live_handler_count--.
+    for (int i = 0; i < n_targets; i++) {
+        rp_handler_die(targets[i]);
+    }
+
+    // Poll the live counter. Each tick is ~20ms (50 Hz);
+    // RP_SHUTDOWN_TIMEOUT_TICKS=60 → ~1.2s cap. In practice a
+    // handler picks up the DIE and exits within one or two
+    // ticks, so we typically return well under 100ms.
+    ULONG waited = 0;
+    while (waited < RP_SHUTDOWN_TIMEOUT_TICKS) {
+        if (g_live_handler_count <= 0) break;
+        Delay(RP_SHUTDOWN_POLL_TICKS);
+        waited += RP_SHUTDOWN_POLL_TICKS;
+    }
+
+    {
+        char msg[200]; int p = 0;
+        const char * pre = "[rp] shutdownAll: done, remaining=";
+        while (*pre) msg[p++] = *pre++;
+        LONG values[5] = {
+            g_live_handler_count, (LONG) waited,
+            g_handler_entered_count, g_handler_die_seen_count, g_handler_exited_count
+        };
+        const char * labels[5] = {
+            "", " waited_ticks=", " entered=", " die_seen=", " exited="
+        };
+        for (int k = 0; k < 5; k++) {
+            const char * lab = labels[k];
+            while (*lab) msg[p++] = *lab++;
+            LONG v = values[k]; BOOL neg = (v < 0); if (neg) v = -v;
+            char tmp[12]; int t = 0;
+            if (v == 0) tmp[t++] = '0';
+            while (v > 0) { tmp[t++] = (char)('0' + v % 10); v /= 10; }
+            if (neg) msg[p++] = '-';
+            while (t > 0) msg[p++] = tmp[--t];
+        }
+        msg[p] = 0;
+        rp_stdout_line(msg);
+    }
+
     return __result;
 }

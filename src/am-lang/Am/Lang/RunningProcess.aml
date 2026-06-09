@@ -85,5 +85,26 @@ namespace Am.Lang
         // `sigBit`  = Window.getUserPortSigBit().
         // Pass taskPtr=0 to disable.
         native static fun setGlobalWake(taskPtr: Long, sigBit: Int)
+
+        // Force every still-running handler Process this AmLang
+        // program ever spawned to terminate, and wait briefly for
+        // each to actually exit. Necessary because the handler
+        // Processes carry pointers into this AmLang program's
+        // seglist; if `main()` returns and the C runtime
+        // UnLoadSeg()s the program while a handler is still
+        // alive, the next time that handler is dispatched it
+        // executes garbage and the user sees a "Program failed"
+        // alert under a stale `amStudioTTY` name. Triggered via
+        // `#runOnExit` so application code doesn't need to opt
+        // in.
+        native static fun shutdownAllNative()
+
+        // Compiler-injected cleanup. Visibility is enforced at
+        // AmLang resolution time only — the generated C call from
+        // startup.c isn't blocked by `private`.
+        #runOnExit
+        private static fun shutdownAllOnExit() {
+            RunningProcess.shutdownAllNative()
+        }
     }
 }

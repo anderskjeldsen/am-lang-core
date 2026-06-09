@@ -268,3 +268,17 @@ function_result Am_Lang_RunningProcess_close_0(aobject * const this) {
     if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
+
+// Stubs so the libc target links — the AmLang side declares
+// these globally and #runOnExit injects a call. libc child
+// processes are reaped by the OS on parent exit, so no
+// sweep is needed here.
+function_result Am_Lang_RunningProcess_setGlobalWake_0(long long var_taskPtr, int var_sigBit) {
+    function_result __result = { .has_return_value = false };
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
+    function_result __result = { .has_return_value = false };
+    return __result;
+}
