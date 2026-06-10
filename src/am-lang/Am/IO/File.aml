@@ -14,7 +14,7 @@ namespace Am.IO
         }
 
         // Internal native method that creates the physical temporary file
-        static native fun createTempFileInternal(directory: File, prefix: String, suffix: String): String
+        static native fun createTempFileInternal(directory: File, prefix: String, suffix: String): String?
 
         // Public method that creates a File object and marks it as temporary
         static fun createTempFile(directory: File, prefix: String, suffix: String): File {

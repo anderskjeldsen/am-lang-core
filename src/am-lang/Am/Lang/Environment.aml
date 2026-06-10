@@ -6,7 +6,7 @@ namespace Am.Lang
         import Am.Lang
 
         // Returns the value of the named env var, or null if it isn't set.
-        static native fun get(name: String): String
+        static native fun get(name: String): String?
 
         // Sets the env var. Returns true on success.
         static native fun set(name: String, value: String): Bool

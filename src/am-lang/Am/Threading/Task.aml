@@ -21,12 +21,8 @@ namespace Am.Threading {
         // the runner loop never sees them, so one misbehaving task
         // does not stop subsequent tasks on the same worker.
         fun execute() {
-            var f = this.fn
-            if (f == null) {
-                return
-            }
             try {
-                f()
+                this.fn()
             } catch (e: Exception) {
                 "TaskRunner: task threw, continuing".println()
                 e.printWithStackTrace()

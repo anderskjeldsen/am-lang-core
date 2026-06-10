@@ -169,6 +169,13 @@ function_result Am_Lang_ClassRef_getClassRefFromAny_0(nullable_value any)
 	}
 
 	if (class_ref == NULL) {
+		// class_ref_singleton fields are only populated when the binary
+		// was compiled with `-reflection`. Without it, getClassRef() on
+		// any value lands here. Throw a clean exception so the caller
+		// sees an actionable error instead of a SIGSEGV on the
+		// __increase_reference_count(NULL) below.
+		__throw_simple_exception("getClassRef() requires the binary to be compiled with -reflection", "getClassRefFromAny", &__result);
+		goto __exit;
 	}
 
 	__increase_reference_count(class_ref); // one extra, because we want to keep the object until the end.

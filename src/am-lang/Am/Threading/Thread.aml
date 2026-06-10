@@ -5,7 +5,7 @@ namespace Am.Threading {
         import Am.Lang
         import Am.Collections
 
-        var name: String
+        var name: String = "thread"
 
         // Per-thread finalizers run on the thread itself, in reverse
         // registration order, after `runnable.run()` returns but before
@@ -23,7 +23,7 @@ namespace Am.Threading {
         // Initialised lazily on first `addFinalizer()` rather than in
         // an init block so threads that never touch task-bound libs
         // pay zero overhead.
-        private var finalizers: List<ThreadFinalizer> = null
+        private var finalizers: List<ThreadFinalizer>? = null
 
         fun addFinalizer(fn: () => Bool) {
             if (this.finalizers == null) {
@@ -64,11 +64,7 @@ namespace Am.Threading {
         import Am.Lang
 
         fun invoke() {
-            var f = this.fn
-            if (f == null) {
-                return
-            }
-            f()
+            this.fn()
         }
     }
 }

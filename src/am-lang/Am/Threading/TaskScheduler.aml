@@ -158,16 +158,14 @@ namespace Am.Threading {
         private static fun ensureRunner(threadType: Int): TaskRunner {
             TaskScheduler.runnersMutex.lock()
             try {
-                var runner: TaskRunner = null
                 if (TaskScheduler.runners.containsKey(threadType)) {
-                    runner = TaskScheduler.runners.get(threadType)
-                } else {
-                    runner = new TaskRunner()
-                    runner.name = "task-runner-" + threadType.toString()
-                    TaskScheduler.runners.set(threadType, runner)
-                    TaskScheduler.allRunners.add(runner)
-                    runner.start()
+                    return TaskScheduler.runners.get(threadType)
                 }
+                var runner = new TaskRunner()
+                runner.name = "task-runner-" + threadType.toString()
+                TaskScheduler.runners.set(threadType, runner)
+                TaskScheduler.allRunners.add(runner)
+                runner.start()
                 return runner
             } finally {
                 TaskScheduler.runnersMutex.unlock()
