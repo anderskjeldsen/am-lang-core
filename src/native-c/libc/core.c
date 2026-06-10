@@ -994,28 +994,48 @@ aobject * __create_string(char const * const str, aclass * const string_class) {
     return str_obj;
 }
 
+// Zero-init contract for `__create_array`:
+//
+//   For `any_type` arrays (element = `nullable_value`), a slot of all zeros
+//   must read as "absent object". Two invariants make that true today:
+//     1. `object_type == 0` in the `ctype` enum.
+//     2. `flags = 0` doesn't match any `PRIMITIVE_X` bit pattern in
+//        `__value_flags_to_ctype`, so it falls through to `object_type`.
+//        Every `PRIMITIVE_X` constant carries the high `PRIMITIVE = 128`
+//        bit (or PRIMITIVE_BOOL = 64 | PRIMITIVE), so an all-zero byte
+//        never collides with a primitive tag.
+//
+//   We pin both invariants with `_Static_assert` so a future flag-bit
+//   reshuffle or enum reorder breaks the build rather than silently
+//   producing arrays whose slots read as garbage primitives.
+//
+//   For non-`any_type` arrays the slots are plain bytes (pointer for
+//   `object_type`, primitive value otherwise). Zero-init is the right
+//   default there too: NULL pointer for objects, 0 for primitives.
+//
+// The explicit `memset` below makes the zero-init visible at the call
+// site instead of relying on `__allocate_object_with_extra_size` using
+// `calloc` internally — that's an implementation detail of the
+// allocator, not a documented part of the array contract.
+_Static_assert(object_type == 0, "any_type arrays rely on object_type==0 for zero-init slots to read as absent");
+_Static_assert((PRIMITIVE & 0xFC) != 0, "every PRIMITIVE_X tag must have a non-zero high bit so flags=0 reads as object_type");
+
 aobject * __create_array(unsigned int const size, unsigned char const item_size, aclass * const array_class, ctype const ctype) {
     size_t extra_size = sizeof(array_holder) + (size * item_size);
     aobject * array_obj = __allocate_object_with_extra_size(array_class, extra_size);
-//    array_holder * const holder = malloc(sizeof(array_holder));
     array_holder * const holder = (array_holder *) &array_obj[1];
     void *array_data = (void *) (holder + 1);
     array_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
-//    size_t const data_size = size * item_size;
-//    unsigned char * const array_data = malloc(data_size);
     holder->array_data = array_data;
     holder->ctype = ctype;
     holder->item_class = array_class;
     holder->item_size = item_size;
-    holder->size = size;    
-//    *holder = (array_holder) { .array_data = malloc(size * item_size), .size = size, .ctype = ctype, .item_size = item_size };
-//    memset(holder->array_data, 0, size * item_size);
-
-//    memcpy(holder, &t_holder, sizeof(array_holder));
-
-    // holder->array_data = malloc(data_size);
-    // holder->size = size;    
-    // holder->item_class = item_class;
+    holder->size = size;
+    // Explicit zero-init of the data block. See the contract comment above
+    // `__create_array`. For `any_type` this materialises each slot as the
+    // "absent object" `nullable_value`; for other ctypes it's NULL pointers
+    // / zero primitives, which is what the AmLang language model expects.
+    memset(array_data, 0, (size_t) size * item_size);
     return array_obj;
 }
 

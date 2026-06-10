@@ -282,3 +282,20 @@ function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
     function_result __result = { .has_return_value = false };
     return __result;
 }
+
+// Raw-mode + reported-size hooks exist for AmigaOS's custom-handler
+// pty (see native-c/amigaos/Am/Lang/RunningProcess.c). The libc child
+// runs against the host kernel's real PTY, so there's nothing for the
+// AmLang side to query — return non-raw and accept the size silently.
+function_result Am_Lang_RunningProcess_isRawMode_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    __result.return_value = (nullable_value){ .flags = PRIMITIVE_BOOL, .value.bool_value = false };
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_setReportedSize_0(aobject * const this, int var_rows, int var_cols) {
+    function_result __result = { .has_return_value = false };
+    (void)var_rows;
+    (void)var_cols;
+    return __result;
+}
