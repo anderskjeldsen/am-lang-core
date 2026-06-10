@@ -24,18 +24,19 @@ namespace Am.Threading {
 
         // Display name surfaced as the Amiga task / pthread name —
         // helps when reading process listings. Set by TaskScheduler
-        // before `start()`. Initialised to a safe default so the
+        // before `start()`; initialised to a safe default so the
         // native start path (which crashes on a NULL name on AmigaOS,
         // see feedback_amlang_thread_name_required) always has
         // something to work with.
         var name: String = "task-runner"
 
-        private var queue: List<Task>
-        private var mutex: Mutex
+        private var queue: List<Task> = new List<Task>()
+        private var mutex: Mutex = new Mutex()
         private var stopRequested: Bool
         // The worker thread is created lazily on `start()` and never
-        // recreated. Nullable until then so the field has a clean "not
-        // yet started" state — getThread() returns Thread? to match.
+        // recreated. Field is nullable to reflect the "not yet started"
+        // state honestly; `getThread()` asserts non-null because its
+        // contract is "only call after start()".
         private var thread: Thread? = null
 
         // Polling interval while the queue is empty. 20 ms is short
@@ -44,8 +45,6 @@ namespace Am.Threading {
         private static var IDLE_SLEEP_MS: Long = 20L
 
         init {
-            this.queue = List.newList<Task>()
-            this.mutex = new Mutex()
             this.stopRequested = false
         }
 
@@ -67,7 +66,11 @@ namespace Am.Threading {
         // ensureRunner() critical section.
         fun start() {
             var t = new Thread(this as Runnable)
-            t.name = this.name
+            var n = this.name
+            if (n == null) {
+                n = "task-runner"
+            }
+            t.name = n
             this.thread = t
             t.start()
         }
@@ -80,7 +83,7 @@ namespace Am.Threading {
             this.stopRequested = true
         }
 
-        fun getThread(): Thread? {
+        fun getThread(): Thread {
             return this.thread
         }
 

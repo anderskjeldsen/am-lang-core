@@ -5,9 +5,13 @@ namespace Am.Collections {
 
         private var size: Int
         private var currentValueIndex: Int
-        private var nextIndexes: Int[]
-        private var valueIndexes: Int[]
-        private var values: T[] 
+        // Backing arrays eagerly initialised to zero-length so the field
+        // declarations are honest about being non-null. The lazy-init
+        // path in `add()` gates on `length() == 0` instead of the old
+        // `== null` check; the storage materialises on first insert.
+        private var nextIndexes: Int[] = new Int[0]
+        private var valueIndexes: Int[] = new Int[0]
+        private var values: T[] = new T[0]
         private var bucketSize: Int
         private var currentIndex: Int
 
@@ -16,7 +20,7 @@ namespace Am.Collections {
         }
 
         fun has(value: T): Bool {
-            if (this.valueIndexes == null) {
+            if (this.valueIndexes.length() == 0) {
                 return false
             }
             var hash = value.hash()
@@ -42,7 +46,7 @@ namespace Am.Collections {
         }
 
         fun add(value: T) {
-            if (this.nextIndexes == null) {
+            if (this.nextIndexes.length() == 0) {
                 this.bucketSize = 1024
                 this.nextIndexes = new Int[this.bucketSize]
                 this.values = new T[this.bucketSize]
@@ -118,7 +122,7 @@ namespace Am.Collections {
         }
 
         fun remove(value: T): Bool {
-            if (this.valueIndexes == null) {
+            if (this.valueIndexes.length() == 0) {
                 return false
             }
             var hash = value.hash()
@@ -169,7 +173,7 @@ namespace Am.Collections {
             this.size = 0
             this.currentValueIndex = 0
             this.currentIndex = this.bucketSize
-            if (this.valueIndexes != null) {
+            if (this.valueIndexes.length() > 0) {
                 var i = 0
                 while(i < this.valueIndexes.length()) {
                     this.valueIndexes[i] = 0
@@ -179,7 +183,7 @@ namespace Am.Collections {
         }
 
         fun iterator(): Iterator<T> {
-            if (this.valueIndexes == null) {
+            if (this.valueIndexes.length() == 0) {
                 return new HashSetIterator<T>(new Int[0], new Int[0], this.values, 0)
             }
             return new HashSetIterator<T>(this.valueIndexes, this.nextIndexes, this.values, this.bucketSize)

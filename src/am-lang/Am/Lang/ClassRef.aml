@@ -1,7 +1,11 @@
 namespace Am.Lang 
 {
     native class PropertyInfo {
-        private var name: String
+        // Populated by the reflection runtime at startup (gated by
+        // `-reflection`). Marked nullable so the field declaration is
+        // honest; the public getter asserts non-null because the
+        // contract is "reflection setup ran before anyone reads it".
+        private var name: String? = null
         private var index: UByte
 
         fun getName(): String {
@@ -15,12 +19,14 @@ namespace Am.Lang
         native fun setValue(target: Object, value: Any)
     }
 
-    native class ClassRef 
+    native class ClassRef
     {
         import Am.Collections
 
-        private var className: String
-        private var properties: PropertyInfo[]
+        // Same shape as PropertyInfo: populated by the reflection
+        // runtime; getters assert non-null on read.
+        private var className: String? = null
+        private var properties: Array<PropertyInfo>? = null
         private static var classRefs: HashMap<String, ClassRef> = new HashMap<String, ClassRef>()
 
         static fun getClassRef(name: String): ClassRef {

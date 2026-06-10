@@ -6,10 +6,14 @@ namespace Am.Collections {
 
         private var size: Int
         private var currentEntryIndex: Int
-        private var nextIndexes: Int[]
-        private var keyIndexes: Int[]
-        private var keys: K[]
-        private var values: V[] 
+        // Backing arrays eagerly initialised to zero-length so the field
+        // declarations are honest about being non-null. The lazy-init
+        // path in `set()` gates on `length() == 0` instead of the old
+        // `== null` check; the storage materialises on first insert.
+        private var nextIndexes: Int[] = new Int[0]
+        private var keyIndexes: Int[] = new Int[0]
+        private var keys: K[] = new K[0]
+        private var values: V[] = new V[0]
         private var bucketSize: Int = 10
         private var currentIndex: Int
 
@@ -29,7 +33,7 @@ namespace Am.Collections {
         }
 
         fun get(key: K): V {
-            if (this.keyIndexes == null) {
+            if (this.keyIndexes.length() == 0) {
                 throw new KeyNotFoundException(key.toString())
             }
             var hash = key.hash()
@@ -54,7 +58,7 @@ namespace Am.Collections {
         }
 
         fun set(key: K, value: V) {
-            if (this.nextIndexes == null) {
+            if (this.nextIndexes.length() == 0) {
                 this.bucketSize = 100
                 this.nextIndexes = new Int[this.bucketSize]
                 this.keys = new K[this.bucketSize]
@@ -124,7 +128,7 @@ namespace Am.Collections {
         }
 
         fun remove(key: K): Bool {
-            if (this.keyIndexes == null) {
+            if (this.keyIndexes.length() == 0) {
                 return false
             }
             var hash = key.hash()
@@ -175,7 +179,7 @@ namespace Am.Collections {
             this.size = 0
             this.currentEntryIndex = 0
             this.currentIndex = this.bucketSize
-            if (this.keyIndexes != null) {
+            if (this.keyIndexes.length() > 0) {
                 var i = 0
                 while(i < this.keyIndexes.length()) {
                     this.keyIndexes[i] = 0
@@ -185,7 +189,7 @@ namespace Am.Collections {
         }
 
         fun containsKey(key: K): Bool {
-            if (this.keyIndexes == null) {
+            if (this.keyIndexes.length() == 0) {
                 return false
             }
             var hash = key.hash()
@@ -196,7 +200,7 @@ namespace Am.Collections {
         }
 
         fun containsValue(value: V): Bool {
-            if (this.values == null) {
+            if (this.values.length() == 0) {
                 return false
             }
             var i = 0
@@ -220,7 +224,7 @@ namespace Am.Collections {
 
         fun buildKeys(): List<K> {
             var keyList = List.newList<K>()
-            if (this.keys == null) {
+            if (this.keys.length() == 0) {
                 return keyList
             }
 
