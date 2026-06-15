@@ -71,8 +71,12 @@ static char g_log_path[64] = { 0 };
 // each line is a synchronous disk Write that drags amStudio down
 // (visibly so on quit/teardown when the log buffer flushes). Define
 // `RP_VERBOSE_LOG` at compile time to re-enable for diagnostics.
+// Currently ON to chase the post-`dir` Software Failure — every
+// packet the handler processes (except ACTION_DIE) gets a log
+// line so we can see which one is the last one before the
+// crash. Flip back to 0 once the trail is captured.
 #ifndef RP_VERBOSE_LOG
-#  define RP_VERBOSE_LOG 0
+#  define RP_VERBOSE_LOG 1
 #endif
 
 static const char * const RP_LOG_PATHS[] = {
@@ -349,7 +353,31 @@ static void rp_state_release(rp_state * st) {
 // Handler Process
 // =================================================================
 
-static void rp_pkt_reply(struct DosPacket * pkt, LONG res1, LONG res2) {
+// Variant of rp_pkt_reply that lets the caller decide whether to
+// actually PutMsg the reply back to the original sender. When the
+// child has already exited, its Process struct (including the
+// port that originally sent the packet) has been freed by exec —
+// any PutMsg into that port dereferences mp_SigTask / mp_MsgList
+// off freed memory and traps with an illegal instruction, which
+// is the #87000004 alert the user was seeing.
+//
+// `do_reply = TRUE`  → behaves like the original rp_pkt_reply.
+// `do_reply = FALSE` → fills in dp_Res1/Res2 + tags as a reply,
+//                      but skips the PutMsg. The packet memory was
+//                      allocated by the (now-dead) sender; it gets
+//                      reclaimed when exec frees the sender's
+//                      task-owned memory list.
+static void rp_pkt_reply_ex(struct DosPacket * pkt, LONG res1, LONG res2, BOOL do_reply) {
+    if (!do_reply) {
+        // Sender is dead — don't touch pkt or msg at all. The
+        // packet and its containing Message may live on the dead
+        // sender's stack/pool; reading dp_Link or writing dp_Res1
+        // would dereference freed memory and could corrupt
+        // whatever exec has reused that region for. Just drop the
+        // whole interaction on the floor — exec frees the
+        // sender's memory list when the task is torn down.
+        return;
+    }
     struct Message * msg = pkt->dp_Link;
     pkt->dp_Res1 = res1;
     pkt->dp_Res2 = res2;
@@ -367,6 +395,27 @@ static void rp_pkt_reply(struct DosPacket * pkt, LONG res1, LONG res2) {
     PutMsg(reply_port, msg);
 }
 
+static void rp_pkt_reply(struct DosPacket * pkt, LONG res1, LONG res2) {
+    rp_pkt_reply_ex(pkt, res1, res2, TRUE);
+}
+
+// True when it's UNSAFE to PutMsg back to `pkt->dp_Port`. After
+// the child has exited (and its Process / port have been freed)
+// any inbound packet from the child's libc / dos cleanup chain
+// carries a dangling dp_Port. The only safe target left is our
+// own handler port — that's how rp_handler_die's self-DIE works.
+static BOOL rp_can_reply(rp_state * st, struct DosPacket * pkt) {
+    if (!st->child_exited) {
+        return TRUE;
+    }
+    // Self-reply (e.g. the DIE we sent ourselves) is fine — our
+    // own port is alive as long as this handler task is running.
+    if (pkt->dp_Port == st->handler_port) {
+        return TRUE;
+    }
+    return FALSE;
+}
+
 // Must be called with Forbid() held.
 static void rp_fulfil_deferred(rp_state * st) {
     if (st->deferred_read_pkt == NULL) return;
@@ -376,7 +425,10 @@ static void rp_fulfil_deferred(rp_state * st) {
     LONG    n   = pkt->dp_Arg3;
     LONG popped = (LONG) rp_pop(&st->in, dst, (ULONG) n);
     st->deferred_read_pkt = NULL;
-    rp_pkt_reply(pkt, popped, 0);
+    // Reply only if the original sender's port is still alive
+    // (it won't be if the child has exited — its Process struct
+    // and message port have been freed by exec).
+    rp_pkt_reply_ex(pkt, popped, 0, rp_can_reply(st, pkt));
 }
 
 static void rp_handler_entry(void) {
@@ -437,13 +489,15 @@ static void rp_handler_entry(void) {
             if (st->shutdown_requested) {
                 g_handler_die_seen_count++;
                 // Reply to the packet that woke us into the
-                // shutdown branch.
+                // shutdown branch — but only if its sender is
+                // still alive (rp_can_reply gates this).
+                BOOL reply_ok = rp_can_reply(st, pkt);
                 switch (type) {
-                    case ACTION_READ:       rp_pkt_reply(pkt, 0, 0); break;
-                    case ACTION_WRITE:      rp_pkt_reply(pkt, pkt->dp_Arg3, 0); break;
+                    case ACTION_READ:       rp_pkt_reply_ex(pkt, 0, 0, reply_ok); break;
+                    case ACTION_WRITE:      rp_pkt_reply_ex(pkt, pkt->dp_Arg3, 0, reply_ok); break;
                     case ACTION_FINDINPUT:
-                    case ACTION_FINDOUTPUT: rp_pkt_reply(pkt, DOSFALSE, 0); break;
-                    default:                rp_pkt_reply(pkt, DOSTRUE, 0); break;
+                    case ACTION_FINDOUTPUT: rp_pkt_reply_ex(pkt, DOSFALSE, 0, reply_ok); break;
+                    default:                rp_pkt_reply_ex(pkt, DOSTRUE, 0, reply_ok); break;
                 }
                 // Drain whatever is CURRENTLY in the queue with
                 // quick replies. Two things matter here:
@@ -463,7 +517,18 @@ static void rp_handler_entry(void) {
                 //    the inner GetMsg loop forever — confirmed
                 //    2026-06-08 via HeadlessLoad. So this drain
                 //    has a hard cap so we can never spin.
-                int drain_left = 64;
+                //
+                // SKIP DRAIN entirely when the child has already
+                // exited: any packets queued behind the DIE come
+                // from the dying child's libc/dos cleanup chain
+                // and may sit in memory exec has freed (the
+                // child's stack / DOS packet pool). GetMsg's
+                // internal RemHead would dereference the freed
+                // node's mln_Pred/mln_Succ pointers — instant
+                // #87000004. Leaving the messages in the queue
+                // is fine: exec reclaims them along with the
+                // dying sender's task memory list.
+                int drain_left = st->child_exited ? 0 : 64;
                 struct Message * drain_msg;
                 while (drain_left > 0 && (drain_msg = GetMsg(port)) != NULL) {
                     drain_left--;
@@ -473,12 +538,13 @@ static void rp_handler_entry(void) {
                     }
                     struct DosPacket * dp = (struct DosPacket *) drain_msg->mn_Node.ln_Name;
                     if (dp == NULL) continue;
+                    BOOL drain_reply_ok = rp_can_reply(st, dp);
                     switch (dp->dp_Type) {
-                        case ACTION_READ:       rp_pkt_reply(dp, 0, 0); break;
-                        case ACTION_WRITE:      rp_pkt_reply(dp, dp->dp_Arg3, 0); break;
+                        case ACTION_READ:       rp_pkt_reply_ex(dp, 0, 0, drain_reply_ok); break;
+                        case ACTION_WRITE:      rp_pkt_reply_ex(dp, dp->dp_Arg3, 0, drain_reply_ok); break;
                         case ACTION_FINDINPUT:
-                        case ACTION_FINDOUTPUT: rp_pkt_reply(dp, DOSFALSE, 0); break;
-                        default:                rp_pkt_reply(dp, DOSTRUE, 0); break;
+                        case ACTION_FINDOUTPUT: rp_pkt_reply_ex(dp, DOSFALSE, 0, drain_reply_ok); break;
+                        default:                rp_pkt_reply_ex(dp, DOSTRUE, 0, drain_reply_ok); break;
                     }
                 }
                 running = FALSE;
@@ -486,6 +552,13 @@ static void rp_handler_entry(void) {
                 break;
             }
 
+            // Post-mortem packet-reply safety. When the child has
+            // already died, dp_Port on incoming packets may point
+            // at the child's freed Process port. PutMsg into it
+            // crashes the handler with #87000004. rp_can_reply
+            // returns FALSE in that case; rp_pkt_reply_ex then
+            // fills the result fields but skips the actual PutMsg.
+            BOOL reply_ok = rp_can_reply(st, pkt);
             switch (type) {
                 case ACTION_FINDINPUT:
                 case ACTION_FINDOUTPUT: {
@@ -494,16 +567,16 @@ static void rp_handler_entry(void) {
                     fh->fh_Arg1 = (LONG) st;
                     st->open_count++;
                     st->any_open = TRUE;
-                    rp_pkt_reply(pkt, DOSTRUE, 0);
+                    rp_pkt_reply_ex(pkt, DOSTRUE, 0, reply_ok);
                     break;
                 }
                 case ACTION_END:
                     if (st->open_count > 0) st->open_count--;
-                    rp_pkt_reply(pkt, DOSTRUE, 0);
+                    rp_pkt_reply_ex(pkt, DOSTRUE, 0, reply_ok);
                     break;
                 case ACTION_DIE:
                     // Advisory unless AmLang side has requested shutdown.
-                    rp_pkt_reply(pkt, DOSTRUE, 0);
+                    rp_pkt_reply_ex(pkt, DOSTRUE, 0, reply_ok);
                     break;
                 case ACTION_WRITE: {
                     UBYTE * src = (UBYTE *) pkt->dp_Arg2;
@@ -557,11 +630,11 @@ static void rp_handler_entry(void) {
                         resp[rp++] = 'q';
                         rp_push(&st->in, resp, (ULONG) rp);
                         rp_fulfil_deferred(st);
-                        rp_pkt_reply(pkt, n, 0);
+                        rp_pkt_reply_ex(pkt, n, 0, reply_ok);
                         break;
                     }
                     rp_push(&st->out, src, (ULONG) n);
-                    rp_pkt_reply(pkt, n, 0);
+                    rp_pkt_reply_ex(pkt, n, 0, reply_ok);
                     // Wake the main task AFTER the bytes are in the
                     // ring and the packet is replied. Signal'ing
                     // BEFORE the push lets drainProcess race in,
@@ -576,9 +649,9 @@ static void rp_handler_entry(void) {
                         UBYTE * dst = (UBYTE *) pkt->dp_Arg2;
                         LONG    n   = pkt->dp_Arg3;
                         LONG popped = (LONG) rp_pop(&st->in, dst, (ULONG) n);
-                        rp_pkt_reply(pkt, popped, 0);
+                        rp_pkt_reply_ex(pkt, popped, 0, reply_ok);
                     } else if (st->in.writer_closed) {
-                        rp_pkt_reply(pkt, 0, 0);
+                        rp_pkt_reply_ex(pkt, 0, 0, reply_ok);
                     } else if (st->raw_mode) {
                         // Raw mode + empty ring -> reply 0 immediately
                         // instead of deferring. bebbossh's interactive
@@ -597,10 +670,11 @@ static void rp_handler_entry(void) {
                         // FALSE — that's how the password fgets in
                         // loginPass() waits for the user to finish
                         // typing.
-                        rp_pkt_reply(pkt, 0, 0);
+                        rp_pkt_reply_ex(pkt, 0, 0, reply_ok);
                     } else {
                         if (st->deferred_read_pkt != NULL) {
-                            rp_pkt_reply(st->deferred_read_pkt, 0, 0);
+                            rp_pkt_reply_ex(st->deferred_read_pkt, 0, 0,
+                                            rp_can_reply(st, st->deferred_read_pkt));
                         }
                         st->deferred_read_pkt = pkt;
                     }
@@ -630,9 +704,9 @@ static void rp_handler_entry(void) {
                     // bebbossh shell loop the immediate honest
                     // answer is exactly what dos.library expects.
                     if (st->in.count > 0 || st->in.writer_closed) {
-                        rp_pkt_reply(pkt, DOSTRUE, 0);
+                        rp_pkt_reply_ex(pkt, DOSTRUE, 0, reply_ok);
                     } else {
-                        rp_pkt_reply(pkt, DOSFALSE, 0);
+                        rp_pkt_reply_ex(pkt, DOSFALSE, 0, reply_ok);
                     }
                     break;
                 case ACTION_SCREEN_MODE:
@@ -650,10 +724,10 @@ static void rp_handler_entry(void) {
                     // SetMode or because we mishandled the packet.
                     rp_log_event("[rp] SCREEN_MODE arg=", pkt->dp_Arg1);
                     st->raw_mode = (pkt->dp_Arg1 != 0) ? TRUE : FALSE;
-                    rp_pkt_reply(pkt, DOSTRUE, 0);
+                    rp_pkt_reply_ex(pkt, DOSTRUE, 0, reply_ok);
                     break;
                 case ACTION_CHANGE_SIGNAL:
-                    rp_pkt_reply(pkt, DOSTRUE, 0);
+                    rp_pkt_reply_ex(pkt, DOSTRUE, 0, reply_ok);
                     break;
                 case ACTION_DISK_INFO: {
                     // IsInteractive() in dos.library V36+ asks the
@@ -683,13 +757,13 @@ static void rp_handler_entry(void) {
                         id->id_DiskType = 0x434F4E00L;
                         id->id_DiskState = ID_VALIDATED;
                     }
-                    rp_pkt_reply(pkt, DOSTRUE, 0);
+                    rp_pkt_reply_ex(pkt, DOSTRUE, 0, reply_ok);
                     break;
                 }
                 case ACTION_SAME_LOCK:
                 case ACTION_FH_FROM_LOCK:
                 case ACTION_SEEK:           /* 1008 — stream is not seekable */
-                    rp_pkt_reply(pkt, -1, ERROR_ACTION_NOT_KNOWN);
+                    rp_pkt_reply_ex(pkt, -1, ERROR_ACTION_NOT_KNOWN, reply_ok);
                     break;
                 case ACTION_EXAMINE_FH: {   /* 1034 */
                     // Two-mode behaviour, gated on raw_mode:
@@ -726,7 +800,7 @@ static void rp_handler_entry(void) {
                     // ring returns 0 instead of deferring, so the
                     // event loop doesn't wedge on that one Read.
                     if (!st->raw_mode) {
-                        rp_pkt_reply(pkt, DOSFALSE, 0);
+                        rp_pkt_reply_ex(pkt, DOSFALSE, 0, reply_ok);
                         break;
                     }
                     struct FileInfoBlock * fib =
@@ -738,13 +812,13 @@ static void rp_handler_entry(void) {
                         }
                         fib->fib_Size = (LONG) st->in.count;
                     }
-                    rp_pkt_reply(pkt, DOSTRUE, 0);
+                    rp_pkt_reply_ex(pkt, DOSTRUE, 0, reply_ok);
                     break;
                 }
                 default:
                     // No rp_log_event here — DOS-in-handler rule
                     // (see banner at function entry).
-                    rp_pkt_reply(pkt, DOSTRUE, 0);
+                    rp_pkt_reply_ex(pkt, DOSTRUE, 0, reply_ok);
                     break;
             }
             Permit();
@@ -753,7 +827,8 @@ static void rp_handler_entry(void) {
 
     Forbid();
     if (st->deferred_read_pkt != NULL) {
-        rp_pkt_reply(st->deferred_read_pkt, 0, 0);
+        rp_pkt_reply_ex(st->deferred_read_pkt, 0, 0,
+                        rp_can_reply(st, st->deferred_read_pkt));
         st->deferred_read_pkt = NULL;
     }
     // Null handler_port so any subsequent rp_handler_die call
@@ -1451,9 +1526,17 @@ function_result Am_Lang_RunningProcess_close_0(aobject * const this) {
     if (this != NULL) __increase_reference_count(this);
     running_process_data * d = rp_data(this);
     if (d != NULL && d->state != NULL) {
+        // These two log_event calls run on the AmLang main task
+        // (not the handler), so the dos-in-handler rule doesn't
+        // apply — Write to g_log_fh is safe. They bracket the
+        // close so a tty.log that ends after "close: enter" but
+        // before "close: done" tells us the AmLang side is the
+        // one crashing, not the handler.
+        rp_log_event("[rp] close: enter, live=", g_live_handler_count);
         rp_handler_die(d->state);
         rp_state_release(d->state);
         d->state = NULL;
+        rp_log_event("[rp] close: done, live=", g_live_handler_count);
     }
     if (this != NULL) __decrease_reference_count(this);
     return __result;
@@ -1495,15 +1578,32 @@ function_result Am_Lang_RunningProcess_setGlobalWake_0(long long var_taskPtr, in
 // don't have to hold Forbid for the duration of the wait),
 // send each one an ACTION_DIE + flag shutdown_requested, then
 // poll-with-Delay until the global list empties. Capped at
-// ~1.2s total wait so a wedged handler can't block exit
-// forever — in that bad case the user might still see a
-// stale alert, but that's strictly better than today's
-// "every exit shows one".
-#define RP_SHUTDOWN_TIMEOUT_TICKS  60   // 60 ticks = ~1.2 seconds
-#define RP_SHUTDOWN_POLL_TICKS      2   // 2 ticks  = ~40 ms per poll
+// ~5s total wait — generous enough that the only handlers
+// still alive past this point are genuinely wedged, in
+// which case we move on to the RemTask backstop below
+// rather than just sleeping.
+#define RP_SHUTDOWN_TIMEOUT_TICKS    250  // 250 ticks = ~5 seconds
+#define RP_SHUTDOWN_POLL_TICKS         2  // 2 ticks   = ~40 ms per poll
+// After the polite wait we do up to two re-DIE rounds before
+// resorting to RemTask. Each round retries the polite DIE
+// path so a handler that was simply behind on processing has
+// one more chance to exit cleanly. The Signal() nudge wakes
+// any task that's mysteriously not seeing PutMsg's signal
+// (defensive — shouldn't happen, but cheap).
+#define RP_SHUTDOWN_REDIE_ROUNDS       2
+#define RP_SHUTDOWN_REDIE_TICKS       50  // ~1s per round
 
 function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
     function_result __result = { .has_return_value = false };
+
+    // Mirror the per-stage counters into tty.log so a quit-time
+    // crash leaves a trail in the file (rp_stdout_line goes to
+    // the parent shell's stdout, which evaporates if you launched
+    // amStudio from Workbench).
+    rp_log_event("[rp] shutdownAll: enter live=", g_live_handler_count);
+    rp_log_event("[rp] shutdownAll: entered=",    g_handler_entered_count);
+    rp_log_event("[rp] shutdownAll: die_seen=",   g_handler_die_seen_count);
+    rp_log_event("[rp] shutdownAll: exited=",     g_handler_exited_count);
 
     // Print a single combined diagnostic line covering all four
     // counters so we can tell at a glance which segment of the
@@ -1556,11 +1656,17 @@ function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
     rp_state * targets[RP_MAX_SHUTDOWN_TARGETS];
     int n_targets = 0;
 
+    // Snapshot live handlers under Forbid AND pin each by
+    // bumping refcount. Without the pin a handler that exits
+    // between our Permit() and the rp_handler_die() call would
+    // free its rp_state, leaving us pointing at freed memory.
+    // The matching rp_state_release at the end drops the pin.
     Forbid();
     rp_state * cur = g_handler_list_head;
     while (cur != NULL && n_targets < RP_MAX_SHUTDOWN_TARGETS) {
         cur->shutdown_requested = TRUE;
         if (cur->handler_port != NULL) {
+            cur->refcount++;
             targets[n_targets++] = cur;
         }
         cur = cur->next_handler;
@@ -1598,14 +1704,111 @@ function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
     }
 
     // Poll the live counter. Each tick is ~20ms (50 Hz);
-    // RP_SHUTDOWN_TIMEOUT_TICKS=60 → ~1.2s cap. In practice a
+    // RP_SHUTDOWN_TIMEOUT_TICKS=250 → ~5s cap. In practice a
     // handler picks up the DIE and exits within one or two
-    // ticks, so we typically return well under 100ms.
+    // ticks, so we typically return well under 100ms — the
+    // cap is generous so that a behind-on-processing handler
+    // can still complete its drain rather than being killed.
     ULONG waited = 0;
     while (waited < RP_SHUTDOWN_TIMEOUT_TICKS) {
         if (g_live_handler_count <= 0) break;
         Delay(RP_SHUTDOWN_POLL_TICKS);
         waited += RP_SHUTDOWN_POLL_TICKS;
+    }
+
+    // Re-DIE rounds: any handler still alive past the polite
+    // wait gets another ACTION_DIE plus a Signal() nudge in
+    // case its first DIE went into a packet queue we couldn't
+    // get past, or the handler somehow missed the port's wake
+    // signal. Each round waits a smaller window for results.
+    if (g_live_handler_count > 0) {
+        for (int round = 0; round < RP_SHUTDOWN_REDIE_ROUNDS; round++) {
+            if (g_live_handler_count <= 0) break;
+            // Snapshot live handlers again — between rounds, some
+            // may have exited and unlinked themselves, so the
+            // original `targets[]` array can have stale pointers.
+            rp_state * roundTargets[RP_MAX_SHUTDOWN_TARGETS];
+            int roundN = 0;
+            Forbid();
+            rp_state * walk = g_handler_list_head;
+            while (walk != NULL && roundN < RP_MAX_SHUTDOWN_TARGETS) {
+                walk->shutdown_requested = TRUE;
+                if (walk->handler_port != NULL) {
+                    walk->refcount++;
+                    roundTargets[roundN++] = walk;
+                }
+                walk = walk->next_handler;
+            }
+            Permit();
+            for (int i = 0; i < roundN; i++) {
+                rp_handler_die(roundTargets[i]);
+                // Wake the handler's task by raising any pending
+                // signal it might be sleeping on. The handler's
+                // WaitPort waits on its message port's signal bit;
+                // PutMsg already raises that bit, but we Signal()
+                // SIGBREAKF_CTRL_C as a defensive nudge — if the
+                // port's signal is stuck for any reason, this
+                // forces a Wait() return. The handler's main loop
+                // re-checks shutdown_requested on every packet, so
+                // a spurious wake-without-message is harmless.
+                if (roundTargets[i]->handler_proc != NULL) {
+                    Signal((struct Task *) roundTargets[i]->handler_proc,
+                           SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+                }
+            }
+            ULONG round_waited = 0;
+            while (round_waited < RP_SHUTDOWN_REDIE_TICKS) {
+                if (g_live_handler_count <= 0) break;
+                Delay(RP_SHUTDOWN_POLL_TICKS);
+                round_waited += RP_SHUTDOWN_POLL_TICKS;
+            }
+            waited += round_waited;
+            // Drop the pins; matched to the refcount++ above.
+            for (int i = 0; i < roundN; i++) {
+                rp_state_release(roundTargets[i]);
+            }
+        }
+    }
+
+    // Drop the pins taken in the initial snapshot. Matched to the
+    // refcount++ inside the original Forbid block above.
+    for (int i = 0; i < n_targets; i++) {
+        rp_state_release(targets[i]);
+    }
+
+    // Last resort: any handler still alive at this point is
+    // genuinely wedged. Letting it survive past UnLoadSeg means
+    // the next packet that wakes it will execute freed code and
+    // pop the #87000004 Software Failure alert under the stale
+    // `amStudioTTY` name. RemTask removes the task before that
+    // can happen. Resources tracked via TC_MemEntry (the stack,
+    // any allocations the task did via its own pool) get freed
+    // by exec on RemTask; our rp_state / ring buffers leak (no
+    // callback path to reclaim them once RemTask hits), but the
+    // process is exiting anyway so this is just a clean-exit
+    // tradeoff.
+    if (g_live_handler_count > 0) {
+        rp_stdout_line("[rp] shutdownAll: RemTask on wedged handlers");
+        rp_log_event("[rp] shutdownAll: RemTask wedged, live=", g_live_handler_count);
+        Forbid();
+        rp_state * cur2 = g_handler_list_head;
+        while (cur2 != NULL) {
+            rp_state * next = cur2->next_handler;
+            struct Process * hp = cur2->handler_proc;
+            // Defensive guard: only RemTask if the proc pointer is
+            // still set AND we haven't already nulled handler_port
+            // (which the handler exit path does after Permit, so a
+            // null handler_port + non-null handler_proc means the
+            // handler is between Permit and function-return — give
+            // it one more tick rather than RemTasking mid-cleanup).
+            if (hp != NULL && cur2->handler_port != NULL) {
+                cur2->handler_port = NULL;
+                RemTask((struct Task *) hp);
+                g_live_handler_count--;
+            }
+            cur2 = next;
+        }
+        Permit();
     }
 
     {
@@ -1632,6 +1835,15 @@ function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
         msg[p] = 0;
         rp_stdout_line(msg);
     }
+
+    // Mirror the final state into tty.log alongside the
+    // parent-stdout breadcrumb, so a Workbench-launched session
+    // can still see the cleanup outcome after exit.
+    rp_log_event("[rp] shutdownAll: done remaining=", g_live_handler_count);
+    rp_log_event("[rp] shutdownAll: waited_ticks=",   (LONG) waited);
+    rp_log_event("[rp] shutdownAll: final entered=",  g_handler_entered_count);
+    rp_log_event("[rp] shutdownAll: final die_seen=", g_handler_die_seen_count);
+    rp_log_event("[rp] shutdownAll: final exited=",   g_handler_exited_count);
 
     return __result;
 }
