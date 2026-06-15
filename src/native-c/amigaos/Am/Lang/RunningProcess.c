@@ -562,23 +562,63 @@ static void rp_handler_entry(void) {
             switch (type) {
                 case ACTION_FINDINPUT:
                 case ACTION_FINDOUTPUT: {
-                    struct FileHandle * fh = (struct FileHandle *) BADDR(pkt->dp_Arg1);
-                    fh->fh_Type = port;
-                    fh->fh_Arg1 = (LONG) st;
-                    st->open_count++;
-                    st->any_open = TRUE;
-                    rp_pkt_reply_ex(pkt, DOSTRUE, 0, reply_ok);
+                    // After the child has died, pkt may live in the
+                    // dead sender's freed memory; dp_Arg1 could be
+                    // garbage. The fh writes below dereference
+                    // BADDR(dp_Arg1) unconditionally — if we get
+                    // unlucky on the recycled value we blast a word
+                    // into some random place in exec's heap and
+                    // alert with #87000004. Skip the write entirely
+                    // when the child is gone.
+                    if (!st->child_exited) {
+                        struct FileHandle * fh = (struct FileHandle *) BADDR(pkt->dp_Arg1);
+                        fh->fh_Type = port;
+                        fh->fh_Arg1 = (LONG) st;
+                        st->open_count++;
+                        st->any_open = TRUE;
+                    }
+                    rp_pkt_reply_ex(pkt, st->child_exited ? DOSFALSE : DOSTRUE, 0, reply_ok);
                     break;
                 }
-                case ACTION_END:
+                case ACTION_END: {
                     if (st->open_count > 0) st->open_count--;
                     rp_pkt_reply_ex(pkt, DOSTRUE, 0, reply_ok);
+                    // Self-exit once the child has gone and every
+                    // inherited FH is closed — no further legitimate
+                    // traffic can arrive from the (now-dead) child, so
+                    // hanging around just to read packets out of its
+                    // freed memory is asking for an Address Error. The
+                    // unconditional BADDR(pkt->dp_Arg*) writes in the
+                    // FINDINPUT / FINDOUTPUT / DISK_INFO / EXAMINE_FH
+                    // cases would happily blast a random word into
+                    // freed-and-reused memory if a post-exit packet
+                    // sneaks through; exiting here keeps that window
+                    // from ever opening. close() may still PutMsg
+                    // ACTION_DIE after this — handler_port is nulled
+                    // in the teardown so the next rp_handler_die
+                    // sees NULL and skips the PutMsg.
+                    if (st->child_exited && st->open_count == 0
+                        && st->any_open) {
+                        st->shutdown_requested = TRUE;
+                        running = FALSE;
+                    }
                     break;
+                }
                 case ACTION_DIE:
                     // Advisory unless AmLang side has requested shutdown.
                     rp_pkt_reply_ex(pkt, DOSTRUE, 0, reply_ok);
                     break;
                 case ACTION_WRITE: {
+                    // If the child is gone, src+n point into
+                    // recycled / freed memory; reading n bytes from
+                    // a garbage src for a garbage n could walk off
+                    // the end of any mapping. Drop the write
+                    // silently — child is dead so there's no
+                    // legitimate writer anyway.
+                    if (st->child_exited) {
+                        rp_pkt_reply_ex(pkt, pkt->dp_Arg3, 0, reply_ok);
+                        break;
+                    }
                     UBYTE * src = (UBYTE *) pkt->dp_Arg2;
                     LONG    n   = pkt->dp_Arg3;
                     // Intercept the AmigaOS "what's your terminal
@@ -645,7 +685,12 @@ static void rp_handler_entry(void) {
                     break;
                 }
                 case ACTION_READ: {
-                    if (st->in.count > 0) {
+                    if (st->child_exited) {
+                        // Don't write into pkt->dp_Arg2 — after child
+                        // exit it may be recycled memory. Reply 0
+                        // (EOF) and drop the read.
+                        rp_pkt_reply_ex(pkt, 0, 0, reply_ok);
+                    } else if (st->in.count > 0) {
                         UBYTE * dst = (UBYTE *) pkt->dp_Arg2;
                         LONG    n   = pkt->dp_Arg3;
                         LONG popped = (LONG) rp_pop(&st->in, dst, (ULONG) n);
@@ -747,17 +792,22 @@ static void rp_handler_entry(void) {
                     // an unmounted error. Block counts stay zero;
                     // they're meaningless for a console stream and
                     // no AmigaOS code we care about reads them.
-                    struct InfoData * id = (struct InfoData *) BADDR(pkt->dp_Arg2);
-                    if (id != NULL) {
-                        UBYTE * z = (UBYTE *) id;
-                        ULONG i;
-                        for (i = 0; i < sizeof(struct InfoData); i++) {
-                            z[i] = 0;
+                    // Skip the BADDR write if the child is gone —
+                    // see the FINDINPUT/FINDOUTPUT case above for the
+                    // freed-memory / recycled-pointer rationale.
+                    if (!st->child_exited) {
+                        struct InfoData * id = (struct InfoData *) BADDR(pkt->dp_Arg2);
+                        if (id != NULL) {
+                            UBYTE * z = (UBYTE *) id;
+                            ULONG i;
+                            for (i = 0; i < sizeof(struct InfoData); i++) {
+                                z[i] = 0;
+                            }
+                            id->id_DiskType = 0x434F4E00L;
+                            id->id_DiskState = ID_VALIDATED;
                         }
-                        id->id_DiskType = 0x434F4E00L;
-                        id->id_DiskState = ID_VALIDATED;
                     }
-                    rp_pkt_reply_ex(pkt, DOSTRUE, 0, reply_ok);
+                    rp_pkt_reply_ex(pkt, st->child_exited ? DOSFALSE : DOSTRUE, 0, reply_ok);
                     break;
                 }
                 case ACTION_SAME_LOCK:
@@ -799,7 +849,11 @@ static void rp_handler_entry(void) {
                     // ACTION_READ — when raw_mode is TRUE, an empty
                     // ring returns 0 instead of deferring, so the
                     // event loop doesn't wedge on that one Read.
-                    if (!st->raw_mode) {
+                    if (!st->raw_mode || st->child_exited) {
+                        // Plain DOSFALSE reply in the non-raw or
+                        // child-gone cases — no BADDR write means
+                        // no risk of corrupting memory through a
+                        // recycled dp_Arg2 from a dead sender.
                         rp_pkt_reply_ex(pkt, DOSFALSE, 0, reply_ok);
                         break;
                     }
@@ -872,6 +926,19 @@ static void __saveds rp_child_exit(
     if (st == NULL) return;
     Forbid();
     st->child_exited = TRUE;
+    // Trip the same shutdown flag that close() would otherwise set
+    // a moment later. The handler's shutdown branch responds to the
+    // very next packet with safe DOSFALSE/DOSTRUE replies and breaks
+    // out of the loop — without this, the handler stays alive in
+    // its NORMAL switch for the post-exit packets, and the next
+    // FINDINPUT / DISK_INFO / EXAMINE_FH that sneaks in writes
+    // through BADDR(pkt->dp_Arg*) into freed memory and alerts with
+    // #87000004. close()'s subsequent rp_handler_die becomes a
+    // no-op when handler_port is already nulled by the exiting
+    // handler, so this is purely additive — the existing path still
+    // covers the case where the child crashes without firing
+    // NP_ExitCode.
+    st->shutdown_requested = TRUE;
     // Wake the handler if it's blocked on a deferred read so the
     // child's read consumers don't sit forever. We turn the
     // writer_closed flag on first, then fulfil any waiting read with
