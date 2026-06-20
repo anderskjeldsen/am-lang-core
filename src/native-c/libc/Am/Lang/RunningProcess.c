@@ -1,10 +1,17 @@
-// Async child-process wrapper for libc. Forks a child, execs the
-// command via /bin/sh -c, and wires stdin/stdout through pipe()
-// pairs. Mirror of the AmigaOS PIPE: implementation; same public
-// behaviour (non-blocking tryReadOutput, line-by-line writeInput).
+// Async child-process wrapper for libc. Uses forkpty() to give the
+// child a real pseudo-terminal so interactive programs (ssh, vim,
+// nano, etc.) see a tty on stdin/stdout/stderr — without this the
+// SSH client refuses to allocate a remote pty and prints
+// "Pseudo-terminal will not be allocated because stdin is not a
+// terminal" before sending what amounts to a non-interactive
+// session. Same public behaviour as the previous pipe-based
+// implementation (non-blocking tryReadOutput, line-by-line
+// writeInput); the read and write halves now share the pty master
+// fd, since the kernel pty's master is bidirectional.
 //
 // Used for desktop testing of the IDE (macOS / Linux); the IDE
-// itself runs on AmigaOS/MorphOS in practice.
+// itself runs on AmigaOS/MorphOS in practice (RunningProcess.c
+// there speaks to a custom DOS handler instead).
 
 #include <libc/core.h>
 #include <Am/Lang/RunningProcess.h>
@@ -23,7 +30,14 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/ioctl.h>
 #include <signal.h>
+#include <termios.h>
+#if defined(__APPLE__)
+  #include <util.h>                // forkpty on macOS
+#else
+  #include <pty.h>                 // forkpty on Linux (link with -lutil)
+#endif
 
 typedef struct _running_process_data running_process_data;
 struct _running_process_data {
@@ -61,12 +75,20 @@ function_result Am_Lang_RunningProcess__native_mark_children_0(aobject * const t
 
 static void rp_close_internal(running_process_data * d) {
     if (d == NULL) return;
-    if (d->stdin_writer_fd >= 0) {
-        close(d->stdin_writer_fd);
+    // With the pty backend stdin_writer_fd and stdout_reader_fd
+    // hold the same master fd. Close it once, null both slots.
+    int writer = d->stdin_writer_fd;
+    int reader = d->stdout_reader_fd;
+    if (writer >= 0) {
+        close(writer);
         d->stdin_writer_fd = -1;
+        if (reader == writer) {
+            d->stdout_reader_fd = -1;
+            reader = -1;
+        }
     }
-    if (d->stdout_reader_fd >= 0) {
-        close(d->stdout_reader_fd);
+    if (reader >= 0) {
+        close(reader);
         d->stdout_reader_fd = -1;
     }
     if (d->child_pid > 0 && !d->child_exited) {
@@ -107,36 +129,41 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     string_holder * cmd_holder = (string_holder *) (command + 1);
     const char * cmd_str = cmd_holder->string_value;
 
-    int stdin_pipe[2];   // [0]=read end (child), [1]=write end (parent)
-    int stdout_pipe[2];  // [0]=read end (parent), [1]=write end (child)
-    if (pipe(stdin_pipe) != 0) {
-        __throw_simple_exception("RunningProcess: pipe(stdin) failed", "in Am_Lang_RunningProcess_startNative_0", &__result);
-        goto __exit;
-    }
-    if (pipe(stdout_pipe) != 0) {
-        close(stdin_pipe[0]); close(stdin_pipe[1]);
-        __throw_simple_exception("RunningProcess: pipe(stdout) failed", "in Am_Lang_RunningProcess_startNative_0", &__result);
-        goto __exit;
-    }
+    // Hand the child a PTY in cooked+echo defaults. That's
+    // deliberately NOT raw mode: ssh's pty-req protocol message
+    // copies our local termios state to the remote PTY, so if we
+    // start in raw (cfmakeraw) the remote shell ends up with ECHO
+    // off and the user never sees the bytes they type echoed back
+    // over the connection — even though Enter still reaches the
+    // remote and runs commands. Interactive children (ssh, nano,
+    // htop, bash) all do their own tcsetattr to switch our local
+    // PTY into raw mode the moment they start, saving the cooked
+    // state for restore on exit. Until then ssh has already
+    // forwarded the cooked+echo modes to the remote and the remote
+    // shell echoes typing normally.
+    //
+    // Pass NULL termios to forkpty so we get the kernel defaults
+    // (the values openpty would seed in `struct termios` after a
+    // freshly-opened ptmx). On macOS that's: ICANON, ECHO, ICRNL,
+    // OPOST, ONLCR, ISIG, all on — exactly what a brand-new
+    // controlling tty looks like.
+    struct winsize slave_win;
+    memset(&slave_win, 0, sizeof(slave_win));
+    slave_win.ws_row = 24;
+    slave_win.ws_col = 80;
 
-    pid_t pid = fork();
+    int master_fd = -1;
+    pid_t pid = forkpty(&master_fd, NULL, NULL, &slave_win);
     if (pid < 0) {
-        close(stdin_pipe[0]); close(stdin_pipe[1]);
-        close(stdout_pipe[0]); close(stdout_pipe[1]);
-        __throw_simple_exception("RunningProcess: fork failed", "in Am_Lang_RunningProcess_startNative_0", &__result);
+        __throw_simple_exception("RunningProcess: forkpty failed", "in Am_Lang_RunningProcess_startNative_0", &__result);
         goto __exit;
     }
     if (pid == 0) {
-        // Child. Wire stdin/stdout to our pipe ends, close the
-        // parent ends, then exec via /bin/sh -c so shell features
-        // (quoting, &&, etc.) work the same as runAndCaptureOutput.
-        dup2(stdin_pipe[0], STDIN_FILENO);
-        dup2(stdout_pipe[1], STDOUT_FILENO);
-        dup2(stdout_pipe[1], STDERR_FILENO);
-        close(stdin_pipe[0]);
-        close(stdin_pipe[1]);
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
+        // Child. forkpty has already wired the slave pty onto stdin /
+        // stdout / stderr and made it the controlling terminal. All
+        // that's left is chdir (best-effort) and exec via /bin/sh -c
+        // so shell features (quoting, &&, etc.) work the same as
+        // runAndCaptureOutput.
         if (workingDir != NULL) {
             string_holder * wd_holder = (string_holder *) (workingDir + 1);
             const char * wd_str = wd_holder->string_value;
@@ -147,22 +174,28 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
                 }
             }
         }
+        // Hint the child about its terminal type. Many curses-based
+        // programs (nano, htop) fall over with a bare "dumb" TERM;
+        // xterm-256color is the closest match to what amStudio's
+        // grid actually understands.
+        setenv("TERM", "xterm-256color", 1);
         execl("/bin/sh", "sh", "-c", cmd_str, (char *) NULL);
         // execl returns only on failure.
         _exit(127);
     }
 
-    // Parent. Close the child ends; keep the parent ends.
-    close(stdin_pipe[0]);
-    close(stdout_pipe[1]);
+    // Parent. Make the pty master non-blocking so tryReadOutput
+    // returns immediately when no bytes are buffered.
+    int flags = fcntl(master_fd, F_GETFL, 0);
+    fcntl(master_fd, F_SETFL, flags | O_NONBLOCK);
 
-    // Make the parent's stdout reader non-blocking so tryReadOutput
-    // returns immediately when there's nothing buffered.
-    int flags = fcntl(stdout_pipe[0], F_GETFL, 0);
-    fcntl(stdout_pipe[0], F_SETFL, flags | O_NONBLOCK);
-
-    d->stdin_writer_fd  = stdin_pipe[1];
-    d->stdout_reader_fd = stdout_pipe[0];
+    // The master pty fd is bidirectional — reads pick up the
+    // child's stdout/stderr stream, writes are delivered to the
+    // child's stdin. Park the same fd in both slots so the
+    // tryReadOutput / writeInput paths above keep working without
+    // structural changes.
+    d->stdin_writer_fd  = master_fd;
+    d->stdout_reader_fd = master_fd;
     d->child_pid = pid;
     d->child_exited = 0;
 
@@ -187,6 +220,9 @@ function_result Am_Lang_RunningProcess_tryReadOutput_0(aobject * const this) {
     ssize_t n = read(d->stdout_reader_fd, buf, sizeof(buf) - 1);
     if (n > 0) {
         buf[n] = 0;
+        fprintf(stderr, "[rp.read] fd=%d n=%zd byte0=0x%02x\n",
+            d->stdout_reader_fd, n, (unsigned) (unsigned char) buf[0]);
+        fflush(stderr);
         __result.return_value.value.object_value = __create_string(buf, &Am_Lang_String);
         goto __exit;
     }
@@ -228,6 +264,10 @@ function_result Am_Lang_RunningProcess_writeInput_0(aobject * const this, aobjec
     size_t len = strlen(h->string_value);
     if (len > 0) {
         ssize_t w = write(d->stdin_writer_fd, h->string_value, len);
+        fprintf(stderr, "[rp.writeInput] fd=%d len=%zu wrote=%zd byte0=0x%02x\n",
+            d->stdin_writer_fd, len, w,
+            (unsigned) (unsigned char) h->string_value[0]);
+        fflush(stderr);
         (void) w;  // best-effort
     }
 
@@ -283,19 +323,49 @@ function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
     return __result;
 }
 
-// Raw-mode + reported-size hooks exist for AmigaOS's custom-handler
-// pty (see native-c/amigaos/Am/Lang/RunningProcess.c). The libc child
-// runs against the host kernel's real PTY, so there's nothing for the
-// AmLang side to query — return non-raw and accept the size silently.
+// Raw-mode hook. On AmigaOS this is driven by the custom DOS
+// handler — the child explicitly calls SetMode() to opt into raw
+// I/O when it wants to read keystrokes one at a time, and the
+// AmLang side flips the panel into terminal-grid rendering. The
+// libc backend now hands the child a real kernel PTY via forkpty,
+// and that PTY is up in raw mode from the moment the child
+// starts (see cfmakeraw in startNative). So every stream we read
+// back is a full terminal byte stream — OSC title-set escapes
+// (\x1b]0;…\a), ANSI cursor positioning, colour codes — and the
+// line-history renderer doesn't know how to interpret any of it.
+// Reporting `true` here routes drainProcess straight into the
+// TerminalEmulator grid, which is what we want for ssh / nano /
+// htop. Simple `ls`/`dir` calls go through runAndCaptureOutput,
+// not RunningProcess, so they stay on the history renderer.
 function_result Am_Lang_RunningProcess_isRawMode_0(aobject * const this) {
     function_result __result = { .has_return_value = true };
-    __result.return_value = (nullable_value){ .flags = PRIMITIVE_BOOL, .value.bool_value = false };
+    (void) this;
+    __result.return_value = (nullable_value){ .flags = PRIMITIVE_BOOL, .value.bool_value = true };
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_setReportedSize_0(aobject * const this, int var_rows, int var_cols) {
     function_result __result = { .has_return_value = false };
-    (void)var_rows;
-    (void)var_cols;
+    if (this != NULL) __increase_reference_count(this);
+    running_process_data * d = rp_data(this);
+    // Forward the AmLang panel's grid dimensions to the child's
+    // pty via TIOCSWINSZ. Programs like ssh, nano and htop read
+    // this on startup (and reread on SIGWINCH) to decide where to
+    // wrap output. Without it the child stays at 24x80 and the
+    // CLI panel looks like a wide window with truncated text.
+    if (d != NULL && d->stdout_reader_fd >= 0 && var_rows > 0 && var_cols > 0) {
+        struct winsize ws;
+        memset(&ws, 0, sizeof(ws));
+        ws.ws_row = (unsigned short) var_rows;
+        ws.ws_col = (unsigned short) var_cols;
+        ioctl(d->stdout_reader_fd, TIOCSWINSZ, &ws);
+        if (d->child_pid > 0 && !d->child_exited) {
+            // SIGWINCH so a child that's already running (re-resize
+            // after the user changes panel size) notices the new dims
+            // and repaints its UI to fit. Best-effort.
+            kill(d->child_pid, SIGWINCH);
+        }
+    }
+    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
