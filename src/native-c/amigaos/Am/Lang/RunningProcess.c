@@ -1912,5 +1912,17 @@ function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
     rp_log_event("[rp] shutdownAll: final die_seen=", g_handler_die_seen_count);
     rp_log_event("[rp] shutdownAll: final exited=",   g_handler_exited_count);
 
+    // Close the log file so AmigaOS releases the lock on
+    // RAM:amStudio-tty.log. Without this the file shows as "in use"
+    // after amStudio exits and the user can't open / delete it from
+    // Workbench until they reboot — DOS doesn't auto-Close FH's that
+    // a process leaves open at exit, the AmigaOS exec lib doesn't
+    // garbage-collect them either. Last call before we return.
+    if (g_log_fh != 0) {
+        BPTR fh = g_log_fh;
+        g_log_fh = 0;
+        Close(fh);
+    }
+
     return __result;
 }
