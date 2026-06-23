@@ -323,24 +323,36 @@ function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
     return __result;
 }
 
-// Raw-mode hook. On AmigaOS this is driven by the custom DOS
-// handler — the child explicitly calls SetMode() to opt into raw
-// I/O when it wants to read keystrokes one at a time, and the
-// AmLang side flips the panel into terminal-grid rendering. The
-// libc backend now hands the child a real kernel PTY via forkpty,
-// and that PTY is up in raw mode from the moment the child
-// starts (see cfmakeraw in startNative). So every stream we read
-// back is a full terminal byte stream — OSC title-set escapes
-// (\x1b]0;…\a), ANSI cursor positioning, colour codes — and the
-// line-history renderer doesn't know how to interpret any of it.
-// Reporting `true` here routes drainProcess straight into the
-// TerminalEmulator grid, which is what we want for ssh / nano /
-// htop. Simple `ls`/`dir` calls go through runAndCaptureOutput,
-// not RunningProcess, so they stay on the history renderer.
+// Raw-mode hook — asks the kernel "is the slave PTY currently in
+// raw mode?" the same way every Unix program would (a tcgetattr
+// on the fd). On a forkpty pair, `tcgetattr(master_fd)` returns
+// the SLAVE's termios — so when the child runs `tcsetattr(raw)`
+// (which ssh, nano, vim, htop, less, mc all do at startup via
+// cfmakeraw / curses initscr / readline's prep_terminal), the
+// master observes it on the next call.
+//
+// "Raw" here is the standard test curses uses: canonical input
+// off (ICANON) AND local echo off (ECHO). Either alone would
+// false-positive — a program that just wants per-char input but
+// leaves echo on (uncommon) wouldn't want grid rendering, and an
+// echo-off-but-line-buffered program (`stty -echo`) shouldn't
+// either. Both bits being clear is the unambiguous "this is a
+// full-screen / interactive TUI" signal.
+//
+// Returning false on a closed / non-tty fd is correct fallback —
+// the CLI panel renders through the line-history path until the
+// child actually switches mode.
 function_result Am_Lang_RunningProcess_isRawMode_0(aobject * const this) {
     function_result __result = { .has_return_value = true };
-    (void) this;
-    __result.return_value = (nullable_value){ .flags = PRIMITIVE_BOOL, .value.bool_value = true };
+    bool raw = false;
+    running_process_data * d = rp_data(this);
+    if (d != NULL && d->stdout_reader_fd >= 0) {
+        struct termios t;
+        if (tcgetattr(d->stdout_reader_fd, &t) == 0) {
+            raw = ((t.c_lflag & ICANON) == 0) && ((t.c_lflag & ECHO) == 0);
+        }
+    }
+    __result.return_value = (nullable_value){ .flags = PRIMITIVE_BOOL, .value.bool_value = raw };
     return __result;
 }
 

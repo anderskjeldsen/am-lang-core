@@ -203,6 +203,36 @@ struct rp_state {
     // program's seglist gets unloaded. Pure bookkeeping — the
     // handler itself never touches it.
     struct rp_state * next_handler;
+
+    // Per-child packet histogram. Bumped (no lock — single-writer:
+    // the handler task) at packet entry; dumped from rp_child_exit
+    // so we can tell at a glance whether an ixemul/GeekGadgets binary
+    // is even routing its writes through our FakeFileHandle. If
+    // ls/make/gcc finish with pkt_write_count == 0, ixemul opened
+    // a different stdout (e.g. CONSOLE: fallback) and not our FH.
+    volatile ULONG pkt_read_count;
+    volatile ULONG pkt_write_count;
+    volatile ULONG pkt_write_bytes;
+    volatile ULONG pkt_find_count;
+    volatile ULONG pkt_diskinfo_count;
+    volatile ULONG pkt_examinefh_count;
+    volatile ULONG pkt_end_count;
+    volatile ULONG pkt_screenmode_count;
+    volatile ULONG pkt_changesig_count;
+    volatile ULONG pkt_other_count;
+    volatile LONG  pkt_other_last_type;
+
+    // BPTR of the child's stdin FakeFileHandle, mirrored from
+    // running_process_data at startNative time. The handler task
+    // doesn't have access to `d`, so the EXAMINE_FH handler reads
+    // this to distinguish stdin probes (bebbossh's handleKeyboard
+    // polling, which needs DOSFALSE pre-raw_mode to trigger
+    // SetMode) from stdout/stderr probes (ixemul's fdopen at
+    // child startup, which needs DOSTRUE+fib or the child bails
+    // with exit 161 before reaching main()). Single-write at
+    // startNative, multi-read from the handler task — no lock
+    // needed.
+    BPTR fh_in_bptr;
 };
 
 // Singly-linked list of every live handler state. Mutated only
@@ -472,6 +502,26 @@ static void rp_handler_entry(void) {
             struct DosPacket * pkt = (struct DosPacket *) msg->mn_Node.ln_Name;
             if (pkt == NULL) continue;
             LONG type = pkt->dp_Type;
+            // Per-packet histogram for child-exit diagnostics. See
+            // pkt_*_count fields in rp_state for why these matter
+            // for ixemul/GeekGadgets `ls`/`make`/`gcc` output gap.
+            switch (type) {
+                case ACTION_READ:         st->pkt_read_count++;       break;
+                case ACTION_WRITE:        st->pkt_write_count++;
+                                          st->pkt_write_bytes += (ULONG) pkt->dp_Arg3;
+                                          break;
+                case ACTION_FINDINPUT:
+                case ACTION_FINDOUTPUT:   st->pkt_find_count++;       break;
+                case ACTION_DISK_INFO:    st->pkt_diskinfo_count++;   break;
+                case ACTION_EXAMINE_FH:   st->pkt_examinefh_count++;  break;
+                case ACTION_END:          st->pkt_end_count++;        break;
+                case ACTION_SCREEN_MODE:  st->pkt_screenmode_count++; break;
+                case ACTION_CHANGE_SIGNAL:st->pkt_changesig_count++;  break;
+                case ACTION_DIE:          /* not counted */            break;
+                default:                  st->pkt_other_count++;
+                                          st->pkt_other_last_type = type;
+                                          break;
+            }
 #if RP_VERBOSE_LOG
             // ACTION_DIE deliberately not logged even in verbose
             // mode — amStudio's main loop spins up tasks whose
@@ -849,10 +899,30 @@ static void rp_handler_entry(void) {
                     // ACTION_READ — when raw_mode is TRUE, an empty
                     // ring returns 0 instead of deferring, so the
                     // event loop doesn't wedge on that one Read.
-                    if (!st->raw_mode || st->child_exited) {
-                        // Plain DOSFALSE reply in the non-raw or
-                        // child-gone cases — no BADDR write means
-                        // no risk of corrupting memory through a
+                    //
+                    // 2026-06-23 refinement for ixemul programs:
+                    // restrict the DOSFALSE-pre-raw_mode trick to
+                    // STDIN probes. Bebbossh's handleKeyboard only
+                    // ExamineFH's stdin, so the trigger still fires
+                    // exactly when needed. ixemul-based programs
+                    // (ls/make/gcc) call fdopen() on all 3 inherited
+                    // BPTRs at startup, and DOSFALSE on stdout/stderr
+                    // there made ixemul think stdio init had failed,
+                    // bailing with exit 161 before reaching main()
+                    // (zero ACTION_WRITE packets). Replying DOSTRUE+
+                    // fib for stdout/stderr lets ixemul's fdopen
+                    // succeed, the child runs main(), writes its
+                    // output through ACTION_WRITE.
+                    if (st->child_exited) {
+                        rp_pkt_reply_ex(pkt, DOSFALSE, 0, reply_ok);
+                        break;
+                    }
+                    BOOL is_stdin_probe = (pkt->dp_Arg1 == st->fh_in_bptr);
+                    if (is_stdin_probe && !st->raw_mode) {
+                        // Bebbossh's handleKeyboard SetMode trigger
+                        // path — keep DOSFALSE so the SetMode
+                        // fallback fires. No BADDR write means no
+                        // risk of corrupting memory through a
                         // recycled dp_Arg2 from a dead sender.
                         rp_pkt_reply_ex(pkt, DOSFALSE, 0, reply_ok);
                         break;
@@ -864,6 +934,11 @@ static void rp_handler_entry(void) {
                         for (ULONG i = 0; i < sizeof(struct FileInfoBlock); i++) {
                             z[i] = 0;
                         }
+                        // fib_Size is meaningful only for the
+                        // bebbossh-stdin polling idiom; stdout/stderr
+                        // probes from ixemul fdopen don't care about
+                        // the value. Reporting the input ring depth
+                        // is harmless for the latter.
                         fib->fib_Size = (LONG) st->in.count;
                     }
                     rp_pkt_reply_ex(pkt, DOSTRUE, 0, reply_ok);
@@ -924,6 +999,22 @@ static void __saveds rp_child_exit(
     rp_log_event("rp_child_exit data=",   data);
     rp_state * st = (rp_state *) data;
     if (st == NULL) return;
+    // Packet histogram. If pkt_write_count == 0 for a child that
+    // clearly produced output (ls / make / gcc), ixemul opened a
+    // different stdout (CONSOLE: fallback or its own NIL: wrapper)
+    // instead of writing through our FakeFileHandle. pkt_other_*
+    // surfaces unexpected packet types ixemul may be probing with.
+    rp_log_event("[hist] READ        =", (LONG) st->pkt_read_count);
+    rp_log_event("[hist] WRITE       =", (LONG) st->pkt_write_count);
+    rp_log_event("[hist] WRITE bytes =", (LONG) st->pkt_write_bytes);
+    rp_log_event("[hist] FINDIN/OUT  =", (LONG) st->pkt_find_count);
+    rp_log_event("[hist] DISK_INFO   =", (LONG) st->pkt_diskinfo_count);
+    rp_log_event("[hist] EXAMINE_FH  =", (LONG) st->pkt_examinefh_count);
+    rp_log_event("[hist] END         =", (LONG) st->pkt_end_count);
+    rp_log_event("[hist] SCREEN_MODE =", (LONG) st->pkt_screenmode_count);
+    rp_log_event("[hist] CHANGE_SIG  =", (LONG) st->pkt_changesig_count);
+    rp_log_event("[hist] other count =", (LONG) st->pkt_other_count);
+    rp_log_event("[hist] other lastT =", (LONG) st->pkt_other_last_type);
     Forbid();
     st->child_exited = TRUE;
     // Trip the same shutdown flag that close() would otherwise set
@@ -1279,6 +1370,10 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     d->fh_in_bptr  = MKBADDR(fh_in);
     d->fh_out_bptr = MKBADDR(fh_out);
     d->fh_err_bptr = MKBADDR(fh_err);
+    // Mirror stdin BPTR into rp_state so the handler task's
+    // EXAMINE_FH path can distinguish stdin probes from
+    // stdout/stderr probes. See st->fh_in_bptr comment.
+    st->fh_in_bptr = d->fh_in_bptr;
     st->open_count = 3;
     st->any_open   = TRUE;
 

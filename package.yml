@@ -61,6 +61,9 @@ platforms:
     gccCommand: powerpc-linux-gnu-gcc -O1
     gccAdditionalOptions:
       - -pthread
+  - id: linux-ppc64
+    extends: linux-ppc32
+    gccCommand: powerpc-linux-gnu-gcc -O2
   - id: macos
     extends: libc
     gccCommand: gcc -O3
