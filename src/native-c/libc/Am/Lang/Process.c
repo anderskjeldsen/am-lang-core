@@ -16,9 +16,7 @@ function_result Am_Lang_Process__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	__increase_reference_count(this);
 __exit: ;
-	__decrease_reference_count(this);
 	return __result;
 }
 
@@ -42,9 +40,6 @@ function_result Am_Lang_Process_run_0(aobject * command)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (command != NULL) {
-		__increase_reference_count(command);
-	}
 
 	string_holder *cmd_holder = (string_holder *) (command + 1);
 	int status = system(cmd_holder->string_value);
@@ -60,9 +55,6 @@ function_result Am_Lang_Process_run_0(aobject * command)
 	}
 
 __exit: ;
-	if (command != NULL) {
-		__decrease_reference_count(command);
-	}
 	return __result;
 }
 
@@ -70,9 +62,6 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (command != NULL) {
-		__increase_reference_count(command);
-	}
 
 	string_holder *cmd_holder = (string_holder *) (command + 1);
 
@@ -118,9 +107,6 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 	}
 
 __exit: ;
-	if (command != NULL) {
-		__decrease_reference_count(command);
-	}
 	return __result;
 }
 
@@ -176,12 +162,6 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (command != NULL) {
-		__increase_reference_count(command);
-	}
-	if (workingDir != NULL) {
-		__increase_reference_count(workingDir);
-	}
 
 	string_holder *cmd_holder = (string_holder *) (command + 1);
 	string_holder *dir_holder = (workingDir != NULL) ? (string_holder *) (workingDir + 1) : NULL;
@@ -261,11 +241,5 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 	}
 
 __exit: ;
-	if (command != NULL) {
-		__decrease_reference_count(command);
-	}
-	if (workingDir != NULL) {
-		__decrease_reference_count(workingDir);
-	}
 	return __result;
 }

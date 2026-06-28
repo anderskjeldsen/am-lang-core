@@ -20,18 +20,12 @@ function_result Am_Threading_Mutex__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	struct SignalSemaphore *sem = (struct SignalSemaphore *) malloc(sizeof(struct SignalSemaphore));
 	InitSemaphore(sem);
 	this->object_properties.class_object_properties.object_data.value.custom_value = sem;
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 }
 
@@ -62,17 +56,11 @@ function_result Am_Threading_Mutex_lock_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	struct SignalSemaphore *sem = (struct SignalSemaphore *) this->object_properties.class_object_properties.object_data.value.custom_value;
 	ObtainSemaphore(sem);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 }
 
@@ -80,17 +68,11 @@ function_result Am_Threading_Mutex_unlock_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	struct SignalSemaphore *sem = (struct SignalSemaphore *) this->object_properties.class_object_properties.object_data.value.custom_value;
 	ReleaseSemaphore(sem);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 }
 
@@ -98,17 +80,11 @@ function_result Am_Threading_Mutex_tryLock_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	struct SignalSemaphore *sem = (struct SignalSemaphore *) this->object_properties.class_object_properties.object_data.value.custom_value;
 	ULONG got = AttemptSemaphore(sem);
 	__result.return_value.value.bool_value = (got != 0);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 }

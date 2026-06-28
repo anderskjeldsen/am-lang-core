@@ -52,7 +52,7 @@ namespace Am.Collections {
                 if (key2 == key) {
                     return keyIndex
                 }
-                keyIndex = this.nextIndexes[keyIndex] - 1                
+                keyIndex = this.nextIndexes[keyIndex] - 1
             }
             return -1
         }

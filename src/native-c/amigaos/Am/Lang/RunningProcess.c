@@ -233,7 +233,26 @@ struct rp_state {
     // startNative, multi-read from the handler task — no lock
     // needed.
     BPTR fh_in_bptr;
+
+    // Pool of DupLock'd cwd locks pre-allocated at startNative time
+    // (when the AmLang main task can safely call DOS). Handed out
+    // one-at-a-time by the handler's ACTION_COPY_DIR_FH (1030) and
+    // ACTION_PARENT_FH (1031) cases — ixemul-based programs (ls,
+    // make, gcc, etc.) make 3 such calls during fdopen() of their
+    // inherited stdin/stdout/stderr and bail (exit 161 before main())
+    // if any returns a null Lock. The caller takes ownership of the
+    // returned BPTR and is responsible for UnLock'ing it. When the
+    // pool drains, further requests reply DOSFALSE; any locks still
+    // in the pool at handler shutdown are UnLock'd by rp_state_free
+    // so they don't leak.
+    //
+    // 6 entries covers ixemul's 3 fdopen + 3 follow-up Parent/Copy
+    // probes; an unusually chatty caller will see a few DOSFALSEs at
+    // the tail (correctly handled by ixemul as "lock op failed").
+    BPTR cached_locks[6];
 };
+
+#define RP_LOCK_POOL_SIZE 6
 
 // Singly-linked list of every live handler state. Mutated only
 // under Forbid(). Walked by shutdownAllNative on exit.
@@ -860,11 +879,62 @@ static void rp_handler_entry(void) {
                     rp_pkt_reply_ex(pkt, st->child_exited ? DOSFALSE : DOSTRUE, 0, reply_ok);
                     break;
                 }
-                case ACTION_SAME_LOCK:
-                case ACTION_FH_FROM_LOCK:
                 case ACTION_SEEK:           /* 1008 — stream is not seekable */
+                    /* Seek convention: dp_Res1 = -1 on error, errno
+                     * in dp_Res2. -1 is the documented "seek failed"
+                     * sentinel and callers test for it explicitly. */
                     rp_pkt_reply_ex(pkt, -1, ERROR_ACTION_NOT_KNOWN, reply_ok);
                     break;
+                case ACTION_SAME_LOCK:      /*   40 — compare two locks */
+                case ACTION_FH_FROM_LOCK:   /* 1026 — make FH from lock */
+                    /* Lock-returning ops we don't implement: reply
+                     * with 0 BPTR (null Lock) so callers treat them
+                     * as cleanly failed. Earlier code replied DOSTRUE
+                     * (=-1) here which ixemul interpreted as a real
+                     * Lock pointer and dereferenced BADDR(-1). */
+                    rp_pkt_reply_ex(pkt, 0, ERROR_ACTION_NOT_KNOWN, reply_ok);
+                    break;
+                case 1030:                  /* ACTION_COPY_DIR_FH */
+                case 1031: {                /* ACTION_PARENT_FH */
+                    /* ixemul's fdopen() of the 3 inherited stdio FHs
+                     * sends one of these per fd and bails (exit 161)
+                     * if it doesn't get back a valid dir Lock — so
+                     * pop a pre-DupLock'd cwd lock from the pool and
+                     * transfer ownership to the caller (it'll UnLock
+                     * later). Pool was populated at startNative when
+                     * the AmLang main task could safely call DupLock;
+                     * the handler task can't (recursive packet wait
+                     * deadlock risk). When the pool drains, reply 0
+                     * — caller treats it as a clean failure. */
+                    BPTR popped = 0;
+                    if (!st->child_exited) {
+                        int li;
+                        for (li = 0; li < RP_LOCK_POOL_SIZE; li++) {
+                            if (st->cached_locks[li] != 0) {
+                                popped = st->cached_locks[li];
+                                st->cached_locks[li] = 0;
+                                break;
+                            }
+                        }
+                    }
+                    /* Log every reply so we can tell whether the
+                     * lock-pool handout is actually firing for
+                     * ixemul's COPY_DIR_FH / PARENT_FH probes.
+                     * No DOS call here — rp_log_event Write()'s
+                     * to g_log_fh which is opened on the main
+                     * task, so the handler-side Write is safe
+                     * (target is the RAM-Handler / a different
+                     * port, not our own pr_MsgPort). */
+                    if (popped != 0) {
+                        rp_log_event("[rp] lockpool: pop type=", (LONG) type);
+                        rp_log_event("[rp] lockpool: handed=",   (LONG) popped);
+                        rp_pkt_reply_ex(pkt, popped, 0, reply_ok);
+                    } else {
+                        rp_log_event("[rp] lockpool: EMPTY type=", (LONG) type);
+                        rp_pkt_reply_ex(pkt, 0, ERROR_ACTION_NOT_KNOWN, reply_ok);
+                    }
+                    break;
+                }
                 case ACTION_EXAMINE_FH: {   /* 1034 */
                     // Two-mode behaviour, gated on raw_mode:
                     //
@@ -917,8 +987,23 @@ static void rp_handler_entry(void) {
                         rp_pkt_reply_ex(pkt, DOSFALSE, 0, reply_ok);
                         break;
                     }
+                    // Stdin probe + raw_mode==FALSE used to always
+                    // reply DOSFALSE so bebbossh's handleKeyboard
+                    // SetMode-on-failure branch fires. But ixemul's
+                    // fdopen(stdin) does an ExamineFH at child
+                    // startup and treats DOSFALSE as "stdin broken"
+                    // → exit 161 before reaching main(). The two
+                    // phases are distinguishable by pkt_write_count:
+                    // bebbossh ALWAYS writes its banner before any
+                    // ExamineFH polling, so >0 writes means "we're
+                    // past startup". ixemul's startup ExamineFH
+                    // fires BEFORE any user-level writes (it's
+                    // during libc init), so write_count==0. Use
+                    // that to keep bebbossh's trigger alive while
+                    // letting ixemul's fdopen succeed.
                     BOOL is_stdin_probe = (pkt->dp_Arg1 == st->fh_in_bptr);
-                    if (is_stdin_probe && !st->raw_mode) {
+                    BOOL post_first_write = (st->pkt_write_count > 0);
+                    if (is_stdin_probe && !st->raw_mode && post_first_write) {
                         // Bebbossh's handleKeyboard SetMode trigger
                         // path — keep DOSFALSE so the SetMode
                         // fallback fires. No BADDR write means no
@@ -934,6 +1019,26 @@ static void rp_handler_entry(void) {
                         for (ULONG i = 0; i < sizeof(struct FileInfoBlock); i++) {
                             z[i] = 0;
                         }
+                        // fib_DirEntryType MUST be set — 0 is invalid
+                        // and ixemul's fdopen() treats it as "fd
+                        // broken" → exit 161 before main(). ST_PIPEFILE
+                        // (-5) is the closest semantic match for a
+                        // stream-like FH; ixemul accepts it and proceeds
+                        // to wrap the inherited BPTR into a FILE*.
+                        fib->fib_DirEntryType = ST_PIPEFILE;
+                        fib->fib_EntryType    = ST_PIPEFILE;
+                        // BCPL-string filename so ixemul's strncpy /
+                        // strlen path doesn't trip on an empty header.
+                        // Format: [len][char...] in the first bytes.
+                        fib->fib_FileName[0] = 6;
+                        fib->fib_FileName[1] = 'S';
+                        fib->fib_FileName[2] = 'T';
+                        fib->fib_FileName[3] = 'D';
+                        fib->fib_FileName[4] = 'I';
+                        fib->fib_FileName[5] = 'O';
+                        fib->fib_FileName[6] = ' ';
+                        fib->fib_FileName[7] = 0;
+                        fib->fib_Protection = 0;  // RWED open
                         // fib_Size is meaningful only for the
                         // bebbossh-stdin polling idiom; stdout/stderr
                         // probes from ixemul fdopen don't care about
@@ -1050,12 +1155,10 @@ static running_process_data * rp_data(aobject * const this) {
 
 function_result Am_Lang_RunningProcess__native_init_0(aobject * const this) {
     function_result __result = { .has_return_value = false };
-    if (this != NULL) __increase_reference_count(this);
     running_process_data * d = calloc(1, sizeof(running_process_data));
     if (d != NULL) {
         this->object_properties.class_object_properties.object_data.value.custom_value = d;
     }
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
 
@@ -1272,9 +1375,6 @@ static BPTR rp_loadseg_with_path(const char * name) {
 
 function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobject * command, aobject * workingDir) {
     function_result __result = { .has_return_value = false };
-    if (this != NULL) __increase_reference_count(this);
-    if (command != NULL) __increase_reference_count(command);
-    if (workingDir != NULL) __increase_reference_count(workingDir);
 
     rp_log_open();
     rp_log_event("startNative", 0);
@@ -1406,6 +1506,34 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         }
     }
 
+    // Pre-populate the dir-lock pool from the current task's
+    // pr_CurrentDir (which is the new working dir we just set,
+    // or the inherited cwd if workingDir was empty). DupLock is a
+    // DOS call — safe to use here because we're running on the
+    // AmLang main task, NOT inside the handler. Each successful
+    // DupLock gives the caller a fresh Lock BPTR they own and must
+    // UnLock; pre-allocating N of them lets the handler hand them
+    // out reactively without making DOS calls from the handler
+    // task (which would deadlock if it's our own handler).
+    //
+    // Ignores DupLock failures — pool slots stay 0 and the handler
+    // just replies DOSFALSE when it sees a 0 slot.
+    {
+        struct Process * self_proc = (struct Process *) FindTask(NULL);
+        BPTR src_lock = (self_proc != NULL) ? self_proc->pr_CurrentDir : 0;
+        rp_log_event("[rp] lockpool: src_lock=", (LONG) src_lock);
+        if (src_lock != 0) {
+            int li;
+            int filled = 0;
+            for (li = 0; li < RP_LOCK_POOL_SIZE; li++) {
+                st->cached_locks[li] = DupLock(src_lock);
+                if (st->cached_locks[li] != 0) filled++;
+            }
+            rp_log_event("[rp] lockpool: filled=", (LONG) filled);
+            rp_log_event("[rp] lockpool: slot0=", (LONG) st->cached_locks[0]);
+        }
+    }
+
     // Parse "binary args..." and LoadSeg.
     string_holder * cmd_holder = (string_holder *) (command + 1);
     const char * cmd_str = (cmd_holder != NULL) ? cmd_holder->string_value : NULL;
@@ -1440,6 +1568,21 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     // Spawn the child. NP_FreeSeglist=TRUE so the child unloads its
     // own seg on exit.
     Forbid();
+    // DupLock the cwd one more time to use as the child's HomeDir.
+    // ixemul-based programs (GeekGadgets coreutils, gcc, make) read
+    // pr_HomeDir at libc init to locate ixemul.library config files
+    // and the program's own location; without it they exit 161 before
+    // reaching main(). DOS calls are safe here — we're still on the
+    // AmLang main task, not the handler. If DupLock fails the child
+    // just inherits a null HomeDir (libnix programs cope fine).
+    BPTR child_home_lock = 0;
+    {
+        struct Process * self_proc = (struct Process *) FindTask(NULL);
+        BPTR src_lock = (self_proc != NULL) ? self_proc->pr_CurrentDir : 0;
+        if (src_lock != 0) {
+            child_home_lock = DupLock(src_lock);
+        }
+    }
     struct Process * child = CreateNewProcTags(
         NP_Seglist,     (ULONG) seg,
         NP_FreeSeglist, TRUE,
@@ -1451,6 +1594,8 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         NP_Arguments,   (ULONG) g_arg_buf,
         NP_Name,        (ULONG) "amStudioChild",
         NP_StackSize,   32768,
+        NP_HomeDir,     (ULONG) child_home_lock,
+        NP_CopyVars,    TRUE,
         NP_ExitCode,    (ULONG) rp_child_exit,
         NP_ExitData,    (LONG)  st,
         TAG_DONE);
@@ -1479,6 +1624,28 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
             cli->cli_CurrentInput   = d->fh_in_bptr;
             cli->cli_StandardOutput = d->fh_out_bptr;
             cli->cli_CurrentOutput  = d->fh_out_bptr;
+            // cli_Interactive == 1 tells the child's libc / shell
+            // it's running with a real (interactive) console rather
+            // than a batch script. ixemul-based programs branch on
+            // this for stdio buffering AND in some versions abort
+            // with a custom exit code (0xA1 / 161) when it reads
+            // as 0. Set both this and cli_Background to mirror what
+            // a normal shell-spawned process looks like.
+            cli->cli_Interactive    = 1;
+            cli->cli_Background     = 0;
+            // cli_CommandName is a BSTR (length-prefixed BCPL string)
+            // ixemul uses for argv[0] reconstruction. A NULL BSTR
+            // here makes ixemul's _start choke; a sensible default
+            // mirrors what SystemTagList sets. Stash it in a static
+            // BCPL-format buffer — CLI struct just stores the BPTR.
+            static UBYTE s_cmd_name_bstr[36];
+            int slen = 0;
+            while (slen < 30 && g_cmd_buf[slen] != 0) {
+                s_cmd_name_bstr[slen + 1] = g_cmd_buf[slen];
+                slen++;
+            }
+            s_cmd_name_bstr[0] = (UBYTE) slen;
+            cli->cli_CommandName = MKBADDR(s_cmd_name_bstr);
             rp_log_event("[rp] CLI patched, cli=", (LONG) cli);
         } else {
             rp_log_event("[rp] no CLI on child (pr_CLI=", (LONG) child->pr_CLI);
@@ -1514,15 +1681,11 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     rp_log_event("[rp] expected handler_port=",(LONG) st->handler_port);
 
 __exit: ;
-    if (this != NULL) __decrease_reference_count(this);
-    if (command != NULL) __decrease_reference_count(command);
-    if (workingDir != NULL) __decrease_reference_count(workingDir);
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_tryReadOutput_0(aobject * const this) {
     function_result __result = { .has_return_value = true };
-    if (this != NULL) __increase_reference_count(this);
     __result.return_value.value.object_value = __create_string("", &Am_Lang_String);
 
 #if RP_VERBOSE_LOG
@@ -1566,14 +1729,11 @@ function_result Am_Lang_RunningProcess_tryReadOutput_0(aobject * const this) {
     }
 
 __exit: ;
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_writeInput_0(aobject * const this, aobject * text) {
     function_result __result = { .has_return_value = false };
-    if (this != NULL) __increase_reference_count(this);
-    if (text != NULL) __increase_reference_count(text);
 
     running_process_data * d = rp_data(this);
     if (d == NULL || d->state == NULL || text == NULL) goto __exit;
@@ -1632,14 +1792,11 @@ function_result Am_Lang_RunningProcess_writeInput_0(aobject * const this, aobjec
     Permit();
 
 __exit: ;
-    if (this != NULL) __decrease_reference_count(this);
-    if (text != NULL) __decrease_reference_count(text);
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_isAlive_0(aobject * const this) {
     function_result __result = { .has_return_value = true };
-    if (this != NULL) __increase_reference_count(this);
     running_process_data * d = rp_data(this);
     BOOL alive = FALSE;
     if (d != NULL && d->state != NULL) {
@@ -1650,13 +1807,11 @@ function_result Am_Lang_RunningProcess_isAlive_0(aobject * const this) {
         if (!exited || queued > 0) alive = TRUE;
     }
     __result.return_value.value.bool_value = alive ? true : false;
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_setReportedSize_0(aobject * const this, int var_rows, int var_cols) {
     function_result __result = { .has_return_value = false };
-    if (this != NULL) __increase_reference_count(this);
     running_process_data * d = rp_data(this);
     if (d != NULL && d->state != NULL) {
         LONG r = (LONG) var_rows;
@@ -1666,26 +1821,22 @@ function_result Am_Lang_RunningProcess_setReportedSize_0(aobject * const this, i
         d->state->reported_rows = r;
         d->state->reported_cols = c;
     }
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_isRawMode_0(aobject * const this) {
     function_result __result = { .has_return_value = true };
-    if (this != NULL) __increase_reference_count(this);
     running_process_data * d = rp_data(this);
     BOOL raw = FALSE;
     if (d != NULL && d->state != NULL) {
         raw = d->state->raw_mode;
     }
     __result.return_value.value.bool_value = raw ? true : false;
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_close_0(aobject * const this) {
     function_result __result = { .has_return_value = false };
-    if (this != NULL) __increase_reference_count(this);
     running_process_data * d = rp_data(this);
     if (d != NULL && d->state != NULL) {
         // These two log_event calls run on the AmLang main task
@@ -1695,12 +1846,28 @@ function_result Am_Lang_RunningProcess_close_0(aobject * const this) {
         // before "close: done" tells us the AmLang side is the
         // one crashing, not the handler.
         rp_log_event("[rp] close: enter, live=", g_live_handler_count);
+        // UnLock any cached dir-locks the handler didn't hand out.
+        // Done here (main task) rather than from rp_state_free
+        // (which the handler task may invoke at refcount=0) so the
+        // UnLock — a DOS call — never runs from inside our DOS
+        // handler. The DIE we send below makes the handler exit
+        // before its next packet, so it won't read these slots
+        // after we zero them.
+        {
+            int li;
+            for (li = 0; li < RP_LOCK_POOL_SIZE; li++) {
+                BPTR lock = d->state->cached_locks[li];
+                if (lock != 0) {
+                    d->state->cached_locks[li] = 0;
+                    UnLock(lock);
+                }
+            }
+        }
         rp_handler_die(d->state);
         rp_state_release(d->state);
         d->state = NULL;
         rp_log_event("[rp] close: done, live=", g_live_handler_count);
     }
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
 
@@ -1802,6 +1969,17 @@ function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
     LONG live = g_live_handler_count;
     if (live <= 0) {
         rp_stdout_line("[rp] shutdownAll: no live handlers");
+        // Close the tty.log FH before returning — otherwise
+        // RAM:amStudio-tty.log stays "in use" after exit (DOS
+        // doesn't auto-close FHs left open by a dying process).
+        // The other return path below also closes; this is the
+        // common case (handlers self-exit cleanly so live==0 at
+        // shutdownAll time) so we'd hit it on every clean run.
+        if (g_log_fh != 0) {
+            BPTR fh = g_log_fh;
+            g_log_fh = 0;
+            Close(fh);
+        }
         return __result;
     }
 

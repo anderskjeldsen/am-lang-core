@@ -13,15 +13,9 @@ function_result Am_Lang_Weak__native_init_0(aobject * const this)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 	// Add reference count for this in Weak._native_init
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 	weak_reference_node * const node = calloc(1, sizeof(weak_reference_node));
 	this->object_properties.class_object_properties.object_data.value.custom_value = node;
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -55,9 +49,6 @@ function_result Am_Lang_Weak_set_0_object(aobject * const this, aobject * t)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 	// Add reference count for this in Weak.set
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 	// Add reference count for t in Weak.set
 	if (t != NULL) {
 		__increase_reference_count(t);
@@ -72,9 +63,6 @@ function_result Am_Lang_Weak_set_0_object(aobject * const this, aobject * t)
 	}
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	if (t != NULL) {
 		__decrease_reference_count(t);
 	}
@@ -86,9 +74,6 @@ function_result Am_Lang_Weak_get_0_object(aobject * const this)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 	// Add reference count for this in Weak.get
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 	// TODO: implement native function Am_Lang_Weak_get_0
 	weak_reference_node * node = get_weak_reference_node(this);
 	if (node->object) {
@@ -96,9 +81,6 @@ function_result Am_Lang_Weak_get_0_object(aobject * const this)
 	}
 	__result.return_value.value.object_value = node->object;
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 

@@ -9,14 +9,8 @@ function_result Am_Lang_Array__native_init_0(aobject * const this)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 	// Add reference count for this in Array._native_init
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 	// TODO: implement native function Am_Lang_Array__native_init_0
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -89,17 +83,11 @@ function_result Am_Lang_Array_length_0(aobject * const this)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 	// Add reference count for this in Array.length
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 	array_holder * ah = (array_holder *) &this[1]; // this->object_properties.class_object_properties.object_data.value.custom_value;
 //	printf("get length %ld\n", ah->size);
 	__result.return_value = (nullable_value) { .value = { .uint_value = (unsigned int) ah->size }, .flags = PRIMITIVE_UINT };
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -107,9 +95,6 @@ function_result Am_Lang_Array_createEmptyArrayOfSameType_0(aobject * const this,
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	array_holder * ah = (array_holder *) &this[1]; // this->object_properties.class_object_properties.object_data.value.custom_value;
 
@@ -117,8 +102,5 @@ function_result Am_Lang_Array_createEmptyArrayOfSameType_0(aobject * const this,
 
 	__result.return_value.value.object_value = new_array;
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };

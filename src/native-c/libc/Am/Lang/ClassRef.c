@@ -12,13 +12,7 @@ function_result Am_Lang_ClassRef__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 }
 
@@ -43,9 +37,6 @@ function_result Am_Lang_ClassRef_initFromAny_0(aobject * const this, nullable_va
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 	__increase_reference_count_nullable_value(any);
 
 	aclass * class_ptr = NULL;
@@ -105,9 +96,6 @@ function_result Am_Lang_ClassRef_initFromAny_0(aobject * const this, nullable_va
 	__decrease_reference_count(class_name);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	__decrease_reference_count_nullable_value(any);
 	return __result;
 }

@@ -813,12 +813,10 @@ static running_process_data * rp_data(aobject * const this) {
 
 function_result Am_Lang_RunningProcess__native_init_0(aobject * const this) {
     function_result __result = { .has_return_value = false };
-    if (this != NULL) __increase_reference_count(this);
     running_process_data * d = calloc(1, sizeof(running_process_data));
     if (d != NULL) {
         this->object_properties.class_object_properties.object_data.value.custom_value = d;
     }
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
 
@@ -1035,9 +1033,6 @@ static BPTR rp_loadseg_with_path(const char * name) {
 
 function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobject * command, aobject * workingDir) {
     function_result __result = { .has_return_value = false };
-    if (this != NULL) __increase_reference_count(this);
-    if (command != NULL) __increase_reference_count(command);
-    if (workingDir != NULL) __increase_reference_count(workingDir);
 
     rp_log_open();
     rp_log_event("startNative", 0);
@@ -1277,15 +1272,11 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     rp_log_event("[rp] expected handler_port=",(LONG) st->handler_port);
 
 __exit: ;
-    if (this != NULL) __decrease_reference_count(this);
-    if (command != NULL) __decrease_reference_count(command);
-    if (workingDir != NULL) __decrease_reference_count(workingDir);
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_tryReadOutput_0(aobject * const this) {
     function_result __result = { .has_return_value = true };
-    if (this != NULL) __increase_reference_count(this);
     __result.return_value.value.object_value = __create_string("", &Am_Lang_String);
 
 #if RP_VERBOSE_LOG
@@ -1329,14 +1320,11 @@ function_result Am_Lang_RunningProcess_tryReadOutput_0(aobject * const this) {
     }
 
 __exit: ;
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_writeInput_0(aobject * const this, aobject * text) {
     function_result __result = { .has_return_value = false };
-    if (this != NULL) __increase_reference_count(this);
-    if (text != NULL) __increase_reference_count(text);
 
     running_process_data * d = rp_data(this);
     if (d == NULL || d->state == NULL || text == NULL) goto __exit;
@@ -1395,14 +1383,11 @@ function_result Am_Lang_RunningProcess_writeInput_0(aobject * const this, aobjec
     Permit();
 
 __exit: ;
-    if (this != NULL) __decrease_reference_count(this);
-    if (text != NULL) __decrease_reference_count(text);
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_isAlive_0(aobject * const this) {
     function_result __result = { .has_return_value = true };
-    if (this != NULL) __increase_reference_count(this);
     running_process_data * d = rp_data(this);
     BOOL alive = FALSE;
     if (d != NULL && d->state != NULL) {
@@ -1413,13 +1398,11 @@ function_result Am_Lang_RunningProcess_isAlive_0(aobject * const this) {
         if (!exited || queued > 0) alive = TRUE;
     }
     __result.return_value.value.bool_value = alive ? true : false;
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_setReportedSize_0(aobject * const this, int var_rows, int var_cols) {
     function_result __result = { .has_return_value = false };
-    if (this != NULL) __increase_reference_count(this);
     running_process_data * d = rp_data(this);
     if (d != NULL && d->state != NULL) {
         LONG r = (LONG) var_rows;
@@ -1429,33 +1412,28 @@ function_result Am_Lang_RunningProcess_setReportedSize_0(aobject * const this, i
         d->state->reported_rows = r;
         d->state->reported_cols = c;
     }
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_isRawMode_0(aobject * const this) {
     function_result __result = { .has_return_value = true };
-    if (this != NULL) __increase_reference_count(this);
     running_process_data * d = rp_data(this);
     BOOL raw = FALSE;
     if (d != NULL && d->state != NULL) {
         raw = d->state->raw_mode;
     }
     __result.return_value.value.bool_value = raw ? true : false;
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_close_0(aobject * const this) {
     function_result __result = { .has_return_value = false };
-    if (this != NULL) __increase_reference_count(this);
     running_process_data * d = rp_data(this);
     if (d != NULL && d->state != NULL) {
         rp_handler_die(d->state);
         rp_state_release(d->state);
         d->state = NULL;
     }
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
 

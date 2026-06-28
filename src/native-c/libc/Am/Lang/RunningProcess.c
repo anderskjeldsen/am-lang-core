@@ -33,6 +33,7 @@
 #include <sys/ioctl.h>
 #include <signal.h>
 #include <termios.h>
+#include <poll.h>
 #if defined(__APPLE__)
   #include <util.h>                // forkpty on macOS
 #else
@@ -54,7 +55,6 @@ static running_process_data * rp_data(aobject * const this) {
 
 function_result Am_Lang_RunningProcess__native_init_0(aobject * const this) {
     function_result __result = { .has_return_value = false };
-    if (this != NULL) __increase_reference_count(this);
     running_process_data * d = calloc(1, sizeof(running_process_data));
     if (d != NULL) {
         d->stdin_writer_fd  = -1;
@@ -63,7 +63,6 @@ function_result Am_Lang_RunningProcess__native_init_0(aobject * const this) {
         d->child_exited = 0;
         this->object_properties.class_object_properties.object_data.value.custom_value = d;
     }
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
 
@@ -117,9 +116,6 @@ function_result Am_Lang_RunningProcess__native_release_0(aobject * const this) {
 
 function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobject * command, aobject * workingDir) {
     function_result __result = { .has_return_value = false };
-    if (this != NULL) __increase_reference_count(this);
-    if (command != NULL) __increase_reference_count(command);
-    if (workingDir != NULL) __increase_reference_count(workingDir);
 
     running_process_data * d = rp_data(this);
     if (d == NULL) {
@@ -200,15 +196,11 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     d->child_exited = 0;
 
 __exit: ;
-    if (this != NULL) __decrease_reference_count(this);
-    if (command != NULL) __decrease_reference_count(command);
-    if (workingDir != NULL) __decrease_reference_count(workingDir);
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_tryReadOutput_0(aobject * const this) {
     function_result __result = { .has_return_value = true };
-    if (this != NULL) __increase_reference_count(this);
     __result.return_value.value.object_value = NULL;
 
     running_process_data * d = rp_data(this);
@@ -244,14 +236,11 @@ function_result Am_Lang_RunningProcess_tryReadOutput_0(aobject * const this) {
     __result.return_value.value.object_value = __create_string("", &Am_Lang_String);
 
 __exit: ;
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_writeInput_0(aobject * const this, aobject * text) {
     function_result __result = { .has_return_value = false };
-    if (this != NULL) __increase_reference_count(this);
-    if (text != NULL) __increase_reference_count(text);
 
     running_process_data * d = rp_data(this);
     if (d == NULL || d->stdin_writer_fd < 0 || text == NULL) {
@@ -272,14 +261,11 @@ function_result Am_Lang_RunningProcess_writeInput_0(aobject * const this, aobjec
     }
 
 __exit: ;
-    if (this != NULL) __decrease_reference_count(this);
-    if (text != NULL) __decrease_reference_count(text);
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_isAlive_0(aobject * const this) {
     function_result __result = { .has_return_value = true };
-    if (this != NULL) __increase_reference_count(this);
     running_process_data * d = rp_data(this);
     int alive = 0;
     if (d != NULL && d->child_pid > 0 && !d->child_exited) {
@@ -291,21 +277,48 @@ function_result Am_Lang_RunningProcess_isAlive_0(aobject * const this) {
             d->child_exited = 1;
         }
     }
-    // Treat "child gone but output still pending" as alive too so
-    // callers drain the buffer cleanly.
+    // Child has been reaped — but the PTY master may still hold
+    // a few buffered bytes the slave TTY hadn't flushed at exit.
+    // Use poll(timeout=0) to ask the kernel "anything readable
+    // right now?". If yes → keep claiming alive so the caller
+    // drains the buffer. If no → return alive=0 and let the
+    // caller close.
+    //
+    // The earlier "fd open" override unconditionally returned 1
+    // here, which on macOS turns into an infinite re-schedule
+    // loop in the AmLang drain task: macOS's non-blocking PTY
+    // master returns EAGAIN rather than EIO for a long window
+    // after the slave hangs up, so tryReadOutput keeps coming
+    // back empty without ever closing the fd. The caller can't
+    // close on its own because it only closes when isAlive==false.
+    // poll() resolves the deadlock cleanly: an actually-drained
+    // master reports neither POLLIN nor POLLHUP/POLLERR, so we
+    // tell the caller "done" and the close fires.
     if (!alive && d != NULL && d->stdout_reader_fd >= 0) {
-        alive = 1;
+        struct pollfd pfd;
+        pfd.fd = d->stdout_reader_fd;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+        int pr = poll(&pfd, 1, 0);
+        if (pr > 0 && (pfd.revents & POLLIN) != 0) {
+            alive = 1;  // bytes ready — keep draining
+        } else if (pr > 0 && (pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) != 0) {
+            // Slave hung up. Eagerly close so future isAlive
+            // calls take the cheap fd<0 path instead of polling.
+            close(d->stdout_reader_fd);
+            d->stdout_reader_fd = -1;
+        }
+        // pr == 0: no data, no hup. Fall through with alive=0 —
+        // child is reaped and the kernel has no pending bytes to
+        // give us, so further polling would just spin.
     }
     __result.return_value.value.bool_value = alive ? true : false;
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
 
 function_result Am_Lang_RunningProcess_close_0(aobject * const this) {
     function_result __result = { .has_return_value = false };
-    if (this != NULL) __increase_reference_count(this);
     rp_close_internal(rp_data(this));
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }
 
@@ -358,7 +371,6 @@ function_result Am_Lang_RunningProcess_isRawMode_0(aobject * const this) {
 
 function_result Am_Lang_RunningProcess_setReportedSize_0(aobject * const this, int var_rows, int var_cols) {
     function_result __result = { .has_return_value = false };
-    if (this != NULL) __increase_reference_count(this);
     running_process_data * d = rp_data(this);
     // Forward the AmLang panel's grid dimensions to the child's
     // pty via TIOCSWINSZ. Programs like ssh, nano and htop read
@@ -378,6 +390,5 @@ function_result Am_Lang_RunningProcess_setReportedSize_0(aobject * const this, i
             kill(d->child_pid, SIGWINCH);
         }
     }
-    if (this != NULL) __decrease_reference_count(this);
     return __result;
 }

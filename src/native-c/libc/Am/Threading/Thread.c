@@ -62,9 +62,6 @@ function_result Am_Threading_Thread__native_init_0(aobject * const this)
 {
     function_result __result = { .has_return_value = false };
     bool __returning = false;
-    if (this != NULL) {
-        __increase_reference_count(this);
-    }
 
     Am_Threading_Thread_data *data = malloc(sizeof(Am_Threading_Thread_data));
     data->started = false;
@@ -72,9 +69,6 @@ function_result Am_Threading_Thread__native_init_0(aobject * const this)
     this->object_properties.class_object_properties.object_data.value.custom_value = data;
 
 __exit: ;
-    if (this != NULL) {
-        __decrease_reference_count(this);
-    }
     return __result;
 }
 
@@ -146,9 +140,6 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 {
     function_result __result = { .has_return_value = false };
     bool __returning = false;
-    if (this != NULL) {
-        __increase_reference_count(this);
-    }
 
     pthread_once(&current_thread_key_once, make_current_thread_key);
 
@@ -157,6 +148,13 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 
     // Take an extra ref for the worker thread; it'll drop it as the
     // very last thing in the entry function. See file-level comment.
+    //
+    // DO NOT STRIP — this is a lifetime extension for the WORKER thread,
+    // not the redundant per-call inc that the native-arg-strip sweep
+    // targeted. The strip script accidentally took it; the pthread entry
+    // still calls __decrease_reference_count(thread) on exit, so removing
+    // this dec leaves a -1 imbalance → premature free → heap corruption
+    // observed as SIGBUS in TaskScheduler.stopAll's println() at shutdown.
     __increase_reference_count(this);
 
     int rc = pthread_create(&data->thread_id, NULL,
@@ -173,9 +171,6 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
     }
 
 __exit: ;
-    if (this != NULL) {
-        __decrease_reference_count(this);
-    }
     return __result;
 }
 
@@ -183,9 +178,6 @@ function_result Am_Threading_Thread_join_0(aobject * const this)
 {
     function_result __result = { .has_return_value = false };
     bool __returning = false;
-    if (this != NULL) {
-        __increase_reference_count(this);
-    }
 
     Am_Threading_Thread_data *data =
         (Am_Threading_Thread_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
@@ -196,9 +188,6 @@ function_result Am_Threading_Thread_join_0(aobject * const this)
     }
 
 __exit: ;
-    if (this != NULL) {
-        __decrease_reference_count(this);
-    }
     return __result;
 }
 

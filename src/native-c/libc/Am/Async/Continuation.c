@@ -55,9 +55,6 @@ function_result Am_Async_Continuation__native_init_0(aobject * const this)
 {
     function_result __result = { .has_return_value = false };
     bool __returning = false;
-    if (this != NULL) {
-        __increase_reference_count(this);
-    }
 
     Am_Async_Continuation_data *data = malloc(sizeof(Am_Async_Continuation_data));
     atomic_store_explicit(&data->done, false, memory_order_relaxed);
@@ -65,9 +62,6 @@ function_result Am_Async_Continuation__native_init_0(aobject * const this)
     this->object_properties.class_object_properties.object_data.value.custom_value = data;
 
 __exit: ;
-    if (this != NULL) {
-        __decrease_reference_count(this);
-    }
     return __result;
 }
 
@@ -130,9 +124,6 @@ function_result Am_Async_Continuation_resume_0(aobject * const this)
 {
     function_result __result = { .has_return_value = false };
     bool __returning = false;
-    if (this != NULL) {
-        __increase_reference_count(this);
-    }
 
     Am_Async_Continuation_data *data =
         (Am_Async_Continuation_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
@@ -156,9 +147,6 @@ function_result Am_Async_Continuation_resume_0(aobject * const this)
     }
 
 __exit: ;
-    if (this != NULL) {
-        __decrease_reference_count(this);
-    }
 
     // Fire AFTER dropping our reference on `this`. The parent's resumed
     // code may itself release the continuation (drops to 0 → free()),
@@ -191,9 +179,6 @@ function_result Am_Async_Continuation_isDone_0(aobject * const this)
 {
     function_result __result = { .has_return_value = true };
     bool __returning = false;
-    if (this != NULL) {
-        __increase_reference_count(this);
-    }
 
     Am_Async_Continuation_data *data =
         (Am_Async_Continuation_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
@@ -206,8 +191,5 @@ function_result Am_Async_Continuation_isDone_0(aobject * const this)
     __result.return_value.flags = 0;
 
 __exit: ;
-    if (this != NULL) {
-        __decrease_reference_count(this);
-    }
     return __result;
 }

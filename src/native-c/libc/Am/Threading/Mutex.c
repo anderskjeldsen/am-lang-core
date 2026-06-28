@@ -24,9 +24,6 @@ function_result Am_Threading_Mutex__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	pthread_mutex_t *m = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
 	pthread_mutexattr_t attr;
@@ -37,9 +34,6 @@ function_result Am_Threading_Mutex__native_init_0(aobject * const this)
 	this->object_properties.class_object_properties.object_data.value.custom_value = m;
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 }
 
@@ -71,17 +65,11 @@ function_result Am_Threading_Mutex_lock_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	pthread_mutex_t *m = (pthread_mutex_t *) this->object_properties.class_object_properties.object_data.value.custom_value;
 	pthread_mutex_lock(m);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 }
 
@@ -89,17 +77,11 @@ function_result Am_Threading_Mutex_unlock_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	pthread_mutex_t *m = (pthread_mutex_t *) this->object_properties.class_object_properties.object_data.value.custom_value;
 	pthread_mutex_unlock(m);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 }
 
@@ -107,17 +89,11 @@ function_result Am_Threading_Mutex_tryLock_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	pthread_mutex_t *m = (pthread_mutex_t *) this->object_properties.class_object_properties.object_data.value.custom_value;
 	int rc = pthread_mutex_trylock(m);
 	__result.return_value.value.bool_value = (rc == 0);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 }

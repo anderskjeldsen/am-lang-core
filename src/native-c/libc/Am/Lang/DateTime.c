@@ -48,13 +48,7 @@ function_result Am_Lang_DateTime__native_init_0(aobject * const this)
 {
     function_result __result = { .has_return_value = false };
     bool __returning = false;
-    if (this != NULL) {
-        __increase_reference_count(this);
-    }
 __exit: ;
-    if (this != NULL) {
-        __decrease_reference_count(this);
-    }
     return __result;
 }
 
@@ -253,9 +247,6 @@ function_result Am_Lang_DateTime_formatDateTime_0(unsigned long long epochMillis
     function_result __result = { .has_return_value = true };
     bool __returning = false;
 
-    if (pattern != NULL) {
-        __increase_reference_count(pattern);
-    }
 
     struct tm tm_time = epochMillisToTm(epochMillis, timezoneOffsetMinutes);
     
@@ -336,9 +327,6 @@ function_result Am_Lang_DateTime_formatDateTime_0(unsigned long long epochMillis
     __result.return_value.value.object_value = __create_string(formatted, &Am_Lang_String);
 
 __exit: ;
-    if (pattern != NULL) {
-        __decrease_reference_count(pattern);
-    }
     return __result;
 }
 
@@ -348,12 +336,6 @@ function_result Am_Lang_DateTime_parseDateTime_0(aobject* dateString, aobject* p
     function_result __result = { .has_return_value = true };
     bool __returning = false;
 
-    if (dateString != NULL) {
-        __increase_reference_count(dateString);
-    }
-    if (pattern != NULL) {
-        __increase_reference_count(pattern);
-    }
 
     // Basic parsing for "yyyy-MM-dd HH:mm:ss" format
     string_holder *date_holder = dateString->object_properties.class_object_properties.object_data.value.custom_value;
@@ -384,12 +366,6 @@ function_result Am_Lang_DateTime_parseDateTime_0(aobject* dateString, aobject* p
     }
 
 __exit: ;
-    if (dateString != NULL) {
-        __decrease_reference_count(dateString);
-    }
-    if (pattern != NULL) {
-        __decrease_reference_count(pattern);
-    }
     return __result;
 }
 

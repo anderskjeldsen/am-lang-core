@@ -110,13 +110,7 @@ function_result Am_Lang_DateTime__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 }
 
@@ -303,9 +297,6 @@ function_result Am_Lang_DateTime_formatDateTime_0(unsigned long long epochMillis
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (pattern != NULL) {
-		__increase_reference_count(pattern);
-	}
 
 	broken_down_t bd;
 	decompose(epochMillis, timezoneOffsetMinutes, &bd);
@@ -331,9 +322,6 @@ function_result Am_Lang_DateTime_formatDateTime_0(unsigned long long epochMillis
 	__result.return_value.value.object_value = __create_string(formatted, &Am_Lang_String);
 
 __exit: ;
-	if (pattern != NULL) {
-		__decrease_reference_count(pattern);
-	}
 	return __result;
 }
 
@@ -356,12 +344,6 @@ function_result Am_Lang_DateTime_parseDateTime_0(aobject *dateString, aobject *p
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (dateString != NULL) {
-		__increase_reference_count(dateString);
-	}
-	if (pattern != NULL) {
-		__increase_reference_count(pattern);
-	}
 
 	string_holder *date_holder = (string_holder *) (dateString + 1);
 	const char *date_str = date_holder->string_value;
@@ -386,12 +368,6 @@ function_result Am_Lang_DateTime_parseDateTime_0(aobject *dateString, aobject *p
 	__result.return_value.value.ulong_value = (unsigned long long) unix_secs * 1000ULL;
 
 __exit: ;
-	if (dateString != NULL) {
-		__decrease_reference_count(dateString);
-	}
-	if (pattern != NULL) {
-		__decrease_reference_count(pattern);
-	}
 	return __result;
 }
 

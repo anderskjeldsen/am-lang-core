@@ -1,7 +1,42 @@
 // #include <stdlib.h>
 #include <libc/core.h>
 #include <string.h>
-#include <stdarg.h> 
+#include <stdarg.h>
+
+// Thread-safe ARC platform layer. Linux/macOS use a recursive
+// pthread_mutex (recursive so a single thread can take the lock more
+// than once while nested inside ARC machinery — destructors that
+// recursively dec refs would otherwise self-deadlock). AmigaOS m68k
+// classic doesn't need the lock at all for correctness (cooperative
+// inside the task; preemption is between tasks, and inter-task object
+// sharing on classic Amiga goes through Message ports anyway). The
+// helpers stay defined as no-ops so generated code links cleanly.
+#ifndef __AMIGA__
+#include <pthread.h>
+static pthread_mutex_t __arc_shared_mutex;
+static bool __arc_shared_mutex_initialised = false;
+void __arc_shared_mutex_init(void) {
+    if (__arc_shared_mutex_initialised) return;
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&__arc_shared_mutex, &attr);
+    pthread_mutexattr_destroy(&attr);
+    __arc_shared_mutex_initialised = true;
+}
+void __arc_shared_lock(void)   { pthread_mutex_lock(&__arc_shared_mutex); }
+void __arc_shared_unlock(void) { pthread_mutex_unlock(&__arc_shared_mutex); }
+void * __current_thread(void)  { return (void *) pthread_self(); }
+#else
+// AmigaOS: no real shared-memory contention for ARC; lock/unlock are
+// no-ops, and the thread identity is FindTask(NULL) (the Task pointer
+// is stable for the lifetime of the task).
+#include <proto/exec.h>
+void __arc_shared_mutex_init(void) {}
+void __arc_shared_lock(void)   {}
+void __arc_shared_unlock(void) {}
+void * __current_thread(void)  { return (void *) FindTask(NULL); }
+#endif
 #include <Am/Lang/Exception.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/Annotations/UseMemoryPool.h>
@@ -25,6 +60,14 @@
 #include <libc/core_inline_functions.h>
 
 bool __conditional_logging_on = false;
+
+// Thread-safe ARC runtime flag — see core.h for the contract. Starts
+// false; flipped on by `__create_wrapper`. Never flips back: even if
+// every wrapper later dies, the flag stays on because we don't want
+// to track the live-wrapper count across the codebase. The cost is
+// that long-running programs which briefly share an object once pay
+// the unwrap branch forever after — fine in practice.
+bool __amlc_any_wrappers_alive = false;
 
 // Always-defined so callers compiled with DEBUG can link even when
 // core.c itself was compiled without DEBUG. Body only does anything
@@ -329,6 +372,14 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
 
             __obj->class_ptr = __class;
             __obj->reference_count = 1;
+            // Thread-safe ARC: every newly allocated object is owned
+            // by the thread that allocated it. This is the cheap fast
+            // path for refcount mutation later — owner-thread inc/dec
+            // skips locks; cross-thread access goes through wrapper
+            // machinery. `first_object_wrapper` stays NULL until
+            // someone actually shares this object across threads.
+            __obj->owner_thread = __current_thread();
+            __obj->first_object_wrapper = NULL;
 
             #if defined(DEBUG) || defined(TRACKOBJECTS)
             allocations[allocation_index++] = __obj;
@@ -479,6 +530,16 @@ void __deallocate_detached_object(aobject * const __obj) {
 }
 
 void __deallocate_object(aobject * const __obj) {
+    #ifdef WRAPLOG
+    fprintf(stderr, "[real.dealloc] real=%p class=%s rc=%d propref=%d owner_gone=%d wrappers=%p\n",
+        __obj,
+        __obj && __obj->class_ptr ? __obj->class_ptr->name : "(?)",
+        __obj ? __obj->reference_count : -1,
+        __obj ? __obj->property_reference_count : -1,
+        __obj ? __obj->owner_gone : -1,
+        __obj ? (void*)__obj->first_object_wrapper : NULL);
+    fflush(stderr);
+    #endif
     bool it = false;
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
@@ -566,17 +627,30 @@ void __deallocate_object(aobject * const __obj) {
 
 void __decrease_property_reference_count(aobject * const __obj) {
     if ( __obj != NULL) {
+        #ifdef WRAPLOG
+        if (__obj->class_ptr == NULL) {
+            fprintf(stderr, "[dec_pr] wrapper=%p propref %d->%d\n", __obj, __obj->property_reference_count, __obj->property_reference_count - 1);
+            fflush(stderr);
+        }
+        #endif
+        // Thread-safe ARC: unlinking from __first_object + the counter
+        // mutation must be atomic w.r.t. concurrent increases on other
+        // threads. Recursive mutex → nested set_property calls (which
+        // also take the lock) are fine. The deallocate path below is
+        // outside the lock — see comment near the call.
+        __arc_shared_lock();
         __obj->property_reference_count--;
         #if defined(DEBUG) && defined(ARCLOG)
-        #ifdef CONDLOG 
+        #ifdef CONDLOG
         if (__conditional_logging_on) {
         #endif
         printf("decrease property reference count of object of type %s (address: %p, object_id: %d), new reference count %d, property reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->reference_count, __obj->property_reference_count);
-        #ifdef CONDLOG 
+        #ifdef CONDLOG
         }
-        #endif        
+        #endif
         #endif
 
+        bool should_deallocate = false;
         if (__obj->property_reference_count == 0 && !__obj->pending_deallocation) {
             if (__obj == __first_object) {
 
@@ -585,7 +659,7 @@ void __decrease_property_reference_count(aobject * const __obj) {
                 if (__first_object != NULL) {
                     __first_object->prev = NULL;
                 }
-            } else {        
+            } else {
                 __obj->prev->next = __obj->next;
                 if (__obj->next != NULL) {
                     __obj->next->prev = __obj->prev;
@@ -596,6 +670,39 @@ void __decrease_property_reference_count(aobject * const __obj) {
 
 
             if (__obj->reference_count == 0) {
+                // Same Stage 8 end-of-life decision as the rc → 0 path:
+                // if foreign wrappers still subscribe, set `owner_gone`
+                // and let the last wrapper death finalize. Otherwise
+                // claim destruction now via `destruction_claimed` —
+                // NOT `pending_deallocation` (that's __detach_object's
+                // recursion guard).
+                if (__obj->first_object_wrapper == NULL) {
+                    if (!__obj->destruction_claimed) {
+                        __obj->destruction_claimed = true;
+                        should_deallocate = true;
+                    }
+                } else {
+                    __obj->owner_gone = true;
+                }
+            }
+        }
+        __arc_shared_unlock();
+
+        // Run the destructor outside the global ARC lock — release
+        // callbacks call back into the ARC machinery (dec'ing children),
+        // which would re-enter the recursive mutex safely BUT might also
+        // call out to user code that takes its own locks. Keeping the
+        // destructor outside the global ARC lock minimises hold-time
+        // and avoids surprising lock-ordering inversions.
+        if (should_deallocate) {
+            // Wrappers go through __deallocate_wrapper, not the
+            // class_ptr->release path — calling __deallocate_object on
+            // a wrapper would deref a NULL class_ptr inside
+            // __detach_object's debug-print/release-dispatch. Same split
+            // we already do in __decrease_reference_count for rc=0.
+            if (__obj->class_ptr == NULL) {
+                __deallocate_wrapper(__obj);
+            } else {
                 __deallocate_object(__obj);
             }
         }
@@ -794,11 +901,173 @@ void print_allocated_objects() {
 }
 
 void clear_allocated_objects() {
+    // Generated `main()` calls this first; piggy-back to bring up the
+    // thread-safe ARC shared mutex before any allocation happens. The
+    // call is idempotent (`__arc_shared_mutex_initialised` guard) so
+    // repeat calls or test harnesses are fine.
+    __arc_shared_mutex_init();
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         allocations[i] = NULL;
     }
     #endif
+}
+
+// ------------------------------------------------------------------
+// Thread-safe ARC: wrapper lifecycle.
+//
+// A wrapper aobject is a lean handle in some thread B's realm pointing
+// at a real aobject owned by thread A. The wrapper distinguishes
+// itself by `class_ptr == NULL` and stores the real in
+// `object_properties.object_wrapper.wrapped_object`. The real's
+// `first_object_wrapper` linked list records every live wrapper so we
+// can refuse to destroy the real while any wrapper still references
+// it.
+//
+// `__create_wrapper(real)`:
+//   - allocates a wrapper aobject (raw calloc, no class)
+//   - takes the shared mutex
+//   - links a new object_wrapper_entry into real->first_object_wrapper
+//   - bumps real->reference_count by 1 (the wrapper holds a ref on the real)
+//   - releases mutex
+//   - wrapper starts at reference_count = 1, owner = current thread
+//
+// `__deallocate_wrapper(wrapper)`:
+//   - takes the shared mutex
+//   - finds and unlinks our entry from real->first_object_wrapper
+//   - decs real->reference_count by 1
+//   - if real hits 0 + 0, ALSO dispatches the real's destructor
+//   - releases mutex
+//   - frees the wrapper struct
+// ------------------------------------------------------------------
+
+// Codegen-facing helper. Fast path is "same-thread, return as-is";
+// slow path mints a wrapper. Same-thread is a single load + compare,
+// no allocation. At -O0 we still pay the function-call frame
+// overhead, but unlike inlined ternaries this doesn't blow the
+// 26 k-line JsBytecodeVm.run frame — function calls reserve a fixed
+// per-call stack chunk, not per-call-site stack.
+aobject * __wrap_if_foreign(aobject * const __raw) {
+    if (__raw == NULL) return NULL;
+    // If __raw is already a wrapper, it must already be in the
+    // current thread's realm (wrappers don't leave their owner). Pass
+    // through. We test this BEFORE owner_thread so we don't deref a
+    // wrapper's owner_thread when the wrapper itself is what we want.
+    if (__raw->class_ptr == NULL) return __raw;
+    if (__raw->owner_thread == __current_thread()) return __raw;
+    return __create_wrapper(__raw);
+}
+
+aobject * __create_wrapper(aobject * const __realobj) {
+    #ifdef WRAPLOG
+    fprintf(stderr, "[wrap.create] real=%p class=%s rc=%d propref=%d wrappers=%p\n",
+        __realobj,
+        __realobj && __realobj->class_ptr ? __realobj->class_ptr->name : "(?)",
+        __realobj ? __realobj->reference_count : -1,
+        __realobj ? __realobj->property_reference_count : -1,
+        __realobj ? (void*)__realobj->first_object_wrapper : NULL);
+    fflush(stderr);
+    #endif
+    // First wrapper ever? Flip the global so __unwrap stops being a
+    // free-zero-instruction identity. Set BEFORE the wrapper is
+    // visible to any other thread — the wrapper-list mutex below
+    // provides the release-side synchronisation that publishes both
+    // this flag and the new wrapper entry together.
+    __amlc_any_wrappers_alive = true;
+
+    // Allocate the wrapper aobject itself. It has no class (class_ptr
+    // stays NULL — that's the discriminator) and zero properties, so
+    // the base aobject struct alone is enough.
+    aobject * __wrapper = (aobject *) calloc(1, sizeof(aobject));
+    if (__wrapper == NULL) return NULL;
+    __wrapper->class_ptr = NULL;                         // wrapper sentinel
+    __wrapper->reference_count = 1;
+    __wrapper->property_reference_count = 0;
+    __wrapper->owner_thread = __current_thread();
+    __wrapper->object_properties.object_wrapper.wrapped_object = __realobj;
+
+    // Build the subscription entry the real will hold on to.
+    object_wrapper_entry * __entry =
+        (object_wrapper_entry *) calloc(1, sizeof(object_wrapper_entry));
+    if (__entry == NULL) { free(__wrapper); return NULL; }
+    __entry->subscriber = __wrapper;
+    __entry->next = NULL;
+
+    // Link into the real's wrapper list under the shared mutex.
+    //
+    // NOTE: we do NOT bump real->reference_count anymore — wrappers are
+    // tracked separately via `first_object_wrapper`. The owner's
+    // reference_count stays solely "owner-thread local refs". This
+    // splits ownership so owner-thread inc/dec on its own count doesn't
+    // need the lock, except on the 1→0 transition (see
+    // __decrease_reference_count). End-of-life coordination is via the
+    // `owner_gone` flag set by whoever drains rc+propref to zero first.
+    __arc_shared_lock();
+    __entry->next = __realobj->first_object_wrapper;
+    __realobj->first_object_wrapper = __entry;
+    __arc_shared_unlock();
+
+    return __wrapper;
+}
+
+void __deallocate_wrapper(aobject * const __wrapper) {
+    aobject * const __realobj =
+        __wrapper->object_properties.object_wrapper.wrapped_object;
+    #ifdef WRAPLOG
+    fprintf(stderr, "[wrap.dealloc] wrapper=%p real=%p real_class=%s real_rc=%d real_propref=%d real_owner_gone=%d\n",
+        __wrapper, __realobj,
+        __realobj && __realobj->class_ptr ? __realobj->class_ptr->name : "(?)",
+        __realobj ? __realobj->reference_count : -1,
+        __realobj ? __realobj->property_reference_count : -1,
+        __realobj ? __realobj->owner_gone : -1);
+    fflush(stderr);
+    #endif
+
+    // Unlink self under the shared mutex. The unlink walks the
+    // singly-linked list looking for the entry whose `subscriber`
+    // matches `__wrapper`. The list is typically short (number of
+    // threads currently borrowing the object — usually 1-3) so the
+    // linear walk is fine.
+    __arc_shared_lock();
+    object_wrapper_entry * prev = NULL;
+    object_wrapper_entry * cur = __realobj->first_object_wrapper;
+    while (cur != NULL) {
+        if (cur->subscriber == __wrapper) {
+            if (prev == NULL) {
+                __realobj->first_object_wrapper = cur->next;
+            } else {
+                prev->next = cur->next;
+            }
+            free(cur);
+            break;
+        }
+        prev = cur;
+        cur = cur->next;
+    }
+
+    // Real-destruction protocol (new):
+    //   - Wrappers do NOT contribute to real->reference_count anymore.
+    //   - Whoever drains rc+propref to zero on the owner side sets
+    //     `owner_gone = true` UNDER THIS SAME LOCK if any wrappers
+    //     still subscribe; otherwise they destroy outright.
+    //   - On wrapper death (here), if we were the last subscriber AND
+    //     the owner has already flagged owner_gone, we finalize.
+    // This means a typical wrapper death only locks long enough to
+    // unsubscribe — no owner-side counter mutation, no decrement-then-
+    // check ping-pong.
+    bool destroy_real = (__realobj->first_object_wrapper == NULL
+                      && __realobj->owner_gone
+                      && !__realobj->destruction_claimed);
+    if (destroy_real) {
+        __realobj->destruction_claimed = true;
+    }
+    __arc_shared_unlock();
+
+    if (destroy_real) {
+        __deallocate_object(__realobj);
+    }
+
+    free(__wrapper);
 }
 
 void deallocate_annotations(class_static * const __class_static) {

@@ -22,9 +22,7 @@ function_result Am_Lang_Process__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	__increase_reference_count(this);
 __exit: ;
-	__decrease_reference_count(this);
 	return __result;
 }
 
@@ -48,9 +46,6 @@ function_result Am_Lang_Process_run_0(aobject * command)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (command != NULL) {
-		__increase_reference_count(command);
-	}
 
 	string_holder *cmd_holder = (string_holder *) (command + 1);
 	STRPTR cmd_strptr = (STRPTR) cmd_holder->string_value;
@@ -68,9 +63,6 @@ function_result Am_Lang_Process_run_0(aobject * command)
 	__result.return_value.value.int_value = (int) status;
 
 __exit: ;
-	if (command != NULL) {
-		__decrease_reference_count(command);
-	}
 	return __result;
 }
 
@@ -143,9 +135,6 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (command != NULL) {
-		__increase_reference_count(command);
-	}
 
 	string_holder *cmd_holder = (string_holder *) (command + 1);
 	STRPTR cmd_strptr = (STRPTR) cmd_holder->string_value;
@@ -248,9 +237,6 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 	__result.return_value.value.object_value = str;
 
 __exit: ;
-	if (command != NULL) {
-		__decrease_reference_count(command);
-	}
 	return __result;
 }
 
@@ -322,12 +308,6 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (command != NULL) {
-		__increase_reference_count(command);
-	}
-	if (workingDir != NULL) {
-		__increase_reference_count(workingDir);
-	}
 
 	string_holder *dir_holder = (workingDir != NULL) ? (string_holder *) (workingDir + 1) : NULL;
 	const char *dir_str = (dir_holder != NULL && dir_holder->length > 0) ? dir_holder->string_value : NULL;
@@ -427,11 +407,5 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 	__result.return_value.value.object_value = out_str;
 
 __exit: ;
-	if (command != NULL) {
-		__decrease_reference_count(command);
-	}
-	if (workingDir != NULL) {
-		__decrease_reference_count(workingDir);
-	}
 	return __result;
 }

@@ -10,14 +10,8 @@ function_result Am_Lang_String__native_init_0(aobject * const this)
 	function_result __result = { .has_return_value = false };
 /*
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 	// TODO: implement native function Am_Lang_String__native_init_0
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 */
 	return __result;
 };
@@ -84,9 +78,6 @@ function_result Am_Lang_String_getLength_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 	// TODO: implement native function Am_Lang_String_getLength_0
 	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	if ( holder != NULL ) {
@@ -96,9 +87,6 @@ function_result Am_Lang_String_getLength_0(aobject * const this)
 	}
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -106,9 +94,6 @@ function_result Am_Lang_String_print_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	if ( holder != NULL ) {
 		printf("%s", holder->string_value);
@@ -126,9 +111,6 @@ function_result Am_Lang_String_print_0(aobject * const this)
 
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -136,12 +118,6 @@ function_result Am_Lang_String_equals_0(aobject * const this, aobject * other)
 {	
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
-	if (other != NULL) {
-		__increase_reference_count(other);
-	}
 
 	if (other == NULL) {
 		__result.return_value = (nullable_value) { .value.bool_value = false, .flags = PRIMITIVE_BOOL };
@@ -162,12 +138,6 @@ function_result Am_Lang_String_equals_0(aobject * const this, aobject * other)
 	__result.return_value = (nullable_value) { .value.bool_value = res, .flags = PRIMITIVE_BOOL };
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
-	if (other != NULL) {
-		__decrease_reference_count(other);
-	}
 	return __result;
 };
 
@@ -175,12 +145,6 @@ function_result Am_Lang_String__op__plus_0(aobject * const this, aobject * s)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
-	if (s != NULL) {
-		__increase_reference_count(s);
-	}
 
 
 	string_holder *holder1 = this->object_properties.class_object_properties.object_data.value.custom_value;
@@ -210,12 +174,6 @@ function_result Am_Lang_String__op__plus_0(aobject * const this, aobject * s)
 	// TODO: implement native function MyNamespace_CustomMyClass__op__plus_0
 //	printf("TODO: implement native function Am_Lang__op__plus_0\n");
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
-	if (s != NULL) {
-		__decrease_reference_count(s);
-	}
 	return __result;
 };
 
@@ -224,12 +182,6 @@ function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	if (bytes != NULL) {
-		__increase_reference_count(bytes);
-	}
-	if (encoding != NULL) {
-		__increase_reference_count(encoding);
-	}
 
 
 	array_holder *a_holder = (array_holder *) &bytes[1]; // bytes->object_properties.class_object_properties.object_data.value.custom_value;
@@ -255,12 +207,6 @@ function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
 	__result.return_value.flags = 0;
 
 __exit: ;
-	if (bytes != NULL) {
-		__decrease_reference_count(bytes);
-	}
-	if (encoding != NULL) {
-		__decrease_reference_count(encoding);
-	}
 	return __result;
 };
 
@@ -268,12 +214,6 @@ function_result Am_Lang_String_toBytes_0(aobject * const this, aobject * encodin
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
-	if (encoding != NULL) {
-		__increase_reference_count(encoding);
-	}
 	string_holder *string_holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	aobject *array = __create_array(string_holder->length, 1, &Am_Lang_Array_ta_Am_Lang_UByte, uchar_type);
 
@@ -283,12 +223,6 @@ function_result Am_Lang_String_toBytes_0(aobject * const this, aobject * encodin
 	__result.return_value.value.object_value = array;
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
-	if (encoding != NULL) {
-		__decrease_reference_count(encoding);
-	}
 	return __result;
 };
 
@@ -296,9 +230,6 @@ function_result Am_Lang_String_characterAtNative_0(aobject * const this, unsigne
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 
 	string_holder *string_holder = this->object_properties.class_object_properties.object_data.value.custom_value;
@@ -309,9 +240,6 @@ function_result Am_Lang_String_characterAtNative_0(aobject * const this, unsigne
 	__result.return_value.value.ushort_value = string_holder->string_value[index];
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -319,12 +247,6 @@ function_result Am_Lang_String_indexOf_0(aobject * const this, aobject * s)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
-	if (s != NULL) {
-		__increase_reference_count(s);
-	}
 
 	string_holder *sh1 = this->object_properties.class_object_properties.object_data.value.custom_value;
 	string_holder *sh2 = s->object_properties.class_object_properties.object_data.value.custom_value;
@@ -337,12 +259,6 @@ function_result Am_Lang_String_indexOf_0(aobject * const this, aobject * s)
 	}
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
-	if (s != NULL) {
-		__decrease_reference_count(s);
-	}
 	return __result;
 };
 
@@ -350,12 +266,6 @@ function_result Am_Lang_String_lastIndexOf_0(aobject * const this, aobject * s)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
-	if (s != NULL) {
-		__increase_reference_count(s);
-	}
 
 	int last_index = -1;
 
@@ -372,12 +282,6 @@ function_result Am_Lang_String_lastIndexOf_0(aobject * const this, aobject * s)
 	__result.return_value.value.int_value = last_index;
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
-	if (s != NULL) {
-		__decrease_reference_count(s);
-	}
 	return __result;
 };
 
@@ -385,9 +289,6 @@ function_result Am_Lang_String_substring_0(aobject * const this, unsigned int st
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 
@@ -418,9 +319,6 @@ function_result Am_Lang_String_substring_0(aobject * const this, unsigned int st
 	__result.return_value.value.object_value = str_obj;
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 

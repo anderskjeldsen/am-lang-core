@@ -63,9 +63,6 @@ function_result Am_IO_FileStream__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	char * const path = get_file_path(this);
 	char * const mode = get_file_access_mode(this);
@@ -80,9 +77,6 @@ function_result Am_IO_FileStream__native_init_0(aobject * const this)
 	this->object_properties.class_object_properties.object_data.value.custom_value = holder;
 	holder->file = f;
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -111,9 +105,6 @@ function_result Am_IO_FileStream_close_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	// Eagerly release the OS file handle. Needed on AmigaOS where
 	// a same-process write→read on one path doesn't round-trip
@@ -127,9 +118,6 @@ function_result Am_IO_FileStream_close_0(aobject * const this)
 	}
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -145,12 +133,6 @@ function_result Am_IO_FileStream_read_0(aobject * const this, aobject * buffer, 
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
-	if (buffer != NULL) {
-		__increase_reference_count(buffer);
-	}
 
 	file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 
@@ -158,12 +140,6 @@ function_result Am_IO_FileStream_read_0(aobject * const this, aobject * buffer, 
 	__result.return_value.value.uint_value = fread(a_holder->array_data + offset, 1, length, holder->file);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
-	if (buffer != NULL) {
-		__decrease_reference_count(buffer);
-	}
 	return __result;
 };
 
@@ -171,12 +147,6 @@ function_result Am_IO_FileStream_write_0(aobject * const this, aobject * buffer,
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
-	if (buffer != NULL) {
-		__increase_reference_count(buffer);
-	}
 
 	file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 
@@ -186,12 +156,6 @@ function_result Am_IO_FileStream_write_0(aobject * const this, aobject * buffer,
 	fflush(holder->file);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
-	if (buffer != NULL) {
-		__decrease_reference_count(buffer);
-	}
 	return __result;
 };
 
@@ -199,13 +163,7 @@ function_result Am_IO_FileStream_seekFromStart_0(aobject * const this, long long
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -213,9 +171,6 @@ function_result Am_IO_FileStream_readByte_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	unsigned char bytes[1];
@@ -227,9 +182,6 @@ function_result Am_IO_FileStream_readByte_0(aobject * const this)
 	}
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -237,9 +189,6 @@ function_result Am_IO_FileStream_writeByte_0(aobject * const this, int byte)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	unsigned char bytes[1];
@@ -248,9 +197,6 @@ function_result Am_IO_FileStream_writeByte_0(aobject * const this, int byte)
 	fflush(holder->file);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 

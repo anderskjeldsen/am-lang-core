@@ -18,13 +18,7 @@ function_result Am_IO_File__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -75,15 +69,6 @@ function_result Am_IO_File_listNative_0(aobject * const this, aobject * folderFi
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
-	if (folderFilename != NULL) {
-		__increase_reference_count(folderFilename);
-	}
-	if (list != NULL) {
-		__increase_reference_count(list);
-	}
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
 	string_holder *filename_string_holder = (string_holder *) (filename + 1);
@@ -113,15 +98,6 @@ function_result Am_IO_File_listNative_0(aobject * const this, aobject * folderFi
 	closedir(d);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
-	if (folderFilename != NULL) {
-		__decrease_reference_count(folderFilename);
-	}
-	if (list != NULL) {
-		__decrease_reference_count(list);
-	}
 	return __result;
 };
 
@@ -129,9 +105,6 @@ function_result Am_IO_File_isDirectory_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
 	string_holder *filename_string_holder = (string_holder *) (filename + 1);
@@ -145,9 +118,6 @@ function_result Am_IO_File_isDirectory_0(aobject * const this)
 		goto __exit;
     }
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -156,9 +126,6 @@ function_result Am_IO_File_exists_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
 	string_holder *filename_string_holder = (string_holder *) (filename + 1);
@@ -167,9 +134,6 @@ function_result Am_IO_File_exists_0(aobject * const this)
 	__result.return_value.value.bool_value = (stat(filename_string_holder->string_value, &s) == 0);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -177,9 +141,6 @@ function_result Am_IO_File_getSize_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
 	string_holder *filename_string_holder = (string_holder *) (filename + 1);
@@ -192,9 +153,6 @@ function_result Am_IO_File_getSize_0(aobject * const this)
 	}
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -202,9 +160,6 @@ function_result Am_IO_File_getLastModified_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
 	string_holder *filename_string_holder = (string_holder *) (filename + 1);
@@ -218,9 +173,6 @@ function_result Am_IO_File_getLastModified_0(aobject * const this)
 	}
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -228,9 +180,6 @@ function_result Am_IO_File_canRead_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
 	string_holder *filename_string_holder = (string_holder *) (filename + 1);
@@ -238,9 +187,6 @@ function_result Am_IO_File_canRead_0(aobject * const this)
 	__result.return_value.value.bool_value = (access(filename_string_holder->string_value, R_OK) == 0);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -248,9 +194,6 @@ function_result Am_IO_File_canWrite_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
 	string_holder *filename_string_holder = (string_holder *) (filename + 1);
@@ -258,9 +201,6 @@ function_result Am_IO_File_canWrite_0(aobject * const this)
 	__result.return_value.value.bool_value = (access(filename_string_holder->string_value, W_OK) == 0);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -269,9 +209,6 @@ function_result Am_IO_File_delete_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
 	string_holder *filename_string_holder = (string_holder *) (filename + 1);
@@ -291,9 +228,6 @@ function_result Am_IO_File_delete_0(aobject * const this)
 	}
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -301,9 +235,6 @@ function_result Am_IO_File_createDirectory_0(aobject * path)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (path != NULL) {
-		__increase_reference_count(path);
-	}
 
 	string_holder *path_string_holder = (string_holder *) (path + 1);
 	
@@ -316,9 +247,6 @@ function_result Am_IO_File_createDirectory_0(aobject * path)
 	__result.return_value.value.bool_value = (result == 0);
 
 __exit: ;
-	if (path != NULL) {
-		__decrease_reference_count(path);
-	}
 	return __result;
 };
 
@@ -326,12 +254,6 @@ function_result Am_IO_File_copy_0(aobject * const this, aobject * destination)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
-	if (destination != NULL) {
-		__increase_reference_count(destination);
-	}
 
 	aobject *source_filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
 	string_holder *source_string_holder = (string_holder *) (source_filename + 1);
@@ -367,12 +289,6 @@ function_result Am_IO_File_copy_0(aobject * const this, aobject * destination)
 	__result.return_value.value.bool_value = success;
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
-	if (destination != NULL) {
-		__decrease_reference_count(destination);
-	}
 	return __result;
 };
 
@@ -380,12 +296,6 @@ function_result Am_IO_File_move_0(aobject * const this, aobject * destination)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
-	if (destination != NULL) {
-		__increase_reference_count(destination);
-	}
 
 	aobject *source_filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
 	string_holder *source_string_holder = (string_holder *) (source_filename + 1);
@@ -395,12 +305,6 @@ function_result Am_IO_File_move_0(aobject * const this, aobject * destination)
 	__result.return_value.value.bool_value = (result == 0);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
-	if (destination != NULL) {
-		__decrease_reference_count(destination);
-	}
 	return __result;
 };
 
@@ -408,15 +312,6 @@ function_result Am_IO_File_createTempFileInternal_0(aobject * directory, aobject
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (directory != NULL) {
-		__increase_reference_count(directory);
-	}
-	if (prefix != NULL) {
-		__increase_reference_count(prefix);
-	}
-	if (suffix != NULL) {
-		__increase_reference_count(suffix);
-	}
 
 	aobject *dir_filename = directory->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
 	string_holder *dir_string_holder = (string_holder *) (dir_filename + 1);
@@ -454,15 +349,6 @@ function_result Am_IO_File_createTempFileInternal_0(aobject * directory, aobject
 	}
 
 __exit: ;
-	if (directory != NULL) {
-		__decrease_reference_count(directory);
-	}
-	if (prefix != NULL) {
-		__decrease_reference_count(prefix);
-	}
-	if (suffix != NULL) {
-		__decrease_reference_count(suffix);
-	}
 	return __result;
 };
 

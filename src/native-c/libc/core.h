@@ -98,6 +98,8 @@ typedef void (*__suspend_function)(suspend_state *);
 typedef enum _ctype ctype;
 typedef enum _class_type class_type;
 typedef struct _class_object_properties class_object_properties;
+typedef struct _object_wrapper object_wrapper;
+typedef struct _object_wrapper_entry object_wrapper_entry;
 typedef union _object_properties object_properties;
 typedef struct _anonymous_class_state_data anonymous_class_state_data;
 typedef struct _sweep_result sweep_result;
@@ -221,9 +223,24 @@ struct _class_object_properties {
     property * properties;
 };
 
+struct _object_wrapper {
+    aobject * wrapped_object;
+};
+
 union _object_properties {
     class_object_properties class_object_properties;
     iface_reference iface_reference;
+    object_wrapper object_wrapper;
+};
+
+struct _object_wrapper_entry {
+    aobject * subscriber;
+    // Self-reference uses the struct-tag form rather than the typedef
+    // alias (`object_wrapper_entry`) — the typedef binding sits on the
+    // `typedef struct _object_wrapper_entry object_wrapper_entry;` line
+    // above, but `struct object_wrapper_entry` is a different name and
+    // would forward-declare an unrelated, never-defined type.
+    struct _object_wrapper_entry * next;
 };
 
 struct _aobject {
@@ -233,8 +250,27 @@ struct _aobject {
     int reference_count;
     int property_reference_count;
     object_properties object_properties;
+    void * owner_thread;
+    object_wrapper_entry * first_object_wrapper; // lock a app shared mutext to read/write
     bool marked;
     bool pending_deallocation;
+    // Thread-safe ARC: set under the shared mutex when this real's
+    // owner-side liveness (reference_count + property_reference_count
+    // + traversal-from-live-roots) has fully drained but foreign-thread
+    // wrappers still subscribe to it. Wrappers consult this on their
+    // own death — if `owner_gone == true` AND they were the last
+    // subscriber, they finalize the real. One-way: never cleared.
+    // Replaces the prior protocol where wrappers contributed +1 to
+    // `reference_count`, which forced every wrapper birth/death to
+    // mutate the owner's counter under the lock.
+    bool owner_gone;
+    // Thread-safe ARC: lock-protected "I will call __deallocate_object
+    // on this real" claim. Set by whichever of owner-dec / propref-dec
+    // / last-wrapper-death observes the all-zero condition first.
+    // Separate from `pending_deallocation` (which is the in-progress
+    // recursion guard set by __detach_object) so the destructor path
+    // still runs after we claim.
+    bool destruction_claimed;
     aobject *prev;
     aobject *next;
 };
@@ -287,6 +323,64 @@ aclass Long = {
 extern aobject * __first_object;
 extern aclass * __first_class;
 extern class_static * __first_class_static;
+
+// Thread-safe ARC infrastructure.
+// `owner_thread` on every aobject records the thread that allocated it
+// (set in __allocate_object_with_extra_size). When a thread other than
+// the owner wants to reference the object, a wrapper aobject is created
+// in the borrowing thread's realm pointing at the real via
+// object_properties.object_wrapper.wrapped_object — wrappers are
+// identified by `class_ptr == NULL`. Owner-thread inc/dec on the real's
+// reference_count happens lock-free (only one writer). Wrapper-list
+// mutations (subscribing/unsubscribing) and property_reference_count
+// writes happen under this shared mutex.
+//
+// Implemented as a function-call boundary so the core stays portable —
+// libc gets a pthread_mutex_t behind the scenes, AmigaOS will get a
+// SignalSemaphore.
+void __arc_shared_lock(void);
+void __arc_shared_unlock(void);
+void __arc_shared_mutex_init(void);
+
+// Returns an opaque thread identifier. Owners are compared via
+// pointer-equality so the implementation just has to be unique per
+// thread and stable for that thread's lifetime. libc returns
+// (void*)pthread_self(), AmigaOS returns FindTask(NULL).
+void * __current_thread(void);
+
+// Set to `true` the first time a cross-thread wrapper is minted (in
+// `__create_wrapper`). `__unwrap` consults this flag to short-circuit
+// the wrapper-following ternary when no wrappers have ever existed —
+// the common case for single-threaded programs and even for
+// multi-threaded programs that don't share objects between threads.
+//
+// Stays `false` for the lifetime of programs that never share — `gcc
+// -O3` then constant-propagates and DCEs the wrapper-following branch
+// entirely. At `gcc -O0` (dev builds) we still pay one load + branch
+// per property read; that's manageable.
+extern bool __amlc_any_wrappers_alive;
+
+// Allocate a wrapper aobject in the current thread, pointing at the
+// real aobject (which is owned by some other thread). Subscribes the
+// wrapper into `real->first_object_wrapper` under the shared mutex
+// and bumps `real->reference_count`. The wrapper starts at
+// `reference_count = 1` and `class_ptr == NULL` (the wrapper sentinel).
+// `__realobj` is named with that suffix because gcc treats `__real`
+// as a reserved keyword (the `__real__`/`__imag__` complex-number
+// builtins) and rejects it as a parameter name.
+aobject * __create_wrapper(aobject * const __realobj);
+
+// Called by codegen whenever an aobject reference is acquired from a
+// nullable_value source (property read, function return, etc.). If
+// the underlying object is owned by another thread, mints a wrapper
+// in the current thread's realm. Otherwise (the common single-thread
+// case), returns the original pointer unchanged — very cheap.
+//
+// NULL passes through. Already-wrapped pointers (class_ptr == NULL,
+// owner_thread == current) pass through. Wrappers from OTHER threads
+// shouldn't normally appear here because `__set_property` unwraps
+// before storing; if one does, we'd re-wrap (correct but wasteful).
+aobject * __wrap_if_foreign(aobject * const __raw);
 
 
 // functions

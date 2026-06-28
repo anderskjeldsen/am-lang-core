@@ -12,13 +12,7 @@ function_result Am_IO_Networking_Socket__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -42,9 +36,6 @@ function_result Am_IO_Networking_Socket_createSocket_0(aobject * const this, int
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	printf("create socket %d, %d, %d\n", addressFamily, socketType, protocolFamily);
 	int s = socket(addressFamily, socketType, protocolFamily); 
@@ -58,9 +49,6 @@ function_result Am_IO_Networking_Socket_createSocket_0(aobject * const this, int
 	this->object_properties.class_object_properties.object_data.value.int_value = s;
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -68,12 +56,6 @@ function_result Am_IO_Networking_Socket_connectNative_0(aobject * const this, ao
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
-	if (hostName != NULL) {
-		__increase_reference_count(hostName);
-	}
 
 	int result = 0;
 	long ipadd;
@@ -106,12 +88,6 @@ function_result Am_IO_Networking_Socket_connectNative_0(aobject * const this, ao
 	}
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
-	if (hostName != NULL) {
-		__decrease_reference_count(hostName);
-	}
 	return __result;
 };
 
@@ -119,12 +95,6 @@ function_result Am_IO_Networking_Socket_send_0(aobject * const this, aobject * b
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
-	if (bytes != NULL) {
-		__increase_reference_count(bytes);
-	}
 
 	int s = this->object_properties.class_object_properties.object_data.value.int_value;				
 	if ( s < 0 )
@@ -154,12 +124,6 @@ function_result Am_IO_Networking_Socket_send_0(aobject * const this, aobject * b
 	__result.return_value.value.uint_value = sent;
 	__result.return_value.flags = PRIMITIVE_UINT;
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
-	if (bytes != NULL) {
-		__decrease_reference_count(bytes);
-	}
 	return __result;
 };
 
@@ -167,12 +131,6 @@ function_result Am_IO_Networking_Socket_receive_0(aobject * const this, aobject 
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
-	if (bytes != NULL) {
-		__increase_reference_count(bytes);
-	}
 
 	int s = this->object_properties.class_object_properties.object_data.value.int_value;				
 	if ( s < 0 )
@@ -203,12 +161,6 @@ function_result Am_IO_Networking_Socket_receive_0(aobject * const this, aobject 
 	__returning = true;
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
-	if (bytes != NULL) {
-		__decrease_reference_count(bytes);
-	}
 	return __result;
 };
 
@@ -217,9 +169,6 @@ function_result Am_IO_Networking_Socket_close_0(aobject * const this)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 	// Add reference count for this in Socket.close
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	int s = this->object_properties.class_object_properties.object_data.value.int_value;				
 	if ( s < 0 )
@@ -232,9 +181,6 @@ function_result Am_IO_Networking_Socket_close_0(aobject * const this)
 	this->object_properties.class_object_properties.object_data.value.int_value = -1;
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 

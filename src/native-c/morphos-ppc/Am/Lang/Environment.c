@@ -27,9 +27,7 @@ function_result Am_Lang_Environment__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	__increase_reference_count(this);
 __exit: ;
-	__decrease_reference_count(this);
 	return __result;
 }
 
@@ -53,9 +51,6 @@ function_result Am_Lang_Environment_get_0(aobject * name)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (name != NULL) {
-		__increase_reference_count(name);
-	}
 
 	string_holder *name_holder = (string_holder *) (name + 1);
 	STRPTR name_strptr = (STRPTR) name_holder->string_value;
@@ -102,9 +97,6 @@ function_result Am_Lang_Environment_get_0(aobject * name)
 	__result.return_value.value.object_value = str;
 
 __exit: ;
-	if (name != NULL) {
-		__decrease_reference_count(name);
-	}
 	return __result;
 }
 
@@ -112,12 +104,6 @@ function_result Am_Lang_Environment_set_0(aobject * name, aobject * value)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (name != NULL) {
-		__increase_reference_count(name);
-	}
-	if (value != NULL) {
-		__increase_reference_count(value);
-	}
 
 	string_holder *name_holder = (string_holder *) (name + 1);
 	string_holder *value_holder = (string_holder *) (value + 1);
@@ -129,12 +115,6 @@ function_result Am_Lang_Environment_set_0(aobject * name, aobject * value)
 	__result.return_value.value.bool_value = (ok != 0);
 
 __exit: ;
-	if (name != NULL) {
-		__decrease_reference_count(name);
-	}
-	if (value != NULL) {
-		__decrease_reference_count(value);
-	}
 	return __result;
 }
 
@@ -142,9 +122,6 @@ function_result Am_Lang_Environment_unset_0(aobject * name)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	if (name != NULL) {
-		__increase_reference_count(name);
-	}
 
 	string_holder *name_holder = (string_holder *) (name + 1);
 	STRPTR name_strptr = (STRPTR) name_holder->string_value;
@@ -153,8 +130,5 @@ function_result Am_Lang_Environment_unset_0(aobject * name)
 	__result.return_value.value.bool_value = (ok != 0);
 
 __exit: ;
-	if (name != NULL) {
-		__decrease_reference_count(name);
-	}
 	return __result;
 }

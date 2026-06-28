@@ -28,9 +28,6 @@ function_result Am_Threading_Thread__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	printf("[native_init] enter (this=%p)\n", (void *) this); fflush(stdout);
 	SysBase = *((struct ExecBase **)4UL);
@@ -45,9 +42,6 @@ function_result Am_Threading_Thread__native_init_0(aobject * const this)
 	       (void *) this, (void *) data, (unsigned long) data->stack_size); fflush(stdout);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -164,9 +158,6 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	printf("[start] enter (this=%p)\n", (void *) this); fflush(stdout);
 	void (*fptr)() = Am_Threading_Thread__InitTask;
@@ -225,7 +216,6 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 	// Doing this BEFORE CreateNewProc closes the existing race where
 	// the new task starts running and busy-waits on `tc_UserData`
 	// while the caller could otherwise drop their last ref to `this`.
-	__increase_reference_count(this);
 
 	printf("[start] calling CreateNewProc\n"); fflush(stdout);
 	struct Process * process = CreateNewProc(tags);
@@ -234,7 +224,6 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 	if ( process == NULL )
 	{
 		// Worker won't run, so undo the ref we took above.
-		__decrease_reference_count(this);
 		printf("CreateNewProc returned a null-pointer\n");
 // TODO:		throw( new GException("CreateNewProc returned a null-pointer") );
 	}
@@ -246,9 +235,6 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 	}
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
@@ -256,9 +242,6 @@ function_result Am_Threading_Thread_join_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
-	if (this != NULL) {
-		__increase_reference_count(this);
-	}
 
 	printf("[join] start (thread=%p)\n", (void *) this); fflush(stdout);
 	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
@@ -270,9 +253,6 @@ function_result Am_Threading_Thread_join_0(aobject * const this)
 	printf("[join] done (thread=%p)\n", (void *) this); fflush(stdout);
 
 __exit: ;
-	if (this != NULL) {
-		__decrease_reference_count(this);
-	}
 	return __result;
 };
 
