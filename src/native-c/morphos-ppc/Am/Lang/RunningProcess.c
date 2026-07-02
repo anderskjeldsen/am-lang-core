@@ -1401,6 +1401,17 @@ function_result Am_Lang_RunningProcess_isAlive_0(aobject * const this) {
     return __result;
 }
 
+// Exit-code stub for MorphOS — NP_ExitCode is m68k-only here, so we
+// don't have a real exit status to expose. Return 0 so the New CLI
+// retry gate (which compares against 161) never trips. Acceptable for
+// now; native-side stderr-leak detection is amStudio-on-V40-specific.
+function_result Am_Lang_RunningProcess_exitCode_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    (void) this;
+    __result.return_value.value.int_value = 0;
+    return __result;
+}
+
 function_result Am_Lang_RunningProcess_setReportedSize_0(aobject * const this, int var_rows, int var_cols) {
     function_result __result = { .has_return_value = false };
     running_process_data * d = rp_data(this);
@@ -1434,6 +1445,15 @@ function_result Am_Lang_RunningProcess_close_0(aobject * const this) {
         rp_state_release(d->state);
         d->state = NULL;
     }
+    return __result;
+}
+
+// See amigaos backend for the rationale. Stub on morphos-ppc — the
+// close_0 tear-down path here doesn't have the freed-fh_Type hazard
+// that terminateChild fixes, so a no-op is safe.
+function_result Am_Lang_RunningProcess_terminateChild_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    (void) this;
     return __result;
 }
 

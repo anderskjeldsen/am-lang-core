@@ -51,6 +51,17 @@ namespace Am.Lang
         // return true once more while the stdout ring drains.
         native fun isAlive(): Bool
 
+        // Exit status of the child. Valid only after isAlive() has
+        // returned false. Returns 0 while still running.
+        //
+        // Used by amStudio's New CLI to detect ixemul's "libc init
+        // failed" sentinel (code 161) — the only case the panel's
+        // auto-retry-via-sync path should fire on. Earlier the
+        // retry was gated on "zero bytes written" which also matched
+        // any side-effect command that succeeds silently (`delete`,
+        // `mkdir`, etc.) and caused those to run twice.
+        native fun exitCode(): Int
+
         // True iff the child has put stdin into raw mode via
         // SetMode(fh, 1) — the AmigaOS equivalent of a Unix
         // terminal's "ECHO off + line-discipline off". Set when the
@@ -76,6 +87,20 @@ namespace Am.Lang
         // GC via _native_release_0, so explicit calls are only
         // needed when you want to release the handler early.
         native fun close()
+
+        // Async graceful kill: signal the child (SIGBREAKF_CTRL_C on
+        // amigaos, no-op on other platforms — libc's close_0 already
+        // covers the equivalent path via SIGKILL). Returns
+        // immediately; the child exits on its own from its libc's
+        // CTRL_C check, then rp_child_exit fires and the next
+        // drainProcess tick reaps via isAlive()==false → close().
+        //
+        // Use this instead of close() for user-initiated kills
+        // while the child is still alive — direct close() on amigaos
+        // tears the DOS handler down under a live child, which
+        // alerts the next time the child issues a syscall through
+        // the now-freed fh_Type MsgPort.
+        native fun terminateChild()
 
         // Register a task + signal-bit to be Signal()'d whenever the
         // child writes output. Lets the AmLang main loop (whose

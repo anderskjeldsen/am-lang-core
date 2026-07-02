@@ -46,6 +46,7 @@ struct _running_process_data {
     int  stdout_reader_fd;  // parent reads  <- child stdout
     pid_t child_pid;
     int  child_exited;      // 0 until waitpid reports the child gone
+    int  exit_code;         // unix exit code, post-waitpid (0 default)
 };
 
 static running_process_data * rp_data(aobject * const this) {
@@ -61,6 +62,7 @@ function_result Am_Lang_RunningProcess__native_init_0(aobject * const this) {
         d->stdout_reader_fd = -1;
         d->child_pid = -1;
         d->child_exited = 0;
+        d->exit_code = 0;
         this->object_properties.class_object_properties.object_data.value.custom_value = d;
     }
     return __result;
@@ -194,6 +196,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     d->stdout_reader_fd = master_fd;
     d->child_pid = pid;
     d->child_exited = 0;
+    d->exit_code = 0;
 
 __exit: ;
     return __result;
@@ -275,6 +278,16 @@ function_result Am_Lang_RunningProcess_isAlive_0(aobject * const this) {
             alive = 1;  // still running
         } else if (r == d->child_pid) {
             d->child_exited = 1;
+            // Capture exit code in Amiga-compatible shape: just the
+            // unix exit status, masked to the low byte for normal
+            // exits. New CLI's retry gate compares against 161 (the
+            // ixemul libc-init-failed sentinel) so this only matters
+            // on Amiga, but track it on libc too for parity.
+            if (WIFEXITED(status)) {
+                d->exit_code = WEXITSTATUS(status);
+            } else {
+                d->exit_code = -1;  // killed by signal / crash
+            }
         }
     }
     // Child has been reaped — but the PTY master may still hold
@@ -316,9 +329,33 @@ function_result Am_Lang_RunningProcess_isAlive_0(aobject * const this) {
     return __result;
 }
 
+function_result Am_Lang_RunningProcess_exitCode_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    running_process_data * d = rp_data(this);
+    int code = 0;
+    if (d != NULL) {
+        code = d->exit_code;
+    }
+    __result.return_value.value.int_value = code;
+    return __result;
+}
+
 function_result Am_Lang_RunningProcess_close_0(aobject * const this) {
     function_result __result = { .has_return_value = false };
     rp_close_internal(rp_data(this));
+    return __result;
+}
+
+// On libc we could send SIGINT to the child via kill(2) here to
+// mirror the amigaos graceful-kill path, but the confirm-close
+// flow on Mac/Linux already goes through close_0 (which SIGKILLs
+// the child on shutdown) without the fh_Type-freed-port hazard
+// that motivated terminateChild_0 on amigaos. Keeping the libc
+// implementation as a no-op means killRunningChild() → close_0()
+// continues to work exactly as it did before the amigaos split.
+function_result Am_Lang_RunningProcess_terminateChild_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    (void) this;
     return __result;
 }
 

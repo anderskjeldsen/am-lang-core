@@ -153,52 +153,131 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 	am_proc_build_temp_path(temp_path,     self, NULL);
 	am_proc_build_temp_path(temp_path_err, self, "_e");
 
+	// V40 stderr capture: same recipe as the InDir variant — see the
+	// banner there for the full rationale. Brief: CreateNewProcTags
+	// with NP_ConsoleTask=NULL + manual pr_CES patch + asymmetric
+	// Close (only err_file in parent; out_file + nil_in handled by
+	// child's CLI cleanup).
 	BPTR out_file = Open((CONST_STRPTR) temp_path, MODE_NEWFILE);
-	if (out_file == 0) {
-		// Build a message that includes the dos.library IoErr() code.
-		static char err_msg[80];
-		const char *prefix = "Failed to open temp file (IoErr=0x";
-		int p = 0;
-		while (prefix[p] != 0) { err_msg[p] = prefix[p]; p++; }
-		LONG ioerr = IoErr();
-		for (LONG nibble = 7; nibble >= 0; nibble--) {
-			LONG v = (ioerr >> (nibble * 4)) & 0xF;
-			err_msg[p++] = (char)(v < 10 ? ('0' + v) : ('a' + (v - 10)));
-		}
-		err_msg[p++] = ')';
-		err_msg[p] = 0;
-		__throw_simple_exception(err_msg, "in Am_Lang_Process_runAndCaptureOutput_0", &__result);
+	BPTR err_file = Open((CONST_STRPTR) temp_path_err, MODE_NEWFILE);
+	BPTR nil_in   = Open((CONST_STRPTR) "NIL:", MODE_OLDFILE);
+	if (out_file == 0 || err_file == 0 || nil_in == 0) {
+		if (out_file) Close(out_file);
+		if (err_file) Close(err_file);
+		if (nil_in)   Close(nil_in);
+		__throw_simple_exception("Failed to open temp files / NIL:", "in Am_Lang_Process_runAndCaptureOutput_0", &__result);
 		goto __exit;
 	}
-	BPTR err_file = Open((CONST_STRPTR) temp_path_err, MODE_NEWFILE);
-	// stderr file is best-effort — if it can't be opened we just lose
-	// stderr capture, not the whole command run. NIL: is set as the
-	// SYS_Error value so the System call doesn't fall back to inheriting
-	// the parent's handle (which we know writes nowhere useful).
-	BPTR err_value = err_file != 0 ? err_file : 0;
 
-	struct TagItem run_tags[] = {
-		{ SYS_Input,     (ULONG) NULL },
-		{ SYS_Output,    (ULONG) out_file },
-		{ SYS_Error,     (ULONG) err_value },
-		{ SYS_Asynch,    FALSE },
-		{ SYS_UserShell, TRUE },
-		{ TAG_DONE,      0 },
-	};
+	static char g_bin_buf2[128];
+	static char g_arg_buf2[512];
+	{
+		const char *src = (const char *) cmd_strptr;
+		int p = 0;
+		while (src[p] != 0 && src[p] != ' ' && src[p] != '\t' && p < (int)(sizeof(g_bin_buf2)-1)) {
+			g_bin_buf2[p] = src[p]; p++;
+		}
+		g_bin_buf2[p] = 0;
+		while (src[p] == ' ' || src[p] == '\t') p++;
+		int a = 0;
+		while (src[p] != 0 && a < (int)(sizeof(g_arg_buf2)-2)) {
+			g_arg_buf2[a++] = src[p++];
+		}
+		g_arg_buf2[a++] = '\n';
+		g_arg_buf2[a]   = 0;
+	}
 
-	LONG status = SystemTagList(cmd_strptr, run_tags);
-	// In synchronous mode (SYS_Asynch=FALSE), SystemTagList does NOT close the
-	// streams — the caller owns them. Close before re-opening for read, otherwise
-	// the file stays locked and subsequent Open(MODE_NEWFILE) on the same path
-	// will fail with ERROR_OBJECT_IN_USE.
-	Close(out_file);
-	if (err_file != 0) Close(err_file);
-	if (status == -1) {
+	BPTR seg = LoadSeg((CONST_STRPTR) g_bin_buf2);
+	if (seg == 0) {
+		int has_path = 0;
+		for (int i = 0; g_bin_buf2[i] != 0; i++) {
+			if (g_bin_buf2[i] == '/' || g_bin_buf2[i] == ':') { has_path = 1; break; }
+		}
+		if (!has_path) {
+			char with_c[160];
+			int p = 0;
+			with_c[p++] = 'C'; with_c[p++] = ':';
+			int k = 0;
+			while (g_bin_buf2[k] != 0 && p < (int)(sizeof(with_c)-1)) with_c[p++] = g_bin_buf2[k++];
+			with_c[p] = 0;
+			seg = LoadSeg((CONST_STRPTR) with_c);
+		}
+	}
+	if (seg == 0) {
+		Close(out_file); Close(err_file); Close(nil_in);
 		DeleteFile((CONST_STRPTR) temp_path);
 		DeleteFile((CONST_STRPTR) temp_path_err);
-		__throw_simple_exception("Failed to execute command", "in Am_Lang_Process_runAndCaptureOutput_0", &__result);
+		__throw_simple_exception("LoadSeg failed (binary not found)", "in Am_Lang_Process_runAndCaptureOutput_0", &__result);
 		goto __exit;
 	}
+
+	Forbid();
+	struct Process *child = CreateNewProcTags(
+		NP_Seglist,     (ULONG) seg,
+		NP_FreeSeglist, (ULONG) TRUE,
+		NP_Cli,         (ULONG) TRUE,
+		NP_Input,       (ULONG) nil_in,
+		NP_Output,      (ULONG) out_file,
+		NP_Error,       (ULONG) err_file,
+		NP_ConsoleTask, (ULONG) NULL,
+		NP_Arguments,   (ULONG) g_arg_buf2,
+		NP_Name,        (ULONG) "amStudioBatch",
+		NP_StackSize,   (ULONG) 65536,
+		TAG_DONE);
+	if (child != NULL) {
+		child->pr_CIS = nil_in;
+		child->pr_COS = out_file;
+		child->pr_CES = err_file;
+		struct CommandLineInterface *cli =
+			(struct CommandLineInterface *) BADDR(child->pr_CLI);
+		if (cli != NULL) {
+			cli->cli_StandardInput  = nil_in;
+			cli->cli_CurrentInput   = nil_in;
+			cli->cli_StandardOutput = out_file;
+			cli->cli_CurrentOutput  = out_file;
+			// cli_CommandName is a BSTR; ixemul reads it for
+			// argv[0]. Without setting it the child inherits a
+			// stale value ("app" — amStudio's process name) and
+			// gcc prints "app: No input files" instead of
+			// "gcc: No input files". Build a length-prefixed
+			// BCPL string from g_bin_buf2 into a static buffer
+			// and point cli_CommandName at it (BPTR = MKBADDR).
+			static UBYTE s_cmd_name_bstr[34];
+			int slen = 0;
+			while (slen < 30 && g_bin_buf2[slen] != 0) {
+				s_cmd_name_bstr[slen + 1] = (UBYTE) g_bin_buf2[slen];
+				slen++;
+			}
+			s_cmd_name_bstr[0] = (UBYTE) slen;
+			cli->cli_CommandName = MKBADDR(s_cmd_name_bstr);
+		}
+	}
+	Permit();
+
+	if (child == NULL) {
+		UnLoadSeg(seg);
+		Close(out_file); Close(err_file); Close(nil_in);
+		DeleteFile((CONST_STRPTR) temp_path);
+		DeleteFile((CONST_STRPTR) temp_path_err);
+		__throw_simple_exception("CreateNewProc failed", "in Am_Lang_Process_runAndCaptureOutput_0", &__result);
+		goto __exit;
+	}
+
+	{
+		int safety = 600;
+		while (safety > 0) {
+			struct Task *t;
+			Forbid();
+			t = FindTask((STRPTR) "amStudioBatch");
+			Permit();
+			if (t == NULL) break;
+			Delay(2);
+			safety--;
+		}
+		Delay(5);
+	}
+
+	Close(err_file);  // asymmetric: only err_file — out_file + nil_in handled by CLI cleanup
 
 	// Read both temp files. Both reads delete the temp file as part
 	// of the helper, regardless of success — no orphaned files on
@@ -343,34 +422,159 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 	am_proc_build_temp_path(temp_path,     self, NULL);
 	am_proc_build_temp_path(temp_path_err, self, "_e");
 
+	// V40 stderr-capture recipe (verified via gcctest harness):
+	//   1. Open out_file, err_file (MODE_NEWFILE) + NIL: as stdin
+	//   2. LoadSeg the command binary, parse args
+	//   3. CreateNewProcTags with NP_Input=NIL, NP_Output=out,
+	//      NP_Error=err, NP_ConsoleTask=NULL (breaks ixemul's
+	//      "*" fallback that otherwise leaks stderr to the
+	//      launching shell)
+	//   4. Manually patch pr_CIS/pr_COS/pr_CES + CLI struct under
+	//      Forbid (V40 silently drops NP_Error tag → pr_CES must
+	//      be set manually; the cli_StandardInput/Output fields
+	//      are needed for child's libc init to read consistent
+	//      values)
+	//   5. Wait FindTask returns NULL + small extra delay
+	//   6. ASYMMETRIC Close: only err_file in parent. V40 honours
+	//      NP_Input/Output so CLI cleanup closes those (parent
+	//      Close = use-after-free → hang). V40 drops NP_Error so
+	//      cleanup never tracked err_file → parent must close.
+	//   7. Re-open both files by name for reading.
 	BPTR out_file = Open((CONST_STRPTR) temp_path, MODE_NEWFILE);
-	if (out_file == 0) {
+	BPTR err_file = Open((CONST_STRPTR) temp_path_err, MODE_NEWFILE);
+	BPTR nil_in   = Open((CONST_STRPTR) "NIL:", MODE_OLDFILE);
+	if (out_file == 0 || err_file == 0 || nil_in == 0) {
+		if (out_file) Close(out_file);
+		if (err_file) Close(err_file);
+		if (nil_in)   Close(nil_in);
 		if (did_swap) { CurrentDir(old_lock); UnLock(new_lock); }
-		__throw_simple_exception("Failed to open temp file", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+		__throw_simple_exception("Failed to open temp files / NIL:", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
 		goto __exit;
 	}
-	BPTR err_file = Open((CONST_STRPTR) temp_path_err, MODE_NEWFILE);
-	BPTR err_value = err_file != 0 ? err_file : 0;
 
-	struct TagItem run_tags[] = {
-		{ SYS_Input,     (ULONG) NULL },
-		{ SYS_Output,    (ULONG) out_file },
-		{ SYS_Error,     (ULONG) err_value },
-		{ SYS_Asynch,    FALSE },
-		{ SYS_UserShell, TRUE },
-		{ TAG_DONE,      0 },
-	};
+	// Split "binary args..." for NP_Arguments and LoadSeg.
+	// Same shape as rp_split_cmd in RunningProcess.c — kept local so
+	// Process.c doesn't depend on RunningProcess internals.
+	static char g_bin_buf[128];
+	static char g_arg_buf[512];
+	{
+		const char *src = (const char *) cmd_strptr;
+		int p = 0;
+		while (src[p] != 0 && src[p] != ' ' && src[p] != '\t' && p < (int)(sizeof(g_bin_buf)-1)) {
+			g_bin_buf[p] = src[p]; p++;
+		}
+		g_bin_buf[p] = 0;
+		while (src[p] == ' ' || src[p] == '\t') p++;
+		int a = 0;
+		while (src[p] != 0 && a < (int)(sizeof(g_arg_buf)-2)) {
+			g_arg_buf[a++] = src[p++];
+		}
+		g_arg_buf[a++] = '\n';
+		g_arg_buf[a]   = 0;
+	}
 
-	LONG status = SystemTagList(cmd_strptr, run_tags);
-	Close(out_file);
-	if (err_file != 0) Close(err_file);
-	if (status == -1) {
+	// LoadSeg the binary — try as given, then with C: prefix on
+	// failure (matches the path search a typed shell command does).
+	BPTR seg = LoadSeg((CONST_STRPTR) g_bin_buf);
+	if (seg == 0) {
+		// Check for path separators — only retry C: if it's a bare name.
+		int has_path = 0;
+		for (int i = 0; g_bin_buf[i] != 0; i++) {
+			if (g_bin_buf[i] == '/' || g_bin_buf[i] == ':') { has_path = 1; break; }
+		}
+		if (!has_path) {
+			char with_c[160];
+			int p = 0;
+			with_c[p++] = 'C'; with_c[p++] = ':';
+			int k = 0;
+			while (g_bin_buf[k] != 0 && p < (int)(sizeof(with_c)-1)) with_c[p++] = g_bin_buf[k++];
+			with_c[p] = 0;
+			seg = LoadSeg((CONST_STRPTR) with_c);
+		}
+	}
+	if (seg == 0) {
+		Close(out_file); Close(err_file); Close(nil_in);
 		DeleteFile((CONST_STRPTR) temp_path);
 		DeleteFile((CONST_STRPTR) temp_path_err);
 		if (did_swap) { CurrentDir(old_lock); UnLock(new_lock); }
-		__throw_simple_exception("Failed to execute command", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+		__throw_simple_exception("LoadSeg failed (binary not found)", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
 		goto __exit;
 	}
+
+	// Spawn child under Forbid + manual CLI/process field patches.
+	Forbid();
+	struct Process *child = CreateNewProcTags(
+		NP_Seglist,     (ULONG) seg,
+		NP_FreeSeglist, (ULONG) TRUE,
+		NP_Cli,         (ULONG) TRUE,
+		NP_Input,       (ULONG) nil_in,
+		NP_Output,      (ULONG) out_file,
+		NP_Error,       (ULONG) err_file,
+		NP_ConsoleTask, (ULONG) NULL,
+		NP_Arguments,   (ULONG) g_arg_buf,
+		NP_Name,        (ULONG) "amStudioBatch",
+		NP_StackSize,   (ULONG) 65536,
+		TAG_DONE);
+	if (child != NULL) {
+		child->pr_CIS = nil_in;
+		child->pr_COS = out_file;
+		child->pr_CES = err_file;
+		struct CommandLineInterface *cli =
+			(struct CommandLineInterface *) BADDR(child->pr_CLI);
+		if (cli != NULL) {
+			cli->cli_StandardInput  = nil_in;
+			cli->cli_CurrentInput   = nil_in;
+			cli->cli_StandardOutput = out_file;
+			cli->cli_CurrentOutput  = out_file;
+			// cli_CommandName is a BSTR; ixemul reads it for
+			// argv[0]. Without setting it the child inherits a
+			// stale value ("app" — amStudio's process name) and
+			// gcc prints "app: No input files" instead of
+			// "gcc: No input files". Build a length-prefixed
+			// BCPL string from g_bin_buf into a static buffer
+			// and point cli_CommandName at it (BPTR = MKBADDR).
+			static UBYTE s_cmd_name_bstr[34];
+			int slen = 0;
+			while (slen < 30 && g_bin_buf[slen] != 0) {
+				s_cmd_name_bstr[slen + 1] = (UBYTE) g_bin_buf[slen];
+				slen++;
+			}
+			s_cmd_name_bstr[0] = (UBYTE) slen;
+			cli->cli_CommandName = MKBADDR(s_cmd_name_bstr);
+		}
+	}
+	Permit();
+
+	if (child == NULL) {
+		UnLoadSeg(seg);
+		Close(out_file); Close(err_file); Close(nil_in);
+		DeleteFile((CONST_STRPTR) temp_path);
+		DeleteFile((CONST_STRPTR) temp_path_err);
+		if (did_swap) { CurrentDir(old_lock); UnLock(new_lock); }
+		__throw_simple_exception("CreateNewProc failed", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+		goto __exit;
+	}
+
+	// Wait for child to fully exit before touching the inherited FHs.
+	// 600 ticks * 40ms = 24 seconds cap.
+	{
+		int safety = 600;
+		while (safety > 0) {
+			struct Task *t;
+			Forbid();
+			t = FindTask((STRPTR) "amStudioBatch");
+			Permit();
+			if (t == NULL) break;
+			Delay(2);
+			safety--;
+		}
+		Delay(5);  // extra flush window for any in-flight CLI cleanup
+	}
+
+	// Asymmetric Close — see banner above.
+	Close(err_file);
+	// out_file + nil_in: DON'T touch — CLI cleanup closed them, our
+	// Close would be use-after-free → handler-port hang.
 
 	UBYTE *out_buf = NULL;
 	LONG out_size = am_proc_read_and_delete_temp(temp_path, &out_buf);

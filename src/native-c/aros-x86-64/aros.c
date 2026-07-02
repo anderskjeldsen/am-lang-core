@@ -11,13 +11,10 @@ void __ensure_exec() {
 	if (SysBase == NULL) {
 		SysBase = *((struct ExecBase **)4UL);
 	}
-	printf("Ensure exec - SysBase: %d\n", (ULONG) SysBase);
 }
 
 void * __ensure_library(unsigned char * __lib_name, unsigned int version)
 {
-	printf("Ensure Library %s\n", __lib_name, (unsigned int) __first_lib_node);
-
 	lib_node * __current_lib_node = __first_lib_node;
 	while ( __current_lib_node != NULL) {
 		if ( strcmp(__current_lib_node->name, __lib_name) == 0 ) {
@@ -40,7 +37,6 @@ void * __ensure_library(unsigned char * __lib_name, unsigned int version)
 }
 
 void __release_libraries() {
-	printf("Release libraries");
 	lib_node * __current_lib_node = __first_lib_node;
 	__first_lib_node = NULL;
 	while ( __current_lib_node != NULL) {

@@ -48,5 +48,31 @@ namespace Am.Lang
             p.startNative(command, workingDir)
             return p
         }
+
+        // Same as `start` but lets the caller pre-set the terminal
+        // dimensions the handler reports to the child's getConsoleSize
+        // probe. Bebbossh / nano query that probe very early during
+        // init — before the AmLang main task gets a turn to call
+        // setReportedSize() — so without this they see the rp_state
+        // default (24x80) and the remote PTY is sized to that. Pass
+        // the CliView's grid dimensions here so the first probe
+        // already has the right answer.
+        static fun startWithReportedSize(
+            command: String, workingDir: String,
+            rows: Int, cols: Int): RunningProcess {
+            var p = new RunningProcess()
+            // First setReportedSize stashes the dims on the per-
+            // process data (amiga backend uses these to seed the
+            // freshly-allocated rp_state, which is what bebbossh's
+            // early getConsoleSize probe reads). On libc this is
+            // a no-op (no PTY master fd yet) — the SECOND call
+            // below ioctls TIOCSWINSZ once the master exists.
+            p.setReportedSize(rows, cols)
+            p.startNative(command, workingDir)
+            // Apply again post-spawn — needed on libc to actually
+            // hit TIOCSWINSZ. Harmless on amiga (same value).
+            p.setReportedSize(rows, cols)
+            return p
+        }
     }
 }

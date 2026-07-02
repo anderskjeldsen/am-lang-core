@@ -179,7 +179,24 @@ struct rp_state {
     BOOL any_open;
 
     volatile BOOL child_exited;
+    // Exit status captured by rp_child_exit (D0 from NP_ExitCode).
+    // Read by the AmLang side via RunningProcess.exitCode() to gate
+    // the New CLI auto-retry: 161 is ixemul's "libc init failed"
+    // sentinel and is the only code we want to retry on. Initialised
+    // to 0; only valid once child_exited is TRUE.
+    volatile LONG exit_code;
     volatile BOOL shutdown_requested;
+
+    // Task pointer of the CHILD (bebbossh / ls / make / …) captured
+    // from CreateNewProcTags's return. Used by terminateChild_0 to
+    // graceful-kill: Signal(child_task, SIGBREAKF_CTRL_C) then let
+    // the child's own libc / DOS loop exit via its CTRL_C check
+    // (bebbossh's loginPass does this after every Read()). We
+    // never RemTask this pointer — leaving DOS state corrupted from
+    // an interrupted syscall would trash locks / semaphores. Cleared
+    // by rp_child_exit so late callers to terminateChild don't
+    // Signal a freed task struct. Read under Forbid.
+    struct Task * volatile child_task;
 
     // ACTION_SCREEN_MODE arg — TRUE = child put stdin into raw mode
     // (SetMode(fh, 1) on AmigaOS, equivalent to terminal raw mode
@@ -233,6 +250,12 @@ struct rp_state {
     // startNative, multi-read from the handler task — no lock
     // needed.
     BPTR fh_in_bptr;
+    // Mirrored stdout / stderr BPTRs so the handler-side EXAMINE_FH
+    // diagnostic can identify which FH is being probed when it
+    // ISN'T stdin. Useful for figuring out which BPTR bebbossh /
+    // libnix is actually using for its keyboard-polling loop.
+    BPTR fh_out_bptr;
+    BPTR fh_err_bptr;
 
     // Pool of DupLock'd cwd locks pre-allocated at startNative time
     // (when the AmLang main task can safely call DOS). Handed out
@@ -363,7 +386,26 @@ struct _running_process_data {
     BOOL  child_owns_seg;   // TRUE when NP_FreeSeglist=TRUE → child unloads
     BPTR  old_cwd_lock;
     BOOL  has_old_cwd;
+    // Cached exit_code so exitCode() can be read AFTER close() has
+    // nulled `state`. drainProcess calls close() before the retry-
+    // guard check, so we have to snapshot the value at close time.
+    LONG  cached_exit_code;
+    // Pre-spawn terminal dimensions. setReportedSize() can be called
+    // BEFORE startNative (so the rp_state's initial reported_rows /
+    // reported_cols already match the panel when bebbossh's very
+    // early getConsoleSize probe arrives). When state is NULL we
+    // stash here; startNative copies us into state at allocation.
+    // Default 24/80 until the caller overrides.
+    LONG  pending_rows;
+    LONG  pending_cols;
 };
+
+// Forward declarations. rp_handler_die is defined further down (its
+// body uses rp_state fields whose layout depends on the struct
+// declared above), but rp_startnative_teardown — declared right
+// below — calls into it, so the compiler needs to know its shape
+// first. Same for rp_stdout_line used by rp_handler_die.
+static void rp_handler_die(rp_state * st);
 
 // =================================================================
 // State refcount + cleanup
@@ -396,6 +438,76 @@ static void rp_state_release(rp_state * st) {
         // the handler stuck. See banner in rp_handler_entry.
         rp_state_free(st);
     }
+}
+
+// Undo the partial startNative-time allocation when we bail out
+// via `goto __exit` after a mid-way failure (empty command,
+// LoadSeg not found, CreateNewProc(child) failed, …). Without this
+// each cmd-not-found leaks:
+//   - a live "amStudioTTY" handler Process that sits in WaitPort
+//     forever, and
+//   - three AllocDosObject'd FileHandles.
+// Both were showing up as amStudioTTY #87000004 alerts because
+// later child spawns amStudio does (task-scheduler workers, JIT
+// helpers, …) can inherit a stale handler port via pr_ConsoleTask,
+// and when they PutMsg the ACTION_DIE on exit that port has
+// already been reclaimed → guru. Safe to call with a partially-
+// initialised running_process_data — each field checks its own
+// NULL/zero sentinel first.
+//
+// Called BEFORE `__throw_simple_exception` at every failure site
+// inside Am_Lang_RunningProcess_startNative_0. Do NOT call this
+// on the success path: on success the ownership of state, FHs
+// and seg has transferred to the running handler / child and the
+// normal close_0 / rp_child_exit / _native_release_0 chain will
+// unwind them.
+static void rp_startnative_teardown(running_process_data * d) {
+    if (d == NULL) return;
+    rp_log_str("[rp] startnative teardown: enter\n");
+    if (d->state != NULL) {
+        rp_state * st = d->state;
+        rp_log_event("[rp]   handler_die state=", (LONG) st);
+        // Snapshot g_handler_exited_count so we can watch for it to
+        // tick. Send DIE, then wait for the handler task to fully
+        // exit BEFORE our own rp_state_release. That way the release
+        // that brings refcount to 0 (and thus calls rp_state_free)
+        // runs on the main task instead of the exiting handler task
+        // — running FreeMem from a Process that's mid-teardown was
+        // crashing with #87000004 on the cmd-not-found path (handler
+        // was told to die microseconds after being spawned, so it
+        // never had a chance to service other packets and its
+        // internal state / port was in a fragile in-between state).
+        // With the wait-first ordering the handler's rp_state_release
+        // is the FIRST decrement (2 → 1, no free), and ours here is
+        // the second (1 → 0 → rp_state_free on the safe main task).
+        ULONG exited_before = g_handler_exited_count;
+        rp_handler_die(st);
+        int waited = 0;
+        while (waited < 25) {   // 25 ticks × ~20 ms = ~500 ms cap
+            if (g_handler_exited_count > exited_before) break;
+            Delay(1);
+            waited++;
+        }
+        rp_log_event("[rp]   handler exit waited ticks=", (LONG) waited);
+        rp_state_release(st);
+        d->state = NULL;
+    }
+    // Skip FreeDosObject on the FakeFHs — V40 dos.library appears to
+    // do something on FreeDosObject(DOS_FILEHANDLE, …) that reaches
+    // through fh_Type (our now-dead handler port), leading to the
+    // #87000004 AN_AsyncPkt alert. Just null the bptrs so nothing
+    // stale is kept around; the 3 × ~80 byte leak is bounded (one
+    // set per cmd-not-found) and matches the intentional leak
+    // pattern already used by _native_release_0 (see line 1345
+    // comment about V40 dos.library / libnix cleanup double-free).
+    d->fh_in_bptr = 0;
+    d->fh_out_bptr = 0;
+    d->fh_err_bptr = 0;
+    if (d->child_seg != 0 && !d->child_owns_seg) {
+        UnLoadSeg(d->child_seg);
+        d->child_seg = 0;
+    }
+    rp_log_str("[rp] startnative teardown: done\n");
 }
 
 // =================================================================
@@ -542,14 +654,34 @@ static void rp_handler_entry(void) {
                                           break;
             }
 #if RP_VERBOSE_LOG
-            // ACTION_DIE deliberately not logged even in verbose
-            // mode — amStudio's main loop spins up tasks whose
-            // pr_ConsoleTask inherits from us, and each sends a DIE
-            // on exit (tens of thousands per session). Logging the
-            // other types is useful for diagnosing handler protocol
-            // issues; off by default because bebbossh's idle polling
-            // fires ACTION_EXAMINE_FH dozens of times per second.
-            if (type != ACTION_DIE) {
+            // Suppress the polling-heavy packet types from the
+            // per-packet log — they're pure idle noise and each entry
+            // costs a synchronous Write+Flush to PROGDIR:tty.log,
+            // which stalls the handler task on real disk I/O. A single
+            // nano/bebbossh session was producing ~260 k of these,
+            // measurably slowing the SSH stream.
+            //
+            //   ACTION_DIE (5)         — amStudio's main loop spins up
+            //     tasks whose pr_ConsoleTask inherits from us; each
+            //     sends a DIE on exit (tens of thousands per session).
+            //   ACTION_WAIT_CHAR (20)  — bebbossh's eventLoop polls
+            //     it every iteration.
+            //   ACTION_READ (82)       — same polling loop calls
+            //     Read(1) whenever WaitForChar returns TRUE;
+            //     ~260 k/session by itself.
+            //   ACTION_EXAMINE_FH (1034) — bebbossh's !stdoutBptr
+            //     fallback path polls this too, and libnix stdio
+            //     inits sometimes fire it dozens of times/sec.
+            //
+            // Everything else (WRITE, SCREEN_MODE, FINDINPUT/OUTPUT,
+            // END, DISK_INFO, SEEK, CHANGE_SIGNAL, unknown types) is
+            // still logged, so protocol bugs remain diagnosable. All
+            // types are still counted via pkt_*_count histogram
+            // dumped on exit.
+            if (type != ACTION_DIE
+                && type != ACTION_WAIT_CHAR
+                && type != ACTION_READ
+                && type != ACTION_EXAMINE_FH) {
                 rp_log_event("hnd RX type=", type);
             }
 #endif
@@ -711,15 +843,40 @@ static void rp_handler_entry(void) {
                     //   read digits until ' '   -> numCols
                     // That maps to "CSI 1 ; <rows> ; <cols> SP q"
                     // when CSI is the 2-byte form "ESC [".
+                    // Per-write log was a probe diagnostic — it fired
+                    // on EVERY ACTION_WRITE (a Write+Flush pair each,
+                    // synchronous disk I/O) which measurably slowed the
+                    // SSH stream during `top`/nano refreshes. Now that
+                    // the CSI 0 SP q reply path is confirmed working
+                    // (see [reference_amigaos_fh_port_isinteractive]),
+                    // only log the probe MATCH so we can still spot
+                    // ordering/size issues if they resurface.
                     if (n == 4 && src[0] == 0x9b && src[1] == 0x30
                                  && src[2] == 0x20 && src[3] == 0x71) {
+                        rp_log_event("[rp] CSI 0 SP q matched, replying with rows=", st->reported_rows);
+                        rp_log_event("[rp]   cols=", st->reported_cols);
                         UBYTE resp[40];
                         int rp = 0;
-                        resp[rp++] = 0x1b; resp[rp++] = '[';
-                        resp[rp++] = '1';  resp[rp++] = ';';
+                        // bebbossh's parser (console.cpp:51) does
+                        // `q = &tmp[5]; for (;*q != ';'; ...) numRows*=10+...`
+                        // i.e. it HARDCODES rows-digits to start at
+                        // byte 5 of our reply, regardless of CSI form.
+                        // Earlier we sent "ESC [ 1 ; <rows>;<cols> SP q"
+                        // — only a 4-byte header — so bebbossh started
+                        // mid-rows: for 29 it parsed "9" (one digit),
+                        // sent rows=9 in the SSH pty-req → nano on the
+                        // server got a 9-row PTY → rendered ~1/3 of the
+                        // panel. Use the 1-byte-CSI Amiga CON: form so
+                        // the header is exactly 5 bytes: 0x9B '1' ';'
+                        // '1' ';' — then byte 5 IS the first rows digit
+                        // no matter how many digits rows or cols take.
+                        resp[rp++] = 0x9b;
+                        resp[rp++] = '1';
+                        resp[rp++] = ';';
+                        resp[rp++] = '1';
+                        resp[rp++] = ';';
                         LONG rows = st->reported_rows;
                         if (rows < 1) rows = 24;
-                        // itoa rows
                         {
                             char tmp[12]; int t = 0;
                             if (rows == 0) tmp[t++] = '0';
@@ -736,7 +893,7 @@ static void rp_handler_entry(void) {
                             while (t > 0) resp[rp++] = (UBYTE) tmp[--t];
                         }
                         resp[rp++] = ' ';
-                        resp[rp++] = 'q';
+                        resp[rp++] = 'r';
                         rp_push(&st->in, resp, (ULONG) rp);
                         rp_fulfil_deferred(st);
                         rp_pkt_reply_ex(pkt, n, 0, reply_ok);
@@ -987,28 +1144,48 @@ static void rp_handler_entry(void) {
                         rp_pkt_reply_ex(pkt, DOSFALSE, 0, reply_ok);
                         break;
                     }
-                    // Stdin probe + raw_mode==FALSE used to always
-                    // reply DOSFALSE so bebbossh's handleKeyboard
-                    // SetMode-on-failure branch fires. But ixemul's
-                    // fdopen(stdin) does an ExamineFH at child
-                    // startup and treats DOSFALSE as "stdin broken"
-                    // → exit 161 before reaching main(). The two
-                    // phases are distinguishable by pkt_write_count:
-                    // bebbossh ALWAYS writes its banner before any
-                    // ExamineFH polling, so >0 writes means "we're
-                    // past startup". ixemul's startup ExamineFH
-                    // fires BEFORE any user-level writes (it's
-                    // during libc init), so write_count==0. Use
-                    // that to keep bebbossh's trigger alive while
-                    // letting ixemul's fdopen succeed.
-                    BOOL is_stdin_probe = (pkt->dp_Arg1 == st->fh_in_bptr);
-                    BOOL post_first_write = (st->pkt_write_count > 0);
-                    if (is_stdin_probe && !st->raw_mode && post_first_write) {
-                        // Bebbossh's handleKeyboard SetMode trigger
-                        // path — keep DOSFALSE so the SetMode
-                        // fallback fires. No BADDR write means no
-                        // risk of corrupting memory through a
-                        // recycled dp_Arg2 from a dead sender.
+                    // STDIN probe + raw_mode==FALSE: reply DOSFALSE
+                    // so bebbossh / nano's handleKeyboard takes its
+                    // SetMode(stdin, 1) fallback, which sends
+                    // ACTION_SCREEN_MODE → raw_mode=TRUE → terminal
+                    // grid takes over. STDOUT/STDERR probes get
+                    // DOSTRUE+fib unconditionally.
+                    //
+                    // (Earlier this was gated on pkt_write_count to
+                    // try to let ixemul's fdopen succeed at the same
+                    // time, but ixemul still bails on something else
+                    // entirely — and the guard regressed nano /
+                    // bebbossh by suppressing the SetMode trigger
+                    // during init. ixemul tools now go through the
+                    // SystemTagList path in CliView instead, so this
+                    // handler only needs to satisfy libnix programs.)
+                    // Pre-raw-mode rule: reply DOSFALSE to every
+                    // EXAMINE_FH that reaches us, regardless of which
+                    // FH BPTR the caller used. bebbossh's
+                    // handleKeyboard polls via a fresh BPTR (likely
+                    // from a `*` Open or DupLockFromFH on stdin)
+                    // whose value doesn't equal any of our three
+                    // fh_in/out/err mirrors — but it still routes
+                    // packets to us (fh_Type → our port). The
+                    // narrower `is_stdin_probe` gate matched only
+                    // fh_in_bptr exactly, so bebbossh's polling got
+                    // DOSTRUE+fib forever and SetMode never fired
+                    // → no raw_mode → nano renders as line-history.
+                    //
+                    // This used to be narrowed to stdin-only because
+                    // ixemul's fdopen() on stdout/stderr bailed on
+                    // DOSFALSE. Ixemul tools now route through the
+                    // CliView auto-retry → Process.run* path's
+                    // CreateNewProcTags + real-FH spawn, so this
+                    // handler only has to satisfy libnix
+                    // (bebbossh/nano/ssh) — which want DOSFALSE on
+                    // every pre-raw probe.
+                    if (!st->raw_mode) {
+                        static int s_first_dosfalse_logged = 0;
+                        if (!s_first_dosfalse_logged) {
+                            s_first_dosfalse_logged = 1;
+                            rp_log_str("[rp] EXAMINE_FH pre-raw -> DOSFALSE\n");
+                        }
                         rp_pkt_reply_ex(pkt, DOSFALSE, 0, reply_ok);
                         break;
                     }
@@ -1121,7 +1298,12 @@ static void __saveds rp_child_exit(
     rp_log_event("[hist] other count =", (LONG) st->pkt_other_count);
     rp_log_event("[hist] other lastT =", (LONG) st->pkt_other_last_type);
     Forbid();
+    st->exit_code = status;
     st->child_exited = TRUE;
+    // Clear child_task NOW so terminateChild_0 racers don't Signal a
+    // freed task struct — the Process is being torn down as we
+    // return from this callback.
+    st->child_task = NULL;
     // Trip the same shutdown flag that close() would otherwise set
     // a moment later. The handler's shutdown branch responds to the
     // very next packet with safe DOSFALSE/DOSTRUE replies and breaks
@@ -1157,6 +1339,10 @@ function_result Am_Lang_RunningProcess__native_init_0(aobject * const this) {
     function_result __result = { .has_return_value = false };
     running_process_data * d = calloc(1, sizeof(running_process_data));
     if (d != NULL) {
+        // Sensible defaults so a startNative without a preceding
+        // setReportedSize() still reports a usable terminal size.
+        d->pending_rows = 24;
+        d->pending_cols = 80;
         this->object_properties.class_object_properties.object_data.value.custom_value = d;
     }
     return __result;
@@ -1385,14 +1571,77 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         goto __exit;
     }
 
+    // ── Pre-flight: verify the binary exists BEFORE we allocate
+    // any of the handler scaffolding. If it doesn't, throw early
+    // — no state, no handler process, no FakeFileHandles, and
+    // therefore nothing for _native_release_0 to tear down when
+    // the AmLang exception unwinds. The old flow allocated all
+    // of that first, hit LoadSeg-not-found, then tried to unwind
+    // — the die/state-release/FH-cleanup interleaved with dos.
+    // library's Process teardown of the amStudioTTY handler in a
+    // way that produced the AN_AsyncPkt (#87000004) alert.
+    //
+    // We do a real LoadSeg + UnLoadSeg (not just Lock) so the
+    // check goes through the same rp_loadseg_with_path resolver
+    // the actual spawn uses — including the C: fallback and the
+    // pr_CLI->cli_CommandDir walk — and its answer is authoritative.
+    // The cost of two LoadSegs on the success path is negligible;
+    // LoadSeg for a binary the OS just resolved is dominated by
+    // memory-alloc + relocation, both of which the seg-cache hits.
+    {
+        string_holder * cmd_holder = (command != NULL) ? (string_holder *) (command + 1) : NULL;
+        const char * cmd_str = (cmd_holder != NULL) ? cmd_holder->string_value : NULL;
+        if (cmd_str == NULL || cmd_str[0] == 0) {
+            __throw_simple_exception("RunningProcess: empty command", "in startNative", &__result);
+            goto __exit;
+        }
+        // CWD swap so relative paths resolve the same way the
+        // main-flow LoadSeg will. Restored on failure OR success
+        // — the main flow re-swaps immediately after.
+        BPTR preflight_old_cwd = 0;
+        BOOL preflight_had_cwd = FALSE;
+        if (workingDir != NULL) {
+            string_holder * wd_holder = (string_holder *) (workingDir + 1);
+            const char * wd_str = (wd_holder != NULL) ? wd_holder->string_value : NULL;
+            if (wd_str != NULL && wd_str[0] != 0) {
+                BPTR new_lock = Lock((CONST_STRPTR) wd_str, ACCESS_READ);
+                if (new_lock != 0) {
+                    preflight_old_cwd = CurrentDir(new_lock);
+                    preflight_had_cwd = TRUE;
+                }
+            }
+        }
+        char preflight_cmd_buf[256];
+        char preflight_arg_buf[512];
+        rp_split_cmd(cmd_str, preflight_cmd_buf, sizeof(preflight_cmd_buf),
+                              preflight_arg_buf, sizeof(preflight_arg_buf));
+        BPTR check_seg = rp_loadseg_with_path(preflight_cmd_buf);
+        // Restore CWD immediately so the rest of the function
+        // starts from the same state a successful pre-flight
+        // would. The main flow does its own swap a bit further
+        // down (with d->has_old_cwd tracking).
+        if (preflight_had_cwd) {
+            BPTR nl = CurrentDir(preflight_old_cwd);
+            if (nl != 0) UnLock(nl);
+        }
+        if (check_seg == 0) {
+            rp_log_event("[rp] pre-flight LoadSeg failed, IoErr=", IoErr());
+            __throw_simple_exception("RunningProcess: LoadSeg failed (binary not found)", "in startNative", &__result);
+            goto __exit;
+        }
+        UnLoadSeg(check_seg);
+    }
+
     rp_state * st = (rp_state *) AllocMem(sizeof(*st), MEMF_PUBLIC | MEMF_CLEAR);
     if (st == NULL) {
         __throw_simple_exception("RunningProcess: AllocMem(state) failed", "in startNative", &__result);
         goto __exit;
     }
     st->refcount = 1;
-    st->reported_rows = 24;
-    st->reported_cols = 80;
+    // Seed reported size from any pre-spawn setReportedSize() the
+    // caller made. Defaults are 24/80 from _native_init_0.
+    st->reported_rows = d->pending_rows;
+    st->reported_cols = d->pending_cols;
     st->in.data  = (UBYTE *) AllocMem(RP_RING_SIZE, MEMF_PUBLIC);
     st->out.data = (UBYTE *) AllocMem(RP_RING_SIZE, MEMF_PUBLIC);
     if (st->in.data == NULL || st->out.data == NULL) {
@@ -1436,6 +1685,9 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     }
     Permit();
     if (st->handler_proc == NULL) {
+        // Cleanup deferred to _native_release_0 — see LoadSeg-fail
+        // comment. Here there's no handler to signal so it's just
+        // a state_release, which _native_release_0 handles too.
         __throw_simple_exception("RunningProcess: CreateNewProc(handler) failed", "in startNative", &__result);
         goto __exit;
     }
@@ -1455,17 +1707,29 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         if (fh_in  != NULL) FreeDosObject(DOS_FILEHANDLE, fh_in);
         if (fh_out != NULL) FreeDosObject(DOS_FILEHANDLE, fh_out);
         if (fh_err != NULL) FreeDosObject(DOS_FILEHANDLE, fh_err);
+        // Handler + state cleanup deferred to _native_release_0 —
+        // see LoadSeg-fail comment for the AN_AsyncPkt rationale.
         __throw_simple_exception("RunningProcess: AllocDosObject(fh) failed", "in startNative", &__result);
         goto __exit;
     }
     fh_in->fh_Type  = st->handler_port;
-    fh_in->fh_Port  = st->handler_port;        // non-NULL → IsInteractive=TRUE
+    // fh_Port is misnamed: per dosextens.h it's a BOOLEAN flag,
+    // and AmigaOS V40 IsInteractive() returns its raw value
+    // verbatim (no coercion to -1/0 — confirmed by AROS source
+    // [rom/dos/isinteractive.c]). bebbossh's grabConsole bails
+    // when `IsInteractive(stdin) != DOSTRUE`, so the field must
+    // be exactly DOSTRUE (-1L), not a pointer or any positive
+    // sentinel — earlier we set it to handler_port and bebbossh
+    // fell into the !stdoutBptr branch, skipped getConsoleSize,
+    // and sent 0×0 in pty-req → server defaulted to 80×24 → nano
+    // rendered only the top ~half of a wider panel.
+    fh_in->fh_Port  = (struct MsgPort *) DOSTRUE;
     fh_in->fh_Arg1  = (LONG) st;
     fh_out->fh_Type = st->handler_port;
-    fh_out->fh_Port = st->handler_port;
+    fh_out->fh_Port = (struct MsgPort *) DOSTRUE;
     fh_out->fh_Arg1 = (LONG) st;
     fh_err->fh_Type = st->handler_port;
-    fh_err->fh_Port = st->handler_port;
+    fh_err->fh_Port = (struct MsgPort *) DOSTRUE;
     fh_err->fh_Arg1 = (LONG) st;
     d->fh_in_bptr  = MKBADDR(fh_in);
     d->fh_out_bptr = MKBADDR(fh_out);
@@ -1473,25 +1737,26 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     // Mirror stdin BPTR into rp_state so the handler task's
     // EXAMINE_FH path can distinguish stdin probes from
     // stdout/stderr probes. See st->fh_in_bptr comment.
-    st->fh_in_bptr = d->fh_in_bptr;
+    st->fh_in_bptr  = d->fh_in_bptr;
+    st->fh_out_bptr = d->fh_out_bptr;
+    st->fh_err_bptr = d->fh_err_bptr;
     st->open_count = 3;
     st->any_open   = TRUE;
 
-    // Banner — lands in the panel as the first thing the user sees.
-    {
-        char banner[160]; int p = 0;
-        const char * pre = "[amStudio] tty ready, log=";
-        while (*pre) banner[p++] = *pre++;
-        if (g_log_path[0] != 0) {
-            for (int i = 0; g_log_path[i] != 0; i++) banner[p++] = g_log_path[i];
-        } else {
-            const char * np = "(none)"; while (*np) banner[p++] = *np++;
-        }
-        banner[p++] = '\n';
-        Forbid();
-        rp_push(&st->out, (const UBYTE *) banner, (ULONG) p);
-        Permit();
+    // Banner used to land in the out ring as a debug aid, but it
+    // makes the CliView side think the child wrote bytes (it can't
+    // tell handler-generated bytes apart from child-generated ones).
+    // That blocks the "child wrote 0 bytes → fall back to sync
+    // SystemTagList" auto-retry path for ixemul tools. Logged to
+    // tty.log instead — same diagnostic value, doesn't pollute the
+    // panel or the byte-counter heuristic.
+    rp_log_str("[rp] tty ready, log=");
+    if (g_log_path[0] != 0) {
+        rp_log_str(g_log_path);
+    } else {
+        rp_log_str("(none)");
     }
+    rp_log_str("\n");
 
     // CWD swap (LoadSeg honours current dir).
     if (workingDir != NULL) {
@@ -1543,6 +1808,10 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
             if (nl != 0) UnLock(nl);
             d->has_old_cwd = FALSE;
         }
+        // See LoadSeg-failure comment: cleanup deferred to
+        // _native_release_0 to avoid the AN_AsyncPkt (#87000004)
+        // alert generated by a synchronous handler-die + release
+        // interleaved with the ARC release path.
         __throw_simple_exception("RunningProcess: empty command", "in startNative", &__result);
         goto __exit;
     }
@@ -1560,6 +1829,15 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
             if (nl != 0) UnLock(nl);
             d->has_old_cwd = FALSE;
         }
+        // Cleanup deliberately deferred to _native_release_0: when
+        // the AmLang exception unwinds and drops the RunningProcess
+        // ref, ARC fires _native_release_0 which already sends
+        // rp_handler_die + rp_state_release + nulls fh bptrs. Doing
+        // a second synchronous teardown here was actually generating
+        // the AN_AsyncPkt (#87000004) alert we were chasing —
+        // dos.library was seeing the handler's die/exit interleave
+        // with the immediately-following release from a different
+        // task. Just throw; let the ARC release path do the work.
         __throw_simple_exception("RunningProcess: LoadSeg failed (binary not found)", "in startNative", &__result);
         goto __exit;
     }
@@ -1665,10 +1943,22 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         rp_log_event("[rp] CreateNewProc(child) failed", 0);
         UnLoadSeg(seg);
         d->child_seg = 0;
+        // Cleanup deferred to _native_release_0 — see LoadSeg-fail
+        // comment for the AN_AsyncPkt rationale.
         __throw_simple_exception("RunningProcess: CreateNewProc(child) failed", "in startNative", &__result);
         goto __exit;
     }
     d->child_owns_seg = TRUE;
+    // Capture the child's Task pointer for the graceful-kill path
+    // (terminateChild_0 uses this to Signal SIGBREAKF_CTRL_C to the
+    // child so it exits via its own CTRL_C check instead of us
+    // tearing down the handler while the child is mid-Read → alert
+    // on the freed fh_Type MsgPort). `struct Process` embeds `struct
+    // Task` as its first member, so this cast is safe. Cleared by
+    // rp_child_exit when the child dies.
+    Forbid();
+    st->child_task = &child->pr_Task;
+    Permit();
     // Confirm the new process actually got our FH wiring + handler
     // port. If any of these don't match what we passed in NP_*, the
     // tag wasn't honoured for some reason and we'll see writes go
@@ -1810,16 +2100,54 @@ function_result Am_Lang_RunningProcess_isAlive_0(aobject * const this) {
     return __result;
 }
 
+// Exit status captured by NP_ExitCode. Returns 0 until the child has
+// exited (callers should gate on isAlive() == false before reading).
+// New CLI uses this to detect ixemul's "libc init failed" sentinel
+// (status 161) so the auto-retry only fires for that specific case,
+// not for any silent-success command.
+function_result Am_Lang_RunningProcess_exitCode_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    running_process_data * d = rp_data(this);
+    LONG code = 0;
+    if (d != NULL) {
+        // Two readable sources: live state (child still hooked in)
+        // or the cached snapshot taken by close_0. CliView.drainProcess
+        // calls close() before reading exitCode(), so the cache is
+        // the usual path. Live state stays valid for any caller that
+        // reads BEFORE close — useful from outside drainProcess.
+        if (d->state != NULL) {
+            Forbid();
+            code = d->state->exit_code;
+            Permit();
+        } else {
+            code = d->cached_exit_code;
+        }
+    }
+    __result.return_value.value.int_value = (int) code;
+    return __result;
+}
+
 function_result Am_Lang_RunningProcess_setReportedSize_0(aobject * const this, int var_rows, int var_cols) {
     function_result __result = { .has_return_value = false };
     running_process_data * d = rp_data(this);
-    if (d != NULL && d->state != NULL) {
+    if (d != NULL) {
         LONG r = (LONG) var_rows;
         LONG c = (LONG) var_cols;
         if (r < 1) r = 1;
         if (c < 1) c = 1;
-        d->state->reported_rows = r;
-        d->state->reported_cols = c;
+        rp_log_event("[rp] setReportedSize rows=", r);
+        rp_log_event("[rp]   cols=", c);
+        // Always update the pending slot — startNative seeds the
+        // freshly-allocated rp_state from here, so a setReportedSize
+        // before startNative is no longer a no-op.
+        d->pending_rows = r;
+        d->pending_cols = c;
+        // If state is already alive (post-spawn), update it too so
+        // the live size matches subsequent panel resizes.
+        if (d->state != NULL) {
+            d->state->reported_rows = r;
+            d->state->reported_cols = c;
+        }
     }
     return __result;
 }
@@ -1832,6 +2160,39 @@ function_result Am_Lang_RunningProcess_isRawMode_0(aobject * const this) {
         raw = d->state->raw_mode;
     }
     __result.return_value.value.bool_value = raw ? true : false;
+    return __result;
+}
+
+// Graceful async kill — Signal SIGBREAKF_CTRL_C to the child's Task
+// and return immediately. Does NOT tear the handler down (that's
+// close_0's job), so subsequent DOS syscalls from the child still
+// route through a live MsgPort while the child unwinds its own
+// exit path. bebbossh's loginPass checks SetSignal(0,CTRL_C) after
+// every Read() and calls exit(0) when the bit fires, so as long as
+// the child is servicing Reads (raw-mode empty-ring returns 0
+// immediately, so the check fires within microseconds) it dies on
+// its own. rp_child_exit's NP_ExitCode callback then flips
+// child_exited=TRUE, which drainProcess picks up on its next tick
+// and calls close_0() for the safe teardown.
+//
+// If the child is deep in a post-login eventLoop that ignores
+// CTRL_C, this returns without effect — the child stays alive.
+// That's acceptable for the confirm-close case (worst outcome:
+// the panel closes but the SSH session keeps running until it
+// finishes or the user amStudio-exits, at which point
+// shutdownAllNative sweeps it). Never worse than the previous
+// behaviour of tearing the handler down under a live child.
+function_result Am_Lang_RunningProcess_terminateChild_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    running_process_data * d = rp_data(this);
+    if (d != NULL && d->state != NULL) {
+        rp_state * st = d->state;
+        Forbid();
+        if (!st->child_exited && st->child_task != NULL) {
+            Signal(st->child_task, SIGBREAKF_CTRL_C);
+        }
+        Permit();
+    }
     return __result;
 }
 
@@ -1863,6 +2224,13 @@ function_result Am_Lang_RunningProcess_close_0(aobject * const this) {
                 }
             }
         }
+        // Snapshot exit_code before releasing state — AmLang's
+        // drainProcess calls close() then reads exitCode() after, so
+        // we have to preserve the value across the state free. Read
+        // under Forbid for the same reason exitCode_0 did.
+        Forbid();
+        d->cached_exit_code = d->state->exit_code;
+        Permit();
         rp_handler_die(d->state);
         rp_state_release(d->state);
         d->state = NULL;
