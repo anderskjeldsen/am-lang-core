@@ -1,5 +1,6 @@
 namespace Am.Lang
 {
+//    #implementationPlatforms "libc", "linux-x64", "linux-ppc32", "linux-ppc64", "macos", "macos-arm", "amigaos", "morphos-ppc"
     class Runtime
     {
         import Am.Collections
@@ -51,5 +52,14 @@ namespace Am.Lang
         {
             return Runtime.instance.removeProperty(key)
         }
+
+        // Returns the target platform id the current binary was built
+        // for — e.g. "macos-arm", "linux-x64", "amigaos", "morphos-ppc".
+        // Compiler-provided: the body is emitted by
+        // `CRenderer.renderSpecialFunctionFull` and reads a
+        // `-DAM_PLATFORM_ID=...` define injected by `MakefileRenderer`,
+        // so `Runtime.getPlatform()` resolves at C-compile time to the
+        // literal string of the platform whose Makefile is in use.
+        special static fun getPlatform(): String
     }
 }
