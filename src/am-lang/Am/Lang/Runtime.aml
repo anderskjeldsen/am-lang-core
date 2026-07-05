@@ -1,6 +1,5 @@
 namespace Am.Lang
 {
-//    #implementationPlatforms "libc", "linux-x64", "linux-ppc32", "linux-ppc64", "macos", "macos-arm", "amigaos", "morphos-ppc"
     class Runtime
     {
         import Am.Collections
