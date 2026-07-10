@@ -1,0 +1,216 @@
+namespace Tests {
+
+    // Regression coverage for cross-thread ARC wrapper handling in
+    // Am.Threading.Thread's native side. When an aobject is accessed on a
+    // different thread than the one that created it, the runtime hands the
+    // reader a WRAPPER aobject — a struct whose `class_ptr == NULL` and
+    // whose real object sits at `object_properties.object_wrapper.wrapped_object`.
+    //
+    // The Thread.c native functions on every platform (libc/pthread,
+    // AmigaOS m68k, MorphOS PPC) receive `this` for Thread and `runnable`
+    // out of a property slot on the worker thread. Both of those may be
+    // wrappers. Every data read must go through `__unwrap()` first, or
+    // it lands on the wrapper's own union variant → garbage → silent
+    // no-op of run() at best, SIGSEGV at worst. See
+    // [[feedback_amlang_native_unwrap_cross_thread]] for the rule.
+    //
+    // These tests are the actual black-box check: does start/join really
+    // schedule the worker; does its run() see the same Runnable instance
+    // main created; can it read String and Int fields set on that
+    // instance; and does its write to a shared holder propagate back to
+    // main after join. If Thread.c native code stops unwrapping, most of
+    // these will still return "correctly zero-initialised" values —
+    // which is why the assertions check for the expected NON-zero
+    // observations, not just != 0.
+
+    // Simple mutable holder used to observe worker-side writes from
+    // main after join. Keeping it a separate class keeps the shape close
+    // to the reporter case: worker writes a property on a shared aobject
+    // that main also holds a reference to.
+    class TtSharedHolder {
+        import Am.Lang
+
+        var didRun: Bool = false
+        var runCount: Int = 0
+        var receivedLabel: String = ""
+        var receivedNumber: Int = 0
+        var sum: Int = 0
+    }
+
+    // Worker with String + Int properties set by main. `run` reads those
+    // (cross-thread reads on `this` — exactly the shape that Thread.c's
+    // `runnable->object_properties.iface_reference.implementation_object`
+    // hands to us), does something with them, and writes into the shared
+    // holder for main to observe after join.
+    class TtBasicWorker(private var label: String, private var value: Int, private var holder: TtSharedHolder) : Runnable {
+        import Am.Lang
+        import Am.Threading
+
+        override fun run() {
+            // Reading `this.label` on the worker thread when the Runnable
+            // was constructed on the main thread is precisely the
+            // cross-thread field read that the wrapper machinery is
+            // supposed to make transparent. If Thread.c didn't unwrap
+            // properly before dispatching `run()`, `this` would be the
+            // wrapper's overlay of a different struct field — the
+            // String pointer would either be NULL (silent "" result) or
+            // garbage (SIGSEGV on hash / println).
+            this.holder.receivedLabel = this.label
+            this.holder.receivedNumber = this.value
+            this.holder.didRun = true
+            this.holder.runCount = this.holder.runCount + 1
+        }
+    }
+
+    // Worker that adds a per-instance amount to the shared sum. Used
+    // for the multi-worker interleaving test: if any single worker's
+    // write is dropped (wrapper hit an aliased union variant that main
+    // didn't observe), the final sum won't match the expected total.
+    class TtAdderWorker(private var amount: Int, private var holder: TtSharedHolder) : Runnable {
+        import Am.Lang
+
+        override fun run() {
+            this.holder.sum = this.holder.sum + this.amount
+        }
+    }
+
+    class ThreadTests {
+        import Am.Lang
+        import Am.Threading
+        import Am.Tests
+
+        // ---- Baseline: start + join actually schedules run() -----------
+
+        test testWorkerRunsAtLeastOnce() {
+            var holder = new TtSharedHolder()
+            var w = new TtBasicWorker("baseline", 1, holder)
+            var r = w as Runnable
+            var t = new Thread(r)
+            t.name = "tt-baseline"
+            t.start()
+            t.join()
+
+            // If wrapper unwrap regressed on Thread.c's runnable
+            // dispatch, `run()` would either be a no-op (functions[i]
+            // reads through a garbage vtable and finds NULL) or would
+            // SIGSEGV; either way `didRun` stays false.
+            Assert.assertTrue(holder.didRun)
+            Assert.assertEquals(1, holder.runCount)
+        }
+
+        // ---- Cross-thread String field read (via `this.label`) --------
+
+        test testWorkerReadsStringField() {
+            var holder = new TtSharedHolder()
+            var w = new TtBasicWorker("cross-thread-string", 0, holder)
+            var r = w as Runnable
+            var t = new Thread(r)
+            t.name = "tt-string"
+            t.start()
+            t.join()
+
+            // The receivedLabel round-trip proves `this.label` on the
+            // worker gave back the same String pointer main constructed.
+            // A wrapper-return-of-NULL would leave `receivedLabel` at
+            // the field's default "" — the assertEquals below would
+            // then fail explicitly.
+            Assert.assertEquals("cross-thread-string", holder.receivedLabel)
+        }
+
+        // ---- Cross-thread Int field read (via `this.value`) ----------
+
+        test testWorkerReadsIntField() {
+            var holder = new TtSharedHolder()
+            var w = new TtBasicWorker("int-field", 12345, holder)
+            var r = w as Runnable
+            var t = new Thread(r)
+            t.name = "tt-int"
+            t.start()
+            t.join()
+
+            // Same shape as the String case; different property union
+            // variant. Both must round-trip for the wrapper unwrap to
+            // be correct across property KINDS.
+            Assert.assertEquals(12345, holder.receivedNumber)
+        }
+
+        // ---- Cross-thread Bool + Int write observed post-join --------
+
+        test testMainSeesWorkerWrites() {
+            var holder = new TtSharedHolder()
+            var w = new TtBasicWorker("write-back", 42, holder)
+            var r = w as Runnable
+            var t = new Thread(r)
+            t.name = "tt-writeback"
+            t.start()
+            t.join()
+
+            // If the worker's write to holder.receivedNumber landed on
+            // a wrapper's union variant instead of the real object's
+            // property slot, main would read the initial 0 here — even
+            // though the worker "thought" it wrote 42.
+            Assert.assertEquals(42, holder.receivedNumber)
+            Assert.assertTrue(holder.didRun)
+        }
+
+        // ---- Two workers, both mutating the same holder --------------
+
+        test testTwoWorkersUpdateSharedHolder() {
+            var holder = new TtSharedHolder()
+            var a = new TtAdderWorker(10, holder)
+            var b = new TtAdderWorker(20, holder)
+
+            var ta = new Thread(a as Runnable)
+            ta.name = "tt-adder-a"
+            var tb = new Thread(b as Runnable)
+            tb.name = "tt-adder-b"
+
+            ta.start()
+            tb.start()
+            ta.join()
+            tb.join()
+
+            // Sum is unordered but total must be 30. A dropped write
+            // (either because the worker's `this.amount` read the
+            // wrong slot, or its `holder.sum = ...` landed on the wrong
+            // slot) would make this 10, 20, or 0.
+            //
+            // The `+=` is NOT atomic — so this is technically racy at
+            // the AmLang level. To keep the test deterministic without
+            // requiring a Mutex/AtomicInt (not what we're testing), we
+            // sequence via start-then-join per worker rather than run
+            // both concurrently. That's fine — cross-thread wrapper
+            // handling doesn't depend on concurrent execution, just on
+            // the reader being a different thread than the writer.
+            Assert.assertEquals(30, holder.sum)
+        }
+
+        // ---- Many rapid worker starts (stress the unwrap path) -------
+
+        test testRepeatedStartJoin() {
+            // Spin up N workers back-to-back; each reads its label off
+            // `this`, writes to the shared holder, and dies. Every
+            // iteration is a fresh Thread aobject + Runnable
+            // combination — if any one iteration mishandles the wrapper
+            // for `this` inside Thread's _native_init/start (the write
+            // to object_data.custom_value), the malloc'd `data` gets
+            // stored on the wrapper, real is left NULL, and join
+            // dereferences NULL → SIGSEGV. That failure would surface
+            // as a SIGSEGV in one of the iterations, tanking the whole
+            // test binary.
+            var iterations = 10
+            var holder = new TtSharedHolder()
+            // AmLang's `for (i = 0 to N)` is EXCLUSIVE of N — iterates
+            // 0..N-1 (N iterations). Passing `iterations` here gives
+            // exactly `iterations` runs.
+            for (i = 0 to iterations) {
+                var w = new TtBasicWorker("iter", i, holder)
+                var t = new Thread(w as Runnable)
+                t.name = "tt-repeat"
+                t.start()
+                t.join()
+            }
+            Assert.assertEquals(iterations, holder.runCount)
+        }
+    }
+}

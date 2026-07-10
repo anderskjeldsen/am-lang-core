@@ -38,6 +38,8 @@
 #include <Am/Lang/String.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/Bool.h>
+#include <Am/Lang/UByte.h>
+#include <Am/Lang/Array.h>
 #include <libc/core_inline_functions.h>
 
 #include <amigaos/amiga.h>
@@ -204,6 +206,13 @@ struct rp_state {
     // the AmLang side via isRawMode() to switch the CLI panel into
     // char-at-a-time passthrough + terminal-emulator rendering.
     volatile BOOL raw_mode;
+
+    // Binary mode (Process.startBinary): the child streams a raw binary
+    // protocol (e.g. bebbossh -T carrying a git packfile), so the
+    // ACTION_WRITE handler must NOT intercept the 4-byte CSI 0 SP q
+    // console-size probe — a coincidental 4-byte match would eat pack
+    // bytes. Set from running_process_data.binary at startNative.
+    volatile BOOL binary;
 
     // Reported terminal dimensions, used to answer the bebbossh-
     // style CSI 0 SP q "what's your size?" query that programs send
@@ -379,6 +388,7 @@ static void rp_signal_main_wake(void) {
 typedef struct _running_process_data running_process_data;
 struct _running_process_data {
     rp_state * state;
+    int   binary;           // 1 = Process.startBinary (raw byte stream)
     BPTR  fh_in_bptr;
     BPTR  fh_out_bptr;
     BPTR  fh_err_bptr;
@@ -851,6 +861,13 @@ static void rp_handler_entry(void) {
                     // (see [reference_amigaos_fh_port_isinteractive]),
                     // only log the probe MATCH so we can still spot
                     // ordering/size issues if they resurface.
+                    // NB: this probe interception stays active even in
+                    // binary mode. bebbossh sends the size query at startup
+                    // and blocks reading the reply; if we don't answer, it
+                    // hangs AND the 4 probe bytes leak into the out ring and
+                    // corrupt the git stream. The probe is written to the
+                    // stdin FH, never in-band with stdout pack data, and a
+                    // 4-byte pack Write coincidentally matching is negligible.
                     if (n == 4 && src[0] == 0x9b && src[1] == 0x30
                                  && src[2] == 0x20 && src[3] == 0x71) {
                         rp_log_event("[rp] CSI 0 SP q matched, replying with rows=", st->reported_rows);
@@ -1029,7 +1046,10 @@ static void rp_handler_entry(void) {
                             for (i = 0; i < sizeof(struct InfoData); i++) {
                                 z[i] = 0;
                             }
-                            id->id_DiskType = 0x434F4E00L;
+                            // 'CON\0' makes IsInteractive() TRUE; in binary
+                            // mode report a plain type so it stays FALSE and
+                            // the child treats us as a pipe (no terminal init).
+                            id->id_DiskType = st->binary ? ID_DOS_DISK : 0x434F4E00L;
                             id->id_DiskState = ID_VALIDATED;
                         }
                     }
@@ -1652,6 +1672,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         goto __exit;
     }
     d->state = st;
+    st->binary = (d->binary != 0) ? TRUE : FALSE;
 
     // Capture the parent task's Output() FH so handler tasks
     // (which inherit NIL: as their stdout) have a real FH to
@@ -1723,13 +1744,21 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     // fell into the !stdoutBptr branch, skipped getConsoleSize,
     // and sent 0×0 in pty-req → server defaulted to 80×24 → nano
     // rendered only the top ~half of a wider panel.
-    fh_in->fh_Port  = (struct MsgPort *) DOSTRUE;
+    // Binary mode: report the FHs as NON-interactive (fh_Port = DOSFALSE).
+    // A program like bebbossh checks IsInteractive() and, when TRUE, does
+    // console/terminal setup — grabConsole, a CSI 0 SP q size probe, and
+    // it prefixes its stdout with terminal-control escapes (e.g.
+    // "ESC [ 2;r;c {"). That garbage corrupts a binary git stream. Making
+    // the handles look like a plain pipe suppresses all of it, which is
+    // exactly what `bebbossh -T` piping git-upload-pack wants.
+    LONG fh_interactive = (d->binary != 0) ? DOSFALSE : DOSTRUE;
+    fh_in->fh_Port  = (struct MsgPort *) fh_interactive;
     fh_in->fh_Arg1  = (LONG) st;
     fh_out->fh_Type = st->handler_port;
-    fh_out->fh_Port = (struct MsgPort *) DOSTRUE;
+    fh_out->fh_Port = (struct MsgPort *) fh_interactive;
     fh_out->fh_Arg1 = (LONG) st;
     fh_err->fh_Type = st->handler_port;
-    fh_err->fh_Port = (struct MsgPort *) DOSTRUE;
+    fh_err->fh_Port = (struct MsgPort *) fh_interactive;
     fh_err->fh_Arg1 = (LONG) st;
     d->fh_in_bptr  = MKBADDR(fh_in);
     d->fh_out_bptr = MKBADDR(fh_out);
@@ -2019,6 +2048,56 @@ function_result Am_Lang_RunningProcess_tryReadOutput_0(aobject * const this) {
     }
 
 __exit: ;
+    return __result;
+}
+
+// Binary read: pop raw bytes from the out ring into a fresh UByte[]
+// (empty when nothing queued). Unlike tryReadOutput this does NOT
+// NUL-terminate / strlen, so a binary packfile survives intact.
+function_result Am_Lang_RunningProcess_tryReadOutputBytes_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    running_process_data * d = rp_data(this);
+    UBYTE buf[2048];
+    ULONG n = 0;
+    if (d != NULL && d->state != NULL) {
+        Forbid();
+        n = rp_pop(&d->state->out, buf, sizeof(buf));
+        Permit();
+    }
+    aobject * arr = __create_array((unsigned int) n, 1, &Am_Lang_Array_ta_Am_Lang_UByte, uchar_type);
+    if (n > 0) {
+        array_holder * ah = (array_holder *) &arr[1];
+        memcpy(ah->array_data, buf, (size_t) n);
+    }
+    __result.return_value.value.object_value = arr;
+    return __result;
+}
+
+// Binary write: push raw bytes from a UByte[] into the in ring.
+function_result Am_Lang_RunningProcess_writeInputBytes_0(aobject * const this, aobject * data, const long long offset, const unsigned int length) {
+    function_result __result = { .has_return_value = true };
+    unsigned int wrote = 0;
+    running_process_data * d = rp_data(this);
+    if (d != NULL && d->state != NULL && data != NULL && !d->state->child_exited) {
+        array_holder * ah = (array_holder *) &data[1];
+        if ((unsigned long long) offset + length <= ah->size) {
+            Forbid();
+            wrote = (unsigned int) rp_push(&d->state->in,
+                        (const UBYTE *) ((unsigned char *) ah->array_data + offset),
+                        (ULONG) length);
+            rp_fulfil_deferred(d->state);
+            Permit();
+        }
+    }
+    __result.return_value.value.uint_value = wrote;
+    __result.return_value.flags = PRIMITIVE_UINT;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_enableBinaryMode_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    running_process_data * d = rp_data(this);
+    if (d != NULL) d->binary = 1;
     return __result;
 }
 

@@ -38,6 +38,8 @@
 #include <Am/Lang/String.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/Bool.h>
+#include <Am/Lang/UByte.h>
+#include <Am/Lang/Array.h>
 #include <libc/core_inline_functions.h>
 
 #include <morphos-ppc/morphos.h>
@@ -184,6 +186,11 @@ struct rp_state {
     // char-at-a-time passthrough + terminal-emulator rendering.
     volatile BOOL raw_mode;
 
+    // Binary mode (Process.startBinary): skip the 4-byte CSI 0 SP q
+    // console-size probe interception so a raw binary stream (bebbossh
+    // -T carrying a git packfile) is never partially swallowed.
+    volatile BOOL binary;
+
     // Reported terminal dimensions, used to answer the bebbossh-
     // style CSI 0 SP q "what's your size?" query that programs send
     // by Write()-ing to stdin (yes, really — the AmigaOS console
@@ -303,6 +310,7 @@ static void rp_signal_main_wake(void) {
 typedef struct _running_process_data running_process_data;
 struct _running_process_data {
     rp_state * state;
+    int   binary;           // 1 = Process.startBinary (raw byte stream)
     BPTR  fh_in_bptr;
     BPTR  fh_out_bptr;
     BPTR  fh_err_bptr;
@@ -540,6 +548,9 @@ static void rp_handler_entry(void) {
                     //   read digits until ' '   -> numCols
                     // That maps to "CSI 1 ; <rows> ; <cols> SP q"
                     // when CSI is the 2-byte form "ESC [".
+                    // Probe interception stays active even in binary mode —
+                    // bebbossh blocks on the size reply and the 4 probe
+                    // bytes would otherwise corrupt the out stream.
                     if (n == 4 && src[0] == 0x9b && src[1] == 0x30
                                  && src[2] == 0x20 && src[3] == 0x71) {
                         UBYTE resp[40];
@@ -691,7 +702,11 @@ static void rp_handler_entry(void) {
                         for (i = 0; i < sizeof(struct InfoData); i++) {
                             z[i] = 0;
                         }
-                        id->id_DiskType = 0x434F4E00L;
+                        // 'CON\0' makes IsInteractive() TRUE; in binary
+                        // mode report a plain type so it stays FALSE and the
+                        // child treats us as a pipe (no terminal escapes that
+                        // would corrupt a binary git stream).
+                        id->id_DiskType = st->binary ? ID_DOS_DISK : 0x434F4E00L;
                         id->id_DiskState = ID_VALIDATED;
                     }
                     rp_pkt_reply(pkt, DOSTRUE, 0);
@@ -1061,6 +1076,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         goto __exit;
     }
     d->state = st;
+    st->binary = (d->binary != 0) ? TRUE : FALSE;
 
     // Capture the parent task's Output() FH so handler tasks
     // (which inherit NIL: as their stdout) have a real FH to
@@ -1320,6 +1336,55 @@ function_result Am_Lang_RunningProcess_tryReadOutput_0(aobject * const this) {
     }
 
 __exit: ;
+    return __result;
+}
+
+// Binary read: pop raw bytes from the out ring into a fresh UByte[]
+// (no NUL-terminate / strlen), so a binary packfile survives intact.
+function_result Am_Lang_RunningProcess_tryReadOutputBytes_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    running_process_data * d = rp_data(this);
+    UBYTE buf[2048];
+    ULONG n = 0;
+    if (d != NULL && d->state != NULL) {
+        Forbid();
+        n = rp_pop(&d->state->out, buf, sizeof(buf));
+        Permit();
+    }
+    aobject * arr = __create_array((unsigned int) n, 1, &Am_Lang_Array_ta_Am_Lang_UByte, uchar_type);
+    if (n > 0) {
+        array_holder * ah = (array_holder *) &arr[1];
+        memcpy(ah->array_data, buf, (size_t) n);
+    }
+    __result.return_value.value.object_value = arr;
+    return __result;
+}
+
+// Binary write: push raw bytes from a UByte[] into the in ring.
+function_result Am_Lang_RunningProcess_writeInputBytes_0(aobject * const this, aobject * data, const long long offset, const unsigned int length) {
+    function_result __result = { .has_return_value = true };
+    unsigned int wrote = 0;
+    running_process_data * d = rp_data(this);
+    if (d != NULL && d->state != NULL && data != NULL && !d->state->child_exited) {
+        array_holder * ah = (array_holder *) &data[1];
+        if ((unsigned long long) offset + length <= ah->size) {
+            Forbid();
+            wrote = (unsigned int) rp_push(&d->state->in,
+                        (const UBYTE *) ((unsigned char *) ah->array_data + offset),
+                        (ULONG) length);
+            rp_fulfil_deferred(d->state);
+            Permit();
+        }
+    }
+    __result.return_value.value.uint_value = wrote;
+    __result.return_value.flags = PRIMITIVE_UINT;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_enableBinaryMode_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    running_process_data * d = rp_data(this);
+    if (d != NULL) d->binary = 1;
     return __result;
 }
 

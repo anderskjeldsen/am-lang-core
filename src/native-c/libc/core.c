@@ -433,6 +433,35 @@ sweep_result __detach_object_from_sweep(aobject * const __obj) {
         return (sweep_result) { .is_swept = false, .next = __obj->next };
     }
 
+    // Wrapper (class_ptr == NULL): it was linked into __first_object by its
+    // property_reference_count (a cross-thread object stored into a
+    // collection/property), so the cycle sweep can reach it. It must NOT go
+    // through the real-object path — __detach_object immediately derefs
+    // class_ptr->release, and __deallocate_detached_object would free it raw,
+    // leaving a dangling entry in the real's first_object_wrapper list.
+    // Unlink it here and hand it to __deallocate_wrapper, which unsubscribes
+    // from the real and frees the wrapper. This mirrors the class_ptr==NULL
+    // split already used in the dec-refcount paths. Safe to run mid-sweep:
+    // reals detached earlier this pass aren't freed until the second loop.
+    if (__obj->class_ptr == NULL) {
+        aobject *next_to_sweep = __obj->next;
+        if (__obj == __first_object) {
+            __set_first_object(__obj->next, "detach_wrapper_from_sweep");
+            if (__first_object != NULL) {
+                __first_object->prev = NULL;
+            }
+        } else {
+            __obj->prev->next = __obj->next;
+            if (__obj->next != NULL) {
+                __obj->next->prev = __obj->prev;
+            }
+        }
+        __obj->next = NULL;
+        __obj->prev = NULL;
+        __deallocate_wrapper(__obj);
+        return (sweep_result) { .is_swept = true, .next = next_to_sweep };
+    }
+
     #ifdef DEBUG
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
@@ -955,7 +984,23 @@ aobject * __wrap_if_foreign(aobject * const __raw) {
     // wrapper's owner_thread when the wrapper itself is what we want.
     if (__raw->class_ptr == NULL) return __raw;
     if (__raw->owner_thread == __current_thread()) return __raw;
-    return __create_wrapper(__raw);
+    aobject * const __wrapper = __create_wrapper(__raw);
+    if (__wrapper == NULL) {
+        // OOM during a cross-thread transition. `__wrap_if_foreign` is
+        // emitted at property-write and nullable_value-boxing sites
+        // where there's no `function_result *` in scope to route through
+        // — the codegen assumes the wrap either succeeds or the raw
+        // pointer would have been fine to use. Neither is true here:
+        // the raw pointer belongs to another thread, and returning it
+        // would break every subsequent read on this thread. Abort
+        // loudly instead of silently corrupting state. See
+        // `feedback_amlang_native_unwrap_cross_thread` for the
+        // "propagate OOM through the exception path" follow-up.
+        fprintf(stderr, "AmLang: out of memory in __wrap_if_foreign (cross-thread wrap); aborting.\n");
+        fflush(stderr);
+        abort();
+    }
+    return __wrapper;
 }
 
 aobject * __create_wrapper(aobject * const __realobj) {
@@ -1226,6 +1271,13 @@ bool __any_equals(const nullable_value a, const nullable_value b) {
 aobject * __create_string_constant(char const * const str, aclass * const string_class) {
     size_t len = strlen(str);
     aobject * str_obj = __allocate_object_with_extra_size(string_class, sizeof(string_holder));
+    // Propagate the OOM cleanly. Callers that have a `function_result *`
+    // in scope should check the return and route through
+    // `__throw_out_of_memory_exception`; callers without a function-result
+    // channel (startup, constant tables) will see the NULL propagate and
+    // most likely abort with a NULL deref at their first use — still
+    // better than reading random bytes past a bogus allocation.
+    if (str_obj == NULL) return NULL;
 
     string_holder * const holder = (string_holder *) (str_obj + 1);
     str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
@@ -1234,18 +1286,17 @@ aobject * __create_string_constant(char const * const str, aclass * const string
     holder->length = len;
     holder->string_value = (char *) str;
     holder->hash = hash;
-
-//    *holder = (string_holder) { .is_string_constant = true, .length = strlen(str), .string_value = (char *) str, .hash = hash };
-//    memcpy(holder, &t_holder, sizeof(string_holder));
-    // holder->string_value = str; // assume that string constants will never change
-    // holder->length = strlen(str); // TODO: how many characters exactly?
-    // holder->is_string_constant = true;
     return str_obj;
 }
 
 aobject * __create_string(char const * const str, aclass * const string_class) {
     size_t len = strlen(str);
     aobject * str_obj = __allocate_object_with_extra_size(string_class, sizeof(string_holder) + len + 1);
+    // See __create_string_constant above for the NULL propagation
+    // contract — same reasoning applies. Callers are responsible for
+    // treating a NULL as "the runtime is out of memory" and routing
+    // through `__throw_out_of_memory_exception` if they can.
+    if (str_obj == NULL) return NULL;
     string_holder * const holder = (string_holder *) (str_obj + 1);
     str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
     char * const newStr = (char * const) (holder + 1);
@@ -1255,11 +1306,6 @@ aobject * __create_string(char const * const str, aclass * const string_class) {
     holder->length = len;
     holder->string_value = newStr;
     holder->hash = hash;
-//    *holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = newStr, .hash = hash };
-//    memcpy(holder, &t_holder, sizeof(string_holder));
-//    holder->string_value = newStr;
-//    holder->length = len; // TODO: how many characters exactly?
-//    holder->is_string_constant = false;
     return str_obj;
 }
 
@@ -1290,8 +1336,33 @@ _Static_assert(object_type == 0, "any_type arrays rely on object_type==0 for zer
 _Static_assert((PRIMITIVE & 0xFC) != 0, "every PRIMITIVE_X tag must have a non-zero high bit so flags=0 reads as object_type");
 
 aobject * __create_array(unsigned int const size, unsigned char const item_size, aclass * const array_class, ctype const ctype) {
-    size_t extra_size = sizeof(array_holder) + (size * item_size);
+    // Overflow-safe size computation. Before this: `size * item_size`
+    // did the multiply in `unsigned int * unsigned int` (item_size
+    // promotes) which wraps modulo 2^32 on ANY host. Then `size_t
+    // extra_size = sizeof(array_holder) + <wrapped>` silently produced
+    // a much smaller total on 64-bit and satisfied the allocation with
+    // a buffer far too small for the array's advertised size. Writes
+    // past the true end corrupted the heap; reads returned garbage.
+    // Symptom that flagged this: `new Long[Int.max]` (16 GB request)
+    // succeeded on a 32 GB machine, then any element write past
+    // ~512M silently smashed unrelated allocations.
+    //
+    // Now: promote both operands to size_t so the multiply matches the
+    // destination width on every host, and check both the multiply and
+    // the subsequent add against `(size_t)-1` (portable SIZE_MAX). On
+    // overflow return NULL — the codegen's post-`__create_array` OOM
+    // null-check will then throw `OutOfMemoryException`, which matches
+    // "we cannot satisfy this allocation" semantically.
+    size_t const size_z = (size_t) size;
+    size_t const item_size_z = (size_t) item_size;
+    if (item_size_z != 0 && size_z > ((size_t)-1 - sizeof(array_holder)) / item_size_z) {
+        return NULL;
+    }
+    size_t extra_size = sizeof(array_holder) + (size_z * item_size_z);
     aobject * array_obj = __allocate_object_with_extra_size(array_class, extra_size);
+    if (array_obj == NULL) {
+        return NULL;
+    }
     array_holder * const holder = (array_holder *) &array_obj[1];
     void *array_data = (void *) (holder + 1);
     array_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
@@ -1316,8 +1387,33 @@ char * get_array_data(array_holder * holder) {
     return (char *) &holder[1];
 }
 
+// Preallocated OutOfMemoryException singleton. Held immortal — every OOM
+// throw reuses the same aobject *. The `__throw_exception` path bumps
+// the refcount by one on each throw (and `__decrease_reference_count`
+// after a `pass` / handled site brings it back down), so a healthy
+// program churns the ref by +1/-1 per catch cycle. The initial ref
+// counts as one held forever by the runtime — the object is never
+// deallocated.
+//
+// Declared here (instead of alongside `__init_oom_singleton` further
+// down) so `__create_exception` — which is the immediate fallback path
+// on Exception allocation failure — can see it. `static` keeps it
+// file-local.
+static aobject * __oom_singleton = NULL;
+
 aobject * __create_exception(aobject * const message) {
     aobject *ex = __allocate_object(&__exception_class_alias);
+    if (ex == NULL) {
+        // Allocation of the ordinary Exception object failed. Rather
+        // than return NULL (which every caller then dereferences to
+        // populate the message), hand back the preallocated OOM
+        // singleton. Callers that immediately throw the returned aobject
+        // will end up throwing OOM instead of Exception — which is
+        // accurate: the reason `message` couldn't be attached is that
+        // we're out of memory. `__decrease_reference_count(ex)` in the
+        // caller is safe on the immortal singleton — its rc just churns.
+        return __oom_singleton;
+    }
     __exception_constructor_alias(ex, message);
     __exception_init_instance_function_alias((nullable_value){ .value.object_value = ex });
     return ex;
@@ -1326,11 +1422,108 @@ aobject * __create_exception(aobject * const message) {
 void __throw_simple_exception(const char * const message, const char * const stack_trace_item_text, function_result * const result) {
     aobject * ex_msg = __create_string_constant(message, &__string_class_alias);
     aobject * stit = __create_string_constant(stack_trace_item_text, &__string_class_alias);
+    // If either string constant allocation failed, we're out of memory
+    // and can't build the intended exception. Fall back to the
+    // preallocated OOM singleton — it has no per-throw message but is
+    // guaranteed constructable. Callers already expect the exception
+    // path to run to completion; SIGSEGV'ing the caller because we
+    // couldn't attach a stack-trace string is strictly worse.
+    if (ex_msg == NULL || stit == NULL) {
+        if (ex_msg != NULL) __decrease_reference_count(ex_msg);
+        if (stit != NULL) __decrease_reference_count(stit);
+        __throw_out_of_memory_exception(result, stack_trace_item_text);
+        return;
+    }
     aobject * ex = __create_exception(ex_msg);
+    // `__create_exception` returns the OOM singleton on allocation
+    // failure (see above); throwing it here still runs cleanly through
+    // __throw_exception, and the stack-trace item we built stays
+    // attached, so users can still see the intended failure site.
     __throw_exception(result, ex, stit);
     __decrease_reference_count(ex_msg); // it's in the exception stack trace list now, we don't need it anymore.
     __decrease_reference_count(stit); // it's in the exception stack trace list now, we don't need it anymore.
-    __decrease_reference_count(ex); // it's in the exception stack trace list now, we don't need it anymore.
+    __decrease_reference_count(ex); // safe on the OOM singleton too — its rc just churns.
+}
+
+// The `__oom_singleton` definition + lifetime notes live above
+// `__create_exception` so that fallback path can compile against it.
+// If startup fails to allocate this singleton the process is already in
+// a hopeless memory state; we abort rather than pretend to keep going.
+// `__throw_out_of_memory_exception` re-checks the singleton at throw
+// time as a belt-and-suspenders in case some caller ends up throwing OOM
+// before `__init_oom_singleton` has run.
+
+void __init_oom_singleton(void) {
+    if (__oom_singleton != NULL) return;
+    // Allocate directly rather than via __create_exception so we don't
+    // depend on __create_string_constant succeeding (it also uses
+    // calloc). The Exception class's `message` field will read as NULL
+    // — printWithStackTrace / toString handle NULL by degrading to
+    // "(no message)", so no user code SIGSEGVs on our singleton.
+    aobject * ex = calloc(1, sizeof(aobject) + (sizeof(property) * __out_of_memory_exception_class_alias.properties_count));
+    if (ex == NULL) {
+        // We are in a bad enough state that even the *singleton* can't
+        // fit. Nothing we can do — abort loudly so the failure isn't
+        // silent.
+        fprintf(stderr, "AmLang: unable to allocate OutOfMemoryException singleton; aborting.\n");
+        fflush(stderr);
+        abort();
+    }
+    if (__out_of_memory_exception_class_alias.properties_count > 0) {
+        ex->object_properties.class_object_properties.properties = (property *) (ex + 1);
+    }
+    ex->class_ptr = &__out_of_memory_exception_class_alias;
+    ex->reference_count = 1;
+    ex->owner_thread = __current_thread();
+    ex->first_object_wrapper = NULL;
+    __oom_singleton = ex;
+}
+
+void __throw_out_of_memory_exception(function_result * const result, const char * const stack_trace_item_text) {
+    if (__oom_singleton == NULL) {
+        // Someone hit OOM before startup wired up the singleton. Same
+        // bad state as an allocation failure inside the singleton
+        // itself — abort rather than crash by throwing NULL.
+        fprintf(stderr, "AmLang: OOM before OutOfMemoryException singleton initialised; aborting (stack: %s)\n",
+                stack_trace_item_text ? stack_trace_item_text : "(unknown)");
+        fflush(stderr);
+        abort();
+    }
+    // Attach a stack-trace frame if the caller supplied one. The
+    // singleton's stack-trace list grows without bound over the
+    // process's lifetime, but that's a bounded leak — a handful of
+    // frames per throw, and the process is already in OOM territory.
+    // Guard against __create_string_constant itself failing (nested
+    // OOM) by throwing without a stack frame in that case.
+    aobject * stit = NULL;
+    if (stack_trace_item_text != NULL) {
+        stit = calloc(1, sizeof(aobject) + (sizeof(property) * __string_class_alias.properties_count) + sizeof(string_holder) + 1);
+        if (stit != NULL) {
+            if (__string_class_alias.properties_count > 0) {
+                stit->object_properties.class_object_properties.properties = (property *) (stit + 1);
+            }
+            stit->class_ptr = &__string_class_alias;
+            stit->reference_count = 1;
+            stit->owner_thread = __current_thread();
+            stit->first_object_wrapper = NULL;
+            // The string holder lives after properties[].
+            string_holder * sh = (string_holder *) ((property *) (stit + 1) + __string_class_alias.properties_count);
+            stit->object_properties.class_object_properties.object_data.value.custom_value = sh;
+            sh->string_value = (char *)(sh + 1);
+            // Bounded copy — cap at 255 bytes so a runaway string
+            // doesn't chew through what little memory we have left.
+            size_t n = 0;
+            while (n < 255 && stack_trace_item_text[n] != '\0') {
+                sh->string_value[n] = stack_trace_item_text[n];
+                n++;
+            }
+            sh->string_value[n] = '\0';
+        }
+    }
+    __throw_exception(result, __oom_singleton, stit);
+    if (stit != NULL) {
+        __decrease_reference_count(stit);
+    }
 }
 
 // true meaning: is same class OR descendant
@@ -1341,6 +1534,39 @@ bool is_descendant_of(aclass const * const cls, aclass const * const base) {
         if (cls->base) {
             return is_descendant_of(cls->base, base);
         }
+    }
+    return false;
+}
+
+// True if `cls` (or any of its base classes) declares `iface` in its
+// `iface_implementations` list. Backs the `x is SomeInterface` codegen
+// path where `SomeInterface` is an interface — `is_descendant_of` on
+// its own only walks `cls->base`, so it misses ALL interface
+// implementations and `x is Iface` always returns false.
+//
+// Argument order matches `is_descendant_of` at the codegen site so
+// both helpers slot into the same emit template: TARGET first (`iface`
+// / `base`), CONCRETE-source-class second (`cls`).
+//
+// Walks the base-class chain because a subclass inherits its parent's
+// declared interfaces (`class Sub : Super {}` where `Super : SomeIface`
+// still has `Sub is SomeIface == true`). Does NOT recurse through
+// interface inheritance (`iface SubIface : SuperIface`) at the entry
+// side — the compiler emits `iface_implementations` entries only for
+// interfaces the class *directly* declares, so callers should query
+// each concrete interface they care about. If we later add compile-
+// time expansion of transitive interface implementations into each
+// class's `iface_implementations` array, this stays correct without
+// changes.
+bool implements_interface(aclass const * const iface, aclass const * const cls) {
+    aclass const * cur = cls;
+    while (cur != NULL) {
+        for (unsigned int i = 0; i < cur->iface_implementation_count; i++) {
+            if (cur->iface_implementations[i].iface_class == iface) {
+                return true;
+            }
+        }
+        cur = cur->base;
     }
     return false;
 }

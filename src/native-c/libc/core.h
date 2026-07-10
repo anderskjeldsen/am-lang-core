@@ -413,6 +413,13 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
 void __throw_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text);
 void __pass_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text);
 void __throw_simple_exception(const char * const message, const char * const stack_trace_item_text, function_result * const result);
+// Preallocated OutOfMemoryException singleton — throw when `calloc` returns
+// NULL in generated `new` codegen. Uses a frozen instance built at startup
+// (`__init_oom_singleton`), so the throw itself never touches `calloc`.
+// Never call before startup has initialised the singleton; the check-null
+// fallback aborts the process.
+void __throw_out_of_memory_exception(function_result * const result, const char * const stack_trace_item_text);
+void __init_oom_singleton(void);
 //void __deallocate_function_result(function_result const result);
 typedef function_result (*__release_T)(aobject * const);
 typedef function_result (*__mark_children_T)(aobject * const);
@@ -433,6 +440,7 @@ aobject * __create_exception(aobject * const message);
 void clear_allocated_objects();
 void print_allocated_objects();
 bool is_descendant_of(aclass const * const cls, aclass const * const base);
+bool implements_interface(aclass const * const iface, aclass const * const cls);
 unsigned int __string_hash(const char * const str);
 void deallocate_annotations(class_static * const __class_static);
 array_holder * get_array_holder(aobject * const array_obj);
@@ -460,6 +468,7 @@ void __print_memory_header(aobject * const obj, const char * prefix);
 #include <Am/Lang/Object.h>
 #include <Am/Lang/ClassRef.h>
 #include <Am/Lang/Exception.h>
+#include <Am/Lang/OutOfMemoryException.h>
 #include <Am/Lang/Annotations/UseMemoryPool.h>
 // typedef Am_Lang_Object_equals_0_T __object_equals_alias;
 #define __object_equals_alias Am_Lang_Object_f_equals_0_T
@@ -468,6 +477,9 @@ void __print_memory_header(aobject * const obj, const char * prefix);
 #define  __class_ref_class_alias Am_Lang_ClassRef
 #define __string_class_alias Am_Lang_String
 #define __exception_class_alias Am_Lang_Exception
+#define __out_of_memory_exception_class_alias Am_Lang_OutOfMemoryException
+#define __out_of_memory_exception_constructor_alias Am_Lang_OutOfMemoryException_f_OutOfMemoryException_0
+#define __out_of_memory_exception_init_instance_function_alias Am_Lang_OutOfMemoryException___init_instance
 #define __add_stack_trace_item_function_alias Am_Lang_Exception_f_addStackTraceItem_0
 #define __exception_constructor_alias Am_Lang_Exception_f_Exception_0
 #define __exception_init_instance_function_alias Am_Lang_Exception___init_instance

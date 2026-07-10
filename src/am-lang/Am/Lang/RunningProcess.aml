@@ -47,6 +47,33 @@ namespace Am.Lang
         // (most do). Writing after close() is a no-op.
         native fun writeInput(text: String)
 
+        // ---- binary I/O (opt-in via Process.startBinary) ------------
+        //
+        // tryReadOutput()/writeInput() are String-typed and NUL-truncate
+        // (the read side null-terminates + creates a String via strlen),
+        // so they can't carry arbitrary bytes — fine for a terminal,
+        // fatal for a git packfile. These byte-oriented variants move
+        // raw bytes to/from the same underlying ring/pipe with no
+        // encoding or terminal translation, so a binary protocol (e.g.
+        // the ssh git transport through bebbossh -T) survives intact.
+        //
+        // Non-blocking read: returns the bytes currently available
+        // (empty UByte[0] when none). Pair with isAlive() to know when
+        // the stream has ended.
+        native fun tryReadOutputBytes(): UByte[]
+
+        // Write `length` bytes of `data` starting at `offset` to the
+        // child's stdin. Returns the count accepted.
+        native fun writeInputBytes(data: UByte[], offset: Long, length: UInt): UInt
+
+        // Flip this process into binary mode. MUST be called before the
+        // child is spawned (Process.startBinary does this). On libc it
+        // switches the backend from a cooked pty to a raw socketpair; on
+        // AmigaOS it tells the dos-handler to skip the console-size probe
+        // interception so no 4-byte payload is ever swallowed. Called by
+        // Process.startBinary before startNative.
+        native fun enableBinaryMode()
+
         // True until the child has exited. After exit, may still
         // return true once more while the stdout ring drains.
         native fun isAlive(): Bool

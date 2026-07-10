@@ -5,7 +5,16 @@ namespace Am.Collections {
         import Am.Lang
 
         private var size: Int
+        // High-water mark of entry slots allocated when no freed slot was
+        // available to reuse. Freed slots are recycled through `freeHead`, so
+        // this stays bounded to the peak LIVE entry count and never marches past
+        // the backing arrays under add/remove churn.
         private var currentEntryIndex: Int
+        // Head of the free-slot list (0 = empty, else slot+1). remove() pushes a
+        // vacated entry slot here; privateSetKeyValue() pops one before extending
+        // currentEntryIndex. Without this, remove reclaimed nothing and the map
+        // overflowed / leaked under churn.
+        private var freeHead: Int
         // Backing arrays eagerly initialised to zero-length so the field
         // declarations are honest about being non-null. The lazy-init
         // path in `set()` gates on `length() == 0` instead of the old
@@ -67,29 +76,42 @@ namespace Am.Collections {
                 this.currentIndex = this.bucketSize
             }
 
-            if ( this.size * 4 >= this.bucketSize * 2 || this.currentIndex >= (this.bucketSize * 2) ) {
-                var entryLastIndex = this.currentEntryIndex
+            // Grow at load factor 0.5 of LIVE entries. size is the correct (and
+            // sole) trigger now that slots are recycled and resize walks only
+            // live bucket chains; the old currentIndex/currentEntryIndex gates
+            // both overflowed the arrays and (via resize) resurrected removed
+            // keys once remove was used.
+            if (this.size * 4 >= this.bucketSize * 2) {
+                var oldKeyIndexes = this.keyIndexes
                 var oldKeys = this.keys
                 var oldValues = this.values
+                var oldNextIndexes = this.nextIndexes
+                var oldBucketSize = this.bucketSize
+
                 var newBucketSize = this.bucketSize * 10
                 this.bucketSize = newBucketSize
                 this.currentIndex = newBucketSize
                 this.currentEntryIndex = 0
                 this.size = 0
+                this.freeHead = 0
 
                 this.nextIndexes = new Int[newBucketSize]
                 this.keys = new K[newBucketSize]
                 this.values = new V[newBucketSize]
                 this.keyIndexes = new Int[newBucketSize * 2]
-//                ("create new bucket in HashMap: " + this.bucketSize.toString() + ", copy " + entryLastIndex.toString() + " items").println()
 
-                var i = 0
-                while(i < entryLastIndex) {
-                    var oldKey = oldKeys[i]
-                    var oldValue = oldValues[i]
-                    this.privateSetKeyValue(oldKey, oldValue)
-                    i++
-                }       
+                // Re-insert LIVE entries only, by walking the old bucket chains.
+                // Freed slots sit on the old free list, unreachable from any
+                // bucket, so they are naturally skipped (no resurrection).
+                var b = 0
+                while (b < oldBucketSize) {
+                    var ki = oldKeyIndexes[b] - 1
+                    while (ki > -1) {
+                        this.privateSetKeyValue(oldKeys[ki], oldValues[ki])
+                        ki = oldNextIndexes[ki] - 1
+                    }
+                    b++
+                }
             }
 
             this.privateSetKeyValue(key, value)
@@ -99,32 +121,36 @@ namespace Am.Collections {
             var hash = key.hash()
             var index = hash % this.bucketSize
 
-            // Check if key already exists
+            // Update existing value if the key is already present.
             var keyIndex = this.keyIndexes[index] - 1
             var existingIndex = this.findEntry(keyIndex, key)
             if (existingIndex >= 0) {
-                // Update existing value
                 this.values[existingIndex] = value
                 return
             }
 
-            this.keys[this.currentEntryIndex] = key
-            this.values[this.currentEntryIndex] = value
-
-            keyIndex = this.keyIndexes[index] - 1 // index of keys and next arrays
-
-            if (keyIndex < 0) {
-                this.keyIndexes[index] = this.currentEntryIndex + 1 // cause all are initially set to 0, then a real 0 will be 1
-                this.nextIndexes[this.currentEntryIndex] = 0
-                this.size++            
-            } 
-            else {        
-                this.keyIndexes[index] = this.currentEntryIndex + 1
-                this.nextIndexes[this.currentEntryIndex] = keyIndex + 1 // old value
-                this.currentIndex++
-                this.size++
+            // Allocate an entry slot: reuse a freed one if available, else extend.
+            var slot = 0
+            if (this.freeHead > 0) {
+                slot = this.freeHead - 1
+                this.freeHead = this.nextIndexes[slot]
+            } else {
+                slot = this.currentEntryIndex
+                this.currentEntryIndex++
             }
-            this.currentEntryIndex++
+
+            this.keys[slot] = key
+            this.values[slot] = value
+
+            keyIndex = this.keyIndexes[index] - 1 // current head of this bucket
+            if (keyIndex < 0) {
+                this.nextIndexes[slot] = 0
+            } else {
+                this.nextIndexes[slot] = keyIndex + 1 // chain to old head
+                this.currentIndex++
+            }
+            this.keyIndexes[index] = slot + 1 // new head of the bucket
+            this.size++
         }
 
         fun remove(key: K): Bool {
@@ -134,38 +160,38 @@ namespace Am.Collections {
             var hash = key.hash()
             var index = hash % this.bucketSize
             var keyIndex = this.keyIndexes[index] - 1
-            
+
             if (keyIndex < 0) {
                 return false
             }
-            
-            // Check if it's the first item in the chain
+
+            // First item in the chain?
             var firstKey = this.keys[keyIndex]
             if (firstKey == key) {
-                // Remove first item - update bucket to point to next
                 var nextIndex = this.nextIndexes[keyIndex] - 1
                 if (nextIndex >= 0) {
                     this.keyIndexes[index] = nextIndex + 1
                 } else {
                     this.keyIndexes[index] = 0
                 }
+                this.freeSlot(keyIndex)
                 this.size--
                 return true
             }
-            
-            // Look for item in the chain
+
+            // Walk the chain.
             var previousIndex = keyIndex
             keyIndex = this.nextIndexes[keyIndex] - 1
             while(keyIndex > -1) {
                 var key2 = this.keys[keyIndex]
                 if (key2 == key) {
-                    // Remove item by updating previous to point to next
                     var nextIndex = this.nextIndexes[keyIndex] - 1
                     if (nextIndex >= 0) {
                         this.nextIndexes[previousIndex] = nextIndex + 1
                     } else {
                         this.nextIndexes[previousIndex] = 0
                     }
+                    this.freeSlot(keyIndex)
                     this.size--
                     return true
                 }
@@ -175,10 +201,19 @@ namespace Am.Collections {
             return false
         }
 
+        // Return an unlinked entry slot to the free list. Its nextIndexes cell is
+        // repurposed as the free-list link; the slot is off every bucket chain,
+        // so no lookup or bucket-walk visits it until it is handed back out.
+        private fun freeSlot(slot: Int) {
+            this.nextIndexes[slot] = this.freeHead
+            this.freeHead = slot + 1
+        }
+
         fun clear() {
             this.size = 0
             this.currentEntryIndex = 0
             this.currentIndex = this.bucketSize
+            this.freeHead = 0
             if (this.keyIndexes.length() > 0) {
                 var i = 0
                 while(i < this.keyIndexes.length()) {
@@ -200,20 +235,21 @@ namespace Am.Collections {
         }
 
         fun containsValue(value: V): Bool {
-            if (this.values.length() == 0) {
+            if (this.keyIndexes.length() == 0) {
                 return false
             }
-            var i = 0
-            while(i < this.currentEntryIndex) {
-                var value2 = this.values[i]
-                if (value2 == value) {
-                    // Verify this entry is still valid by checking if its key exists
-                    var key = this.keys[i]
-                    if (this.containsKey(key)) {
+            // Walk live bucket chains only — freed slots may hold stale values.
+            var b = 0
+            while (b < this.bucketSize) {
+                var ki = this.keyIndexes[b] - 1
+                while (ki > -1) {
+                    var value2 = this.values[ki]
+                    if (value2 == value) {
                         return true
                     }
+                    ki = this.nextIndexes[ki] - 1
                 }
-                i++
+                b++
             }
             return false
         }
@@ -224,20 +260,20 @@ namespace Am.Collections {
 
         fun buildKeys(): List<K> {
             var keyList = List.newList<K>()
-            if (this.keys.length() == 0) {
+            if (this.keyIndexes.length() == 0) {
                 return keyList
             }
-
-            var i = 0
-            while(i < this.currentEntryIndex) {
-                var key = this.keys[i]
-
-                if (key != null && this.containsKey(key)) {
-                    keyList.add(key)
+            // Walk live bucket chains only — never the raw slot array, whose
+            // freed slots can still hold stale keys.
+            var b = 0
+            while (b < this.bucketSize) {
+                var ki = this.keyIndexes[b] - 1
+                while (ki > -1) {
+                    keyList.add(this.keys[ki])
+                    ki = this.nextIndexes[ki] - 1
                 }
-                i++
+                b++
             }
-
             return keyList
         }
 

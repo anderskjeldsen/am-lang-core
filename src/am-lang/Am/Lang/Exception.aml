@@ -10,6 +10,16 @@ namespace Am.Lang
     class KeyNotFoundException(var key: String) : Exception("Key not found: " + key) {
     }
 
+    // Thrown from `new` codegen when the underlying `calloc` returns NULL.
+    // A single instance is preallocated at startup — `__init_oom_singleton`
+    // in core.c — so throwing OOM never itself needs to allocate. Users
+    // MAY catch this, but recovery is best-effort: the runtime holds one
+    // frozen instance and re-uses it for every OOM, so the stack trace
+    // reflects the FIRST throw, not the current one. The rethrow is
+    // otherwise indistinguishable from any other exception.
+    class OutOfMemoryException() : Exception("Out of memory") {
+    }
+
     class Exception(var message: String) {
         import Am.Collections
 

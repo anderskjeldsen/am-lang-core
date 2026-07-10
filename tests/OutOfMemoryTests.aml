@@ -1,0 +1,100 @@
+namespace Tests {
+
+    // Regression coverage for the OutOfMemoryException path landed
+    // 2026-07-10. `new` codegen now emits a null-check after every
+    // `__allocate_object` / `__create_array` call — if the underlying
+    // `calloc` returns NULL (the OS refused to satisfy the request),
+    // the runtime throws the preallocated `OutOfMemoryException`
+    // singleton instead of dereferencing NULL and SIGSEGVing.
+    //
+    // Deterministically triggering a real OS-level calloc failure
+    // inside a unit test is fragile — the numeric ceiling that libc /
+    // kernel refuse depends on host RAM, kernel overcommit settings,
+    // and whether prior tests already grabbed the reservable pool. So
+    // instead of relying on the OS to reject, these tests verify the
+    // AmLang-side shape:
+    //   * The `Am.Lang.OutOfMemoryException` class exists and can be
+    //     `new`'d + caught explicitly.
+    //   * It's a subclass of `Am.Lang.Exception` so generic error
+    //     handlers pick it up without narrowing.
+    //   * Ordinary `new` still works — the OOM null-check codegen
+    //     doesn't false-positive on healthy allocations.
+    //
+    // The actual "runtime throws OOM when calloc returns NULL" path is
+    // covered by manual smoke tests at the C level (build a program
+    // that allocates until failure) — not something we want polluting
+    // an automated suite that runs on every CI push.
+
+    class OutOfMemoryTests {
+        import Am.Lang
+        import Am.Tests
+
+        test testOutOfMemoryExceptionCanBeConstructed() {
+            var e = new OutOfMemoryException()
+            Assert.assertEquals("Out of memory", e.message)
+        }
+
+        // OutOfMemoryException must be catchable narrowly. This is the
+        // shape user code will actually use to distinguish OOM from
+        // other exceptions and (say) release a cache before retrying.
+        test testOutOfMemoryExceptionIsCatchableSpecifically() {
+            var caught = false
+            try {
+                throw new OutOfMemoryException()
+            } catch (ex: OutOfMemoryException) {
+                caught = true
+            }
+            Assert.assertTrue(caught)
+        }
+
+        // And it must be catchable as base `Exception` — the generic
+        // handler pattern most application code uses.
+        test testOutOfMemoryExceptionIsCatchableAsException() {
+            var caught = false
+            try {
+                throw new OutOfMemoryException()
+            } catch (ex: Exception) {
+                caught = true
+            }
+            Assert.assertTrue(caught)
+        }
+
+        // Sanity check: a modest, guaranteed-successful allocation.
+        // Guards against a codegen regression that emitted the OOM
+        // null-check with inverted polarity — that would fire on every
+        // `new` and the whole suite would OOM-throw everywhere.
+        test testNormalAllocationStillWorks() {
+            var buf = new UByte[16]
+            Assert.assertEquals(16UI, buf.length())
+        }
+
+        // And constructing an ordinary Exception (subject of the same
+        // codegen path as OutOfMemoryException) must still work — i.e.
+        // the OOM guard doesn't hijack normal constructor calls.
+        test testConstructingExceptionsStillWorks() {
+            var ex = new Exception("regular exception")
+            Assert.assertEquals("regular exception", ex.message)
+        }
+
+        // No dedicated test for the `__create_array` size-overflow guard
+        // because it isn't portably triggerable from AmLang. AmLang's
+        // `new T[N]` takes an `Int` (max 2^31 - 1); on 32-bit hosts
+        // (amigaos m68k, ppc32) `size_t` is 32 bits and the guard fires
+        // at ~4 GB, but on 64-bit hosts `size_t` is 64 bits and the
+        // guard never fires within the Int-representable range. Every
+        // Int-sized request that fits in `size_t` either succeeds (the
+        // OS finds the memory) or fails at calloc time — the latter
+        // still routes through the codegen's `if (== NULL) throw OOM`
+        // guard, so the outcome the developer sees is identical.
+        //
+        // The pre-fix bug was `unsigned int * unsigned char` wrapping
+        // at 2^32, giving `new Long[Int.max]` a ~4 GB backing buffer
+        // that presented as a 16 GB array — subsequent writes past
+        // ~512M silently smashed unrelated heap allocations. That was
+        // fixed by promoting both operands to `size_t` before the
+        // multiply. Verified by inspection + regressions; a
+        // corresponding runtime-behaviour test would need OS-level
+        // memory-limit manipulation (`setrlimit`, cgroups) to
+        // deterministically drive a smaller-than-Int.max failure.
+    }
+}

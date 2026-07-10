@@ -66,7 +66,10 @@ function_result Am_Threading_Thread__native_init_0(aobject * const this)
     Am_Threading_Thread_data *data = malloc(sizeof(Am_Threading_Thread_data));
     data->started = false;
     data->done    = false;
-    this->object_properties.class_object_properties.object_data.value.custom_value = data;
+    // Unwrap before writing object_data — if `this` was passed in as a
+    // cross-thread wrapper, direct writes would land on the wrapper's
+    // union variant instead of the real object's object_data slot.
+    __unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value = data;
 
 __exit: ;
     return __result;
@@ -77,8 +80,9 @@ function_result Am_Threading_Thread__native_release_0(aobject * const this)
     function_result __result = { .has_return_value = false };
     bool __returning = false;
 
+    aobject * const real = __unwrap(this);
     Am_Threading_Thread_data *data =
-        (Am_Threading_Thread_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
+        (Am_Threading_Thread_data *) real->object_properties.class_object_properties.object_data.value.custom_value;
     if (data != NULL) {
         // If the thread was started but never joined, detach so the
         // worker's pthread resources get reclaimed when it eventually
@@ -88,7 +92,7 @@ function_result Am_Threading_Thread__native_release_0(aobject * const this)
             pthread_detach(data->thread_id);
         }
         free(data);
-        this->object_properties.class_object_properties.object_data.value.custom_value = NULL;
+        real->object_properties.class_object_properties.object_data.value.custom_value = NULL;
     }
 
 __exit: ;
@@ -109,29 +113,44 @@ __exit: ;
 // completion (mirrors the AmigaOS `_InitTask` flow).
 static void *Am_Threading_Thread__pthread_entry(void *arg)
 {
-    aobject *thread = (aobject *) arg;
+    // `arg` is the wrapper pointer that `start_0` handed us. Keep the
+    // raw pointer for TLS + refcount (matches the wrapper we took a ref
+    // on) and use an unwrapped copy for every DATA read — cross-thread
+    // wrappers store the real object in a different union variant, so
+    // dereferences on the wrapper directly would read the wrapper's own
+    // memory and silently no-op the thread body.
+    aobject *thread_ref = (aobject *) arg;
+    aobject *thread     = __unwrap(thread_ref);
 
     pthread_once(&current_thread_key_once, make_current_thread_key);
-    pthread_setspecific(current_thread_key, thread);
+    // TLS carries the wrapper pointer — `getCurrent_0` on this thread
+    // then hands the same wrapper back to AmLang code, so its lifetime
+    // is tied to the ref taken in `start_0`.
+    pthread_setspecific(current_thread_key, thread_ref);
 
-    aobject *runnable =
+    aobject *runnable_ref =
         thread->object_properties.class_object_properties.properties[0].nullable_value.value.object_value;
+    // Runnable slot itself may be a wrapper — unwrap for dispatch reads.
+    aobject *runnable = __unwrap(runnable_ref);
     // Runnable is an interface, so dispatch through the iface_implementation
-    // the wrapper carries (functions[0] = run). Going via runnable->class_ptr
-    // would index into Am.Lang.Runnable's `functions` field, which is left
-    // NULL for interfaces — segfault in the worker thread.
+    // the wrapper carries. The interface function table is laid out as the
+    // inherited AnyInterface methods (indices 0..2) followed by Runnable's own
+    // methods, so run() is at index 3 — matching the compiler-generated call
+    // sites (e.g. Am/Ui/Window.c). Using index 0 calls an AnyInterface method
+    // instead, which silently no-ops the thread body.
     Am_Lang_Runnable_f_run_0_T rFunc =
-        (Am_Lang_Runnable_f_run_0_T) runnable->object_properties.iface_reference.iface_implementation->functions[0];
+        (Am_Lang_Runnable_f_run_0_T) runnable->object_properties.iface_reference.iface_implementation->functions[3];
     rFunc(runnable->object_properties.iface_reference.implementation_object);
 
     Am_Threading_Thread_data *data =
         (Am_Threading_Thread_data *) thread->object_properties.class_object_properties.object_data.value.custom_value;
     data->done = true;
 
-    // Drop the worker's reference on `thread` last — every property
-    // access above this line happens while `thread` is still alive
-    // courtesy of the ref taken in `start_0`.
-    __decrease_reference_count(thread);
+    // Drop the worker's reference on the wrapper we were handed (matches
+    // the `__increase_reference_count(this)` in `start_0`). Every
+    // property access above this line happens while the wrapper — and
+    // therefore the real — is still alive.
+    __decrease_reference_count(thread_ref);
 
     return NULL;
 }
@@ -144,7 +163,7 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
     pthread_once(&current_thread_key_once, make_current_thread_key);
 
     Am_Threading_Thread_data *data =
-        (Am_Threading_Thread_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
+        (Am_Threading_Thread_data *) __unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value;
 
     // Take an extra ref for the worker thread; it'll drop it as the
     // very last thing in the entry function. See file-level comment.
@@ -180,7 +199,7 @@ function_result Am_Threading_Thread_join_0(aobject * const this)
     bool __returning = false;
 
     Am_Threading_Thread_data *data =
-        (Am_Threading_Thread_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
+        (Am_Threading_Thread_data *) __unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value;
     if (data != NULL && data->started) {
         pthread_join(data->thread_id, NULL);
         // pthread_join joined-and-reaped — no further detach needed.

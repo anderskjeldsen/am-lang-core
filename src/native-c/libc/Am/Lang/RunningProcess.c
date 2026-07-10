@@ -20,9 +20,12 @@
 #include <Am/Lang/String.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/Bool.h>
+#include <Am/Lang/UByte.h>
+#include <Am/Lang/Array.h>
 #include <libc/core_inline_functions.h>
 
 #include <stdio.h>
+#include <sys/socket.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -47,6 +50,7 @@ struct _running_process_data {
     pid_t child_pid;
     int  child_exited;      // 0 until waitpid reports the child gone
     int  exit_code;         // unix exit code, post-waitpid (0 default)
+    int  binary;            // 1 = raw socketpair backend (Process.startBinary)
 };
 
 static running_process_data * rp_data(aobject * const this) {
@@ -116,6 +120,13 @@ function_result Am_Lang_RunningProcess__native_release_0(aobject * const this) {
     return __result;
 }
 
+function_result Am_Lang_RunningProcess_enableBinaryMode_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    running_process_data * d = rp_data(this);
+    if (d != NULL) d->binary = 1;
+    return __result;
+}
+
 function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobject * command, aobject * workingDir) {
     function_result __result = { .has_return_value = false };
 
@@ -126,6 +137,47 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     }
     string_holder * cmd_holder = (string_holder *) (command + 1);
     const char * cmd_str = cmd_holder->string_value;
+
+    // Binary mode: give the child a raw socketpair (no pty, no termios
+    // cooking) so a binary protocol survives byte-for-byte. Same shell
+    // (/bin/sh -c) so command strings behave like the pty path.
+    if (d->binary) {
+        int sv[2];
+        if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) != 0) {
+            __throw_simple_exception("RunningProcess: socketpair failed", "in Am_Lang_RunningProcess_startNative_0", &__result);
+            goto __exit;
+        }
+        pid_t bpid = fork();
+        if (bpid < 0) {
+            close(sv[0]); close(sv[1]);
+            __throw_simple_exception("RunningProcess: fork failed", "in Am_Lang_RunningProcess_startNative_0", &__result);
+            goto __exit;
+        }
+        if (bpid == 0) {
+            dup2(sv[1], 0);
+            dup2(sv[1], 1);
+            if (sv[0] > 2) close(sv[0]);
+            if (sv[1] > 2) close(sv[1]);
+            if (workingDir != NULL) {
+                string_holder * wd = (string_holder *) (workingDir + 1);
+                if (wd != NULL && wd->string_value != NULL && wd->string_value[0] != 0) {
+                    if (chdir(wd->string_value) != 0) { /* best-effort */ }
+                }
+            }
+            execl("/bin/sh", "sh", "-c", cmd_str, (char *) NULL);
+            _exit(127);
+        }
+        close(sv[1]);
+        signal(SIGPIPE, SIG_IGN);
+        int bfl = fcntl(sv[0], F_GETFL, 0);
+        fcntl(sv[0], F_SETFL, bfl | O_NONBLOCK);
+        d->stdin_writer_fd  = sv[0];
+        d->stdout_reader_fd = sv[0];
+        d->child_pid = bpid;
+        d->child_exited = 0;
+        d->exit_code = 0;
+        goto __exit;
+    }
 
     // Hand the child a PTY in cooked+echo defaults. That's
     // deliberately NOT raw mode: ssh's pty-req protocol message
@@ -264,6 +316,50 @@ function_result Am_Lang_RunningProcess_writeInput_0(aobject * const this, aobjec
     }
 
 __exit: ;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_tryReadOutputBytes_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    running_process_data * d = rp_data(this);
+    unsigned char buf[4096];
+    ssize_t n = 0;
+    if (d != NULL && d->stdout_reader_fd >= 0) {
+        n = read(d->stdout_reader_fd, buf, sizeof(buf));
+        if (n == 0) {
+            // EOF — child closed stdout.
+            close(d->stdout_reader_fd);
+            d->stdout_reader_fd = -1;
+        } else if (n < 0) {
+            if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                close(d->stdout_reader_fd);
+                d->stdout_reader_fd = -1;
+            }
+            n = 0;  // no data right now
+        }
+    }
+    aobject * arr = __create_array((unsigned int) n, 1, &Am_Lang_Array_ta_Am_Lang_UByte, uchar_type);
+    if (n > 0) {
+        array_holder * ah = (array_holder *) &arr[1];
+        memcpy(ah->array_data, buf, (size_t) n);
+    }
+    __result.return_value.value.object_value = arr;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_writeInputBytes_0(aobject * const this, aobject * data, const long long offset, const unsigned int length) {
+    function_result __result = { .has_return_value = true };
+    running_process_data * d = rp_data(this);
+    unsigned int wrote = 0;
+    if (d != NULL && d->stdin_writer_fd >= 0 && data != NULL && !d->child_exited) {
+        array_holder * ah = (array_holder *) &data[1];
+        if ((unsigned long long) offset + length <= ah->size) {
+            ssize_t w = write(d->stdin_writer_fd, (unsigned char *) ah->array_data + offset, length);
+            if (w > 0) wrote = (unsigned int) w;
+        }
+    }
+    __result.return_value.value.uint_value = wrote;
+    __result.return_value.flags = PRIMITIVE_UINT;
     return __result;
 }
 

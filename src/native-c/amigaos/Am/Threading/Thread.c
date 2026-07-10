@@ -34,7 +34,11 @@ function_result Am_Threading_Thread__native_init_0(aobject * const this)
 	// runs (printf above would crash without it), so the previous
 	// defensive __ensure_library("dos.library") here was dead code.
 	Am_Threading_Thread_data *data = malloc(sizeof(Am_Threading_Thread_data));
-	this->object_properties.class_object_properties.object_data.value.custom_value = data;
+	// Unwrap for the data write — if `this` was passed in as a
+	// cross-thread wrapper the store would land on the wrapper's own
+	// union variant, not the real object's object_data slot, and any
+	// subsequent read (or reader on another task) would see NULL.
+	__unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value = data;
 	data->stack_size = 4000 * 1024; // TODO
 	data->done = false;
 
@@ -47,9 +51,10 @@ function_result Am_Threading_Thread__native_release_0(aobject * const this)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 
-    Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
+	aobject * const real = __unwrap(this);
+	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) real->object_properties.class_object_properties.object_data.value.custom_value;
 	free(data);
-	this->object_properties.class_object_properties.object_data.value.custom_value = NULL;
+	real->object_properties.class_object_properties.object_data.value.custom_value = NULL;
 
 __exit: ;
 	return __result;
@@ -79,17 +84,25 @@ void Am_Threading_Thread__InitTask()
 //		Flags = Flags | TF_SWITCH | TF_LAUNCH;
 //		OwnTask->tc_Flags = Flags;
 
-		aobject * thread = (aobject *) own_task->tc_UserData;
+		// `tc_UserData` was set by `start_0` with the wrapper pointer it
+		// received (so refcount ops on both sides balance). Every data
+		// read below must unwrap first — a cross-thread wrapper's
+		// properties[] and iface_reference union variants overlap with
+		// unrelated wrapper metadata; reading through the raw pointer
+		// yields garbage that silently no-ops `run()`.
+		aobject * thread_ref = (aobject *) own_task->tc_UserData;
 
-		while ( thread == NULL )
+		while ( thread_ref == NULL )
 		{
 			Am_Threading_Thread_sleep_0(100);
-			thread = (aobject *) own_task->tc_UserData;
+			thread_ref = (aobject *) own_task->tc_UserData;
 		}
 
-		if ( thread != NULL )
+		if ( thread_ref != NULL )
 		{
-			aobject * runnable = thread->object_properties.class_object_properties.properties[0].nullable_value.value.object_value;
+			aobject * thread = __unwrap(thread_ref);
+			aobject * runnable_ref = thread->object_properties.class_object_properties.properties[0].nullable_value.value.object_value;
+			aobject * runnable = __unwrap(runnable_ref);
 			// Runnable is an interface, so dispatch through the iface_implementation
 			// the wrapper carries (functions[0] = run). Going via runnable->class_ptr
 			// instead would pick up the Am.Lang.Runnable aclass's `functions` field,
@@ -108,7 +121,10 @@ void Am_Threading_Thread__InitTask()
 			// OpenLibrary — see Am.Net.Socket's nativeInit pattern.
 			// Calling on this task (not the joiner) means finalizers
 			// still see FindTask(NULL) == own_task.
-			Am_Threading_Thread_f_runFinalizers_0(thread);
+			// Pass the wrapper pointer we were handed — the AmLang-side
+			// callee will unwrap where needed and matches how any other
+			// dispatch on this Thread instance from this task looks.
+			Am_Threading_Thread_f_runFinalizers_0(thread_ref);
 			printf("[_InitTask] runFinalizers returned\n");
 			fflush(stdout);
 
@@ -117,12 +133,12 @@ void Am_Threading_Thread__InitTask()
 			printf("[_InitTask] flagged done; dropping worker ref\n");
 			fflush(stdout);
 
-			// Drop the worker's reference on `thread` last — every
-			// access above this line happens while `thread` is still
-			// alive courtesy of the ref taken in `start_0`. Also
-			// closes the busy-wait race above where `tc_UserData` is
-			// set only AFTER the new task is already running.
-			__decrease_reference_count(thread);
+			// Drop the worker's reference on the wrapper we were handed
+			// (matches the `__increase_reference_count(this)` that
+			// `start_0` took before stashing us in `tc_UserData`). Every
+			// access above this line runs while the wrapper — and thus
+			// the real — is still alive.
+			__decrease_reference_count(thread_ref);
 			printf("[_InitTask] worker exiting cleanly\n");
 			fflush(stdout);
 		}
@@ -144,14 +160,20 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 
 	void (*fptr)() = Am_Threading_Thread__InitTask;
 
-	aobject * name = this->object_properties.class_object_properties.properties[1].nullable_value.value.object_value;
+	// Unwrap for every data read on the Thread instance. If the caller
+	// invoked start() through a cross-thread wrapper handle, direct
+	// dereferences would read the wrapper's union variant instead of
+	// the real object's properties[] / object_data.
+	aobject * const this_r = __unwrap(this);
+	aobject * name_ref = this_r->object_properties.class_object_properties.properties[1].nullable_value.value.object_value;
+	aobject * name = __unwrap(name_ref);
 	string_holder *name_holder = name->object_properties.class_object_properties.object_data.value.custom_value;
 	STRPTR name_strptr = "";
 	if ( name_holder->string_value != NULL ) {
 		name_strptr = name_holder->string_value;
 	}
 
-	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
+	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) this_r->object_properties.class_object_properties.object_data.value.custom_value;
 
 //	printf("stack_size: %d\n", data->stack_size);
 //	printf("thread name: %s\n", name_holder->string_value);
@@ -215,7 +237,7 @@ function_result Am_Threading_Thread_join_0(aobject * const this)
 	bool __returning = false;
 
 	printf("Start Joining...\n");
-	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
+	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) __unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value;
 
 	while( !data->done )
 	{

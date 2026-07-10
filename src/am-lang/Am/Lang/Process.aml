@@ -43,6 +43,19 @@ namespace Am.Lang
         // runAndCaptureOutput blocks until the child exits and gives
         // it a NULL stdin, which won't work for password prompts.
         // `workingDir` empty means "current dir".
+        // Like `start`, but with a BINARY, un-translated bidirectional
+        // pipe (no pty / terminal cooking) for streaming raw protocol
+        // bytes — e.g. an ssh git transport via `bebbossh -T`. Drive it
+        // with RunningProcess.tryReadOutputBytes()/writeInputBytes();
+        // the String-based tryReadOutput/writeInput NUL-truncate and
+        // must not be mixed in.
+        static fun startBinary(command: String, workingDir: String): RunningProcess {
+            var p = new RunningProcess()
+            p.enableBinaryMode()
+            p.startNative(command, workingDir)
+            return p
+        }
+
         static fun start(command: String, workingDir: String): RunningProcess {
             var p = new RunningProcess()
             p.startNative(command, workingDir)
