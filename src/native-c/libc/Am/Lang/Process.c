@@ -189,7 +189,7 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 	FILE *pipe = popen(cmd_holder->string_value, "r");
 	if (!pipe) {
 		if (did_chdir) {
-			(void) chdir(saved_cwd);
+			if (chdir(saved_cwd) != 0) { /* best-effort cwd restore; nothing to do on failure */ }
 		}
 		__throw_simple_exception("Failed to execute command", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
 		goto __exit;
@@ -202,7 +202,7 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 		if (!buffer) {
 			pclose(pipe);
 			if (did_chdir) {
-				(void) chdir(saved_cwd);
+				if (chdir(saved_cwd) != 0) { /* best-effort cwd restore; nothing to do on failure */ }
 			}
 			__throw_simple_exception("Out of memory", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
 			goto __exit;
@@ -218,7 +218,7 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 					free(buffer);
 					pclose(pipe);
 					if (did_chdir) {
-						(void) chdir(saved_cwd);
+						if (chdir(saved_cwd) != 0) { /* best-effort cwd restore; nothing to do on failure */ }
 					}
 					__throw_simple_exception("Out of memory", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
 					goto __exit;
@@ -232,7 +232,7 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 		pclose(pipe);
 
 		if (did_chdir) {
-			(void) chdir(saved_cwd);
+			if (chdir(saved_cwd) != 0) { /* best-effort cwd restore; nothing to do on failure */ }
 		}
 
 		aobject *str = __create_string(buffer, &Am_Lang_String);

@@ -261,8 +261,12 @@ function_result Am_Lang_DateTime_formatDateTime_0(unsigned long long epochMillis
     
     // Replace common patterns
     char temp[256];
-    char year_str[5], month_str[3], day_str[3], hour_str[3], minute_str[3], second_str[3];
-    
+    // Sized to hold any int's decimal form (incl. sign + NUL) so the
+    // compiler can't warn about %0Nd truncation — the struct tm fields are
+    // bounded in practice, but gcc can't prove it. Downstream memcpy's copy
+    // a fixed digit count, so the extra capacity is transparent.
+    char year_str[12], month_str[12], day_str[12], hour_str[12], minute_str[12], second_str[12];
+
     snprintf(year_str, sizeof(year_str), "%04d", tm_time.tm_year + 1900);
     snprintf(month_str, sizeof(month_str), "%02d", tm_time.tm_mon + 1);
     snprintf(day_str, sizeof(day_str), "%02d", tm_time.tm_mday);
