@@ -1,7 +1,17 @@
 namespace Am.Lang.Diagnostics
 {
-    native class Arc 
+    native class Arc
     {
         native static fun printAllocatedObjects()
+
+        // Total objects ever allocated (monotonic; never decreases).
+        native static fun getAllocationCount(): Long
+
+        // Cross-thread wrappers currently alive (created - freed). Climbs if
+        // wrappers are leaking.
+        native static fun getLiveWrapperCount(): Long
+
+        // Resident set size in KiB (Linux /proc; 0 where unavailable).
+        native static fun getResidentMemoryKb(): Long
     }
 }

@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <libc/memory_pools.h>
 
 //#define CLASS_TYPE_PRIMITIVE 1
 //#define CLASS_TYPE_NORMAL 0
@@ -198,8 +197,15 @@ struct _aclass {
     unsigned int functions_count;
     unsigned int properties_count;
     iface_implementation * iface_implementations;
-    memory_pool * memory_pool;
     aclass *next;
+    // Live-instance counter for the `instances(Class)` test intrinsic.
+    // Bumped in __allocate_object_with_extra_size / dropped in
+    // __deallocate_object, but ONLY when compiled with -DTRACKOBJECTS
+    // (the `-to` compiler flag; auto-enabled for `amlc test`). Always
+    // present in the struct so generated aclass literals stay valid via
+    // designated initializers (defaults to 0); it just stays 0 unless
+    // TRACKOBJECTS is defined.
+    int instance_count;
 // meta:
 //    aobject *properties;
 };
@@ -469,11 +475,9 @@ void __print_memory_header(aobject * const obj, const char * prefix);
 #include <Am/Lang/ClassRef.h>
 #include <Am/Lang/Exception.h>
 #include <Am/Lang/OutOfMemoryException.h>
-#include <Am/Lang/Annotations/UseMemoryPool.h>
 // typedef Am_Lang_Object_equals_0_T __object_equals_alias;
 #define __object_equals_alias Am_Lang_Object_f_equals_0_T
 #define __object_equals_index Am_Lang_Object_f_equals_0_index
-#define __use_memory_pool_class_alias Am_Lang_Annotations_UseMemoryPool
 #define  __class_ref_class_alias Am_Lang_ClassRef
 #define __string_class_alias Am_Lang_String
 #define __exception_class_alias Am_Lang_Exception

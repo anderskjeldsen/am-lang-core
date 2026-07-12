@@ -39,7 +39,6 @@ void * __current_thread(void)  { return (void *) FindTask(NULL); }
 #endif
 #include <Am/Lang/Exception.h>
 #include <Am/Lang/Object.h>
-#include <Am/Lang/Annotations/UseMemoryPool.h>
 #include <Am/Lang/PropertyInfo.h>
 #include <Am/Lang/ClassRef.h>
 
@@ -88,6 +87,10 @@ void __print_memory_header(aobject * const obj, const char * prefix) {
 }
 
 int __allocation_count = 0;
+// Cross-thread wrapper diagnostics (always on, cheap). Live wrappers =
+// created - deallocated; if it climbs without bound, wrappers are leaking.
+long __wrapper_create_count = 0;
+long __wrapper_dealloc_count = 0;
 #define MAX_ALLOCATIONS 1024 * 50
 #if defined(DEBUG) || defined(TRACKOBJECTS)
 int __last_object_id = 0;
@@ -101,7 +104,10 @@ aobject * __first_detached_object = NULL;
 //aclass * __first_class = NULL;
 class_static *__first_class_static = NULL;
 
-#ifdef DEBUG
+// Defined under TRACKOBJECTS too (not just DEBUG): print_allocated_objects()
+// is compiled for both and calls this, so a TRACKOBJECTS-only build (e.g. the
+// `instances(Class)` test intrinsic) would otherwise fail to link.
+#if defined(DEBUG) || defined(TRACKOBJECTS)
 void __debug_print_string_if_string(aobject * const obj, const char * prefix) {
     if (obj != NULL && obj->class_ptr != NULL && strcmp(obj->class_ptr->name, "Am.Lang.String") == 0) {
         string_holder * holder = (string_holder *) obj->object_properties.class_object_properties.object_data.value.custom_value;
@@ -331,9 +337,14 @@ unsigned int __string_hash(const char * const str) {
 
 aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra_size) {
     __allocation_count++;
-    
+
     #if defined(DEBUG) || defined(TRACKOBJECTS)
-    __last_object_id++;   
+    __last_object_id++;
+    #endif
+    #ifdef TRACKOBJECTS
+    // Per-class live-instance counter feeding the `instances(Class)`
+    // test intrinsic. Balanced by the decrement in __deallocate_object.
+    if (__class != NULL) __class->instance_count++;
     #endif
     #ifdef DEBUG
     #ifdef CONDLOG 
@@ -571,10 +582,16 @@ void __deallocate_object(aobject * const __obj) {
     #endif
     bool it = false;
 
+    #ifdef TRACKOBJECTS
+    // Balance the increment in __allocate_object_with_extra_size so the
+    // `instances(Class)` test intrinsic reflects the live count.
+    if (__obj != NULL && __obj->class_ptr != NULL) __obj->class_ptr->instance_count--;
+    #endif
+
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     char *name = __obj->class_ptr->name;
     int object_id = __obj->object_properties.class_object_properties.object_id;
-    char *type = __obj->class_ptr->name;    
+    char *type = __obj->class_ptr->name;
     #endif
 
     #ifdef DEBUG
@@ -1050,6 +1067,7 @@ aobject * __create_wrapper(aobject * const __realobj) {
     __arc_shared_lock();
     __entry->next = __realobj->first_object_wrapper;
     __realobj->first_object_wrapper = __entry;
+    __wrapper_create_count++;
     __arc_shared_unlock();
 
     return __wrapper;
@@ -1112,6 +1130,7 @@ void __deallocate_wrapper(aobject * const __wrapper) {
         __deallocate_object(__realobj);
     }
 
+    __wrapper_dealloc_count++;
     free(__wrapper);
 }
 

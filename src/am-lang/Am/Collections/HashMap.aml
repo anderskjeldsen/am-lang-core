@@ -207,6 +207,13 @@ namespace Am.Collections {
         private fun freeSlot(slot: Int) {
             this.nextIndexes[slot] = this.freeHead
             this.freeHead = slot + 1
+            // Drop the references to the removed key/value now, instead of
+            // leaving them pinned in the backing arrays until this slot is
+            // handed back out. default(K)/default(V) is null for object types
+            // (0 for primitives), and is typed as K/V so it satisfies the
+            // non-nullable arrays. Freed slots are never read before reuse.
+            this.keys[slot] = default(K)
+            this.values[slot] = default(V)
         }
 
         fun clear() {
