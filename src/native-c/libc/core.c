@@ -2,15 +2,18 @@
 #include <libc/core.h>
 #include <string.h>
 #include <stdarg.h>
+#if defined(__linux__)
+#include <execinfo.h>   // backtrace() for the AMLC_WRAP_TRACE diagnostics
+#endif
 
 // Thread-safe ARC platform layer. Linux/macOS use a recursive
 // pthread_mutex (recursive so a single thread can take the lock more
 // than once while nested inside ARC machinery — destructors that
-// recursively dec refs would otherwise self-deadlock). AmigaOS m68k
-// classic doesn't need the lock at all for correctness (cooperative
-// inside the task; preemption is between tasks, and inter-task object
-// sharing on classic Amiga goes through Message ports anyway). The
-// helpers stay defined as no-ops so generated code links cleanly.
+// recursively dec refs would otherwise self-deadlock). AmigaOS is
+// single-core, so the lock is an inline Forbid/Permit (raw TDNestCnt
+// bump) — that IS mutual exclusion against other tasks there, and it
+// nests naturally (matching the recursive mutex) since TDNestCnt is a
+// counter. See the atomic-macro block in core.h for the rationale.
 #ifndef __AMIGA__
 #include <pthread.h>
 static pthread_mutex_t __arc_shared_mutex;
@@ -23,18 +26,29 @@ void __arc_shared_mutex_init(void) {
     pthread_mutex_init(&__arc_shared_mutex, &attr);
     pthread_mutexattr_destroy(&attr);
     __arc_shared_mutex_initialised = true;
+    {
+        const char *e = getenv("AMLC_XTHREAD_RC");
+        __amlc_xthread_rc_on = (e && atoi(e) != 0) ? 1 : 0;
+    }
 }
 void __arc_shared_lock(void)   { pthread_mutex_lock(&__arc_shared_mutex); }
 void __arc_shared_unlock(void) { pthread_mutex_unlock(&__arc_shared_mutex); }
 void * __current_thread(void)  { return (void *) pthread_self(); }
 #else
-// AmigaOS: no real shared-memory contention for ARC; lock/unlock are
-// no-ops, and the thread identity is FindTask(NULL) (the Task pointer
-// is stable for the lifetime of the task).
+// AmigaOS: single-core, so mutual exclusion for the ARC critical sections
+// (the multi-field free decisions, propref mutations) is an inline
+// Forbid/Permit — raw increment/decrement of Exec's task-switch nesting
+// counter, exactly what Forbid()/Permit() do minus the library-vector call.
+// Balanced ++/-- so nesting returns TDNestCnt to baseline; the destructor
+// itself always runs AFTER unlock (see the dec paths), so Forbid is not held
+// across arbitrary release callbacks — except the __set_property → propref-dec
+// nesting, where a triggered destructor still runs under the outer lock (same
+// as the pthread build holds the mutex there; documented follow-up to defer).
+// The thread identity is FindTask(NULL) (stable for the task's lifetime).
 #include <proto/exec.h>
 void __arc_shared_mutex_init(void) {}
-void __arc_shared_lock(void)   {}
-void __arc_shared_unlock(void) {}
+void __arc_shared_lock(void)   { SysBase->TDNestCnt++; }  // inline Forbid()
+void __arc_shared_unlock(void) { SysBase->TDNestCnt--; }  // inline raw Permit()
 void * __current_thread(void)  { return (void *) FindTask(NULL); }
 #endif
 #include <Am/Lang/Exception.h>
@@ -68,6 +82,12 @@ bool __conditional_logging_on = false;
 // the unwrap branch forever after — fine in practice.
 bool __amlc_any_wrappers_alive = false;
 
+// Thread-safe ARC (BRC) — see core.h. Flipped on the first time a thread is
+// spawned (Am_Threading_Thread_start_0). Gates the owner-vs-foreign branch in
+// the refcount helpers so single-threaded programs never call
+// __current_thread() on the hot path. One-way.
+bool __amlc_multithreaded = false;
+
 // Always-defined so callers compiled with DEBUG can link even when
 // core.c itself was compiled without DEBUG. Body only does anything
 // when DEBUG/TRACKOBJECTS is on (object_id only exists then).
@@ -86,7 +106,9 @@ void __print_memory_header(aobject * const obj, const char * prefix) {
 #endif
 }
 
-int __allocation_count = 0;
+// Atomic: allocation/deallocation happen concurrently on several threads
+// under BRC; a plain int loses updates (test-diagnostic accuracy only).
+__amlc_atomic_int __allocation_count = 0;
 // Cross-thread wrapper diagnostics (always on, cheap). Live wrappers =
 // created - deallocated; if it climbs without bound, wrappers are leaking.
 long __wrapper_create_count = 0;
@@ -335,8 +357,93 @@ unsigned int __string_hash(const char * const str) {
     return hash;
 }
 
+#if defined(__linux__)
+// Opt-in object-leak forensics (AMLC_OBJ_TRACE=1): per-class NET live
+// aobject counts, dumped every ~50k allocations. Same idea as the
+// wrapper-site table — a climbing net names the leaking class directly.
+static int __obj_trace_on = -1;
+#define OBJ_TRACE_SLOTS 4096
+static struct { void * cls; const char * name; long net; } __obj_trace_tab[OBJ_TRACE_SLOTS];
+static long __obj_trace_alloc_total = 0;
+static pthread_mutex_t __obj_trace_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void __obj_trace_bump(aclass * cls, int delta) {
+    if (cls == NULL) return;
+    pthread_mutex_lock(&__obj_trace_mutex);
+    unsigned long h = ((unsigned long) cls >> 3) % OBJ_TRACE_SLOTS;
+    for (int i = 0; i < OBJ_TRACE_SLOTS; i++) {
+        unsigned long idx = (h + i) % OBJ_TRACE_SLOTS;
+        if (__obj_trace_tab[idx].cls == (void *) cls) {
+            __obj_trace_tab[idx].net += delta;
+            break;
+        }
+        if (__obj_trace_tab[idx].cls == NULL) {
+            if (delta > 0) {
+                __obj_trace_tab[idx].cls = (void *) cls;
+                __obj_trace_tab[idx].name = cls->name;
+                __obj_trace_tab[idx].net = delta;
+            }
+            break;
+        }
+    }
+    if (delta > 0 && (++__obj_trace_alloc_total % 50000) == 0) {
+        fprintf(stderr, "[objtrace] ---- top net-live classes (allocs: %ld, live: %d) ----\n",
+            __obj_trace_alloc_total, __allocation_count);
+        // Sample the propref'd-object list: any leaked object with
+        // property_reference_count > 0 is linked here. Print the first few
+        // whose class name matches AMLC_OBJ_TRACE_CLASS (if set) with their
+        // counters — tells us whether the pin is rc or propref.
+        {
+            const char *want = getenv("AMLC_OBJ_TRACE_CLASS");
+            if (want != NULL) {
+                __arc_shared_lock();
+                int shown = 0;
+                long matched = 0;
+                for (aobject *o = __first_object; o != NULL && matched < 100000; o = o->next) {
+                    if (o->class_ptr != NULL && strstr(o->class_ptr->name, want) != NULL) {
+                        matched++;
+                        if (shown < 5) {
+                            fprintf(stderr, "[objtrace]   sample %s rc=%d propref=%d owner_gone=%d wrappers=%p\n",
+                                o->class_ptr->name, o->reference_count,
+                                o->property_reference_count, o->owner_gone,
+                                (void *) o->first_object_wrapper);
+                            shown++;
+                        }
+                    }
+                }
+                fprintf(stderr, "[objtrace]   (%ld '%s' objects on the propref list)\n", matched, want);
+                __arc_shared_unlock();
+            }
+        }
+        for (int pass = 0; pass < 10; pass++) {
+            long best = 0; int bi = -1;
+            for (int i = 0; i < OBJ_TRACE_SLOTS; i++) {
+                if (__obj_trace_tab[i].cls != NULL && __obj_trace_tab[i].net > best) {
+                    best = __obj_trace_tab[i].net; bi = i;
+                }
+            }
+            if (bi < 0) break;
+            fprintf(stderr, "[objtrace]   net=%-8ld %s\n", __obj_trace_tab[bi].net, __obj_trace_tab[bi].name);
+            __obj_trace_tab[bi].net = -__obj_trace_tab[bi].net;
+        }
+        for (int i = 0; i < OBJ_TRACE_SLOTS; i++) {
+            if (__obj_trace_tab[i].net < 0) __obj_trace_tab[i].net = -__obj_trace_tab[i].net;
+        }
+        fflush(stderr);
+    }
+    pthread_mutex_unlock(&__obj_trace_mutex);
+}
+#endif
+
 aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra_size) {
-    __allocation_count++;
+    __amlc_atomic_fetch_add(&__allocation_count, 1);
+    #if defined(__linux__)
+    if (__obj_trace_on == -1) {
+        const char *e = getenv("AMLC_OBJ_TRACE");
+        __obj_trace_on = (e && atoi(e) != 0) ? 1 : 0;
+    }
+    if (__obj_trace_on == 1) __obj_trace_bump(__class, 1);
+    #endif
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     __last_object_id++;
@@ -344,7 +451,7 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
     #ifdef TRACKOBJECTS
     // Per-class live-instance counter feeding the `instances(Class)`
     // test intrinsic. Balanced by the decrement in __deallocate_object.
-    if (__class != NULL) __class->instance_count++;
+    if (__class != NULL) __amlc_atomic_fetch_add(&__class->instance_count, 1);
     #endif
     #ifdef DEBUG
     #ifdef CONDLOG 
@@ -393,7 +500,19 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
             __obj->first_object_wrapper = NULL;
 
             #if defined(DEBUG) || defined(TRACKOBJECTS)
-            allocations[allocation_index++] = __obj;
+            // Debug registry is a FIXED array — saturate instead of writing
+            // past it. An unchecked `allocations[allocation_index++]` overflowed
+            // the global once a process allocated >MAX_ALLOCATIONS objects
+            // (e.g. the V2 compiler compiling a whole project in-process),
+            // corrupting the neighbouring globals and eventually the heap.
+            // Objects beyond capacity simply aren't tracked (shutdown dump
+            // misses them) — a debug-feature limitation, not a correctness one.
+            if (allocation_index < MAX_ALLOCATIONS) {
+                allocations[allocation_index] = __obj;
+            } else if (allocation_index == MAX_ALLOCATIONS) {
+                printf("TRACKOBJECTS: allocation registry full (%d) — further objects untracked\n", MAX_ALLOCATIONS);
+            }
+            allocation_index++;
             if (allocation_index % 1000 == 0) {
                 printf("Another 1000 allocations: %d\n", allocation_index);
             }
@@ -556,7 +675,10 @@ void __deallocate_detached_object(aobject * const __obj) {
     #endif
     #endif
 
-    __allocation_count--;
+    __amlc_atomic_fetch_sub(&__allocation_count, 1);
+    #if defined(__linux__)
+    if (__obj_trace_on == 1) __obj_trace_bump(__obj->class_ptr, -1);
+    #endif
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
@@ -585,7 +707,7 @@ void __deallocate_object(aobject * const __obj) {
     #ifdef TRACKOBJECTS
     // Balance the increment in __allocate_object_with_extra_size so the
     // `instances(Class)` test intrinsic reflects the live count.
-    if (__obj != NULL && __obj->class_ptr != NULL) __obj->class_ptr->instance_count--;
+    if (__obj != NULL && __obj->class_ptr != NULL) __amlc_atomic_fetch_sub(&__obj->class_ptr->instance_count, 1);
     #endif
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
@@ -630,7 +752,10 @@ void __deallocate_object(aobject * const __obj) {
     #endif
     #endif
 
-    __allocation_count--;
+    __amlc_atomic_fetch_sub(&__allocation_count, 1);
+    #if defined(__linux__)
+    if (__obj_trace_on == 1) __obj_trace_bump(__obj->class_ptr, -1);
+    #endif
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
@@ -716,13 +841,18 @@ void __decrease_property_reference_count(aobject * const __obj) {
 
 
             if (__obj->reference_count == 0) {
-                // Same Stage 8 end-of-life decision as the rc → 0 path:
-                // if foreign wrappers still subscribe, set `owner_gone`
-                // and let the last wrapper death finalize. Otherwise
-                // claim destruction now via `destruction_claimed` —
-                // NOT `pending_deallocation` (that's __detach_object's
-                // recursion guard).
-                if (__obj->first_object_wrapper == NULL) {
+                // Same end-of-life decision as the rc → 0 path. Under BRC the
+                // "foreign holders still exist?" test is `foreign_reference_count
+                // != 0` (the wrapper subscription list is always empty now, but
+                // the check is retained so stale wrapper state, if any, is still
+                // honoured). If foreign refs remain, set `owner_gone` and let the
+                // last foreign release finalise. Otherwise claim destruction now
+                // via `destruction_claimed` — NOT `pending_deallocation` (that's
+                // __detach_object's recursion guard). This whole block already
+                // runs under __arc_shared_lock, so the foreign-count read
+                // linearises with foreign decrements.
+                if (__obj->first_object_wrapper == NULL
+                        && __amlc_atomic_load(&__obj->foreign_reference_count) == 0) {
                     if (!__obj->destruction_claimed) {
                         __obj->destruction_claimed = true;
                         should_deallocate = true;
@@ -994,33 +1124,175 @@ void clear_allocated_objects() {
 // 26 k-line JsBytecodeVm.run frame — function calls reserve a fixed
 // per-call stack chunk, not per-call-site stack.
 aobject * __wrap_if_foreign(aobject * const __raw) {
-    if (__raw == NULL) return NULL;
-    // If __raw is already a wrapper, it must already be in the
-    // current thread's realm (wrappers don't leave their owner). Pass
-    // through. We test this BEFORE owner_thread so we don't deref a
-    // wrapper's owner_thread when the wrapper itself is what we want.
-    if (__raw->class_ptr == NULL) return __raw;
-    if (__raw->owner_thread == __current_thread()) return __raw;
-    aobject * const __wrapper = __create_wrapper(__raw);
-    if (__wrapper == NULL) {
-        // OOM during a cross-thread transition. `__wrap_if_foreign` is
-        // emitted at property-write and nullable_value-boxing sites
-        // where there's no `function_result *` in scope to route through
-        // — the codegen assumes the wrap either succeeds or the raw
-        // pointer would have been fine to use. Neither is true here:
-        // the raw pointer belongs to another thread, and returning it
-        // would break every subsequent read on this thread. Abort
-        // loudly instead of silently corrupting state. See
-        // `feedback_amlang_native_unwrap_cross_thread` for the
-        // "propagate OOM through the exception path" follow-up.
-        fprintf(stderr, "AmLang: out of memory in __wrap_if_foreign (cross-thread wrap); aborting.\n");
-        fflush(stderr);
-        abort();
-    }
-    return __wrapper;
+    // Thread-safe ARC (BRC): wrappers are gone. Cross-thread references now use
+    // the SAME real pointer, and foreign liveness is tracked via
+    // `foreign_reference_count` on the OWNED retain paths (__retain_slot_read /
+    // __increase_reference_count). This site is a BORROW — codegen emits no
+    // paired release for it (see RenderHelper.kt; same-thread was already a
+    // zero-cost identity), so it must NOT touch any counter. Bumping here would
+    // leak; the pre-BRC same-thread path already returned the raw unchanged.
+    // Return the pointer as-is.
+    return __raw;
 }
 
+// AMLC_XTHREAD_RC=1: report reference_count mutations performed by a
+// thread that does NOT own the object. reference_count is owner-thread-
+// local BY DESIGN (plain non-atomic ++/--); any cross-thread mutation is
+// a race that can lose updates and leave rc permanently pinned above
+// zero — the object then never destructs (the "chunks leak with rc>0,
+// propref=0, no wrappers" signature). Reports the mutating call site as
+// a module-relative PC (addr2line -e app), rate-limited.
+int __amlc_xthread_rc_on = 0;
+#if defined(__linux__)
+void __report_xthread_rc(aobject * const __obj, const char * const op) {
+    static long __xthread_rc_reports = 0;
+    if (__xthread_rc_reports >= 200) return;
+    __xthread_rc_reports++;
+    extern char __executable_start;
+    void *bt[4];
+    int n = backtrace(bt, 4);
+    fprintf(stderr, "[xthread-rc] %s on %s owner=%p me=%p rc=%d propref=%d",
+        op,
+        __obj->class_ptr ? __obj->class_ptr->name : "(wrapper)",
+        __obj->owner_thread, __current_thread(),
+        __obj->reference_count, __obj->property_reference_count);
+    for (int i = 1; i < n; i++) {
+        fprintf(stderr, " pc=+0x%lx", (unsigned long) bt[i] - (unsigned long) &__executable_start);
+    }
+    fprintf(stderr, "\n");
+    fflush(stderr);
+}
+#else
+void __report_xthread_rc(aobject * const __obj, const char * const op) { (void)__obj; (void)op; }
+#endif
+
+#if defined(__linux__)
+// AMLC_WRAP_TRACE support: per-call-site NET live-wrapper accounting.
+// Fixed-size open-addressing table keyed by minting PC; mutated only
+// under __arc_shared_lock (both create and dealloc already hold it).
+int __wrap_trace_on = -1;                       // -1 unread, 0 off, 1 on
+static __thread void * __wrap_trace_current_site = NULL;
+// Generated code has thousands of distinct minting PCs — an undersized
+// table silently drops late-arriving sites (including the leaky ones),
+// making every visible site look balanced while the global live count
+// climbs. 64k slots covers any realistic program.
+#define WRAP_TRACE_SLOTS 65536
+static struct { void * site; long net; long created; } __wrap_trace_tab[WRAP_TRACE_SLOTS];
+static long __wrap_trace_created_total = 0;
+static long __wrap_trace_dropped = 0;           // sites lost to a full table
+// Companion histogram keyed by wrapped-real CLASS — tells us what TYPE of
+// object the leaked wrappers pin even when the PC table can't.
+#define WRAP_TRACE_CLASS_SLOTS 1024
+static struct { void * cls; const char * name; long net; } __wrap_trace_cls_tab[WRAP_TRACE_CLASS_SLOTS];
+
+static void __wrap_trace_bump_class(aobject * real, int delta) {
+    void * cls = real ? (void *) real->class_ptr : NULL;
+    if (cls == NULL) return;
+    unsigned long h = ((unsigned long) cls >> 3) % WRAP_TRACE_CLASS_SLOTS;
+    for (int i = 0; i < WRAP_TRACE_CLASS_SLOTS; i++) {
+        unsigned long idx = (h + i) % WRAP_TRACE_CLASS_SLOTS;
+        if (__wrap_trace_cls_tab[idx].cls == cls) {
+            __wrap_trace_cls_tab[idx].net += delta;
+            return;
+        }
+        if (__wrap_trace_cls_tab[idx].cls == NULL) {
+            if (delta > 0) {
+                __wrap_trace_cls_tab[idx].cls = cls;
+                __wrap_trace_cls_tab[idx].name = ((aclass *) cls)->name;
+                __wrap_trace_cls_tab[idx].net = delta;
+            }
+            return;
+        }
+    }
+}
+
+// Find/insert the slot for a site. Must be called under __arc_shared_lock.
+static void __wrap_trace_bump(void * site, int delta) {
+    if (site == NULL) return;
+    unsigned long h = ((unsigned long) site >> 2) % WRAP_TRACE_SLOTS;
+    for (int i = 0; i < WRAP_TRACE_SLOTS; i++) {
+        unsigned long idx = (h + i) % WRAP_TRACE_SLOTS;
+        if (__wrap_trace_tab[idx].site == site) {
+            __wrap_trace_tab[idx].net += delta;
+            if (delta > 0) __wrap_trace_tab[idx].created++;
+            return;
+        }
+        if (__wrap_trace_tab[idx].site == NULL) {
+            if (delta > 0) {
+                __wrap_trace_tab[idx].site = site;
+                __wrap_trace_tab[idx].net = delta;
+                __wrap_trace_tab[idx].created = 1;
+            }
+            return;
+        }
+    }
+    __wrap_trace_dropped++;    // table full — surfaced in the dump header
+}
+
+// Dump the sites with the highest net (still-alive) wrapper counts.
+// PCs are printed relative to the main module so `addr2line -e app`
+// resolves them despite PIE/ASLR.
+static void __wrap_trace_dump(void) {
+    extern char __executable_start;             // ld-provided module base
+    unsigned long base = (unsigned long) &__executable_start;
+    fprintf(stderr, "[wraptrace] ---- top net-live wrapper sites (total created: %ld, live now: %ld, dropped: %ld) ----\n",
+        __wrap_trace_created_total, __wrapper_create_count - __wrapper_dealloc_count, __wrap_trace_dropped);
+    for (int pass = 0; pass < 6; pass++) {      // top wrapped-real classes by net
+        long best = 0; int bi = -1;
+        for (int i = 0; i < WRAP_TRACE_CLASS_SLOTS; i++) {
+            if (__wrap_trace_cls_tab[i].cls != NULL && __wrap_trace_cls_tab[i].net > best) {
+                best = __wrap_trace_cls_tab[i].net; bi = i;
+            }
+        }
+        if (bi < 0) break;
+        fprintf(stderr, "[wraptrace]   class net=%-8ld %s\n",
+            __wrap_trace_cls_tab[bi].net, __wrap_trace_cls_tab[bi].name);
+        __wrap_trace_cls_tab[bi].net = -__wrap_trace_cls_tab[bi].net;
+    }
+    for (int i = 0; i < WRAP_TRACE_CLASS_SLOTS; i++) {
+        if (__wrap_trace_cls_tab[i].net < 0) __wrap_trace_cls_tab[i].net = -__wrap_trace_cls_tab[i].net;
+    }
+    for (int pass = 0; pass < 8; pass++) {
+        long best = 0; int bi = -1;
+        for (int i = 0; i < WRAP_TRACE_SLOTS; i++) {
+            if (__wrap_trace_tab[i].site != NULL && __wrap_trace_tab[i].net > best) {
+                best = __wrap_trace_tab[i].net; bi = i;
+            }
+        }
+        if (bi < 0) break;
+        fprintf(stderr, "[wraptrace]   net=%-8ld created=%-10ld pc=+0x%lx\n",
+            __wrap_trace_tab[bi].net, __wrap_trace_tab[bi].created,
+            (unsigned long) __wrap_trace_tab[bi].site - base);
+        __wrap_trace_tab[bi].net = -__wrap_trace_tab[bi].net;   // mark visited
+    }
+    for (int i = 0; i < WRAP_TRACE_SLOTS; i++) {                // restore marks
+        if (__wrap_trace_tab[i].net < 0) __wrap_trace_tab[i].net = -__wrap_trace_tab[i].net;
+    }
+    fflush(stderr);
+}
+#endif
+
 aobject * __create_wrapper(aobject * const __realobj) {
+    #if defined(__linux__)
+    // Opt-in wrapper-leak forensics (AMLC_WRAP_TRACE=1): records the minting
+    // call-site PC in each wrapper and keeps a per-site NET count
+    // (created - freed). Sites whose net keeps climbing are the leaks —
+    // creation-rate histograms can't tell leaked wrappers from the (many)
+    // properly released ones. Dumps the top sites every ~1M creations as
+    // "app-relative" PCs, resolvable with `addr2line -e app <pc-base>`.
+    // Costs one getenv on the first call and nothing when unset.
+    {
+        if (__wrap_trace_on == -1) {
+            const char *e = getenv("AMLC_WRAP_TRACE");
+            __wrap_trace_on = (e && atoi(e) != 0) ? 1 : 0;
+        }
+        if (__wrap_trace_on == 1) {
+            void *bt[3];
+            int n = backtrace(bt, 3);
+            __wrap_trace_current_site = (n >= 3) ? bt[2] : (n >= 2 ? bt[1] : NULL);
+        }
+    }
+    #endif
     #ifdef WRAPLOG
     fprintf(stderr, "[wrap.create] real=%p class=%s rc=%d propref=%d wrappers=%p\n",
         __realobj,
@@ -1047,6 +1319,10 @@ aobject * __create_wrapper(aobject * const __realobj) {
     __wrapper->property_reference_count = 0;
     __wrapper->owner_thread = __current_thread();
     __wrapper->object_properties.object_wrapper.wrapped_object = __realobj;
+    #if defined(__linux__)
+    __wrapper->object_properties.object_wrapper.trace_site =
+        (__wrap_trace_on == 1) ? __wrap_trace_current_site : NULL;
+    #endif
 
     // Build the subscription entry the real will hold on to.
     object_wrapper_entry * __entry =
@@ -1068,6 +1344,16 @@ aobject * __create_wrapper(aobject * const __realobj) {
     __entry->next = __realobj->first_object_wrapper;
     __realobj->first_object_wrapper = __entry;
     __wrapper_create_count++;
+    #if defined(__linux__)
+    if (__wrap_trace_on == 1) {
+        __wrap_trace_bump(__wrapper->object_properties.object_wrapper.trace_site, 1);
+        __wrap_trace_bump_class(__realobj, 1);
+        __wrap_trace_created_total++;
+        if ((__wrap_trace_created_total % 1000000) == 0) {
+            __wrap_trace_dump();
+        }
+    }
+    #endif
     __arc_shared_unlock();
 
     return __wrapper;
@@ -1092,6 +1378,12 @@ void __deallocate_wrapper(aobject * const __wrapper) {
     // threads currently borrowing the object — usually 1-3) so the
     // linear walk is fine.
     __arc_shared_lock();
+    #if defined(__linux__)
+    if (__wrap_trace_on == 1) {
+        __wrap_trace_bump(__wrapper->object_properties.object_wrapper.trace_site, -1);
+        __wrap_trace_bump_class(__realobj, -1);
+    }
+    #endif
     object_wrapper_entry * prev = NULL;
     object_wrapper_entry * cur = __realobj->first_object_wrapper;
     while (cur != NULL) {
@@ -1124,13 +1416,17 @@ void __deallocate_wrapper(aobject * const __wrapper) {
     if (destroy_real) {
         __realobj->destruction_claimed = true;
     }
+    // Counter must be mutated under the lock like its create-side twin —
+    // wrappers die concurrently on several threads, and a non-atomic `++`
+    // outside the lock loses increments, making the live-wrapper metric
+    // (create - dealloc) climb even when every wrapper is properly freed.
+    __wrapper_dealloc_count++;
     __arc_shared_unlock();
 
     if (destroy_real) {
         __deallocate_object(__realobj);
     }
 
-    __wrapper_dealloc_count++;
     free(__wrapper);
 }
 

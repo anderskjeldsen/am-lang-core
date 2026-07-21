@@ -104,10 +104,18 @@ void Am_Threading_Thread__InitTask()
 			aobject * runnable_ref = thread->object_properties.class_object_properties.properties[0].nullable_value.value.object_value;
 			aobject * runnable = __unwrap(runnable_ref);
 			// Runnable is an interface, so dispatch through the iface_implementation
-			// the wrapper carries (functions[0] = run). Going via runnable->class_ptr
-			// instead would pick up the Am.Lang.Runnable aclass's `functions` field,
-			// which is left NULL for interfaces — silent crash on the worker task.
-			Am_Lang_Runnable_f_run_0_T rFunc = (Am_Lang_Runnable_f_run_0_T) runnable->object_properties.iface_reference.iface_implementation->functions[0];
+			// the wrapper carries. run() is at functions[3], NOT [0]: the interface
+			// function table starts with the three inherited AnyInterface methods
+			// (indices 0..2), so index 0 dispatches an AnyInterface method instead —
+			// which SILENTLY NO-OPS the thread body (run() never executes; every
+			// cross-thread write the worker was supposed to make just never happens).
+			// This is exactly how libc (Thread.c:142) and morphos-ppc dispatch it; the
+			// amigaos mirror was stuck on the pre-AnyInterface layout and was caught
+			// by the first real multitasking test run under Amiberry (BRC stress
+			// suite: worker sums came back 0). Going via runnable->class_ptr instead
+			// would pick up the Am.Lang.Runnable aclass's `functions` field, which is
+			// left NULL for interfaces — silent crash on the worker task.
+			Am_Lang_Runnable_f_run_0_T rFunc = (Am_Lang_Runnable_f_run_0_T) runnable->object_properties.iface_reference.iface_implementation->functions[3];
 			rFunc(runnable->object_properties.iface_reference.implementation_object);
 
 			printf("[_InitTask] rFunc returned; about to runFinalizers (task=%p, thread=%p)\n",
@@ -133,11 +141,12 @@ void Am_Threading_Thread__InitTask()
 			printf("[_InitTask] flagged done; dropping worker ref\n");
 			fflush(stdout);
 
-			// Drop the worker's reference on the wrapper we were handed
-			// (matches the `__increase_reference_count(this)` that
-			// `start_0` took before stashing us in `tc_UserData`). Every
-			// access above this line runs while the wrapper — and thus
-			// the real — is still alive.
+			// Drop the worker's FOREIGN reference on the Thread object.
+			// The worker is a non-owner of thread_ref, so this
+			// __decrease_reference_count routes to the atomic foreign
+			// counter — balancing the foreign bump start_0 took on the
+			// worker's behalf. Every access above this line runs while
+			// that ref (and thus the object) is still alive.
 			__decrease_reference_count(thread_ref);
 			printf("[_InitTask] worker exiting cleanly\n");
 			fflush(stdout);
@@ -207,10 +216,21 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 
 //	printf("CreateNewProc\n");
 
-	// Take an extra ref for the worker; _InitTask drops it at the end.
-	// Doing this BEFORE CreateNewProc closes the existing race where
-	// the new task starts running and busy-waits on `tc_UserData`
-	// while the caller could otherwise drop their last ref to `this`.
+	// Thread-safe ARC (BRC): from here on the process is multi-threaded, so
+	// the refcount helpers must classify owner-vs-foreign. One-way flag; set
+	// before CreateNewProc so the worker's first refcount op is classified
+	// correctly. See am-lang-compiler-code/docs/BIASED_REFCOUNT_DESIGN.md.
+	__amlc_multithreaded = true;
+
+	// Take a FOREIGN ref for the worker task on `this`; _InitTask drops it at
+	// the end. The worker is NOT the owner of the Thread object (the creating
+	// task is), so the ref lives on the atomic foreign counter — the worker's
+	// exit __decrease_reference_count (a foreign release) routes to the same
+	// counter. On Amiga the foreign op is an inline Forbid/Permit-bracketed
+	// bump (see core.h). Doing this BEFORE CreateNewProc closes the race where
+	// the new task starts and busy-waits on `tc_UserData` while the caller
+	// could otherwise drop its last ref to `this`.
+	__amlc_atomic_fetch_add(&this_r->foreign_reference_count, 1);
 
 	struct Process * process = CreateNewProc(tags);
 
@@ -218,7 +238,8 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 
 	if ( process == NULL )
 	{
-		// Worker won't run, so undo the ref we took above.
+		// Worker won't run, so undo the foreign ref we took above.
+		__amlc_atomic_fetch_sub(&this_r->foreign_reference_count, 1);
 		printf("CreateNewProc returned a null-pointer\n");
 // TODO:		throw( new GException("CreateNewProc returned a null-pointer") );
 	}

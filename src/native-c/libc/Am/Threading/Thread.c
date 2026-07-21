@@ -146,10 +146,11 @@ static void *Am_Threading_Thread__pthread_entry(void *arg)
         (Am_Threading_Thread_data *) thread->object_properties.class_object_properties.object_data.value.custom_value;
     data->done = true;
 
-    // Drop the worker's reference on the wrapper we were handed (matches
-    // the `__increase_reference_count(this)` in `start_0`). Every
-    // property access above this line happens while the wrapper — and
-    // therefore the real — is still alive.
+    // Drop the worker's reference on the Thread object we were handed. The
+    // worker is a non-owner of `thread_ref`, so this __decrease_reference_count
+    // routes to the atomic foreign counter — balancing the foreign-counter bump
+    // `start_0` took on the worker's behalf. Every property access above this
+    // line happens while that ref (and therefore the object) is still alive.
     __decrease_reference_count(thread_ref);
 
     return NULL;
@@ -161,6 +162,12 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
     bool __returning = false;
 
     pthread_once(&current_thread_key_once, make_current_thread_key);
+
+    // Thread-safe ARC (BRC): from here on the process is multi-threaded, so the
+    // refcount helpers must classify owner-vs-foreign. One-way flag; must be set
+    // before pthread_create so the worker's first refcount op is classified
+    // correctly. See am-lang-compiler-code/docs/BIASED_REFCOUNT_DESIGN.md.
+    __amlc_multithreaded = true;
 
     Am_Threading_Thread_data *data =
         (Am_Threading_Thread_data *) __unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value;
@@ -174,13 +181,28 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
     // still calls __decrease_reference_count(thread) on exit, so removing
     // this dec leaves a -1 imbalance → premature free → heap corruption
     // observed as SIGBUS in TaskScheduler.stopAll's println() at shutdown.
-    __increase_reference_count(this);
+    //
+    // BRC: this ref belongs to the WORKER, which is NOT the owner of `this`
+    // (the owner is the thread that created and started it). So it must live on
+    // the foreign counter — the worker's exit __decrease_reference_count (a
+    // foreign release) routes to the same counter. Bumping the owner-local
+    // `reference_count` here would mismatch that release and leak `this`.
+    // Foreign-counter mutations happen under the shared lock (see
+    // __increase_reference_count).
+    __arc_shared_lock();
+    __amlc_atomic_fetch_add(&this->foreign_reference_count, 1);
+    __arc_shared_unlock();
 
     int rc = pthread_create(&data->thread_id, NULL,
                             Am_Threading_Thread__pthread_entry, (void *) this);
     if (rc != 0) {
-        // Worker won't run, so undo the ref we took above.
-        __decrease_reference_count(this);
+        // Worker won't run, so undo the foreign ref we took above. The caller
+        // still holds its own handle on `this`, so no free decision is needed
+        // here — but the mutation still takes the lock like every other
+        // foreign-counter op.
+        __arc_shared_lock();
+        __amlc_atomic_fetch_sub(&this->foreign_reference_count, 1);
+        __arc_shared_unlock();
         // TODO: throw a proper exception once the runtime exposes a
         // helper. For now, log and leave `started` false so `join`
         // becomes a no-op.

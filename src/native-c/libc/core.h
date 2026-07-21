@@ -4,6 +4,51 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+// Thread-safe ARC — Biased Reference Counting (BRC) cross-thread counter.
+// The owner thread mutates `reference_count` non-atomically (fast path);
+// every OTHER thread mutates `foreign_reference_count` atomically, so the two
+// never race on the same word. The object is destroyed only when
+// reference_count, property_reference_count and foreign_reference_count are
+// all zero. This replaces the per-access cross-thread wrapper-object protocol.
+// See am-lang-compiler-code/docs/BIASED_REFCOUNT_DESIGN.md.
+#if !defined(__STDC_NO_ATOMICS__) && !defined(AMIGA) && !defined(__AMIGA__) && !defined(__MORPHOS__) && !defined(AMLC_NO_ATOMICS)
+    // Real C11 atomics (linux/macos/…): the fast, lock-free path.
+    #include <stdatomic.h>
+    typedef _Atomic int __amlc_atomic_int;
+    #define __amlc_atomic_load(p)          atomic_load_explicit((p), memory_order_acquire)
+    #define __amlc_atomic_fetch_add(p, v)  atomic_fetch_add_explicit((p), (v), memory_order_acq_rel)
+    #define __amlc_atomic_fetch_sub(p, v)  atomic_fetch_sub_explicit((p), (v), memory_order_acq_rel)
+    #define __amlc_atomic_store(p, v)      atomic_store_explicit((p), (v), memory_order_release)
+#elif defined(AMIGA) || defined(__AMIGA__)
+    // AmigaOS: the toolchain has no usable inline atomic RMW — GCC 6.5 m68k
+    // lowers C11 atomics / __sync builtins to ___atomic_*_4 libcalls even at
+    // -mcpu=68020 (verified), and TAS is byte-only + unreliable on chip RAM.
+    // Amiga is single-core, so the only concurrency is task preemption; an
+    // inline Forbid/Permit (raw TDNestCnt bump — exactly what Exec's Forbid()
+    // does, minus the library-vector call) gives true mutual exclusion against
+    // other tasks around the read-modify-write. The window is a couple of
+    // instructions, so multitasking is held off only microscopically. Only the
+    // rare cross-task foreign counter comes through here; owner-path refcount
+    // ops never do. Deferred-reschedule caveat: raw TDNestCnt-- (vs the library
+    // Permit) can delay a switch that became pending during the window to the
+    // next scheduling point — a latency trade, not a correctness one.
+    #include <proto/exec.h>
+    typedef int __amlc_atomic_int;
+    #define __amlc_atomic_load(p)          (*(p))
+    #define __amlc_atomic_store(p, v)      ( (*(p)) = (v) )
+    #define __amlc_atomic_fetch_add(p, v)  ({ SysBase->TDNestCnt++; int __amlc_o = *(p); *(p) = __amlc_o + (v); SysBase->TDNestCnt--; __amlc_o; })
+    #define __amlc_atomic_fetch_sub(p, v)  ({ SysBase->TDNestCnt++; int __amlc_o = *(p); *(p) = __amlc_o - (v); SysBase->TDNestCnt--; __amlc_o; })
+#else
+    // Other no-atomics targets (e.g. MorphOS PPC — has real atomics, but the
+    // toolchain path is unverified): plain non-atomic fallback. Safe only where
+    // ARC is serialised to one execution context.
+    typedef int __amlc_atomic_int;
+    #define __amlc_atomic_load(p)          (*(p))
+    #define __amlc_atomic_fetch_add(p, v)  ( ((*(p)) += (v)), ((*(p)) - (v)) )
+    #define __amlc_atomic_fetch_sub(p, v)  ( ((*(p)) -= (v)), ((*(p)) + (v)) )
+    #define __amlc_atomic_store(p, v)      ( (*(p)) = (v) )
+#endif
+
 //#define CLASS_TYPE_PRIMITIVE 1
 //#define CLASS_TYPE_NORMAL 0
 
@@ -205,7 +250,13 @@ struct _aclass {
     // present in the struct so generated aclass literals stay valid via
     // designated initializers (defaults to 0); it just stays 0 unless
     // TRACKOBJECTS is defined.
-    int instance_count;
+    // TRACKOBJECTS live-instance counter feeding the `instances(Class)` test
+    // intrinsic. Atomic: with BRC, objects of the same class are allocated and
+    // freed from several threads concurrently, and a plain ++/-- loses updates
+    // (first seen as instances() going NEGATIVE in the BRC stress test —
+    // lost increments on 4 concurrently-allocating workers vs serialized
+    // decrements on main).
+    __amlc_atomic_int instance_count;
 // meta:
 //    aobject *properties;
 };
@@ -231,6 +282,11 @@ struct _class_object_properties {
 
 struct _object_wrapper {
     aobject * wrapped_object;
+    // Diagnostics only (AMLC_WRAP_TRACE): creation call-site PC used to
+    // attribute leaked wrappers to their minting site. Fits in the union's
+    // slack (class_object_properties is larger), so no extra bytes. NULL
+    // when tracing is off.
+    void * trace_site;
 };
 
 union _object_properties {
@@ -255,6 +311,13 @@ struct _aobject {
     // this object will also hold a reference to the implementation object, and will remove that once this has reached 0.
     int reference_count;
     int property_reference_count;
+    // Thread-safe ARC (BRC): references held by threads OTHER than
+    // `owner_thread`. Mutated atomically by non-owner threads so it never
+    // races the owner's non-atomic `reference_count`. Foreign increments are
+    // lock-free; foreign decrements take `__arc_shared_mutex` so the free
+    // decision linearises against the owner's rc==0 check. Replaces the old
+    // cross-thread wrapper-object protocol.
+    __amlc_atomic_int foreign_reference_count;
     object_properties object_properties;
     void * owner_thread;
     object_wrapper_entry * first_object_wrapper; // lock a app shared mutext to read/write
@@ -366,6 +429,13 @@ void * __current_thread(void);
 // per property read; that's manageable.
 extern bool __amlc_any_wrappers_alive;
 
+// Thread-safe ARC (BRC): set to `true` the first time a thread is spawned
+// (in Am_Threading_Thread_start_0). Gates the owner-vs-foreign branch in the
+// refcount inc/dec helpers so purely single-threaded programs keep paying only
+// a predictable-branch load — never a __current_thread() call — on the
+// refcount hot path. One-way; never cleared.
+extern bool __amlc_multithreaded;
+
 // Allocate a wrapper aobject in the current thread, pointing at the
 // real aobject (which is owned by some other thread). Subscribes the
 // wrapper into `real->first_object_wrapper` under the shared mutex
@@ -388,6 +458,11 @@ aobject * __create_wrapper(aobject * const __realobj);
 // before storing; if one does, we'd re-wrap (correct but wasteful).
 aobject * __wrap_if_foreign(aobject * const __raw);
 
+// AMLC_XTHREAD_RC=1 diagnostics: report rc mutations by non-owner threads
+// (races that can pin rc above zero forever). Zero-cost when off beyond a
+// global load + predictable branch in the inc/dec helpers.
+extern int __amlc_xthread_rc_on;
+void __report_xthread_rc(aobject * const __obj, const char * const op);
 
 // functions
 void __register_class(class_static * const __class_static);

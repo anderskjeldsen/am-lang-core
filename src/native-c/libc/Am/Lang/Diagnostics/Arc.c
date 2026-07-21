@@ -10,7 +10,7 @@
 #endif
 
 // Diagnostic counters defined in core.c.
-extern int  __allocation_count;       // total objects ever allocated (monotonic)
+extern __amlc_atomic_int __allocation_count; // live objects (allocs - deallocs); atomic under BRC
 extern long __wrapper_create_count;   // cross-thread wrappers created
 extern long __wrapper_dealloc_count;  // cross-thread wrappers freed
 
