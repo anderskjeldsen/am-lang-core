@@ -151,10 +151,18 @@ function_result Am_Lang_ULong_parse_0(aobject * const s)
 	
 	string_holder *holder = s->object_properties.class_object_properties.object_data.value.custom_value;
 	char *str = holder->string_value;
-	char *endptr;
-	
-	unsigned long long result = strtoull(str, &endptr, 10);
-	
+
+	// Manual base-10 parse — see Long.c: the m68k-amigaos C library's
+	// strtoull is not a true 64-bit parse and corrupts values above 2^31.
+	unsigned long long result = 0;
+	const char *p = str;
+	while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') { p++; }
+	if (*p == '+') { p++; }
+	while (*p >= '0' && *p <= '9') {
+		result = result * 10ULL + (unsigned long long)(*p - '0');
+		p++;
+	}
+
 	__result.return_value = (nullable_value) { .value = { .ulong_value = result }, .flags = 0 };
 
 __exit: ;

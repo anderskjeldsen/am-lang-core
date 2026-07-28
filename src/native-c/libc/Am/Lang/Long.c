@@ -153,10 +153,23 @@ function_result Am_Lang_Long_parse_0(aobject * const s)
 	
 	string_holder *holder = s->object_properties.class_object_properties.object_data.value.custom_value;
 	char *str = holder->string_value;
-	char *endptr;
-	
-	long long result = strtoll(str, &endptr, 10);
-	
+
+	// Manual base-10 parse into a 64-bit long long. We do NOT use strtoll:
+	// on m68k-amigaos the C library's strtoll is not a true 64-bit parse and
+	// returns LLONG_MIN for any value above 2^31 (e.g. "4000000000"), which
+	// silently corrupts every Long literal a script or program parses. A
+	// digit-accumulation loop is correct on every platform.
+	long long result = 0;
+	const char *p = str;
+	while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') { p++; }
+	bool negative = false;
+	if (*p == '+' || *p == '-') { negative = (*p == '-'); p++; }
+	while (*p >= '0' && *p <= '9') {
+		result = result * 10 + (long long)(*p - '0');
+		p++;
+	}
+	if (negative) { result = -result; }
+
 	__result.return_value = (nullable_value) { .value = { .long_value = result }, .flags = 0 };
 
 __exit: ;
