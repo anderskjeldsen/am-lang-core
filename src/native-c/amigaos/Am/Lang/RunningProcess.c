@@ -2388,34 +2388,20 @@ function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
     //   entered  — handler entry function actually ran
     //   die_seen — handler observed shutdown_requested
     //   exited   — handler reached its exit cleanup
-    {
-        char msg[160]; int p = 0;
-        const char * pre = "[rp] shutdownAll: live=";
-        while (*pre) msg[p++] = *pre++;
-        LONG values[4] = {
-            g_live_handler_count,
-            g_handler_entered_count,
-            g_handler_die_seen_count,
-            g_handler_exited_count
-        };
-        const char * labels[4] = { "", " entered=", " die_seen=", " exited=" };
-        for (int k = 0; k < 4; k++) {
-            const char * lab = labels[k];
-            while (*lab) msg[p++] = *lab++;
-            LONG v = values[k]; BOOL neg = (v < 0); if (neg) v = -v;
-            char tmp[12]; int t = 0;
-            if (v == 0) tmp[t++] = '0';
-            while (v > 0) { tmp[t++] = (char)('0' + v % 10); v /= 10; }
-            if (neg) msg[p++] = '-';
-            while (t > 0) msg[p++] = tmp[--t];
-        }
-        msg[p] = 0;
-        rp_stdout_line(msg);
-    }
+    //
+    // Stdout emit was intentionally removed 2026-07-10 — the same
+    // counters are already written to `RAM:amStudio-tty.log` via the
+    // `rp_log_event` block above, so nothing diagnostic is lost. The
+    // former `[rp] shutdownAll: live=…` line was appearing in every
+    // clean exit's stdout including unit-test runs, which polluted
+    // the test harness's output on `dockerTest` / amiberry runs. Grep
+    // the log file post-mortem if a shutdown hangs.
 
     LONG live = g_live_handler_count;
     if (live <= 0) {
-        rp_stdout_line("[rp] shutdownAll: no live handlers");
+        // No stdout line ("no live handlers") — see block comment
+        // above. The `rp_log_event` calls further down still record
+        // the outcome in the log file.
         // Close the tty.log FH before returning — otherwise
         // RAM:amStudio-tty.log stays "in use" after exit (DOS
         // doesn't auto-close FHs left open by a dying process).
@@ -2468,19 +2454,12 @@ function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
     // RemTask). If FindTask returns non-NULL, the handler is
     // alive but ignoring DIE.
     {
+        // Log-file only (no stdout) — see the block comment near the
+        // enter of shutdownAllNative. `1` when the handler task is
+        // still alive under the well-known name, `0` when it's gone.
         struct Task * found = FindTask((STRPTR) "amStudioTTY");
-        char msg[80]; int p = 0;
-        const char * pre = "[rp] shutdownAll: FindTask(amStudioTTY)=";
-        while (*pre) msg[p++] = *pre++;
-        if (found == NULL) {
-            const char * tag = "NULL";
-            while (*tag) msg[p++] = *tag++;
-        } else {
-            const char * tag = "ALIVE";
-            while (*tag) msg[p++] = *tag++;
-        }
-        msg[p] = 0;
-        rp_stdout_line(msg);
+        rp_log_event("[rp] shutdownAll: FindTask(amStudioTTY) alive=",
+                     found == NULL ? 0 : 1);
     }
 
     // Send DIE to each captured handler. Each one wakes the
@@ -2575,7 +2554,8 @@ function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
     // process is exiting anyway so this is just a clean-exit
     // tradeoff.
     if (g_live_handler_count > 0) {
-        rp_stdout_line("[rp] shutdownAll: RemTask on wedged handlers");
+        // Log-file only — stdout emission removed 2026-07-10 to
+        // keep clean-exit output free of shutdown diagnostics.
         rp_log_event("[rp] shutdownAll: RemTask wedged, live=", g_live_handler_count);
         Forbid();
         rp_state * cur2 = g_handler_list_head;
@@ -2598,34 +2578,11 @@ function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
         Permit();
     }
 
-    {
-        char msg[200]; int p = 0;
-        const char * pre = "[rp] shutdownAll: done, remaining=";
-        while (*pre) msg[p++] = *pre++;
-        LONG values[5] = {
-            g_live_handler_count, (LONG) waited,
-            g_handler_entered_count, g_handler_die_seen_count, g_handler_exited_count
-        };
-        const char * labels[5] = {
-            "", " waited_ticks=", " entered=", " die_seen=", " exited="
-        };
-        for (int k = 0; k < 5; k++) {
-            const char * lab = labels[k];
-            while (*lab) msg[p++] = *lab++;
-            LONG v = values[k]; BOOL neg = (v < 0); if (neg) v = -v;
-            char tmp[12]; int t = 0;
-            if (v == 0) tmp[t++] = '0';
-            while (v > 0) { tmp[t++] = (char)('0' + v % 10); v /= 10; }
-            if (neg) msg[p++] = '-';
-            while (t > 0) msg[p++] = tmp[--t];
-        }
-        msg[p] = 0;
-        rp_stdout_line(msg);
-    }
-
-    // Mirror the final state into tty.log alongside the
-    // parent-stdout breadcrumb, so a Workbench-launched session
-    // can still see the cleanup outcome after exit.
+    // Final state is written to `RAM:amStudio-tty.log` via the
+    // `rp_log_event` block below. The former stdout emit was
+    // removed 2026-07-10 — same rationale as the entry block: a
+    // clean exit shouldn't print `[rp] shutdownAll: done …` into
+    // unit-test / dockerTest output.
     rp_log_event("[rp] shutdownAll: done remaining=", g_live_handler_count);
     rp_log_event("[rp] shutdownAll: waited_ticks=",   (LONG) waited);
     rp_log_event("[rp] shutdownAll: final entered=",  g_handler_entered_count);
