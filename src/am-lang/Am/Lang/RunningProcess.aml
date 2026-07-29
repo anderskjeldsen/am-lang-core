@@ -146,7 +146,7 @@ namespace Am.Lang
         // UnLoadSeg()s the program while a handler is still
         // alive, the next time that handler is dispatched it
         // executes garbage and the user sees a "Program failed"
-        // alert under a stale `amStudioTTY` name. Triggered via
+        // alert under a stale `AmLangTTY` (historically amStudioTTY) name. Triggered via
         // `#runOnExit` so application code doesn't need to opt
         // in.
         native static fun shutdownAllNative()

@@ -59,6 +59,20 @@ namespace Am.IO
 
         private native fun listNative(folderFilename: String, list: List<String>)
 
+        // Bare names of the sub-DIRECTORIES of this directory (no path
+        // joining, no "."/".."). The directory bit comes from the single
+        // native listing walk (fib_DirEntryType on AmigaOS, d_type on
+        // POSIX), so callers that only recurse into folders — repo
+        // scanners, tree builders — avoid a stat/Lock+Examine round
+        // trip per entry. Order is directory-listing order.
+        fun listDirectoryNames(): String[] {
+            var l = List.newList<String>()
+            this.listDirsNative(this.filename, l)
+            return l.toArray()
+        }
+
+        private native fun listDirsNative(folderFilename: String, list: List<String>)
+
         native fun isDirectory(): Bool
 
         // File metadata methods

@@ -167,30 +167,40 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 	string_holder *dir_holder = (workingDir != NULL) ? (string_holder *) (workingDir + 1) : NULL;
 	const char *dir_str = (dir_holder != NULL && dir_holder->length > 0) ? dir_holder->string_value : NULL;
 
-	// Snapshot the cwd so we can restore it on every exit path
-	// (success or error). Skip the whole save/chdir cycle when no
-	// dir was given so the call stays equivalent to
-	// runAndCaptureOutput and callers can use this method
-	// unconditionally.
-	char saved_cwd[4096];
-	bool did_chdir = false;
+	// The working dir is applied INSIDE the spawned shell — `cd '<dir>'
+	// && <cmd>` — not via chdir() in this process. chdir is process-
+	// wide, so calling this from a worker thread (the git sidebar runs
+	// `git status` on the TaskScheduler IO thread) would briefly flip
+	// the cwd under every other thread. Single-quote the dir and escape
+	// embedded quotes ('\'' dance) so arbitrary paths survive /bin/sh.
+	char *full_cmd = NULL;
+	const char *sh_cmd = cmd_holder->string_value;
 	if (dir_str != NULL) {
-		if (getcwd(saved_cwd, sizeof(saved_cwd)) == NULL) {
-			__throw_simple_exception("getcwd failed", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+		size_t dlen = strlen(dir_str);
+		size_t clen = strlen(sh_cmd);
+		// worst case: every dir byte is ' -> 4 bytes, plus wrapping.
+		full_cmd = (char *) malloc(dlen * 4 + clen + 16);
+		if (full_cmd == NULL) {
+			__throw_simple_exception("Out of memory", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
 			goto __exit;
 		}
-		if (chdir(dir_str) != 0) {
-			__throw_simple_exception("Failed to chdir to working directory", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
-			goto __exit;
+		char *p = full_cmd;
+		*p++ = 'c'; *p++ = 'd'; *p++ = ' '; *p++ = '\'';
+		for (size_t i = 0; i < dlen; i++) {
+			if (dir_str[i] == '\'') {
+				*p++ = '\''; *p++ = '\\'; *p++ = '\''; *p++ = '\'';
+			} else {
+				*p++ = dir_str[i];
+			}
 		}
-		did_chdir = true;
+		*p++ = '\''; *p++ = ' '; *p++ = '&'; *p++ = '&'; *p++ = ' ';
+		memcpy(p, sh_cmd, clen + 1);
+		sh_cmd = full_cmd;
 	}
 
-	FILE *pipe = popen(cmd_holder->string_value, "r");
+	FILE *pipe = popen(sh_cmd, "r");
 	if (!pipe) {
-		if (did_chdir) {
-			if (chdir(saved_cwd) != 0) { /* best-effort cwd restore; nothing to do on failure */ }
-		}
+		if (full_cmd != NULL) free(full_cmd);
 		__throw_simple_exception("Failed to execute command", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
 		goto __exit;
 	}
@@ -201,9 +211,7 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 		char *buffer = (char *) malloc(capacity);
 		if (!buffer) {
 			pclose(pipe);
-			if (did_chdir) {
-				if (chdir(saved_cwd) != 0) { /* best-effort cwd restore; nothing to do on failure */ }
-			}
+			if (full_cmd != NULL) free(full_cmd);
 			__throw_simple_exception("Out of memory", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
 			goto __exit;
 		}
@@ -217,9 +225,7 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 				if (!new_buf) {
 					free(buffer);
 					pclose(pipe);
-					if (did_chdir) {
-						if (chdir(saved_cwd) != 0) { /* best-effort cwd restore; nothing to do on failure */ }
-					}
+					if (full_cmd != NULL) free(full_cmd);
 					__throw_simple_exception("Out of memory", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
 					goto __exit;
 				}
@@ -231,9 +237,7 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 		buffer[size] = 0;
 		pclose(pipe);
 
-		if (did_chdir) {
-			if (chdir(saved_cwd) != 0) { /* best-effort cwd restore; nothing to do on failure */ }
-		}
+		if (full_cmd != NULL) free(full_cmd);
 
 		aobject *str = __create_string(buffer, &Am_Lang_String);
 		free(buffer);

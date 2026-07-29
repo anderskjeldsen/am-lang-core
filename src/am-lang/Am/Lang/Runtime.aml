@@ -52,6 +52,35 @@ namespace Am.Lang
             return Runtime.instance.removeProperty(key)
         }
 
+        // Lazily-built registry of every non-test package compiled into
+        // this binary, package id -> version (e.g. "am-git" -> "0.12.0").
+        // The entries come from Am.Lang.BuildInfo, a class the compiler
+        // GENERATES from the resolved package graph on every build - so
+        // the data is always in sync with the package.yml files that
+        // actually produced the binary.
+        private static var packages: HashMap<String, String>? = null
+
+        static fun getPackages(): HashMap<String, String> {
+            var p = Runtime.packages
+            if (p != null) {
+                return p
+            }
+            var m = new HashMap<String, String>()
+            BuildInfo.populatePackages(m)
+            Runtime.packages = m
+            return m
+        }
+
+        // Version of one package, or null when the id isn't part of
+        // this binary.
+        static fun getPackageVersion(id: String): String? {
+            var m = Runtime.getPackages()
+            if (m.containsKey(id)) {
+                return m.get(id)
+            }
+            return null
+        }
+
         // Returns the target platform id the current binary was built
         // for — e.g. "macos-arm", "linux-x64", "amigaos", "morphos-ppc".
         // Compiler-provided: the body is emitted by

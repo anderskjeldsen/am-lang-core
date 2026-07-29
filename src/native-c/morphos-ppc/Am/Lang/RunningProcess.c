@@ -56,6 +56,11 @@
 
 #include <string.h>
 
+// Task name of the pipe-handler Process RunningProcess spawns per
+// child. Used for NP_Name and the exit-time FindTask sweep - keep the
+// two in sync via this define. 
+#define RP_TTY_TASK_NAME "AmLangTTY"
+
 // =================================================================
 // Diagnostic log (same shape as before — invaluable for debugging
 // the dos.library handler protocol)
@@ -202,7 +207,7 @@ struct rp_state {
     // Single-linked-list pointer threading every live handler
     // state into `g_handler_list_head`. Used by the runOnExit
     // hook (shutdownAllNative) to find every still-running
-    // amStudioTTY Process and tell it to die before the AmLang
+    // AmLangTTY Process and tell it to die before the AmLang
     // program's seglist gets unloaded. Pure bookkeeping — the
     // handler itself never touches it.
     struct rp_state * next_handler;
@@ -1090,7 +1095,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     Forbid();
     st->handler_proc = CreateNewProcTags(
         NP_Entry,     (ULONG) rp_handler_entry,
-        NP_Name,      (ULONG) "amStudioTTY",
+        NP_Name,      (ULONG) RP_TTY_TASK_NAME,
         NP_StackSize, 8192,
         TAG_DONE);
     if (st->handler_proc != NULL) {
@@ -1551,7 +1556,7 @@ function_result Am_Lang_RunningProcess_setGlobalWake_0(long long var_taskPtr, in
 // UnLoadSeg()s the program; the handlers' code pages get
 // freed; the next time an idle handler is dispatched it
 // executes garbage and the user sees an alert with the stale
-// `amStudioTTY` name. Solving that needs a sweep at exit time
+// `AmLangTTY` name. Solving that needs a sweep at exit time
 // that walks every live handler and tells it to die.
 //
 // Strategy: snapshot the list of handler Processes (so we
@@ -1638,9 +1643,9 @@ function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
     // RemTask). If FindTask returns non-NULL, the handler is
     // alive but ignoring DIE.
     {
-        struct Task * found = FindTask((STRPTR) "amStudioTTY");
+        struct Task * found = FindTask((STRPTR) RP_TTY_TASK_NAME);
         char msg[80]; int p = 0;
-        const char * pre = "[rp] shutdownAll: FindTask(amStudioTTY)=";
+        const char * pre = "[rp] shutdownAll: FindTask(AmLangTTY)=";
         while (*pre) msg[p++] = *pre++;
         if (found == NULL) {
             const char * tag = "NULL";

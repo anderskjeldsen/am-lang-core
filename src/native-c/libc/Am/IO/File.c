@@ -14,6 +14,11 @@
 #include <time.h>
 #include <libc/core_inline_functions.h>
 
+#ifdef __amigaos__
+#include <proto/dos.h>
+#include <dos/dosextens.h>
+#endif
+
 function_result Am_IO_File__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
@@ -96,6 +101,91 @@ function_result Am_IO_File_listNative_0(aobject * const this, aobject * folderFi
 		__decrease_reference_count(filename_str);
 	}
 	closedir(d);
+
+__exit: ;
+	return __result;
+};
+
+// List only the sub-directory names of `folderFilename` — the type bit
+// is read during the single listing walk, so no per-entry stat/Examine.
+function_result Am_IO_File_listDirsNative_0(aobject * const this, aobject * folderFilename, aobject * list)
+{
+	function_result __result = { .has_return_value = false };
+	bool __returning = false;
+
+	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
+	string_holder *filename_string_holder = (string_holder *) (filename + 1);
+	const char *dir_path = filename_string_holder->string_value;
+
+#ifdef __amigaos__
+	// dos.library walk: Lock + Examine + ExNext gives every entry's
+	// fib_DirEntryType in one pass (each ExNext is one packet — the
+	// stat() fallback would be Lock+Examine+UnLock per entry through
+	// libnix). FIB must be longword-aligned → AllocDosObject.
+	BPTR lock = Lock((CONST_STRPTR) dir_path, ACCESS_READ);
+	if (lock == (BPTR) NULL) {
+		__throw_simple_exception("Failed to open directory", "in Am_IO_File_listDirsNative_0", &__result);
+		goto __exit;
+	}
+	struct FileInfoBlock *fib = (struct FileInfoBlock *) AllocDosObject(DOS_FIB, NULL);
+	if (fib == NULL) {
+		UnLock(lock);
+		__throw_simple_exception("Out of memory listing directory", "in Am_IO_File_listDirsNative_0", &__result);
+		goto __exit;
+	}
+	if (Examine(lock, fib)) {
+		while (ExNext(lock, fib)) {
+			// >0 = directory-kind. Exclude ST_SOFTLINK (3): it may
+			// resolve to a file, and following links during a scan
+			// invites cycles.
+			LONG t = fib->fib_DirEntryType;
+			if (t > 0 && t != ST_SOFTLINK) {
+				aobject *name_str = __create_string((const char *) fib->fib_FileName, &Am_Lang_String);
+				Am_Collections_List_ta_Am_Lang_String_f_add_0(list, name_str);
+				__decrease_reference_count(name_str);
+			}
+		}
+	}
+	FreeDosObject(DOS_FIB, fib);
+	UnLock(lock);
+#else
+	DIR *d = opendir(dir_path);
+	if (!d) {
+		__throw_simple_exception("Failed to open directory", "in Am_IO_File_listDirsNative_0", &__result);
+		goto __exit;
+	}
+	struct dirent *dir;
+	while ((dir = readdir(d)) != NULL) {
+		if (dir->d_name[0] == '.' &&
+		    (dir->d_name[1] == '\0' ||
+		     (dir->d_name[1] == '.' && dir->d_name[2] == '\0'))) {
+			continue;
+		}
+		bool is_dir = false;
+		bool need_stat = true;
+#ifdef DT_DIR
+		if (dir->d_type != DT_UNKNOWN) {
+			is_dir = (dir->d_type == DT_DIR);
+			need_stat = false;
+		}
+#endif
+		if (need_stat) {
+			// Listing didn't report the type (no d_type, or the
+			// filesystem returns DT_UNKNOWN) — one stat for this entry.
+			char full[PATH_MAX];
+			int n = snprintf(full, sizeof(full), "%s/%s", dir_path, dir->d_name);
+			struct stat s;
+			is_dir = (n > 0 && n < (int) sizeof(full)
+				&& stat(full, &s) == 0 && S_ISDIR(s.st_mode));
+		}
+		if (is_dir) {
+			aobject *name_str = __create_string(dir->d_name, &Am_Lang_String);
+			Am_Collections_List_ta_Am_Lang_String_f_add_0(list, name_str);
+			__decrease_reference_count(name_str);
+		}
+	}
+	closedir(d);
+#endif
 
 __exit: ;
 	return __result;

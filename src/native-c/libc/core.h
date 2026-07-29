@@ -19,6 +19,21 @@
     #define __amlc_atomic_fetch_add(p, v)  atomic_fetch_add_explicit((p), (v), memory_order_acq_rel)
     #define __amlc_atomic_fetch_sub(p, v)  atomic_fetch_sub_explicit((p), (v), memory_order_acq_rel)
     #define __amlc_atomic_store(p, v)      atomic_store_explicit((p), (v), memory_order_release)
+#elif defined(__MORPHOS__)
+    // MorphOS PPC: the toolchain predefines AMIGA/__AMIGA__ too, but MorphOS's
+    // ExecBase is opaque here — `SysBase->TDNestCnt` won't compile (undefined
+    // struct), so the m68k raw-TDNestCnt trick below is out. MorphOS has threads
+    // (CreateNewProc loader/workers), so the non-atomic fallback would race the
+    // cross-thread foreign counter. Use the Forbid()/Permit() library calls
+    // around the RMW: task-level mutual exclusion, single-CPU-safe, and it nests
+    // (Forbid/Permit are counted) exactly like the m68k path. MUST precede the
+    // AMIGA branch since __AMIGA__ is also defined here.
+    #include <proto/exec.h>
+    typedef int __amlc_atomic_int;
+    #define __amlc_atomic_load(p)          (*(p))
+    #define __amlc_atomic_store(p, v)      ( (*(p)) = (v) )
+    #define __amlc_atomic_fetch_add(p, v)  ({ Forbid(); int __amlc_o = *(p); *(p) = __amlc_o + (v); Permit(); __amlc_o; })
+    #define __amlc_atomic_fetch_sub(p, v)  ({ Forbid(); int __amlc_o = *(p); *(p) = __amlc_o - (v); Permit(); __amlc_o; })
 #elif defined(AMIGA) || defined(__AMIGA__)
     // AmigaOS: the toolchain has no usable inline atomic RMW — GCC 6.5 m68k
     // lowers C11 atomics / __sync builtins to ___atomic_*_4 libcalls even at

@@ -56,6 +56,11 @@
 
 #include <string.h>
 
+// Task name of the pipe-handler Process RunningProcess spawns per
+// child. Used for NP_Name and the exit-time FindTask sweep - keep the
+// two in sync via this define. 
+#define RP_TTY_TASK_NAME "AmLangTTY"
+
 // =================================================================
 // Diagnostic log (same shape as before — invaluable for debugging
 // the dos.library handler protocol)
@@ -225,7 +230,7 @@ struct rp_state {
     // Single-linked-list pointer threading every live handler
     // state into `g_handler_list_head`. Used by the runOnExit
     // hook (shutdownAllNative) to find every still-running
-    // amStudioTTY Process and tell it to die before the AmLang
+    // AmLangTTY Process and tell it to die before the AmLang
     // program's seglist gets unloaded. Pure bookkeeping — the
     // handler itself never touches it.
     struct rp_state * next_handler;
@@ -454,10 +459,10 @@ static void rp_state_release(rp_state * st) {
 // via `goto __exit` after a mid-way failure (empty command,
 // LoadSeg not found, CreateNewProc(child) failed, …). Without this
 // each cmd-not-found leaks:
-//   - a live "amStudioTTY" handler Process that sits in WaitPort
+//   - a live RP_TTY_TASK_NAME handler Process that sits in WaitPort
 //     forever, and
 //   - three AllocDosObject'd FileHandles.
-// Both were showing up as amStudioTTY #87000004 alerts because
+// Both were showing up as AmLangTTY #87000004 alerts because
 // later child spawns amStudio does (task-scheduler workers, JIT
 // helpers, …) can inherit a stale handler port via pr_ConsoleTask,
 // and when they PutMsg the ACTION_DIE on exit that port has
@@ -1598,7 +1603,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     // the AmLang exception unwinds. The old flow allocated all
     // of that first, hit LoadSeg-not-found, then tried to unwind
     // — the die/state-release/FH-cleanup interleaved with dos.
-    // library's Process teardown of the amStudioTTY handler in a
+    // library's Process teardown of the AmLangTTY handler in a
     // way that produced the AN_AsyncPkt (#87000004) alert.
     //
     // We do a real LoadSeg + UnLoadSeg (not just Lock) so the
@@ -1686,7 +1691,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     Forbid();
     st->handler_proc = CreateNewProcTags(
         NP_Entry,     (ULONG) rp_handler_entry,
-        NP_Name,      (ULONG) "amStudioTTY",
+        NP_Name,      (ULONG) RP_TTY_TASK_NAME,
         NP_StackSize, 8192,
         TAG_DONE);
     if (st->handler_proc != NULL) {
@@ -2347,7 +2352,7 @@ function_result Am_Lang_RunningProcess_setGlobalWake_0(long long var_taskPtr, in
 // UnLoadSeg()s the program; the handlers' code pages get
 // freed; the next time an idle handler is dispatched it
 // executes garbage and the user sees an alert with the stale
-// `amStudioTTY` name. Solving that needs a sweep at exit time
+// `AmLangTTY` name. Solving that needs a sweep at exit time
 // that walks every live handler and tells it to die.
 //
 // Strategy: snapshot the list of handler Processes (so we
@@ -2457,8 +2462,8 @@ function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
         // Log-file only (no stdout) — see the block comment near the
         // enter of shutdownAllNative. `1` when the handler task is
         // still alive under the well-known name, `0` when it's gone.
-        struct Task * found = FindTask((STRPTR) "amStudioTTY");
-        rp_log_event("[rp] shutdownAll: FindTask(amStudioTTY) alive=",
+        struct Task * found = FindTask((STRPTR) RP_TTY_TASK_NAME);
+        rp_log_event("[rp] shutdownAll: FindTask(AmLangTTY) alive=",
                      found == NULL ? 0 : 1);
     }
 
@@ -2546,7 +2551,7 @@ function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
     // genuinely wedged. Letting it survive past UnLoadSeg means
     // the next packet that wakes it will execute freed code and
     // pop the #87000004 Software Failure alert under the stale
-    // `amStudioTTY` name. RemTask removes the task before that
+    // `AmLangTTY` name. RemTask removes the task before that
     // can happen. Resources tracked via TC_MemEntry (the stack,
     // any allocations the task did via its own pool) get freed
     // by exec on RemTask; our rp_state / ring buffers leak (no

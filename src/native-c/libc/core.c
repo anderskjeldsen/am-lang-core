@@ -34,6 +34,15 @@ void __arc_shared_mutex_init(void) {
 void __arc_shared_lock(void)   { pthread_mutex_lock(&__arc_shared_mutex); }
 void __arc_shared_unlock(void) { pthread_mutex_unlock(&__arc_shared_mutex); }
 void * __current_thread(void)  { return (void *) pthread_self(); }
+#elif defined(__MORPHOS__)
+// MorphOS PPC: ExecBase is opaque, so no raw TDNestCnt (see core.h). Forbid()/
+// Permit() library calls give the same task-level mutual exclusion for the ARC
+// critical sections, and they nest. Thread identity is FindTask(NULL).
+#include <proto/exec.h>
+void __arc_shared_mutex_init(void) {}
+void __arc_shared_lock(void)   { Forbid(); }
+void __arc_shared_unlock(void) { Permit(); }
+void * __current_thread(void)  { return (void *) FindTask(NULL); }
 #else
 // AmigaOS: single-core, so mutual exclusion for the ARC critical sections
 // (the multi-field free decisions, propref mutations) is an inline

@@ -1,0 +1,228 @@
+namespace Tests {
+
+    // Helper with `inline fun`s exercising the runtime behavior of inline
+    // expansion: value flow, ARC cleanup on the early-return-from-loop
+    // path (fixed 2026-07-28: the return now unwinds through the block
+    // cleanup cascade instead of jumping over it), object returns
+    // surviving that cleanup, exception propagation out of an inline
+    // body, and inline-calling-inline.
+    class InlineHelper {
+        import Am.Lang
+
+        var values: Int[] = new Int[0]
+        var names: String[] = new String[0]
+        var callCount: Int = 0
+
+        fun setup() {
+            this.values = new Int[8]
+            this.names = new String[4]
+            var i = 0
+            while (i < 8) {
+                this.values[i] = i * 10
+                i++
+            }
+            this.names[0] = "alpha"
+            this.names[1] = "beta"
+            this.names[2] = "gamma"
+            this.names[3] = "delta"
+        }
+
+        // The exact shape that used to leak: a property-backed array is
+        // subscript-read inside the loop (inc on a hidden temp), and the
+        // early `return` must still run that temp's cleanup dec.
+        inline fun findIndex(wanted: Int): Int {
+            var i = 0
+            while (i < this.values.length()) {
+                var v = this.values[i]
+                if (v == wanted) {
+                    return i
+                }
+                i++
+            }
+            return -1
+        }
+
+        // Object return from inside the loop: the returned String lives in
+        // a local the cleanup cascade releases, so the inline result must
+        // hold its own reference or this reads freed memory.
+        inline fun findName(wanted: String): String {
+            var i = 0
+            while (i < this.names.length()) {
+                var n = this.names[i]
+                if (n.equals(wanted)) {
+                    return n
+                }
+                i++
+            }
+            return ""
+        }
+
+        // Freshly allocated object return (concatenation) — the sharpest
+        // use-after-free probe: the temp holding the new String is
+        // released by the cascade, only the retained result keeps it.
+        inline fun tagOf(wanted: String): String {
+            var i = 0
+            while (i < this.names.length()) {
+                var n = this.names[i]
+                if (n.equals(wanted)) {
+                    return n + "-found"
+                }
+                i++
+            }
+            return "missing"
+        }
+
+        // Void inline with a bare early return.
+        inline fun bumpIfPositive(x: Int) {
+            if (x < 0) {
+                return
+            }
+            this.callCount = this.callCount + 1
+        }
+
+        // Throw from inside the inline loop: must propagate to the CALLER
+        // as a real unwind (not be absorbed like an inline return).
+        inline fun failingLookup(wanted: Int): Int {
+            var i = 0
+            while (i < this.values.length()) {
+                if (this.values[i] == wanted) {
+                    throw new Exception("found forbidden value")
+                }
+                i++
+            }
+            return 0
+        }
+
+        inline fun doubleOf(x: Int): Int {
+            return x * 2
+        }
+
+        // Regular function calling TWO inline functions with an early
+        // return between the expansions (nested inline-in-inline is
+        // rejected by the validator, so this is the deepest legal shape:
+        // two sibling expansions in one caller body).
+        fun doubledLookup(wanted: Int): Int {
+            var idx = this.findIndex(wanted)
+            if (idx < 0) {
+                return -1
+            }
+            return this.doubleOf(idx)
+        }
+    }
+
+    class InlineFunctionTests {
+        import Am.Lang
+        import Am.Tests
+
+        static inline fun clamp(x: Int, lo: Int, hi: Int): Int {
+            if (x < lo) {
+                return lo
+            }
+            if (x > hi) {
+                return hi
+            }
+            return x
+        }
+
+        static test inlineReturnFromLoopFindsValue() {
+            var h = new InlineHelper()
+            h.setup()
+            Assert.assertEquals(3, h.findIndex(30))
+        }
+
+        static test inlineReturnFromLoopFirstIteration() {
+            var h = new InlineHelper()
+            h.setup()
+            Assert.assertEquals(0, h.findIndex(0))
+        }
+
+        static test inlineReturnFromLoopLastElement() {
+            var h = new InlineHelper()
+            h.setup()
+            Assert.assertEquals(7, h.findIndex(70))
+        }
+
+        static test inlineFallThroughReturnOnMiss() {
+            var h = new InlineHelper()
+            h.setup()
+            Assert.assertEquals(-1, h.findIndex(999))
+        }
+
+        static test inlineCalledRepeatedlyInLoop() {
+            var h = new InlineHelper()
+            h.setup()
+            var sum = 0
+            var i = 0
+            while (i < 8) {
+                sum = sum + h.findIndex(i * 10)
+                i++
+            }
+            // 0 + 1 + ... + 7
+            Assert.assertEquals(28, sum)
+        }
+
+        static test inlineObjectReturnSurvivesCleanup() {
+            var h = new InlineHelper()
+            h.setup()
+            var n = h.findName("gamma")
+            // Churn the allocator so a prematurely released return value
+            // would be scribbled over before the assert reads it.
+            var noise = new Int[64]
+            noise[0] = 1
+            Assert.assertEquals("gamma", n)
+        }
+
+        static test inlineFreshObjectReturnSurvivesCleanup() {
+            var h = new InlineHelper()
+            h.setup()
+            var t = h.tagOf("beta")
+            var noise = new Int[64]
+            noise[0] = 1
+            Assert.assertEquals("beta-found", t)
+            Assert.assertEquals("missing", h.tagOf("nope"))
+        }
+
+        static test inlineVoidBareEarlyReturn() {
+            var h = new InlineHelper()
+            h.bumpIfPositive(5)
+            h.bumpIfPositive(-3)
+            h.bumpIfPositive(7)
+            Assert.assertEquals(2, h.callCount)
+        }
+
+        static test inlineThrowPropagatesToCaller() {
+            var h = new InlineHelper()
+            h.setup()
+            var caught = false
+            var afterCall = 0
+            try {
+                var x = h.failingLookup(50)
+                afterCall = x + 1
+            } catch (e: Exception) {
+                caught = true
+            }
+            Assert.assertTrue(caught)
+            Assert.assertEquals(0, afterCall)
+        }
+
+        static test inlineThrowMissReturnsNormally() {
+            var h = new InlineHelper()
+            h.setup()
+            Assert.assertEquals(0, h.failingLookup(999))
+        }
+
+        static test twoInlineExpansionsInOneCaller() {
+            var h = new InlineHelper()
+            h.setup()
+            // 50 sits at index 5, doubled to 10.
+            Assert.assertEquals(10, h.doubledLookup(50))
+            Assert.assertEquals(-1, h.doubledLookup(123))
+        }
+
+        static test staticInlineEarlyReturns() {
+            Assert.assertEquals(5, InlineFunctionTests.clamp(5, 0, 10))
+            Assert.assertEquals(0, InlineFunctionTests.clamp(-3, 0, 10))
+            Assert.assertEquals(10, InlineFunctionTests.clamp(99, 0, 10))
+        }
+    }
+}

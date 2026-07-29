@@ -1,0 +1,56 @@
+namespace Tests {
+
+    // Runtime.getPackages() is fed by Am.Lang.BuildInfo, a class the
+    // compiler generates from the resolved package graph. In this test
+    // build the root package is am-lang-core and am-tests is pulled in
+    // as a testOnly dependency - so the registry must contain the root
+    // (with a non-empty version) and must NOT contain test-only packages.
+    class BuildInfoTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static test registryContainsRootPackage() {
+            var m = Runtime.getPackages()
+            Assert.assertTrue(m.containsKey("am-lang-core"))
+        }
+
+        static test rootPackageVersionIsNonEmpty() {
+            var v = Runtime.getPackageVersion("am-lang-core")
+            Assert.assertNotNull(v)
+            if (v != null) {
+                Assert.assertTrue(v.length() > 0)
+            }
+        }
+
+        static test testOnlyPackagesExcluded() {
+            var m = Runtime.getPackages()
+            Assert.assertFalse(m.containsKey("am-tests"))
+        }
+
+        static test unknownPackageIsNull() {
+            Assert.assertNull(Runtime.getPackageVersion("no-such-package"))
+        }
+
+        static test canIterateAllPackages() {
+            var m = Runtime.getPackages()
+            // Note: use buildKeys(), not keys() - the keys() form trips
+            // the binder ("Can't inject as operator").
+            var keys = m.buildKeys()
+            var count = 0
+            each(keys, id) {
+                var version = m.get(id)
+                Assert.assertTrue(id.length() > 0)
+                Assert.assertTrue(version.length() >= 0)
+                count = count + 1
+            }
+            Assert.assertEquals(m.getSize(), count)
+        }
+
+        static test repeatedCallsReturnSameRegistry() {
+            var a = Runtime.getPackages()
+            var b = Runtime.getPackages()
+            Assert.assertEquals(a.getSize(), b.getSize())
+        }
+    }
+}
