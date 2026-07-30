@@ -24,13 +24,34 @@ namespace Am.IO
         native fun close()
 
         fun readAll(): UByte[] {
+            // Bulk-read into a pre-sized buffer using the file's size —
+            // reading byte-by-byte via readByte() is O(n) native calls and
+            // is catastrophically slow for large files (e.g. multi-MB
+            // packfiles). One or a few native read() calls fill the buffer
+            // directly instead.
+            var total = this.file.getSize()
+            if (total > 0L) {
+                var buf = new UByte[total as UInt]
+                var pos: Long = 0L
+                while (pos < total) {
+                    var remaining = (total - pos).toUInt()
+                    var got = this.read(buf, pos, remaining)
+                    if (got == 0UI) {
+                        break
+                    }
+                    pos = pos + (got as Long)
+                }
+                return buf
+            }
+
+            // Size unavailable (0 / pipe / special file): fall back to a
+            // chunked read that doesn't rely on a known length.
             var data = List<UByte>.newList<UByte>()
             var go = true
-            while(go) {
+            while (go) {
                 var b = this.readByte()
                 if (b >= 0) {
-                    var ub = b.toUByte()
-                    data.add(ub)
+                    data.add(b as UByte)
                 } else {
                     go = false
                 }

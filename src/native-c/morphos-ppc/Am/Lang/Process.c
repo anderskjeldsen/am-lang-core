@@ -222,7 +222,7 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 		NP_Error,       (ULONG) err_file,
 		NP_ConsoleTask, (ULONG) NULL,
 		NP_Arguments,   (ULONG) g_arg_buf2,
-		NP_Name,        (ULONG) "amStudioBatch",
+		NP_Name,        (ULONG) "amProcessCapture",
 		NP_StackSize,   (ULONG) 65536,
 		TAG_DONE);
 	if (child != NULL) {
@@ -238,7 +238,7 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 			cli->cli_CurrentOutput  = out_file;
 			// cli_CommandName is a BSTR; ixemul reads it for argv[0].
 			// Without setting it the child inherits a stale value
-			// ("app" — amStudio's process name) and gcc prints
+			// ("app" — the parent binary's name) and gcc prints
 			// "app: No input files" instead of "gcc: No input files".
 			static UBYTE s_cmd_name_bstr[34];
 			int slen = 0;
@@ -266,7 +266,7 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 		while (safety > 0) {
 			struct Task *t;
 			Forbid();
-			t = FindTask((STRPTR) "amStudioBatch");
+			t = FindTask((STRPTR) "amProcessCapture");
 			Permit();
 			if (t == NULL) break;
 			Delay(2);
@@ -458,7 +458,7 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 		NP_Error,       (ULONG) err_file,
 		NP_ConsoleTask, (ULONG) NULL,
 		NP_Arguments,   (ULONG) g_arg_buf,
-		NP_Name,        (ULONG) "amStudioBatch",
+		NP_Name,        (ULONG) "amProcessCapture",
 		NP_StackSize,   (ULONG) 65536,
 		TAG_DONE);
 	if (child != NULL) {
@@ -499,7 +499,7 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 		while (safety > 0) {
 			struct Task *t;
 			Forbid();
-			t = FindTask((STRPTR) "amStudioBatch");
+			t = FindTask((STRPTR) "amProcessCapture");
 			Permit();
 			if (t == NULL) break;
 			Delay(2);
