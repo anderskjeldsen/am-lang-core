@@ -93,6 +93,12 @@ static const char * const RP_LOG_PATHS[] = {
 static void rp_log_open(void) {
     if (g_log_open_attempted) return;
     g_log_open_attempted = TRUE;
+#if !RP_VERBOSE_LOG
+    // Logging disabled: never open the file, so every rp_log_str /
+    // rp_log_event stays a no-op (they early-out on g_log_fh == 0).
+    g_log_path[0] = 0;
+    return;
+#endif
     for (int i = 0; RP_LOG_PATHS[i] != NULL; i++) {
         g_log_fh = Open((CONST_STRPTR) RP_LOG_PATHS[i], MODE_NEWFILE);
         if (g_log_fh != 0) {
@@ -258,6 +264,10 @@ static BPTR g_parent_stdout = 0;
 // being called before any handler started — though that path
 // is the no-handlers fast-return).
 static void rp_stdout_line(const char * msg) {
+#if !RP_VERBOSE_LOG
+    (void) msg;
+    return;
+#endif
     BPTR out = g_parent_stdout;
     if (out == 0) {
         out = Output();

@@ -76,7 +76,7 @@ void Am_Threading_Thread__InitTask()
 	// Very first thing: prove the worker process actually started.
 	// If this print never lands, CreateNewProc handed control to
 	// something else (or trance never bridged to our entry).
-	printf("[_InitTask] entry (FindTask=%p)\n", (void *) FindTask(NULL)); fflush(stdout);
+//	printf("[_InitTask] entry (FindTask=%p)\n", (void *) FindTask(NULL)); fflush(stdout);
 
 	struct Task *own_task = NULL;
 	struct Process *own_process = NULL;
@@ -98,25 +98,25 @@ void Am_Threading_Thread__InitTask()
 		// aobjects overlay their union variants, so raw derefs would
 		// read garbage and silently no-op run().
 		aobject * thread_ref = (aobject *) own_task->tc_UserData;
-		printf("[_InitTask] initial tc_UserData=%p\n", (void *) thread_ref); fflush(stdout);
+//		printf("[_InitTask] initial tc_UserData=%p\n", (void *) thread_ref); fflush(stdout);
 
 		while ( thread_ref == NULL )
 		{
 			Am_Threading_Thread_sleep_0(100);
 			thread_ref = (aobject *) own_task->tc_UserData;
 		}
-		printf("[_InitTask] tc_UserData resolved (thread=%p)\n", (void *) thread_ref); fflush(stdout);
+//		printf("[_InitTask] tc_UserData resolved (thread=%p)\n", (void *) thread_ref); fflush(stdout);
 
 		if ( thread_ref != NULL )
 		{
 			aobject * thread = __unwrap(thread_ref);
 			aobject * runnable_ref = thread->object_properties.class_object_properties.properties[0].nullable_value.value.object_value;
 			aobject * runnable = __unwrap(runnable_ref);
-			printf("[_InitTask] runnable=%p iface_impl=%p impl_obj=%p\n",
-			       (void *) runnable,
-			       (void *) (runnable ? runnable->object_properties.iface_reference.iface_implementation : NULL),
-			       (void *) (runnable ? runnable->object_properties.iface_reference.implementation_object : NULL));
-			fflush(stdout);
+//			printf("[_InitTask] runnable=%p iface_impl=%p impl_obj=%p\n",
+//			       (void *) runnable,
+//			       (void *) (runnable ? runnable->object_properties.iface_reference.iface_implementation : NULL),
+//			       (void *) (runnable ? runnable->object_properties.iface_reference.implementation_object : NULL));
+//			fflush(stdout);
 
 			// Runnable is an interface, so dispatch through the iface_implementation
 			// the wrapper carries. run() is at functions[3], NOT [0]: the interface's
@@ -128,12 +128,12 @@ void Am_Threading_Thread__InitTask()
 			// instead would pick up the Am.Lang.Runnable aclass's `functions` field,
 			// which is left NULL for interfaces — silent crash on the worker task.
 			Am_Lang_Runnable_f_run_0_T rFunc = (Am_Lang_Runnable_f_run_0_T) runnable->object_properties.iface_reference.iface_implementation->functions[3];
-			printf("[_InitTask] rFunc=%p (functions[3]); calling run()\n", (void *) rFunc); fflush(stdout);
+//			printf("[_InitTask] rFunc=%p (functions[3]); calling run()\n", (void *) rFunc); fflush(stdout);
 			rFunc(runnable->object_properties.iface_reference.implementation_object);
 
-			printf("[_InitTask] rFunc returned; about to runFinalizers (task=%p, thread=%p)\n",
-			       (void *) own_task, (void *) thread);
-			fflush(stdout);
+//			printf("[_InitTask] rFunc returned; about to runFinalizers (task=%p, thread=%p)\n",
+//			       (void *) own_task, (void *) thread);
+//			fflush(stdout);
 
 			// Run user-registered finalizers on this task, in reverse
 			// order, before flipping `done`. The typical caller is the
@@ -144,21 +144,21 @@ void Am_Threading_Thread__InitTask()
 			// still see FindTask(NULL) == own_task. Pass the wrapper —
 			// AmLang-side callee unwraps itself.
 			Am_Threading_Thread_f_runFinalizers_0(thread_ref);
-			printf("[_InitTask] runFinalizers returned\n");
-			fflush(stdout);
+//			printf("[_InitTask] runFinalizers returned\n");
+//			fflush(stdout);
 
 			Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) thread->object_properties.class_object_properties.object_data.value.custom_value;
 			data->done = true;
-			printf("[_InitTask] flagged done; dropping worker ref\n");
-			fflush(stdout);
+//			printf("[_InitTask] flagged done; dropping worker ref\n");
+//			fflush(stdout);
 
 			// Drop the worker's reference on the wrapper we were handed
 			// (matches the `__increase_reference_count(this)` implicitly
 			// held via `start_0`). Every access above this line runs
 			// while the wrapper — and thus the real — is alive.
 			__decrease_reference_count(thread_ref);
-			printf("[_InitTask] worker exiting cleanly\n");
-			fflush(stdout);
+//			printf("[_InitTask] worker exiting cleanly\n");
+//			fflush(stdout);
 		}
 		else
 		{

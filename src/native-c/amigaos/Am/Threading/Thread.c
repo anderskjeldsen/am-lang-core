@@ -118,9 +118,9 @@ void Am_Threading_Thread__InitTask()
 			Am_Lang_Runnable_f_run_0_T rFunc = (Am_Lang_Runnable_f_run_0_T) runnable->object_properties.iface_reference.iface_implementation->functions[3];
 			rFunc(runnable->object_properties.iface_reference.implementation_object);
 
-			printf("[_InitTask] rFunc returned; about to runFinalizers (task=%p, thread=%p)\n",
-			       (void *) own_task, (void *) thread);
-			fflush(stdout);
+//			printf("[_InitTask] rFunc returned; about to runFinalizers (task=%p, thread=%p)\n",
+//			       (void *) own_task, (void *) thread);
+//			fflush(stdout);
 
 			// Run user-registered finalizers on this task, in reverse
 			// order, before flipping `done`. The typical caller is the
@@ -132,14 +132,14 @@ void Am_Threading_Thread__InitTask()
 			// Pass the wrapper pointer we were handed — the AmLang-side
 			// callee will unwrap where needed and matches how any other
 			// dispatch on this Thread instance from this task looks.
-			Am_Threading_Thread_f_runFinalizers_0(thread_ref);
-			printf("[_InitTask] runFinalizers returned\n");
-			fflush(stdout);
+//			Am_Threading_Thread_f_runFinalizers_0(thread_ref);
+//			printf("[_InitTask] runFinalizers returned\n");
+//			fflush(stdout);
 
 			Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) thread->object_properties.class_object_properties.object_data.value.custom_value;
 			data->done = true;
-			printf("[_InitTask] flagged done; dropping worker ref\n");
-			fflush(stdout);
+//			printf("[_InitTask] flagged done; dropping worker ref\n");
+//			fflush(stdout);
 
 			// Drop the worker's FOREIGN reference on the Thread object.
 			// The worker is a non-owner of thread_ref, so this
@@ -148,8 +148,8 @@ void Am_Threading_Thread__InitTask()
 			// worker's behalf. Every access above this line runs while
 			// that ref (and thus the object) is still alive.
 			__decrease_reference_count(thread_ref);
-			printf("[_InitTask] worker exiting cleanly\n");
-			fflush(stdout);
+//			printf("[_InitTask] worker exiting cleanly\n");
+//			fflush(stdout);
 		}
 		else
 		{

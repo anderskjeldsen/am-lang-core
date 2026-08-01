@@ -264,13 +264,14 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 	}
 
 	{
-		// Break the instant the child is gone (fast commands unaffected).
-		// The cap only bounds a truly hung child, and MUST be generous: a
-		// slow command (e.g. am-git loading a large pack on 68k) can run
-		// for minutes; stopping early orphans it, and the orphan then frees
-		// FHs/temp files we already reclaimed -> #80000008 a moment later.
-		// 30000 * 40ms ~= 20 min cap.
-		int safety = 30000;
+		// Break the instant the child is gone. If the child crashes on
+		// exit (e.g. a -noixemul CLI child mishandling the inherited FHs ->
+		// #80000008), it gets SUSPENDED on a requester and never leaves the
+		// task list, so FindTask never returns NULL and we run to this cap.
+		// Keep it modest so that case returns in seconds (with whatever the
+		// child already wrote) rather than hanging for many minutes.
+		// 375 * 40ms ~= 15s cap.
+		int safety = 375;
 		while (safety > 0) {
 			struct Task *t;
 			Forbid();
@@ -386,6 +387,106 @@ function_result Am_Lang_Process_getCwd_0()
 	} else {
 		__result.return_value.value.object_value = __create_string("", &Am_Lang_String);
 	}
+	return __result;
+}
+
+// Capture ONLY stdout, run via the DOS System() shell with `> tempfile`
+// redirection. System() is synchronous and manages the child's lifecycle
+// the standard DOS way — unlike the hand-rolled CreateNewProc capture in
+// runAndCaptureOutputInDir, this works for a -noixemul child (am-git),
+// which the CreateNewProc recipe (tuned for ixemul children) hangs at
+// startup. stderr goes wherever the shell sends it (not captured).
+function_result Am_Lang_Process_captureStdoutInDir_0(aobject * command, aobject * workingDir)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+
+	string_holder *cmd_holder = (string_holder *) (command + 1);
+	const char *cmd_str = (const char *) cmd_holder->string_value;
+
+	string_holder *dir_holder2 = (workingDir != NULL) ? (string_holder *) (workingDir + 1) : NULL;
+	const char *dir_str2 = (dir_holder2 != NULL && dir_holder2->length > 0) ? dir_holder2->string_value : NULL;
+
+	// Swap current dir to workingDir so the command runs there (same
+	// ownership rules as runAndCaptureOutputInDir: restore the previous
+	// lock, UnLock only the one we created).
+	BPTR cs_new_lock = (BPTR) NULL;
+	BPTR cs_old_lock = (BPTR) NULL;
+	bool cs_swapped = false;
+	if (dir_str2 != NULL) {
+		cs_new_lock = Lock((CONST_STRPTR) dir_str2, ACCESS_READ);
+		if (cs_new_lock == (BPTR) NULL) {
+			__throw_simple_exception("Failed to lock working directory", "in Am_Lang_Process_captureStdoutInDir_0", &__result);
+			goto __exit;
+		}
+		cs_old_lock = CurrentDir(cs_new_lock);
+		cs_swapped = true;
+	}
+
+	// Temp file goes in the (swapped) current dir as a RELATIVE name — no
+	// dependency on a T:/RAM: assign, which a stripped-down system may
+	// lack. When the cwd is a git repo, put it inside `.git/` so a
+	// `git status` run through here doesn't report the temp file itself as
+	// untracked. Built from the task address so concurrent captures don't
+	// collide. Read back (also relative) BEFORE restoring the cwd.
+	UBYTE temp_path[48];
+	{
+		ULONG i = 0;
+		BPTR git_lock = Lock((CONST_STRPTR) ".git", ACCESS_READ);
+		if (git_lock != (BPTR) NULL) {
+			UnLock(git_lock);
+			const char *g = ".git/";
+			ULONG j = 0;
+			while (g[j] != 0) { temp_path[i++] = g[j++]; }
+		}
+		const char *pfx = "am_cap_";
+		ULONG k = 0;
+		while (pfx[k] != 0) { temp_path[i++] = pfx[k++]; }
+		ULONG addr = (ULONG) FindTask(NULL);
+		for (LONG nibble = 7; nibble >= 0; nibble--) {
+			ULONG v = (addr >> (nibble * 4)) & 0xF;
+			temp_path[i++] = (UBYTE) (v < 10 ? ('0' + v) : ('a' + (v - 10)));
+		}
+		temp_path[i] = 0;
+	}
+
+	// Build "<command> >am_cap_xxxx" — the user shell performs the redirect.
+	static char cs_cmd[1024];
+	{
+		int p = 0;
+		const char *s = cmd_str;
+		while (*s != 0 && p < (int)(sizeof(cs_cmd) - 80)) { cs_cmd[p++] = *s++; }
+		cs_cmd[p++] = ' ';
+		cs_cmd[p++] = '>';
+		const char *t = (const char *) temp_path;
+		while (*t != 0 && p < (int)(sizeof(cs_cmd) - 1)) { cs_cmd[p++] = *t++; }
+		cs_cmd[p] = 0;
+	}
+
+	struct TagItem cs_tags[] = {
+		{ SYS_Asynch,    FALSE },
+		{ SYS_UserShell, TRUE },
+		{ TAG_DONE,      0 },
+	};
+	SystemTagList((STRPTR) cs_cmd, cs_tags);
+
+	// Read the relative temp file while cwd is still the working dir.
+	UBYTE *cs_buf = NULL;
+	LONG cs_size = am_proc_read_and_delete_temp(temp_path, &cs_buf);
+	if (cs_size < 0) cs_size = 0;
+
+	if (cs_swapped) {
+		CurrentDir(cs_old_lock);
+		UnLock(cs_new_lock);
+	}
+	if (cs_buf != NULL) {
+		__result.return_value.value.object_value = __create_string((const char *) cs_buf, &Am_Lang_String);
+		FreeVec(cs_buf);
+	} else {
+		__result.return_value.value.object_value = __create_string("", &Am_Lang_String);
+	}
+
+__exit: ;
 	return __result;
 }
 
@@ -564,13 +665,14 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 	// Wait for child to fully exit before touching the inherited FHs.
 	// 600 ticks * 40ms = 24 seconds cap.
 	{
-		// Break the instant the child is gone (fast commands unaffected).
-		// The cap only bounds a truly hung child, and MUST be generous: a
-		// slow command (e.g. am-git loading a large pack on 68k) can run
-		// for minutes; stopping early orphans it, and the orphan then frees
-		// FHs/temp files we already reclaimed -> #80000008 a moment later.
-		// 30000 * 40ms ~= 20 min cap.
-		int safety = 30000;
+		// Break the instant the child is gone. If the child crashes on
+		// exit (e.g. a -noixemul CLI child mishandling the inherited FHs ->
+		// #80000008), it gets SUSPENDED on a requester and never leaves the
+		// task list, so FindTask never returns NULL and we run to this cap.
+		// Keep it modest so that case returns in seconds (with whatever the
+		// child already wrote) rather than hanging for many minutes.
+		// 375 * 40ms ~= 15s cap.
+		int safety = 375;
 		while (safety > 0) {
 			struct Task *t;
 			Forbid();

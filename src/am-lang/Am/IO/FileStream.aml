@@ -13,6 +13,11 @@ namespace Am.IO
         native fun seekFromStart(offset: Long)
         native fun readByte(): Int
         native fun writeByte(byte: Int)
+        // Size of the OPEN file via the handle (fseek/ftell), NOT a path
+        // stat() — cwd-independent, so it works even when a -noixemul child
+        // has a mismatched libc cwd. readAll() uses this to always take the
+        // fast bulk path. Returns 0 if the handle is unusable.
+        native fun fileSize(): Long
 
         // Release the underlying OS file handle now, instead of waiting
         // for the runtime to release the FileStream object. Needed when
@@ -28,8 +33,11 @@ namespace Am.IO
             // reading byte-by-byte via readByte() is O(n) native calls and
             // is catastrophically slow for large files (e.g. multi-MB
             // packfiles). One or a few native read() calls fill the buffer
-            // directly instead.
-            var total = this.file.getSize()
+            // directly instead. Size comes from the open HANDLE (fileSize),
+            // not a path stat, so it doesn't fail on a -noixemul child whose
+            // libc cwd differs from its DOS current dir (which would drop us
+            // into the byte-by-byte fallback — the ~500s pack read).
+            var total = this.fileSize()
             if (total > 0L) {
                 var buf = new UByte[total as UInt]
                 var pos: Long = 0L

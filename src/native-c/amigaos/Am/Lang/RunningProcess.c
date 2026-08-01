@@ -78,12 +78,12 @@ static char g_log_path[64] = { 0 };
 // each line is a synchronous disk Write that drags amStudio down
 // (visibly so on quit/teardown when the log buffer flushes). Define
 // `RP_VERBOSE_LOG` at compile time to re-enable for diagnostics.
-// Currently ON to chase the post-`dir` Software Failure — every
-// packet the handler processes (except ACTION_DIE) gets a log
-// line so we can see which one is the last one before the
-// crash. Flip back to 0 once the trail is captured.
+// OFF by default — the `[rp]` trail (tty.log file writes + the
+// handler_die stdout lines) is silenced so it doesn't clutter the
+// console / drag teardown. Build with -DRP_VERBOSE_LOG=1 to bring it
+// back when chasing a handler crash.
 #ifndef RP_VERBOSE_LOG
-#  define RP_VERBOSE_LOG 1
+#  define RP_VERBOSE_LOG 0
 #endif
 
 static const char * const RP_LOG_PATHS[] = {
@@ -97,6 +97,12 @@ static const char * const RP_LOG_PATHS[] = {
 static void rp_log_open(void) {
     if (g_log_open_attempted) return;
     g_log_open_attempted = TRUE;
+#if !RP_VERBOSE_LOG
+    // Logging disabled: never open the file, so every rp_log_str /
+    // rp_log_event stays a no-op (they early-out on g_log_fh == 0).
+    g_log_path[0] = 0;
+    return;
+#endif
     for (int i = 0; RP_LOG_PATHS[i] != NULL; i++) {
         g_log_fh = Open((CONST_STRPTR) RP_LOG_PATHS[i], MODE_NEWFILE);
         if (g_log_fh != 0) {
@@ -336,6 +342,10 @@ static BPTR g_parent_stdout = 0;
 // being called before any handler started — though that path
 // is the no-handlers fast-return).
 static void rp_stdout_line(const char * msg) {
+#if !RP_VERBOSE_LOG
+    (void) msg;
+    return;
+#endif
     BPTR out = g_parent_stdout;
     if (out == 0) {
         out = Output();

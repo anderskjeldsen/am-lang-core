@@ -20,6 +20,16 @@ namespace Am.Lang
         // An empty `workingDir` behaves exactly like runAndCaptureOutput.
         static native fun runAndCaptureOutputInDir(command: String, workingDir: String): String
 
+        // Like runAndCaptureOutputInDir, but captures ONLY stdout, run via
+        // the DOS System() shell with `> tempfile` redirection instead of a
+        // hand-rolled CreateNewProc. On AmigaOS this is the reliable path
+        // for spawning a `-noixemul` child (e.g. am-git): the CreateNewProc
+        // recipe used by runAndCaptureOutputInDir is tuned for ixemul
+        // children and hangs a -noixemul one at startup. stderr is NOT
+        // captured (it goes wherever the shell sends it). On libc this is
+        // identical to runAndCaptureOutputInDir.
+        static native fun captureStdoutInDir(command: String, workingDir: String): String
+
         // Resolve `path` to its OS-canonical form. On AmigaOS /
         // MorphOS this means "DH0:Tools/" becomes "Workbench:Tools/"
         // (i.e. device name → mounted volume name) via Lock +

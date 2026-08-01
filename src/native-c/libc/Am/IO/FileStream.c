@@ -129,6 +129,35 @@ __exit: ;
 	return __result;
 };
 
+// Size of the OPEN file, measured through the handle (fseek/ftell) rather
+// than a path stat(). This is cwd-independent — important because a
+// -noixemul child (e.g. am-git spawned by another process) can have a
+// libc cwd that doesn't match its DOS pr_CurrentDir, making a stat() on a
+// relative path fail. readAll() relies on this to always take the fast
+// bulk-read path instead of the byte-by-byte fallback.
+function_result Am_IO_FileStream_fileSize_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+
+	file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+	long long size = 0;
+	if (holder != NULL && holder->file != NULL) {
+		long cur = ftell(holder->file);
+		if (fseek(holder->file, 0, SEEK_END) == 0) {
+			long end = ftell(holder->file);
+			if (end >= 0) {
+				size = (long long) end;
+			}
+			fseek(holder->file, (cur >= 0) ? cur : 0, SEEK_SET);
+		}
+	}
+	__result.return_value.value.long_value = size;
+
+__exit: ;
+	return __result;
+};
+
 function_result Am_IO_FileStream_read_0(aobject * const this, aobject * buffer, long long offset, unsigned int length)
 {
 	function_result __result = { .has_return_value = true };

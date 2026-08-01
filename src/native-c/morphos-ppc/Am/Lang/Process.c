@@ -547,3 +547,12 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 __exit: ;
 	return __result;
 }
+
+/* captureStdoutInDir: MorphOS port. Runs `command` in `workingDir` and returns
+ * its captured output. We reuse runAndCaptureOutputInDir (stdout+stderr) — good
+ * enough on MorphOS, and this keeps the symbol defined so the dispatch table
+ * links even when the app never calls it. */
+function_result Am_Lang_Process_captureStdoutInDir_0(aobject * command, aobject * workingDir)
+{
+	return Am_Lang_Process_runAndCaptureOutputInDir_0(command, workingDir);
+}

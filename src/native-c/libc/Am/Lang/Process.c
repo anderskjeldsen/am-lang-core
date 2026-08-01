@@ -158,6 +158,13 @@ function_result Am_Lang_Process_getCwd_0()
 	return __result;
 }
 
+// On libc there's no ixemul/CreateNewProc distinction — the popen-based
+// InDir capture already works, so just delegate to it.
+function_result Am_Lang_Process_captureStdoutInDir_0(aobject * command, aobject * workingDir)
+{
+	return Am_Lang_Process_runAndCaptureOutputInDir_0(command, workingDir);
+}
+
 function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, aobject * workingDir)
 {
 	function_result __result = { .has_return_value = true };
