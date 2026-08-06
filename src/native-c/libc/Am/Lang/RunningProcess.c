@@ -1,3 +1,183 @@
+#if defined(AM_PLATFORM_NINTENDO_PPC)
+
+#include <libc/core.h>
+#include <Am/Lang/RunningProcess.h>
+#include <Am/Lang/ClassRef.h>
+#include <Am/Lang/String.h>
+#include <Am/Lang/Object.h>
+#include <Am/Lang/Bool.h>
+#include <Am/Lang/UByte.h>
+#include <Am/Lang/Array.h>
+#include <libc/core_inline_functions.h>
+
+#include <stdlib.h>
+
+typedef struct _running_process_data running_process_data;
+struct _running_process_data {
+    int child_exited;
+    int exit_code;
+    int binary;
+    int raw_mode;
+    int reported_rows;
+    int reported_cols;
+};
+
+static running_process_data *rp_data(aobject * const this) {
+    if (this == NULL) return NULL;
+    return (running_process_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
+}
+
+function_result Am_Lang_RunningProcess__native_init_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    running_process_data *d = (running_process_data *) calloc(1, sizeof(running_process_data));
+    if (d != NULL) {
+        d->child_exited = 1;
+        d->exit_code = 0;
+        d->binary = 0;
+        d->raw_mode = 0;
+        d->reported_rows = 24;
+        d->reported_cols = 80;
+        this->object_properties.class_object_properties.object_data.value.custom_value = d;
+    }
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess__native_mark_children_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    (void) this;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess__native_release_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    running_process_data *d = rp_data(this);
+    if (d != NULL) {
+        free(d);
+        this->object_properties.class_object_properties.object_data.value.custom_value = NULL;
+    }
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_enableBinaryMode_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    running_process_data *d = rp_data(this);
+    if (d != NULL) d->binary = 1;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobject * command, aobject * workingDir) {
+    function_result __result = { .has_return_value = false };
+    (void) command;
+    (void) workingDir;
+
+    running_process_data *d = rp_data(this);
+    if (d != NULL) {
+        d->child_exited = 1;
+        d->exit_code = -1;
+    }
+
+    __throw_simple_exception(
+        "RunningProcess is not supported yet on nintendo-ppc",
+        "in Am_Lang_RunningProcess_startNative_0",
+        &__result
+    );
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_tryReadOutput_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    (void) this;
+    __result.return_value.value.object_value = __create_string("", &Am_Lang_String);
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_writeInput_0(aobject * const this, aobject * text) {
+    function_result __result = { .has_return_value = false };
+    (void) this;
+    (void) text;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_tryReadOutputBytes_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    (void) this;
+    aobject *arr = __create_array(0, 1, &Am_Lang_Array_ta_Am_Lang_UByte, uchar_type);
+    __result.return_value.value.object_value = arr;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_writeInputBytes_0(aobject * const this, aobject * data, const long long offset, const unsigned int length) {
+    function_result __result = { .has_return_value = true };
+    (void) this;
+    (void) data;
+    (void) offset;
+    (void) length;
+    __result.return_value.value.uint_value = 0;
+    __result.return_value.flags = PRIMITIVE_UINT;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_isAlive_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    (void) this;
+    __result.return_value.value.bool_value = false;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_exitCode_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    running_process_data *d = rp_data(this);
+    int code = 0;
+    if (d != NULL) code = d->exit_code;
+    __result.return_value.value.int_value = code;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_close_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    (void) this;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_terminateChild_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    (void) this;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_setGlobalWake_0(long long var_taskPtr, int var_sigBit) {
+    function_result __result = { .has_return_value = false };
+    (void) var_taskPtr;
+    (void) var_sigBit;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
+    function_result __result = { .has_return_value = false };
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_isRawMode_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    running_process_data *d = rp_data(this);
+    bool raw = false;
+    if (d != NULL) raw = (d->raw_mode != 0);
+    __result.return_value = (nullable_value){ .flags = PRIMITIVE_BOOL, .value.bool_value = raw };
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_setReportedSize_0(aobject * const this, int var_rows, int var_cols) {
+    function_result __result = { .has_return_value = false };
+    running_process_data *d = rp_data(this);
+    if (d != NULL && var_rows > 0 && var_cols > 0) {
+        d->reported_rows = var_rows;
+        d->reported_cols = var_cols;
+    }
+    return __result;
+}
+
+#else
+
 // Async child-process wrapper for libc. Uses forkpty() to give the
 // child a real pseudo-terminal so interactive programs (ssh, vim,
 // nano, etc.) see a tty on stdin/stdout/stderr — without this the
@@ -525,3 +705,5 @@ function_result Am_Lang_RunningProcess_setReportedSize_0(aobject * const this, i
     }
     return __result;
 }
+
+#endif

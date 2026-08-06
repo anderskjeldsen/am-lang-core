@@ -5,7 +5,7 @@ LOGLEVEL:=1
 MAXONEERROR:=false
 RUNTIMELOGGING:=false
 
-.PHONY: build build-amigaos build-force-deps test test-rl lint docs \
+.PHONY: build build-amigaos build-gamecube run-gamecube-example-dolphin build-force-deps test test-rl lint docs \
 		gdb-test gdb-test-interactive gdb-app gdb-app-interactive \
 		test-verbose test-direct
 
@@ -14,6 +14,12 @@ build:
 
 build-amigaos:
 	$(CMD) build . -bt amigaos-docker -ll5
+
+build-gamecube:
+	$(CMD) build . -bt gamecube-docker -ll5
+
+run-gamecube-example-dolphin:
+	$(MAKE) -C examples/gameCubeTest run-gamecube-dolphin
 
 build-force-deps:
 	$(CMD) build . -fld -bt linux-x64 ll 4

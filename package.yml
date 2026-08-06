@@ -109,6 +109,25 @@ platforms:
       - inputFilename: aros.c     
         outputFilename: aros.o
     gccAdditionalOptions:
+  - id: nintendo-ppc
+    extends: libc
+    gccCommand: powerpc-eabi-gcc -O2 -mogc -mcpu=750 -meabi -mhard-float
+    additionalIncludePaths:
+      - /opt/devkitpro/libogc2/gamecube/include
+    additionalHeaders:
+      - nintendo-ppc.h
+    additionalCSources:
+      - inputFilename: nintendo-ppc.c
+        outputFilename: nintendo-ppc.o
+    gccAdditionalOptions:
+      - -DAM_PLATFORM_NINTENDO_PPC
+      - -DGEKKO
+    gccLibraryPaths:
+      - /opt/devkitpro/libogc2/gamecube/lib
+      - /opt/devkitpro/devkitPPC/powerpc-eabi/lib
+    gccAdditionalLibraries:
+      - ogc
+      - m
 #      - -noixemul
 #  - id: msdos-x86
 #    extends: libc
@@ -174,6 +193,16 @@ buildTargets:
     dockerRun:
       image: arm64v8/ubuntu:24.04
       buildPath: /usr/src/myapp
+  - id: gamecube-docker
+    platform: nintendo-ppc
+    features: ["floatingPoint"]
+    commands:
+      - docker run --rm -v ${build_dir}:/src -e USE_CCACHE=1 -i webhdx/devkitppc-libogc2 /entrypoint.sh -f nintendo-ppc.makefile all
+  - id: wii-docker
+    platform: nintendo-ppc
+    features: ["floatingPoint"]
+    commands:
+      - docker run --rm -v ${build_dir}:/src -e USE_CCACHE=1 -i webhdx/devkitppc-libogc2 /entrypoint.sh -f nintendo-ppc.makefile all
 
 
       #-v /path/to/extra/ppc-morphos/lib:/tools/usr/lib -v /path/to/extra/ppc-morphos/include:/tools/usr/include

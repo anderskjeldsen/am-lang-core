@@ -4,6 +4,9 @@
 #include <Am/Lang/Int.h>
 #include <string.h>
 #include <libc/core_inline_functions.h>
+#if defined(AM_PLATFORM_NINTENDO_PPC)
+#include <gccore.h>
+#endif
 
 function_result Am_Lang_String__native_init_0(aobject * const this)
 {
@@ -96,9 +99,17 @@ function_result Am_Lang_String_print_0(aobject * const this)
 	bool __returning = false;
 	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	if ( holder != NULL ) {
+	#if defined(AM_PLATFORM_NINTENDO_PPC)
+		SYS_Report("%s", holder->string_value);
+	#else
 		printf("%s", holder->string_value);
+	#endif
 	} else {
+	#if defined(AM_PLATFORM_NINTENDO_PPC)
+		SYS_Report("null");
+	#else
 		printf("null");
+	#endif
 	}
 	// When stdout is redirected to a file on AmigaOS (Startup-Sequence
 	// `app >output.log` pattern), libnix's stdio defaults to full

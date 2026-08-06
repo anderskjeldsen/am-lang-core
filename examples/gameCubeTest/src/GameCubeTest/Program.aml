@@ -1,0 +1,10 @@
+namespace GameCubeTest {
+    class Program {
+        import Am.Lang
+
+        static fun main() {
+            "GameCubeTest: starting".println()
+            GameCubeDisplay.renderTriangle()
+        }
+    }
+}

@@ -1,0 +1,6 @@
+namespace GameCubeTest {
+    #implementationPlatforms "nintendo-ppc", "libc"
+    native class GameCubeDisplay {
+        static native fun renderTriangle()
+    }
+}

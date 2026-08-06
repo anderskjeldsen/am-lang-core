@@ -1,3 +1,111 @@
+#if defined(AM_PLATFORM_NINTENDO_PPC)
+
+#include <libc/core.h>
+#include <Am/Threading/Thread.h>
+#include <Am/Lang/Object.h>
+#include <Am/Lang/Runnable.h>
+#include <libc/core_inline_functions.h>
+
+#include <stdlib.h>
+#include <time.h>
+
+typedef struct _Am_Threading_Thread_data Am_Threading_Thread_data;
+struct _Am_Threading_Thread_data {
+    bool started;
+    bool done;
+};
+
+function_result Am_Threading_Thread__native_init_0(aobject * const this)
+{
+    function_result __result = { .has_return_value = false };
+    Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) malloc(sizeof(Am_Threading_Thread_data));
+    if (data != NULL) {
+        data->started = false;
+        data->done = false;
+    }
+    __unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value = data;
+    return __result;
+}
+
+function_result Am_Threading_Thread__native_release_0(aobject * const this)
+{
+    function_result __result = { .has_return_value = false };
+    aobject * const real = __unwrap(this);
+    Am_Threading_Thread_data *data =
+        (Am_Threading_Thread_data *) real->object_properties.class_object_properties.object_data.value.custom_value;
+    if (data != NULL) {
+        free(data);
+        real->object_properties.class_object_properties.object_data.value.custom_value = NULL;
+    }
+    return __result;
+}
+
+function_result Am_Threading_Thread__native_mark_children_0(aobject * const this)
+{
+    function_result __result = { .has_return_value = false };
+    (void) this;
+    return __result;
+}
+
+function_result Am_Threading_Thread_start_0(aobject * const this)
+{
+    function_result __result = { .has_return_value = false };
+
+    aobject * const thread = __unwrap(this);
+    Am_Threading_Thread_data *data =
+        (Am_Threading_Thread_data *) thread->object_properties.class_object_properties.object_data.value.custom_value;
+    if (data == NULL || data->started) {
+        return __result;
+    }
+
+    data->started = true;
+
+    // GameCube-first bring-up: run synchronously until LWP-backed
+    // threading support is added for nintendo-ppc.
+    aobject * runnable_ref = thread->object_properties.class_object_properties.properties[0].nullable_value.value.object_value;
+    aobject * runnable = __unwrap(runnable_ref);
+    if (runnable != NULL && runnable->object_properties.iface_reference.iface_implementation != NULL) {
+        Am_Lang_Runnable_f_run_0_T rFunc =
+            (Am_Lang_Runnable_f_run_0_T) runnable->object_properties.iface_reference.iface_implementation->functions[3];
+        rFunc(runnable->object_properties.iface_reference.implementation_object);
+    }
+
+    data->done = true;
+    return __result;
+}
+
+function_result Am_Threading_Thread_join_0(aobject * const this)
+{
+    function_result __result = { .has_return_value = false };
+    Am_Threading_Thread_data *data =
+        (Am_Threading_Thread_data *) __unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value;
+    if (data != NULL) {
+        data->started = false;
+    }
+    return __result;
+}
+
+function_result Am_Threading_Thread_getCurrent_0()
+{
+    function_result __result = { .has_return_value = true };
+    __result.return_value.value.object_value = NULL;
+    return __result;
+}
+
+function_result Am_Threading_Thread_sleep_0(long long milliseconds)
+{
+    function_result __result = { .has_return_value = false };
+    if (milliseconds > 0) {
+        struct timespec ts;
+        ts.tv_sec = (time_t) (milliseconds / 1000LL);
+        ts.tv_nsec = (long) ((milliseconds % 1000LL) * 1000000L);
+        nanosleep(&ts, NULL);
+    }
+    return __result;
+}
+
+#else
+
 #include <libc/core.h>
 #include <Am/Threading/Thread.h>
 #include <Am/Lang/Object.h>
@@ -269,3 +377,5 @@ function_result Am_Threading_Thread_sleep_0(long long milliseconds)
 __exit: ;
     return __result;
 }
+
+#endif

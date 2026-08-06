@@ -29,6 +29,15 @@ static inline void __set_primitive_nullable(nullable_value * nullable_value, boo
 // addresses by chance.
 static inline int __is_suspicious_object_ptr(aobject *v) {
     if (v == NULL) return 0;
+#if defined(AM_PLATFORM_NINTENDO_PPC)
+    // GameCube/Wii: ALL of MEM1 lives at 0x80000000+, so every valid
+    // heap pointer is negative as a signed 32-bit long. The sign-bit
+    // fingerprint below would flag every object and exit(0) on the
+    // first property store — the app dies before main() visibly runs.
+    // No corruption hunting on this platform.
+    (void) v;
+    return 0;
+#endif
     long lv = (long) v;
     if (lv > 0) {
         return 0;

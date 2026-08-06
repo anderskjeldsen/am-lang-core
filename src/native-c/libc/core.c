@@ -14,7 +14,19 @@
 // bump) — that IS mutual exclusion against other tasks there, and it
 // nests naturally (matching the recursive mutex) since TDNestCnt is a
 // counter. See the atomic-macro block in core.h for the rationale.
-#ifndef __AMIGA__
+#if defined(AM_PLATFORM_NINTENDO_PPC)
+// GameCube/Wii first-pass runtime path: single-owner lock primitive so
+// core compiles cleanly on devkitPPC without pulling pthread in.
+// TODO: replace with LWP-backed mutexes once threading is enabled.
+static int __nintendo_ppc_main_thread_token = 0;
+void __arc_shared_mutex_init(void) {
+    const char *e = getenv("AMLC_XTHREAD_RC");
+    __amlc_xthread_rc_on = (e && atoi(e) != 0) ? 1 : 0;
+}
+void __arc_shared_lock(void)   {}
+void __arc_shared_unlock(void) {}
+void * __current_thread(void)  { return (void *) &__nintendo_ppc_main_thread_token; }
+#elif !defined(__AMIGA__)
 #include <pthread.h>
 static pthread_mutex_t __arc_shared_mutex;
 static bool __arc_shared_mutex_initialised = false;

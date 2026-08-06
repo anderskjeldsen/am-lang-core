@@ -1,3 +1,87 @@
+#if defined(AM_PLATFORM_NINTENDO_PPC)
+
+#include <libc/core.h>
+#include <Am/Lang/Process.h>
+#include <libc/Am/Lang/Process.h>
+#include <Am/Lang/ClassRef.h>
+#include <Am/Lang/Int.h>
+#include <Am/Lang/String.h>
+#include <Am/Lang/Object.h>
+#include <libc/core_inline_functions.h>
+
+function_result Am_Lang_Process__native_init_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = false };
+	(void) this;
+	return __result;
+}
+
+function_result Am_Lang_Process__native_release_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = false };
+	(void) this;
+	return __result;
+}
+
+function_result Am_Lang_Process__native_mark_children_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = false };
+	(void) this;
+	return __result;
+}
+
+function_result Am_Lang_Process_run_0(aobject * command)
+{
+	function_result __result = { .has_return_value = true };
+	(void) command;
+	__result.return_value.value.int_value = -1;
+	return __result;
+}
+
+function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
+{
+	function_result __result = { .has_return_value = true };
+	(void) command;
+	__throw_simple_exception("Process.runAndCaptureOutput is not supported yet on nintendo-ppc", "in Am_Lang_Process_runAndCaptureOutput_0", &__result);
+	__result.return_value.value.object_value = __create_string("", &Am_Lang_String);
+	return __result;
+}
+
+function_result Am_Lang_Process_canonicalPath_0(aobject * path)
+{
+	function_result __result = { .has_return_value = true };
+	if (path != NULL) {
+		__increase_reference_count(path);
+		__result.return_value.value.object_value = path;
+		__increase_reference_count(path);
+		__decrease_reference_count(path);
+	} else {
+		__result.return_value.value.object_value = __create_string("", &Am_Lang_String);
+	}
+	return __result;
+}
+
+function_result Am_Lang_Process_getCwd_0()
+{
+	function_result __result = { .has_return_value = true };
+	__result.return_value.value.object_value = __create_string("", &Am_Lang_String);
+	return __result;
+}
+
+function_result Am_Lang_Process_captureStdoutInDir_0(aobject * command, aobject * workingDir)
+{
+	(void) workingDir;
+	return Am_Lang_Process_runAndCaptureOutput_0(command);
+}
+
+function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, aobject * workingDir)
+{
+	(void) workingDir;
+	return Am_Lang_Process_runAndCaptureOutput_0(command);
+}
+
+#else
+
 #include <libc/core.h>
 #include <Am/Lang/Process.h>
 #include <libc/Am/Lang/Process.h>
@@ -254,3 +338,5 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 __exit: ;
 	return __result;
 }
+
+#endif

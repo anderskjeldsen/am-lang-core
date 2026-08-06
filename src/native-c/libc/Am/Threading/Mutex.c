@@ -1,3 +1,84 @@
+#if defined(AM_PLATFORM_NINTENDO_PPC)
+
+#include <libc/core.h>
+#include <Am/Threading/Mutex.h>
+#include <Am/Lang/Object.h>
+#include <Am/Lang/Bool.h>
+#include <libc/core_inline_functions.h>
+
+#include <stdlib.h>
+
+typedef struct _Am_Threading_Mutex_data Am_Threading_Mutex_data;
+struct _Am_Threading_Mutex_data {
+	int locked;
+};
+
+function_result Am_Threading_Mutex__native_init_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = false };
+	Am_Threading_Mutex_data *d = (Am_Threading_Mutex_data *) malloc(sizeof(Am_Threading_Mutex_data));
+	if (d != NULL) d->locked = 0;
+	__unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value = d;
+	return __result;
+}
+
+function_result Am_Threading_Mutex__native_release_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = false };
+	aobject * const real = __unwrap(this);
+	Am_Threading_Mutex_data *d =
+		(Am_Threading_Mutex_data *) real->object_properties.class_object_properties.object_data.value.custom_value;
+	if (d != NULL) {
+		free(d);
+		real->object_properties.class_object_properties.object_data.value.custom_value = NULL;
+	}
+	return __result;
+}
+
+function_result Am_Threading_Mutex__native_mark_children_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = false };
+	(void) this;
+	return __result;
+}
+
+function_result Am_Threading_Mutex_lock_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = false };
+	Am_Threading_Mutex_data *d =
+		(Am_Threading_Mutex_data *) __unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value;
+	if (d != NULL) d->locked = 1;
+	return __result;
+}
+
+function_result Am_Threading_Mutex_unlock_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = false };
+	Am_Threading_Mutex_data *d =
+		(Am_Threading_Mutex_data *) __unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value;
+	if (d != NULL) d->locked = 0;
+	return __result;
+}
+
+function_result Am_Threading_Mutex_tryLock_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = true };
+	Am_Threading_Mutex_data *d =
+		(Am_Threading_Mutex_data *) __unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value;
+
+	bool acquired = true;
+	if (d != NULL && d->locked) {
+		acquired = false;
+	} else if (d != NULL) {
+		d->locked = 1;
+	}
+
+	__result.return_value.value.bool_value = acquired;
+	return __result;
+}
+
+#else
+
 #include <libc/core.h>
 #include <Am/Threading/Mutex.h>
 #include <Am/Lang/Object.h>
@@ -106,3 +187,5 @@ function_result Am_Threading_Mutex_tryLock_0(aobject * const this)
 __exit: ;
 	return __result;
 }
+
+#endif
