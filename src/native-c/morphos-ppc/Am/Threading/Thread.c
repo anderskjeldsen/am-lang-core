@@ -29,7 +29,7 @@ function_result Am_Threading_Thread__native_init_0(aobject * const this)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 
-	printf("[native_init] enter (this=%p)\n", (void *) this); fflush(stdout);
+	// printf("[native_init] enter (this=%p)\n", (void *) this); fflush(stdout);
 	SysBase = *((struct ExecBase **)4UL);
 	// dos.library is opened by amiga-gcc's C runtime before main()
 	// runs (printf above would crash without it), so the previous
@@ -42,8 +42,8 @@ function_result Am_Threading_Thread__native_init_0(aobject * const this)
 	__unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value = data;
 	data->stack_size = 4000 * 1024; // TODO
 	data->done = false;
-	printf("[native_init] done (this=%p, data=%p, stack=%lu)\n",
-	       (void *) this, (void *) data, (unsigned long) data->stack_size); fflush(stdout);
+	// printf("[native_init] done (this=%p, data=%p, stack=%lu)\n",
+	//        (void *) this, (void *) data, (unsigned long) data->stack_size); fflush(stdout);
 
 __exit: ;
 	return __result;
@@ -176,7 +176,7 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 
-	printf("[start] enter (this=%p)\n", (void *) this); fflush(stdout);
+	// printf("[start] enter (this=%p)\n", (void *) this); fflush(stdout);
 	void (*fptr)() = Am_Threading_Thread__InitTask;
 
 	// Unwrap for every DATA read on the Thread instance. `this` may be
@@ -191,7 +191,7 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 	if ( name_holder->string_value != NULL ) {
 		name_strptr = name_holder->string_value;
 	}
-	printf("[start] fptr=%p name=\"%s\"\n", (void *) fptr, name_strptr); fflush(stdout);
+	// printf("[start] fptr=%p name=\"%s\"\n", (void *) fptr, name_strptr); fflush(stdout);
 
 	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) this_r->object_properties.class_object_properties.object_data.value.custom_value;
 
@@ -240,9 +240,9 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 	// the new task starts running and busy-waits on `tc_UserData`
 	// while the caller could otherwise drop their last ref to `this`.
 
-	printf("[start] calling CreateNewProc\n"); fflush(stdout);
+	// printf("[start] calling CreateNewProc\n"); fflush(stdout);
 	struct Process * process = CreateNewProc(tags);
-	printf("[start] CreateNewProc returned (process=%p)\n", (void *) process); fflush(stdout);
+	// printf("[start] CreateNewProc returned (process=%p)\n", (void *) process); fflush(stdout);
 
 	if ( process == NULL )
 	{
@@ -253,8 +253,8 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 	else
 	{
 		process->pr_Task.tc_UserData = (void *) this;
-		printf("[start] set tc_UserData=%p on task=%p\n",
-		       (void *) this, (void *) &process->pr_Task); fflush(stdout);
+		// printf("[start] set tc_UserData=%p on task=%p\n",
+		//        (void *) this, (void *) &process->pr_Task); fflush(stdout);
 	}
 
 __exit: ;
@@ -266,14 +266,14 @@ function_result Am_Threading_Thread_join_0(aobject * const this)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 
-	printf("[join] start (thread=%p)\n", (void *) this); fflush(stdout);
+	// printf("[join] start (thread=%p)\n", (void *) this); fflush(stdout);
 	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) __unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value;
 
 	while( !data->done )
 	{
 		Am_Threading_Thread_sleep_0(200);
 	}
-	printf("[join] done (thread=%p)\n", (void *) this); fflush(stdout);
+	// printf("[join] done (thread=%p)\n", (void *) this); fflush(stdout);
 
 __exit: ;
 	return __result;

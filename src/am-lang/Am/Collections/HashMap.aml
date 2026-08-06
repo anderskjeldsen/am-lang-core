@@ -265,6 +265,7 @@ namespace Am.Collections {
             return this.size == 0
         }
 
+        // Same as "keys()" on other frameworks. 
         fun buildKeys(): List<K> {
             var keyList = List.newList<K>()
             if (this.keyIndexes.length() == 0) {

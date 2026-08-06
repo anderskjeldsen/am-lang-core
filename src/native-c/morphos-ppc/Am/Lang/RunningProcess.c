@@ -1102,9 +1102,19 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     }
 
     // Spawn handler Process.
+    //
+    // NP_CodeType, CODETYPE_PPC is REQUIRED: rp_handler_entry is a PPC
+    // function pointer, but MorphOS's CreateNewProc defaults NP_Entry to a
+    // 68k entry (dos.library is 68k). Without this tag the handler Process
+    // is created but its PPC entry never executes — the whole DOS-packet
+    // pipe bridge is dead, so a spawned command blocks on its first I/O
+    // and never produces output or exits (isAlive() stays true forever).
+    // Diagnosed on the morphos-qemu rig: shutdownAll reported entered=0
+    // (rp_handler_entry never ran). Same fix as Thread.c's worker spawn.
     Forbid();
     st->handler_proc = CreateNewProcTags(
         NP_Entry,     (ULONG) rp_handler_entry,
+        NP_CodeType,  CODETYPE_PPC,
         NP_Name,      (ULONG) RP_TTY_TASK_NAME,
         NP_StackSize, 8192,
         TAG_DONE);

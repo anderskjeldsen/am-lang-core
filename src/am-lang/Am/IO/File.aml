@@ -92,6 +92,85 @@ namespace Am.IO
         native fun copy(destination: String): Bool
         native fun move(destination: String): Bool
 
+        // Joins a directory path and a bare entry name using the separator the
+        // host filesystem expects. AmigaDOS volume roots ("RAM:") and paths
+        // already ending in a separator take the name directly — sticking a
+        // "/" after a colon would mean *parent* on AmigaDOS, not a child.
+        static fun joinPath(directory: String, name: String): String {
+            if (directory.endsWith(":") || directory.endsWith("/")) {
+                return directory + name
+            }
+            return directory + "/" + name
+        }
+
+        // Creates this directory and every missing parent above it. Returns
+        // true if the directory exists when we're done (already existing is
+        // success, matching mkdir -p).
+        static fun createDirectories(path: String): Bool {
+            var dir = new File(path)
+            if (dir.exists()) {
+                return dir.isDirectory()
+            }
+            var index = path.lastIndexOf("/")
+            if (index > 0) {
+                var parent = path.substring(0UI, index as UInt)
+                if (!parent.endsWith(":")) {
+                    File.createDirectories(parent)
+                }
+            }
+            if (File.createDirectory(path)) {
+                return true
+            }
+            // Lost a race, or the platform reports EEXIST as failure.
+            return dir.exists()
+        }
+
+        // Copies this file — or, if it is a directory, this whole tree — to
+        // `destination`. Directory contents land *inside* `destination`
+        // (i.e. `new File("src").copyRecursive("dst")` gives `dst/<entries>`),
+        // which is what `cp -R src/. dst/` does. Written in AmLang on top of
+        // the single-file native copy so every platform gets it for free.
+        fun copyRecursive(destination: String): Bool {
+            if (!this.isDirectory()) {
+                return this.copy(destination)
+            }
+            if (!File.createDirectories(destination)) {
+                return false
+            }
+            var ok = true
+            var children = this.listFiles()
+            var i = 0
+            while (i < children.length()) {
+                var child = children[i]
+                var target = File.joinPath(destination, child.getName())
+                if (!child.copyRecursive(target)) {
+                    ok = false
+                }
+                i++
+            }
+            return ok
+        }
+
+        // Deletes this file, or this directory and everything below it.
+        // Returns false if any entry could not be removed. A path that does
+        // not exist counts as already deleted.
+        fun deleteRecursive(): Bool {
+            if (!this.exists()) {
+                return true
+            }
+            if (this.isDirectory()) {
+                var children = this.listFiles()
+                var i = 0
+                while (i < children.length()) {
+                    if (!children[i].deleteRecursive()) {
+                        return false
+                    }
+                    i++
+                }
+            }
+            return this.delete()
+        }
+
         // Check if this file is marked as temporary
         fun isTemporary(): Bool {
             return this.temporary
