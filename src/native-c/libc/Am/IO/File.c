@@ -19,6 +19,19 @@
 #include <dos/dosextens.h>
 #endif
 
+// AmigaOS and MorphOS have no POSIX symbolic links, and their C libraries
+// don't ship lstat() at all — so every "does this follow a link?" question
+// collapses to plain stat() there, and the link accessors below are inert.
+//
+// Everywhere else the distinction MATTERS for recursive walks: stat() follows
+// a symlink, so a link pointing at a directory reports S_ISDIR and a naive
+// deleteRecursive() will delete THROUGH it into the target. That is not
+// hypothetical — it is how a `c-libs/openssl -> /opt/homebrew/...` link got a
+// Homebrew keg wiped. rm(1) uses lstat for exactly this reason.
+#if defined(__amigaos__) || defined(__AMIGA__) || defined(__MORPHOS__)
+#define AM_NO_SYMLINKS 1
+#endif
+
 function_result Am_IO_File__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
@@ -191,6 +204,79 @@ __exit: ;
 	return __result;
 };
 
+// True when this path IS a symbolic link (never follows it). Always false on
+// AmigaOS/MorphOS, which have no symlinks. Recursive walkers must consult
+// this BEFORE isDirectory(), which deliberately keeps stat/test -d semantics.
+function_result Am_IO_File_isSymbolicLink_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+
+#ifdef AM_NO_SYMLINKS
+	__result.return_value.value.bool_value = false;
+#else
+	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
+	string_holder *filename_string_holder = (string_holder *) (filename + 1);
+
+	struct stat s;
+	__result.return_value.value.bool_value =
+		(lstat(filename_string_holder->string_value, &s) == 0 && S_ISLNK(s.st_mode));
+#endif
+
+__exit: ;
+	return __result;
+};
+
+// The target path a symbolic link points at, or null when this is not a link
+// (or on platforms without symlinks). The target is returned verbatim — it may
+// be relative to the link's own directory.
+function_result Am_IO_File_readLinkNative_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+
+#ifdef AM_NO_SYMLINKS
+	__result.return_value.value.object_value = NULL;
+#else
+	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
+	string_holder *filename_string_holder = (string_holder *) (filename + 1);
+
+	char buffer[PATH_MAX + 1];
+	ssize_t len = readlink(filename_string_holder->string_value, buffer, PATH_MAX);
+	if (len < 0) {
+		__result.return_value.value.object_value = NULL;
+	} else {
+		// readlink does NOT NUL-terminate.
+		buffer[len] = '\0';
+		__result.return_value.value.object_value = __create_string(buffer, &Am_Lang_String);
+	}
+#endif
+
+__exit: ;
+	return __result;
+};
+
+// Creates `linkPath` as a symbolic link pointing at `target`. False on
+// platforms without symlinks, and false if linkPath already exists.
+function_result Am_IO_File_createSymbolicLink_0(aobject * linkPath, aobject * target)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+
+#ifdef AM_NO_SYMLINKS
+	__result.return_value.value.bool_value = false;
+#else
+	string_holder *link_string_holder = (string_holder *) (linkPath + 1);
+	string_holder *target_string_holder = (string_holder *) (target + 1);
+
+	__result.return_value.value.bool_value =
+		(symlink(target_string_holder->string_value, link_string_holder->string_value) == 0);
+#endif
+
+__exit: ;
+	return __result;
+};
+
 function_result Am_IO_File_isDirectory_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = true };
@@ -305,7 +391,12 @@ function_result Am_IO_File_delete_0(aobject * const this)
 	
 	struct stat s;
 	int result;
-	
+
+	// lstat, NOT stat: a symlink must be unlinked, never followed. With stat
+	// a link pointing at a directory reported S_ISDIR and we called rmdir()
+	// on the LINK path, which fails with ENOTDIR — symlinks to directories
+	// were previously undeletable. Matches rm(1).
+#ifdef AM_NO_SYMLINKS
 	if (stat(filename_string_holder->string_value, &s) == 0) {
 		if (S_ISDIR(s.st_mode)) {
 			result = rmdir(filename_string_holder->string_value);
@@ -316,6 +407,23 @@ function_result Am_IO_File_delete_0(aobject * const this)
 	} else {
 		__result.return_value.value.bool_value = false;
 	}
+#else
+	if (lstat(filename_string_holder->string_value, &s) == 0) {
+		if (S_ISLNK(s.st_mode)) {
+			// Unlink the link itself; the target is left alone. Also the only
+			// way a DANGLING link can be removed (stat would say it does not
+			// exist and we would skip it forever).
+			result = unlink(filename_string_holder->string_value);
+		} else if (S_ISDIR(s.st_mode)) {
+			result = rmdir(filename_string_holder->string_value);
+		} else {
+			result = unlink(filename_string_holder->string_value);
+		}
+		__result.return_value.value.bool_value = (result == 0);
+	} else {
+		__result.return_value.value.bool_value = false;
+	}
+#endif
 
 __exit: ;
 	return __result;

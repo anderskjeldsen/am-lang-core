@@ -61,9 +61,17 @@ function_result Am_Lang_Process_run_0(aobject * command)
 	// caller's stdin/stdout, so the command's output reaches the user's shell.
 	// Passing NULL would silently redirect to NIL: on AmigaOS but CRASH on
 	// MorphOS — omit the tag entirely instead.
+	// NP_StackSize matters here: without it the spawned command gets MorphOS'
+	// default ~4 KB stack (crash dumps from a failed `make` read
+	// StackSize 0x1f40) and anything non-trivial dies immediately -- which is
+	// why `amlc build` could not run make while running make by hand from a
+	// shell worked: the shell's `Stack` setting only applies to ITS children,
+	// not to a process we create here. The capture variants below already pass
+	// this tag; the plain run path did not.
 	struct TagItem tags[] = {
 		{ SYS_Asynch,    FALSE },
 		{ SYS_UserShell, TRUE },
+		{ NP_StackSize,  (ULONG) 100000 },
 		{ TAG_DONE,      0 },
 	};
 
