@@ -1,17 +1,42 @@
 namespace Am.Lang.Diagnostics
 {
+    /**
+     * Counters for the automatic reference counting runtime. Reach for these when a program
+     * grows in memory over time or when you suspect objects are being kept alive by a cycle or
+     * a stray reference: sample getAllocationCount() and getResidentMemoryKb() at two points in
+     * a workload and compare, then call printAllocatedObjects() to see what is still live.
+     * Diagnostics only — nothing here affects program behaviour.
+     */
     native class Arc
     {
+        /**
+         * Prints every object the runtime currently holds alive, with its type, to standard
+         * output. Verbose in a real application; call it around a suspected leak rather than at
+         * arbitrary points.
+         */
         native static fun printAllocatedObjects()
 
-        // Total objects ever allocated (monotonic; never decreases).
+        /**
+         * Returns the total number of objects allocated since the program started. The counter is
+         * monotonic and never decreases, so a difference between two samples tells you the
+         * allocation churn of the work in between.
+         * @return The cumulative allocation count
+         */
         native static fun getAllocationCount(): Long
 
-        // Cross-thread wrappers currently alive (created - freed). Climbs if
-        // wrappers are leaking.
+        /**
+         * Returns the number of cross-thread wrappers currently alive, that is created minus
+         * freed. A value that climbs steadily means wrappers are leaking, which usually points at
+         * an object being passed between threads more often than intended.
+         * @return The live wrapper count
+         */
         native static fun getLiveWrapperCount(): Long
 
-        // Resident set size in KiB (Linux /proc; 0 where unavailable).
+        /**
+         * Returns the process's resident set size in KiB, read from /proc on Linux. Returns 0 on
+         * platforms where the figure is not available.
+         * @return Resident memory in KiB, or 0 when unknown
+         */
         native static fun getResidentMemoryKb(): Long
     }
 }

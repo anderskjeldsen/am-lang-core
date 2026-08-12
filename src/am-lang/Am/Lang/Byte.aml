@@ -1,27 +1,100 @@
 
 namespace Am.Lang 
 {
+    /**
+     * An 8-bit signed integer, range -128 to 127. For raw binary data prefer UByte, which is
+     * what the Stream and String byte APIs use. Literals take a B suffix, as in 16B.
+     */
     primitive native class Byte {
+        /**
+         * Formats the value as decimal text.
+         * @return The value as a String
+         */
         override native fun toString(): String
+        /**
+         * Returns a hash of the value so it can be used as a HashMap or HashSet key.
+         * @return The hash value
+         */
         override native fun hash(): UInt
+        /**
+         * Converts this Byte value to a Short (16-bit signed).
+         * @return The value as a Short
+         */
         native fun toShort(): Short
+        /**
+         * Converts this Byte value to a Int (32-bit signed).
+         * @return The value as a Int
+         */
         native fun toInt(): Int
+        /**
+         * Converts this Byte value to a Long (64-bit signed).
+         * @return The value as a Long
+         */
         native fun toLong(): Long
+        /**
+         * Converts this Byte value to a UByte (8-bit unsigned).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a UByte
+         */
         native fun toUByte(): UByte
+        /**
+         * Converts this Byte value to a UShort (16-bit unsigned).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a UShort
+         */
         native fun toUShort(): UShort
+        /**
+         * Converts this Byte value to a UInt (32-bit unsigned).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a UInt
+         */
         native fun toUInt(): UInt
+        /**
+         * Converts this Byte value to a ULong (64-bit unsigned).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a ULong
+         */
         native fun toULong(): ULong
         #require floatingPoint
+        /**
+         * Converts this Byte value to a Float (32-bit floating-point).
+         * @return The value as a Float
+         */
         native fun toFloat(): Float
         #require floatingPoint
+        /**
+         * Converts this Byte value to a Double (64-bit floating-point).
+         * @return The value as a Double
+         */
         native fun toDouble(): Double
+        /**
+         * Converts to a Bool, where zero is false and any other value is true.
+         * @return True when the value is not zero
+         */
         native fun toBool(): Bool
 
+        /**
+         * Parses decimal text into a Byte.
+         * @param s The text to parse
+         * @return The parsed value
+         */
         static native fun parse(s: String): Byte
 
+        /**
+         * The largest value a Byte can hold.
+         */
         static const var maxValue: Byte = 0x7fB
+        /**
+         * The smallest value a Byte can hold.
+         */
         static const var minValue: Byte = 0x80B
 
+        /**
+         * Returns the smaller of two values.
+         * @param a The first value
+         * @param b The second value
+         * @return a if it is less than b, otherwise b
+         */
         static fun min(a: Byte, b: Byte): Byte {
             if (a < b) {
                 return a
@@ -29,6 +102,12 @@ namespace Am.Lang
             return b
         }
 
+        /**
+         * Returns the larger of two values.
+         * @param a The first value
+         * @param b The second value
+         * @return a if it is greater than b, otherwise b
+         */
         static fun max(a: Byte, b: Byte): Byte {
             if (a > b) {
                 return a
@@ -36,6 +115,11 @@ namespace Am.Lang
             return b
         }
 
+        /**
+         * Returns the magnitude of this value, dropping the sign. Note that minValue has no
+         * positive counterpart, so abs() of minValue wraps back to minValue.
+         * @return The absolute value
+         */
         fun abs(): Byte {
             if (this < 0) {
                 return -this

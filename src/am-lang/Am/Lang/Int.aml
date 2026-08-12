@@ -1,27 +1,104 @@
 
 namespace Am.Lang 
 {
+    /**
+     * A 32-bit signed integer, the default type for integer literals and the workhorse for
+     * loop counters, indices and sizes. Range is -2147483648 to 2147483647; arithmetic wraps
+     * on overflow rather than throwing. Conversions come in two forms — the `value as Int`
+     * cast, which is the preferred house style, and the explicit toX() methods below.
+     */
     primitive native class Int {
+        /**
+         * Formats the value as decimal text.
+         * @return The value as a String
+         */
         override native fun toString(): String
+        /**
+         * Returns a hash of the value so it can be used as a HashMap or HashSet key.
+         * @return The hash value
+         */
         override native fun hash(): UInt
+        /**
+         * Converts this Int value to a Byte (8-bit signed).
+         * The target type is narrower, so values that do not fit are truncated.
+         * @return The value as a Byte
+         */
         native fun toByte(): Byte
+        /**
+         * Converts this Int value to a Short (16-bit signed).
+         * The target type is narrower, so values that do not fit are truncated.
+         * @return The value as a Short
+         */
         native fun toShort(): Short
+        /**
+         * Converts this Int value to a Long (64-bit signed).
+         * @return The value as a Long
+         */
         native fun toLong(): Long
+        /**
+         * Converts this Int value to a UByte (8-bit unsigned).
+         * The target type is narrower, so values that do not fit are truncated.
+         * @return The value as a UByte
+         */
         native fun toUByte(): UByte
+        /**
+         * Converts this Int value to a UShort (16-bit unsigned).
+         * The target type is narrower, so values that do not fit are truncated.
+         * @return The value as a UShort
+         */
         native fun toUShort(): UShort
+        /**
+         * Converts this Int value to a UInt (32-bit unsigned).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a UInt
+         */
         native fun toUInt(): UInt
+        /**
+         * Converts this Int value to a ULong (64-bit unsigned).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a ULong
+         */
         native fun toULong(): ULong
         #require floatingPoint
+        /**
+         * Converts this Int value to a Float (32-bit floating-point).
+         * @return The value as a Float
+         */
         native fun toFloat(): Float
         #require floatingPoint
+        /**
+         * Converts this Int value to a Double (64-bit floating-point).
+         * @return The value as a Double
+         */
         native fun toDouble(): Double
+        /**
+         * Converts to a Bool, where zero is false and any other value is true.
+         * @return True when the value is not zero
+         */
         native fun toBool(): Bool
 
+        /**
+         * Parses decimal text into a Int.
+         * @param s The text to parse
+         * @return The parsed value
+         */
         static native fun parse(s: String): Int
 
+        /**
+         * The largest value a Int can hold.
+         */
         static const var maxValue: Int = 0x7fffffff
+        /**
+         * The smallest value a Int can hold.
+         */
         static const var minValue: Int = 0x80000000
 
+        /**
+         * Returns the smaller of two values.
+         * @param a The first value
+         * @param b The second value
+         * @return a if it is less than b, otherwise b
+         */
         static fun min(a: Int, b: Int): Int {
             if (a < b) {
                 return a
@@ -29,6 +106,12 @@ namespace Am.Lang
             return b
         }
 
+        /**
+         * Returns the larger of two values.
+         * @param a The first value
+         * @param b The second value
+         * @return a if it is greater than b, otherwise b
+         */
         static fun max(a: Int, b: Int): Int {
             if (a > b) {
                 return a
@@ -36,6 +119,11 @@ namespace Am.Lang
             return b
         }
 
+        /**
+         * Returns the magnitude of this value, dropping the sign. Note that minValue has no
+         * positive counterpart, so abs() of minValue wraps back to minValue.
+         * @return The absolute value
+         */
         fun abs(): Int {
             if (this < 0) {
                 return -this

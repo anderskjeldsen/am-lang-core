@@ -1,7 +1,17 @@
 namespace Am.Collections {
+    /**
+     * Something that can be walked element by element. Implementing it is what makes a type usable
+     * with `each` and with the extension functions in CollectionExtensions, so implement it on your
+     * own container types to make them behave like the built-in collections.
+     */
     interface Iterable<T> {
         import Am.Lang
 
+        /**
+         * Returns a new iterator positioned before the first element. Each call must hand back a fresh
+         * iterator, so the container can be walked more than once.
+         * @return An iterator over the elements
+         */
         fun iterator(): Iterator<T>
     }
 }

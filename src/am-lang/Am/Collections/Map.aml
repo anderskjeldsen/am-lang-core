@@ -1,22 +1,83 @@
 namespace Am.Collections {
 
+    /**
+     * One key/value pair from a map.
+     */
     interface MapEntry<K, V> {
+        /**
+         * Returns the entry's key.
+         * @return The key
+         */
         fun getKey(): K
+        /**
+         * Returns the entry's value.
+         * @return The value
+         */
         fun getValue(): V
     }
 
+    /**
+     * The contract shared by keyed collections, implemented by HashMap. Declare parameters and
+     * fields as Map when the calling code should not care which implementation it gets.
+     */
     interface Map<T, U> {
         import Am.Lang
 
+        /**
+         * Returns the number of entries.
+         * @return The entry count
+         */
         fun getSize(): Int
+        /**
+         * Returns the value stored under a key. Implementations throw rather than returning null when
+         * the key is absent.
+         * @param key The key to look up
+         * @return The value stored under that key
+         * @throws KeyNotFoundException if the key is not present
+         */
         fun get(key: T): U
+        /**
+         * Stores a value under a key, replacing any previous value.
+         * @param key The key to store under
+         * @param value The value to store
+         */
         fun set(key: T, value: U)
+        /**
+         * Removes an entry.
+         * @param key The key to remove
+         * @return True if the key was present and removed
+         */
         fun remove(key: T): Bool
+        /**
+         * Removes every entry.
+         */
         fun clear()
+        /**
+         * Tests whether a key is present.
+         * @param key The key to look for
+         * @return True if the key is in the map
+         */
         fun containsKey(key: T): Bool
+        /**
+         * Tests whether any entry holds an equal value.
+         * @param value The value to look for
+         * @return True if some entry holds an equal value
+         */
         fun containsValue(value: U): Bool
+        /**
+         * Tests whether the map holds no entries.
+         * @return True when the map is empty
+         */
         fun isEmpty(): Bool
+        /**
+         * Builds a list of the keys currently present.
+         * @return A new list of the keys
+         */
         fun buildKeys(): List<T>
+        /**
+         * Returns the keys currently present, in unspecified order.
+         * @return A new list of the keys
+         */
         fun keys(): List<T>
     }
 }

@@ -1,25 +1,20 @@
 namespace Am.Threading {
 
-    // Queued unit of work — a thin wrapper around a `() => Bool`
-    // lambda. The Bool return value is currently ignored (AmLang has
-    // no `() => Void` lambda type, so we mirror the convention used
-    // by listener fields throughout am-ui / am-mui).
-    //
-    // Why a wrapper class rather than queuing the lambda directly:
-    //   * keeps TaskRunner.queue typed as List<Task>, not
-    //     List<() => Bool> — the latter trips the renderer crash
-    //     pattern around generic lists of function types.
-    //   * gives `execute()` a single place to catch + log task
-    //     exceptions so a bad task can't tear down the runner.
-    //   * future: a Continuation handle for "await this task's
-    //     completion / result" can hang off this object without
-    //     touching the schedule() API again.
+    /**
+     * One queued unit of work: a thin wrapper around a lambda, as handed to TaskScheduler. The
+     * lambda's Bool result is ignored — it is there because AmLang has no void lambda type, the
+     * same convention the UI listener fields use. The wrapper exists so the runner's queue can be a
+     * list of ordinary objects rather than a list of function types, and so that exceptions can be
+     * caught in one place: a task that throws is logged and the worker carries on with the next
+     * one.
+     */
     class Task(var fn: () => Bool) {
         import Am.Lang
 
-        // Run the wrapped lambda. Exceptions are caught and printed —
-        // the runner loop never sees them, so one misbehaving task
-        // does not stop subsequent tasks on the same worker.
+        /**
+         * Runs the wrapped lambda, catching and printing anything it throws so one misbehaving task
+         * cannot stop the tasks queued behind it.
+         */
         fun execute() {
             try {
                 this.fn()

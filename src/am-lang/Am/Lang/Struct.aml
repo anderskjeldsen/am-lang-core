@@ -1,9 +1,29 @@
 namespace Am.Lang 
 {
+    /**
+     * A holder that lets a struct value be stored where an object reference is expected — inside
+     * a List, a HashMap or an Any-typed field. Structs are value types laid out inline and are
+     * not reference counted, so they cannot be put in a collection directly; wrap the value in a
+     * Struct, and remember that get() and set() copy the value in and out rather than handing
+     * out a reference to it. The compiler supplies the bodies of these methods.
+     */
     class Struct<T : struct> 
     {
+        /**
+         * Returns a copy of the wrapped struct value.
+         * @return The wrapped value
+         */
         special fun get(): T
+        /**
+         * Replaces the wrapped value with a copy of the one given.
+         * @param newValue The value to store
+         */
         special fun set(newValue: T)
+        /**
+         * Compares the wrapped values field by field.
+         * @param other The object to compare with
+         * @return True if other wraps an equal struct value
+         */
         special override fun equals(other: Object): Bool
     }
 }

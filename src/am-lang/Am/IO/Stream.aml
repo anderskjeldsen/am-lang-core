@@ -63,14 +63,49 @@ namespace Am.IO
     }
     */
 
+    /**
+     * A sequence of bytes you can read, write and seek within — the common contract behind
+     * FileStream, MemoryStream and the TextStream and BinaryStream decorators. Write code against
+     * Stream rather than a concrete class and the same routine will work on a file, a memory
+     * buffer or anything you implement yourself. Byte reads return an Int so that a negative
+     * value can signal end of stream; bulk reads return the count actually transferred, which may
+     * be less than you asked for.
+     */
     interface Stream
     {
         import Am.Lang
 
+        /**
+         * Reads up to length bytes into a buffer. A short read is normal, so loop until you have what
+         * you need or the count comes back 0.
+         * @param buffer Destination buffer
+         * @param offset Position in the STREAM to read from
+         * @param length Maximum number of bytes to read
+         * @return The number of bytes actually read; 0 at end of stream
+         */
         fun read(buffer: UByte[], offset: Long, length: UInt): UInt
+        /**
+         * Writes length bytes from a buffer.
+         * @param buffer Source buffer
+         * @param offset Position in the STREAM to write at
+         * @param length Number of bytes to write
+         */
         fun write(buffer: UByte[], offset: Long, length: UInt)
+        /**
+         * Moves the read/write position to an absolute offset from the beginning of the stream.
+         * @param offset Byte offset from the start
+         */
         fun seekFromStart(offset: Long)
+        /**
+         * Reads a single byte. Convenient but slow across a large file, since every call crosses
+         * into the runtime — prefer a bulk read().
+         * @return The byte value 0 to 255, or a negative value at end of stream
+         */
         fun readByte(): Int
+        /**
+         * Writes a single byte.
+         * @param byte The byte value to write, 0 to 255
+         */
         fun writeByte(byte: Int)
     }
 }

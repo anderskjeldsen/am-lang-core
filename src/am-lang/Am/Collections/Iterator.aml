@@ -1,9 +1,23 @@
 namespace Am.Collections {
+    /**
+     * A one-way cursor over a sequence of elements. The usual pattern is a while loop calling
+     * hasNext() and next(), though `each` writes that loop for you. An iterator is single use and
+     * is not protected against the underlying collection changing beneath it.
+     */
     interface Iterator<T> {
         import Am.Lang
 
+        /**
+         * Tests whether another element is available.
+         * @return True when next() can be called
+         */
         fun hasNext(): Bool
 
+        /**
+         * Returns the next element and advances the cursor. Only call it after hasNext() has returned
+         * true.
+         * @return The next element
+         */
         fun next(): T
     }
 }

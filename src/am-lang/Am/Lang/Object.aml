@@ -1,22 +1,66 @@
 namespace Am.Lang 
 {
+    /**
+     * Internal binding to the C runtime routines behind Object.equals, Object.hash and
+     * debug printing. Application code should call the corresponding Object methods
+     * instead of using this class directly.
+     */
     native class ObjectHelper {
+        /**
+         * Compares two object references using the runtime's identity comparison.
+         * @param a The first object
+         * @param b The second object
+         * @return True if both references point at the same instance
+         */
         static native fun equals(a: Object, b: Object): Bool
+        /**
+         * Computes a hash for an object from its runtime identity.
+         * @param o The object to hash
+         * @return An identity-derived hash value
+         */
         static native fun hash(o: Object): UInt
+        /**
+         * Prints runtime diagnostics for an object (type and reference-count information) to
+         * standard output. Useful when tracking down ARC problems.
+         * @param o The object to inspect
+         */
         static native fun printDebug(o: Object)
     }
 
+    /**
+     * Root of the class hierarchy for reference types: every class that does not declare a
+     * base type extends Object, so toString, hash and equals are available on any instance.
+     * Override toString to make your type readable in diagnostics, and override equals and
+     * hash together when instances should compare by value instead of by identity — the
+     * hash-based collections (HashMap, HashSet) rely on that pair being consistent.
+     */
     class Object 
     {
+        /**
+         * Returns a readable representation of this instance. The default implementation returns
+         * the literal "Object", so override it in your own classes.
+         * @return A String describing this instance
+         */
         override fun toString(): String {
             return "Object"
         }
 
+        /**
+         * Returns a hash for this instance. The default is derived from object identity, so two
+         * equal-by-value instances hash differently unless you override this together with equals.
+         * @return The hash value
+         */
         override fun hash(): UInt {
             return ObjectHelper.hash(this)
         }
 
 
+        /**
+         * Compares this instance with another object. The default implementation compares identity
+         * (the same instance), not contents; override it for value semantics.
+         * @param other The object to compare with
+         * @return True if the two objects are considered equal
+         */
         open fun equals(other: Object): Bool {
             return ObjectHelper.equals(this, other)
         }

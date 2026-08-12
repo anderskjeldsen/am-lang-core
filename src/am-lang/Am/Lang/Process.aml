@@ -1,64 +1,89 @@
 namespace Am.Lang
 {
     #implementationPlatforms "libc", "amigaos", "morphos-ppc"
+    /**
+     * Runs external commands. There are two families here: the run* methods, which execute a
+     * command, block until it finishes and hand back the exit code or the captured output; and
+     * the start* methods, which spawn the command asynchronously and return a RunningProcess you
+     * poll for output and write to for input. Use the blocking family for batch work such as
+     * invoking a compiler, and the asynchronous family for anything interactive, because a
+     * blocking run gives the child no stdin and will hang on a password prompt. Commands go
+     * through the platform shell, so quoting rules are the host's.
+     */
     native class Process
     {
         import Am.Lang
 
-        // Execute a shell command and return its exit code.
+        /**
+         * Runs a shell command, waits for it to finish and returns its exit code. Output goes
+         * wherever the shell sends it — use runAndCaptureOutput when you want to read it.
+         * @param command The command line to execute
+         * @return The child's exit code, 0 by convention meaning success
+         */
         static native fun run(command: String): Int
 
-        // Execute a shell command and return its stdout output as a String.
+        /**
+         * Runs a shell command, waits for it to finish and returns what it wrote to stdout. The
+         * child gets no stdin, so never use this for a command that may prompt.
+         * @param command The command line to execute
+         * @return The command's standard output
+         */
         static native fun runAndCaptureOutput(command: String): String
 
-        // Same as runAndCaptureOutput, but with the process's current
-        // working directory temporarily set to `workingDir` for the
-        // duration of the command. The previous CWD is restored on
-        // return (including on error). Use this instead of prefixing
-        // commands with "cd ..." — the AmigaOS shell treats `;` as a
-        // comment so a chained cd doesn't actually move the shell.
-        // An empty `workingDir` behaves exactly like runAndCaptureOutput.
+        /**
+         * Runs a shell command in a given directory and returns its stdout. The working directory
+         * is set for the duration of the command and restored afterwards, including on error. Use
+         * this rather than prefixing the command with a "cd", because the AmigaOS shell treats
+         * `;` as a comment and a chained cd does not actually move the shell. An empty workingDir
+         * behaves exactly like runAndCaptureOutput.
+         * @param command The command line to execute
+         * @param workingDir Directory to run in, or an empty string for the current one
+         * @return The command's standard output
+         */
         static native fun runAndCaptureOutputInDir(command: String, workingDir: String): String
 
-        // Like runAndCaptureOutputInDir, but captures ONLY stdout, run via
-        // the DOS System() shell with `> tempfile` redirection instead of a
-        // hand-rolled CreateNewProc. On AmigaOS this is the reliable path
-        // for spawning a `-noixemul` child (e.g. am-git): the CreateNewProc
-        // recipe used by runAndCaptureOutputInDir is tuned for ixemul
-        // children and hangs a -noixemul one at startup. stderr is NOT
-        // captured (it goes wherever the shell sends it). On libc this is
-        // identical to runAndCaptureOutputInDir.
+        /**
+         * Runs a shell command in a given directory and captures only stdout, going through the
+         * DOS System() shell with file redirection instead of spawning the child directly. On
+         * AmigaOS this is the reliable path for a child built without ixemul: the spawn recipe
+         * used by runAndCaptureOutputInDir is tuned for ixemul children and hangs a -noixemul one
+         * at startup. stderr is not captured. On the libc platforms this behaves exactly like
+         * runAndCaptureOutputInDir.
+         * @param command The command line to execute
+         * @param workingDir Directory to run in, or an empty string for the current one
+         * @return The command's standard output
+         */
         static native fun captureStdoutInDir(command: String, workingDir: String): String
 
-        // Resolve `path` to its OS-canonical form. On AmigaOS /
-        // MorphOS this means "DH0:Tools/" becomes "Workbench:Tools/"
-        // (i.e. device name → mounted volume name) via Lock +
-        // NameFromLock. On libc it returns the realpath; if the path
-        // can't be resolved (doesn't exist, permission denied) the
-        // original input is returned unchanged so the caller still
-        // has something usable.
+        /**
+         * Resolves a path to its canonical OS form. On AmigaOS and MorphOS that means a device
+         * name becomes the mounted volume name, so "DH0:Tools/" comes back as "Workbench:Tools/";
+         * on the libc platforms it is the real path with symlinks resolved. A path that cannot be
+         * resolved — it does not exist, or permission is denied — is returned unchanged, so the
+         * caller always gets something usable.
+         * @param path The path to resolve
+         * @return The canonical path, or the input unchanged when it cannot be resolved
+         */
         static native fun canonicalPath(path: String): String
 
-        // The process's current working directory. On AmigaOS /
-        // MorphOS this is the lock the IDE was launched with
-        // (NameFromLock of pr_CurrentDir); on libc it's getcwd().
-        // Returns "" if the OS can't resolve a name — the caller
-        // should treat empty as "unknown" rather than as a path.
+        /**
+         * Returns the process's current working directory. On AmigaOS and MorphOS this is the
+         * directory the program was launched from. An empty result means the OS could not resolve
+         * a name and should be treated as "unknown" rather than as a path.
+         * @return The current directory, or an empty string when unknown
+         */
         static native fun getCwd(): String
 
-        // Spawn `command` asynchronously with piped stdin/stdout.
-        // Returns a [[RunningProcess]] handle the caller polls for
-        // output and writes to for stdin. Use this for interactive
-        // programs (ssh, REPLs, anything that prompts the user) —
-        // runAndCaptureOutput blocks until the child exits and gives
-        // it a NULL stdin, which won't work for password prompts.
-        // `workingDir` empty means "current dir".
-        // Like `start`, but with a BINARY, un-translated bidirectional
-        // pipe (no pty / terminal cooking) for streaming raw protocol
-        // bytes — e.g. an ssh git transport via `bebbossh -T`. Drive it
-        // with RunningProcess.tryReadOutputBytes()/writeInputBytes();
-        // the String-based tryReadOutput/writeInput NUL-truncate and
-        // must not be mixed in.
+        /**
+         * Spawns a command asynchronously with a raw, untranslated bidirectional pipe — no
+         * terminal emulation and no character translation — for streaming binary protocol bytes,
+         * such as an ssh git transport. Drive the returned handle with tryReadOutputBytes() and
+         * writeInputBytes(); the String-based tryReadOutput() and writeInput() truncate at the
+         * first NUL byte and must not be mixed in.
+         * @param command The command line to execute
+         * @param workingDir Directory to run in, or an empty string for the current one
+         * @return A handle to the running child
+         */
         static fun startBinary(command: String, workingDir: String): RunningProcess {
             var p = new RunningProcess()
             p.enableBinaryMode()
@@ -66,20 +91,33 @@ namespace Am.Lang
             return p
         }
 
+        /**
+         * Spawns a command asynchronously with piped stdin and stdout, returning a handle you
+         * poll for output and write to for input. This is the one to use for interactive programs
+         * — ssh clients, REPLs, anything that prompts — since it lets you answer those prompts.
+         * @param command The command line to execute
+         * @param workingDir Directory to run in, or an empty string for the current one
+         * @return A handle to the running child
+         */
         static fun start(command: String, workingDir: String): RunningProcess {
             var p = new RunningProcess()
             p.startNative(command, workingDir)
             return p
         }
 
-        // Same as `start` but lets the caller pre-set the terminal
-        // dimensions the handler reports to the child's getConsoleSize
-        // probe. Bebbossh / nano query that probe very early during
-        // init — before the AmLang main task gets a turn to call
-        // setReportedSize() — so without this they see the rp_state
-        // default (24x80) and the remote PTY is sized to that. Pass
-        // the CliView's grid dimensions here so the first probe
-        // already has the right answer.
+        /**
+         * Spawns a command asynchronously like start(), but with the terminal dimensions reported
+         * to the child fixed up front. Programs such as ssh clients and full-screen editors query
+         * the terminal size very early during startup — before your code gets a chance to call
+         * setReportedSize() — and would otherwise see the 24x80 default and size the remote
+         * terminal to that. Pass your view's grid dimensions so the first query already has the
+         * right answer.
+         * @param command The command line to execute
+         * @param workingDir Directory to run in, or an empty string for the current one
+         * @param rows Terminal height in character rows
+         * @param cols Terminal width in character columns
+         * @return A handle to the running child
+         */
         static fun startWithReportedSize(
             command: String, workingDir: String,
             rows: Int, cols: Int): RunningProcess {

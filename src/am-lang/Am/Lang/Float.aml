@@ -1,25 +1,113 @@
 namespace Am.Lang 
 {
     #require floatingPoint
+    /**
+     * A 32-bit IEEE floating-point number. Only available when the package enables the
+     * floatingPoint feature (see package.yml) — several retro targets ship without an FPU, and
+     * leaving the feature off keeps the float runtime out of the binary. Prefer Float over
+     * Double on those platforms, and remember that equality comparisons on floating-point
+     * values are unreliable; compare against a tolerance instead.
+     */
     primitive native class Float {
+        /**
+         * Formats the value as decimal text.
+         * @return The value as a String
+         */
         override native fun toString(): String
+        /**
+         * Returns a hash of the value so it can be used as a HashMap or HashSet key.
+         * @return The hash value
+         */
         override native fun hash(): UInt
+        /**
+         * Converts this Float value to a Byte (8-bit signed).
+         * The fractional part is discarded (truncation towards zero), and values outside the
+         * target range are undefined.
+         * @return The value as a Byte
+         */
         native fun toByte(): Byte
+        /**
+         * Converts this Float value to a Short (16-bit signed).
+         * The fractional part is discarded (truncation towards zero), and values outside the
+         * target range are undefined.
+         * @return The value as a Short
+         */
         native fun toShort(): Short
+        /**
+         * Converts this Float value to a Int (32-bit signed).
+         * The fractional part is discarded (truncation towards zero), and values outside the
+         * target range are undefined.
+         * @return The value as a Int
+         */
         native fun toInt(): Int
+        /**
+         * Converts this Float value to a Long (64-bit signed).
+         * The fractional part is discarded (truncation towards zero), and values outside the
+         * target range are undefined.
+         * @return The value as a Long
+         */
         native fun toLong(): Long
+        /**
+         * Converts this Float value to a UByte (8-bit unsigned).
+         * The fractional part is discarded (truncation towards zero), and values outside the
+         * target range are undefined.
+         * @return The value as a UByte
+         */
         native fun toUByte(): UByte
+        /**
+         * Converts this Float value to a UShort (16-bit unsigned).
+         * The fractional part is discarded (truncation towards zero), and values outside the
+         * target range are undefined.
+         * @return The value as a UShort
+         */
         native fun toUShort(): UShort
+        /**
+         * Converts this Float value to a UInt (32-bit unsigned).
+         * The fractional part is discarded (truncation towards zero), and values outside the
+         * target range are undefined.
+         * @return The value as a UInt
+         */
         native fun toUInt(): UInt
+        /**
+         * Converts this Float value to a ULong (64-bit unsigned).
+         * The fractional part is discarded (truncation towards zero), and values outside the
+         * target range are undefined.
+         * @return The value as a ULong
+         */
         native fun toULong(): ULong
+        /**
+         * Converts this Float value to a Double (64-bit floating-point).
+         * @return The value as a Double
+         */
         native fun toDouble(): Double
+        /**
+         * Converts to a Bool, where zero is false and any other value is true.
+         * @return True when the value is not zero
+         */
         native fun toBool(): Bool
 
+        /**
+         * Parses decimal text into a Float.
+         * @param s The text to parse
+         * @return The parsed value
+         */
         static native fun parse(s: String): Float
 
+        /**
+         * The largest value a Float can hold.
+         */
         static const var maxValue: Float = 3.4028235e38F
+        /**
+         * The smallest value a Float can hold.
+         */
         static const var minValue: Float = -3.4028235e38F
 
+        /**
+         * Returns the smaller of two values.
+         * @param a The first value
+         * @param b The second value
+         * @return a if it is less than b, otherwise b
+         */
         static fun min(a: Float, b: Float): Float {
             if (a < b) {
                 return a
@@ -27,6 +115,12 @@ namespace Am.Lang
             return b
         }
 
+        /**
+         * Returns the larger of two values.
+         * @param a The first value
+         * @param b The second value
+         * @return a if it is greater than b, otherwise b
+         */
         static fun max(a: Float, b: Float): Float {
             if (a > b) {
                 return a
@@ -34,6 +128,10 @@ namespace Am.Lang
             return b
         }
 
+        /**
+         * Returns the magnitude of this value, dropping the sign.
+         * @return The absolute value
+         */
         fun abs(): Float {
             if (this < 0.0) {
                 return -this
@@ -41,6 +139,10 @@ namespace Am.Lang
             return this
         }
         
+        /**
+         * Returns the square root of this value. The result is undefined for negative input.
+         * @return The square root
+         */
         native fun sqrt(): Float
 
     }

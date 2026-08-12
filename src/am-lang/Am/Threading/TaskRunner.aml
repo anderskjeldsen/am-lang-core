@@ -1,56 +1,59 @@
 namespace Am.Threading {
 
-    // Single-threaded worker that drains a FIFO of Tasks. Owned 1:1
-    // by TaskScheduler, one per registered TaskThreadType. Internal
-    // class — applications use TaskScheduler.schedule(), not this.
-    //
-    // The thread starts on first `start()` and runs forever until
-    // `stop()` is called. Tasks queued via `submit()` get appended
-    // under `mutex`; the worker pops them under the same mutex but
-    // releases it before invoking task.execute() so long-running
-    // tasks do not block schedule() callers.
-    //
-    // Wake-up today is short-poll (Thread.sleep(IDLE_SLEEP_MS) when
-    // the queue is empty). This is the simplest thing that works on
-    // every backend — AmLang has no Condition primitive yet. The
-    // sleep granularity caps schedule-to-start latency at
-    // IDLE_SLEEP_MS milliseconds, which is fine for "short-lived
-    // tasks" like the user's HTTP requests. When a real Condition
-    // lands, replace the sleep with `condition.wait()` and have
-    // submit() call `condition.signal()`.
+    /**
+     * A single worker thread that drains a queue of Tasks in submission order. TaskScheduler owns
+     * one per registered thread type; applications schedule work through TaskScheduler.schedule()
+     * rather than touching this class. The thread starts on the first start() call and runs until
+     * stop() is requested. Tasks are appended and popped under a mutex, but the lock is released
+     * before a task runs, so a slow task never blocks the code submitting new ones.
+     * While the queue is empty the worker sleeps briefly and checks again — AmLang has no
+     * condition-variable primitive yet — which caps the delay between scheduling a task and it
+     * starting at that poll interval, currently 20 ms.
+     */
     class TaskRunner : Runnable {
         import Am.Lang
         import Am.Collections
 
-        // Display name surfaced as the Amiga task / pthread name —
-        // helps when reading process listings. Set by TaskScheduler
-        // before `start()`; initialised to a safe default so the
-        // native start path (which crashes on a NULL name on AmigaOS,
-        // see feedback_amlang_thread_name_required) always has
-        // something to work with.
+        /**
+         * Name given to the underlying thread, which is what shows up in a process or task listing.
+         * TaskScheduler sets it before start(); it is initialised to a usable default because starting
+         * a thread without a name crashes on AmigaOS.
+         */
         var name: String = "task-runner"
 
+        /**
+         * Pending tasks, oldest first. Only touched while holding the mutex.
+         */
         private var queue: List<Task> = new List<Task>()
+        /**
+         * Guards the queue against concurrent submission and polling.
+         */
         private var mutex: Mutex = new Mutex()
+        /**
+         * Set by stop() and noticed by the worker loop on its next pass.
+         */
         private var stopRequested: Bool
-        // The worker thread is created lazily on `start()` and never
-        // recreated. Field is nullable to reflect the "not yet started"
-        // state honestly; `getThread()` asserts non-null because its
-        // contract is "only call after start()".
+        /**
+         * The worker thread, created on start() and never recreated. Nullable so the "not started yet"
+         * state is honest; getThread() assumes it is only called after start().
+         */
         private var thread: Thread? = null
 
-        // Polling interval while the queue is empty. 20 ms is short
-        // enough to feel instant for UI-driven scheduling without
-        // chewing CPU on an idle worker.
+        /**
+         * How long the worker sleeps between polls while its queue is empty. 20 ms is short enough to
+         * feel immediate for UI-driven work without burning CPU on an idle worker.
+         */
         private static var IDLE_SLEEP_MS: Long = 20L
 
         init {
             this.stopRequested = false
         }
 
-        // Append a task to the runner's queue. Safe to call from any
-        // thread — the mutex serialises producer-side modification
-        // against the runner thread's poll().
+        /**
+         * Appends a task to this runner's queue. Safe to call from any thread; the mutex serialises it
+         * against the worker.
+         * @param task The task to queue
+         */
         fun submit(task: Task) {
             this.mutex.lock()
             try {
@@ -60,10 +63,10 @@ namespace Am.Threading {
             }
         }
 
-        // Spawn the worker thread. Must be called exactly once per
-        // TaskRunner, before any submit() — TaskScheduler enforces
-        // this by creating + starting the runner inside its own
-        // ensureRunner() critical section.
+        /**
+         * Spawns the worker thread. Call exactly once per runner and before any submit(); TaskScheduler
+         * guarantees this by creating and starting each runner inside a critical section.
+         */
         fun start() {
             var t = new Thread(this as Runnable)
             var n = this.name
@@ -75,22 +78,28 @@ namespace Am.Threading {
             t.start()
         }
 
-        // Request a graceful stop. The runner finishes its current
-        // task (if any), drains nothing further, then exits its loop
-        // within at most IDLE_SLEEP_MS of the next poll. Does NOT
-        // join — the caller can `getThread().join()` if it needs to.
+        /**
+         * Asks the worker to stop. It finishes the task it is running, if any, abandons the rest of the
+         * queue, and leaves its loop within one poll interval. This does not wait for the thread —
+         * join it through getThread() when you need to be sure it has finished.
+         */
         fun stop() {
             this.stopRequested = true
         }
 
+        /**
+         * Returns the worker thread, for joining it. Only valid after start().
+         * @return The thread running this worker
+         */
         fun getThread(): Thread {
             return this.thread
         }
 
-        // Worker loop. Pulls one task at a time, executes it, repeats.
-        // The lock is released around `task.execute()` so a slow task
-        // does not block submitters — that's the whole point of the
-        // worker-with-queue pattern.
+        /**
+         * The worker loop: take one task, run it, repeat, sleeping when the queue is empty. The mutex is
+         * not held while a task runs, which is the whole point of the queue — a slow task delays the
+         * tasks behind it but never the code submitting them.
+         */
         override fun run() {
             while (!this.stopRequested) {
                 var task = this.poll()
@@ -102,8 +111,10 @@ namespace Am.Threading {
             }
         }
 
-        // Pop the head task under the mutex. Returns null when the
-        // queue is empty — caller (run loop) sleeps in that case.
+        /**
+         * Removes and returns the oldest queued task, under the mutex.
+         * @return The next task, or null when the queue is empty
+         */
         private fun poll(): Task? {
             var task: Task? = null
             this.mutex.lock()

@@ -1,13 +1,43 @@
 namespace Am.Collections {
 
+    /**
+     * The contract shared by collections of distinct values, implemented by HashSet and TreeSet.
+     * Declare parameters as Set when the calling code should not care whether membership is
+     * hash-based or sorted.
+     */
     interface Set<T> : Iterable<T> {
         import Am.Lang
 
+        /**
+         * Returns the number of distinct values.
+         * @return The element count
+         */
         fun getSize(): Int
+        /**
+         * Tests whether a value is present.
+         * @param item The value to look for
+         * @return True if the value is in the set
+         */
         fun has(item: T): Bool
+        /**
+         * Adds a value if it is not already present.
+         * @param item The value to add
+         */
         fun add(item: T)
+        /**
+         * Removes a value.
+         * @param item The value to remove
+         * @return True if the value was present and removed
+         */
         fun remove(item: T): Bool
+        /**
+         * Removes every value.
+         */
         fun clear()
+        /**
+         * Tests whether the set holds no values.
+         * @return True when the set is empty
+         */
         fun isEmpty(): Bool
     }
 }

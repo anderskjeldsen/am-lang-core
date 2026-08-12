@@ -1,6 +1,13 @@
 
 namespace Am.Lang 
 {
+    /**
+     * The interface a lambda expression implements. You rarely name this type yourself — write a
+     * lambda where a Runnable or a function type is expected and the compiler produces a class
+     * implementing this interface, capturing the variables the lambda refers to. Captured
+     * references are retained for the lifetime of the lambda, so be careful about capturing
+     * large object graphs in long-lived callbacks.
+     */
     interface AnonymousFunction : FunctionReference {
 
     }

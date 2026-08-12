@@ -1,37 +1,36 @@
 namespace Am.Threading {
 
-    // Conventional task-thread categories used as keys into the
-    // TaskScheduler's runner map. Plain Int constants on a class
-    // rather than a true enum — AmLang doesn't have first-class
-    // enums yet, and this lets us key a HashMap<Int, TaskRunner>
-    // without boxing.
-    //
-    // Each unique value spawns a *separate* worker thread the first
-    // time it is scheduled to; tasks scheduled with the same value
-    // run serially on that one worker. Pick the smallest set that
-    // matches your application's concurrency model.
-    //
-    //   IO         — network / disk; one worker drains long blocking calls
-    //   Main       — UI-affine work that must run on the program's main
-    //                thread. NOT auto-drained: the application calls
-    //                TaskScheduler.handleMainTasks() from its event loop
-    //                to run anything queued. Tasks scheduled here that
-    //                never get a pump call sit until process exit.
-    //   Background — low-priority misc work that's safe to defer
-    //
-    // Callers can pass any Int — these constants are conventions, not
-    // a closed set.
+    /**
+     * Conventional worker categories to pass to TaskScheduler.schedule(). Each distinct value gets
+     * its own worker thread the first time something is scheduled to it, and everything scheduled
+     * with that value runs serially on that worker — so the value you choose decides both which
+     * tasks can overlap and how many threads exist. Use IO for network and disk work, Worker for
+     * CPU-heavy work that would otherwise stall IO behind it, Background for anything deferrable,
+     * and Main for work that must happen on the program's main thread. Main is the one that needs
+     * care: nothing drains it automatically, so the application has to call
+     * TaskScheduler.handleMainTasks() from its event loop or those tasks never run. These are plain
+     * Int constants and any Int works, so you can add your own categories.
+     */
     class TaskThreadType {
         import Am.Lang
 
+        /**
+         * Network and disk work: one worker that absorbs long blocking calls.
+         */
         static var IO: Int = 1
+        /**
+         * Work that must run on the program's main thread, typically anything touching the UI. Not
+         * drained automatically — the application must pump it with TaskScheduler.handleMainTasks().
+         */
         static var Main: Int = 2
+        /**
+         * Low-priority miscellaneous work that is safe to defer.
+         */
         static var Background: Int = 3
-        // Heavier CPU work that would block the IO worker if it
-        // shared the queue — HTML / JSON parsing of a fetched
-        // body, expensive transforms over a buffer, etc. Lives on
-        // a dedicated runner so a long parse doesn't stall the
-        // next IO task waiting behind it.
+        /**
+         * Heavier CPU work — parsing a fetched document, transforming a buffer — kept on its own runner
+         * so a long computation does not stall the next IO task queued behind it.
+         */
         static var Worker: Int = 4
     }
 }

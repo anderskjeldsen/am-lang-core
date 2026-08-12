@@ -1,7 +1,17 @@
 namespace Am.Lang.Diagnostics {
+    /**
+     * Switches for the compiler's optional runtime logging. The logging itself only exists in a
+     * binary built with the runtime-logging options (-rl and friends); in an ordinary build
+     * these calls are harmless no-ops.
+     */
     native class Debug {
         import Am.Lang
 
+        /**
+         * Turns conditional runtime logging on or off at runtime, so you can narrow the output to
+         * the section of code you are actually investigating instead of logging the whole run.
+         * @param on True to start logging, false to stop
+         */
         native static fun setConditionalLogging(on: Bool)
     }
 }

@@ -1,23 +1,52 @@
 
 namespace Am.Lang 
 {
+    /**
+     * A growable byte buffer for assembling strings without the quadratic cost of repeated
+     * String concatenation. Append with add(), the + operator or addChar(), then call
+     * toString() to decode the buffer with the builder's encoding (UTF-8 by default). Reuse a
+     * single builder inside a loop and call clear() between rounds rather than allocating a
+     * new one. Note that the buffer stores bytes, not characters: getLength() is a byte count
+     * and addChar() currently keeps only the low 8 bits of the character it is given.
+     */
     class StringBuilder {
 
         import Am.Collections
         
+        /**
+         * Encoding used when decoding the buffer back into a String.
+         */
         private var encoding: String = "UTF-8"
+        /**
+         * The accumulated bytes, in append order.
+         */
         private var buffer: List<UByte> = List<UByte>.newList<UByte>()
 
+        /**
+         * Decodes everything appended so far into a String. The builder is left untouched, so you
+         * may keep appending afterwards.
+         * @return The buffer contents as a String
+         */
         override fun toString(): String {
             var byteArray = this.buffer.toArray()
             return String.fromBytes(byteArray, this.encoding)
         }
 
+        /**
+         * Returns the number of bytes currently buffered — not necessarily the number of
+         * characters, since a multi-byte encoding may use several bytes per character.
+         * @return The buffered byte count
+         */
         fun getLength(): UInt {
             return this.buffer.getSize().toUInt()
         }
 
 //        native fun getLength(): Int
+        /**
+         * Appends a string to the buffer, so `sb + "a" + "b"` chains.
+         * @param s The string to append
+         * @return This builder, for chaining
+         */
         op + (s: String): StringBuilder {
             var bytes = s.toBytes(this.encoding)
             var i = 0
@@ -30,6 +59,11 @@ namespace Am.Lang
             return this
         }
 
+        /**
+         * Appends a string to the buffer, encoded with the builder's encoding.
+         * @param s The string to append
+         * @return This builder, for chaining
+         */
         fun add(s: String): StringBuilder {
             var bytes = s.toBytes(this.encoding)
             var i = 0
@@ -42,12 +76,26 @@ namespace Am.Lang
             return this
         }
 
+        /**
+         * Appends a single character given as a code point, for example 10US for a line feed. Only
+         * the low 8 bits are stored today, so this is safe for ASCII and Latin-1 but will truncate
+         * characters above 255.
+         * @param c The character code to append
+         * @return This builder, for chaining
+         */
         fun addChar(c: UShort) : StringBuilder {
             // TODO: convert to UTF-8
             this.buffer.add(c.toUByte()) // ditching the upper 8 bits for now.
             return this
         }
 
+        /**
+         * Inserts a character at a byte position, shifting the rest of the buffer along. An index
+         * at or past the end appends instead of failing.
+         * @param index Byte position to insert at
+         * @param c The character code to insert
+         * @return This builder, for chaining
+         */
         fun addCharAt(index: UInt, c: UShort) : StringBuilder {
             // Insert character at specific index using List's insertAt method
             if (index >= this.buffer.getSize().toUInt()) {
@@ -60,6 +108,9 @@ namespace Am.Lang
             return this
         }
 
+        /**
+         * Discards the buffered bytes so the builder can be reused.
+         */
         fun clear() {
             this.buffer.clear()
         }

@@ -1,13 +1,11 @@
 namespace Am.Async {
 
-    // Thrown at a suspend point when the Continuation handed to user
-    // code is dropped (refcount → 0) without resume() ever being
-    // called. The exception propagates up through the suspend chain
-    // exactly like any other thrown exception, giving the originally
-    // suspended caller a chance to `try`/`catch` it.
-    //
-    // Raised by the Continuation runtime, not by user code; you should
-    // not throw this yourself.
+    /**
+     * Thrown at a suspend point when the Continuation given to your code is released without
+     * resume() ever being called — the asynchronous equivalent of a promise nobody ever settles.
+     * It travels up through the suspend chain like any other exception, so the code that suspended
+     * can catch it. The runtime raises it; do not throw it yourself.
+     */
     class ContinuationCancelledException() : Exception("Continuation cancelled — dropped without resume()") {
         import Am.Lang
     }

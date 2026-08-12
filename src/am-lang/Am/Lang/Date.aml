@@ -2,21 +2,47 @@
 namespace Am.Lang
 {
     #implementationPlatforms "libc", "amigaos"
+    /**
+     * A bare timestamp: milliseconds since the Unix epoch and nothing else. Use it when you only
+     * need to stamp or compare moments cheaply. For calendar work — year, month, day, formatting
+     * and parsing — use DateTime instead.
+     */
     native class Date {
+        /**
+         * Milliseconds since the Unix epoch.
+         */
         private var value: ULong
 
+        /**
+         * Returns the raw timestamp in milliseconds since the Unix epoch, which is also how you
+         * compare or subtract two Dates.
+         * @return Milliseconds since the epoch
+         */
         fun getValue(): ULong {
             return this.value
         }
 
+        /**
+         * Returns a hash derived from the timestamp, truncated to 32 bits.
+         * @return The hash value
+         */
         override fun hash(): UInt {
             return this.value.toUInt()
         }
 
+        /**
+         * Formats the raw millisecond value as decimal text — not a calendar date. Use DateTime when
+         * you want something human readable.
+         * @return The timestamp as a String
+         */
         override fun toString(): String {
             return this.value.toString()
         }
 
+        /**
+         * Returns the current moment, read from the system clock.
+         * @return A Date holding the current time
+         */
         static fun now(): Date {
             var d = new Date()
             d.value = Date.getMillis()
@@ -29,6 +55,10 @@ namespace Am.Lang
         }
         */
 
+        /**
+         * Reads the system clock.
+         * @return Milliseconds since the epoch
+         */
         private static native fun getMillis(): ULong
     }
 }

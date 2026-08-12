@@ -1,26 +1,57 @@
 namespace Am.Lang
 {
     #implementationPlatforms "libc", "amigaos", "morphos-ppc"
+    /**
+     * Read and write process environment variables. Every method is static, so use it as
+     * Environment.get("HOME") without creating an instance. Available on the libc targets,
+     * AmigaOS and MorphOS; a platform without an environment is a build-time error rather
+     * than a silent no-op. Reads return a nullable String, so prefer getOrDefault() or a
+     * has() check over dereferencing the result directly.
+     */
     native class Environment
     {
         import Am.Lang
 
-        // Returns the value of the named env var, or null if it isn't set.
+        /**
+         * Reads an environment variable.
+         * @param name Name of the variable
+         * @return The value, or null when the variable is not set
+         */
         static native fun get(name: String): String?
 
-        // Sets the env var. Returns true on success.
+        /**
+         * Creates or replaces an environment variable for this process and the children it
+         * spawns afterwards.
+         * @param name Name of the variable
+         * @param value Value to store
+         * @return True when the variable was set
+         */
         static native fun set(name: String, value: String): Bool
 
-        // Removes the env var. Returns true if it existed and was removed.
+        /**
+         * Removes an environment variable.
+         * @param name Name of the variable
+         * @return True if the variable existed and was removed
+         */
         static native fun unset(name: String): Bool
 
-        // Convenience: true if the variable is set.
+        /**
+         * Tests whether a variable is set, without having to handle a nullable result.
+         * @param name Name of the variable
+         * @return True when the variable is set
+         */
         static fun has(name: String): Bool
         {
             return Environment.get(name) != null
         }
 
-        // Convenience: returns defaultValue if the var isn't set.
+        /**
+         * Reads a variable, falling back to a default when it is not set. The usual way to read
+         * optional configuration.
+         * @param name Name of the variable
+         * @param defaultValue Value to return when the variable is not set
+         * @return The variable's value, or defaultValue
+         */
         static fun getOrDefault(name: String, defaultValue: String): String
         {
             var v = Environment.get(name)

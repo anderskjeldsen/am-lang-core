@@ -1,9 +1,21 @@
 namespace Am.Collections {
 
+    /**
+     * Extension functions that apply to every Iterable, giving the collections a small functional
+     * toolkit: filter, map, toList, firstOr and asIterable. They are extensions, so you call them
+     * on the collection itself — `myList.filter(...)` — as long as Am.Collections is imported. Each
+     * one builds a new List rather than a lazy view, so a chain of them allocates once per step.
+     */
     class CollectionExtensions {
         import Am.Lang
 
 // predicate must be able to get the type of T from the function signature
+        /**
+         * Returns the elements for which the predicate holds, in their original order.
+         * @param collection The collection to filter
+         * @param predicate Test applied to each element; true keeps it
+         * @return A new collection of the matching elements
+         */
         ext fun filter<T>(collection: Iterable<T>, predicate: (t: T) => Bool): Iterable<T> {
             var result = List.newList<T>()
             each(collection, item) {
@@ -14,6 +26,13 @@ namespace Am.Collections {
             return result as Iterable<T>
         }
 
+        /**
+         * Returns the first element, or a fallback when the collection is empty. Avoids the
+         * empty-collection check at every call site.
+         * @param iterable The collection to read from
+         * @param or Value to return when the collection is empty
+         * @return The first element, or the fallback
+         */
         ext fun firstOr<T>(iterable: Iterable<T>, or: T): T {
             each(iterable, item) {
                 return item
@@ -21,6 +40,12 @@ namespace Am.Collections {
             return or
         }
 
+        /**
+         * Copies any Iterable into a new List, which is how you get indexed access to the result of a
+         * filter or map, or a snapshot you can keep while the source changes.
+         * @param iterable The collection to copy
+         * @return A new List holding the same elements in order
+         */
         ext fun toList<T>(iterable: Iterable<T>): List<T> {
             var result = List.newList<T>()
             each(iterable, item) {
@@ -30,6 +55,12 @@ namespace Am.Collections {
         }
 
         // Must be able to resolve U from return type
+        /**
+         * Applies a function to every element and returns the results, in order.
+         * @param iterable The collection to transform
+         * @param mapper Function applied to each element
+         * @return A new collection of the transformed elements
+         */
         ext fun map<T, U>(iterable: Iterable<T>, mapper: (t: T) => U): Iterable<U> {
             var result = List<U>.newList<U>()
             each(iterable, item) {
@@ -38,6 +69,12 @@ namespace Am.Collections {
             return result
         }
 
+        /**
+         * Wraps an array as an Iterable so the other extension functions apply to it. No copying takes
+         * place.
+         * @param array The array to wrap
+         * @return An Iterable view of the array
+         */
         ext fun asIterable<T>(array: Array<T>): ArrayIterable<T> {
             return new ArrayIterable<T>(array)
         }

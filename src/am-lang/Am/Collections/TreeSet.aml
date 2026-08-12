@@ -1,43 +1,53 @@
 namespace Am.Collections {
 
-    /*
-     * TreeSet<T> - A sorted set implementation using a binary search tree.
-     * 
-     * This class provides a Set that maintains elements in sorted order
-     * according to a provided comparison lambda function. It does not allow duplicate
-     * elements as determined by the comparison function.
-     * 
-     * Features:
-     * - O(log n) insertion, removal, and lookup operations
-     * - Maintains elements in sorted order
-     * - No duplicate elements allowed
-     * - Requires a comparison lambda function for element comparison
-     * 
-     * Example usage:
-     *   var treeSet = new TreeSet<Int>((a, b) => {
-     *       if (a < b) return -1
-     *       if (a > b) return 1
-     *       return 0
-     *   })
-     *   treeSet.add(5)
-     *   treeSet.add(2)
-     *   treeSet.add(8)
-     *   var sortedList = treeSet.toList() // [2, 5, 8]
+    /**
+     * A set that keeps its elements sorted, backed by a binary search tree. Insertion, removal
+     * and lookup are logarithmic, and toList() hands the values back in order — which is the
+     * reason to choose this over HashSet, since a HashSet gives you no ordering at all. Ordering
+     * comes from a comparison lambda you supply at construction, which must return a negative
+     * number when the first argument sorts first, a positive number when it sorts later, and 0
+     * when the two are equal; values that compare equal are treated as duplicates and only one
+     * is kept. Construct one by passing that lambda to the constructor — for a set of Int, a
+     * lambda returning -1, 1 or 0 — then add() values and read them back with toList(). Note the
+     * tree is not rebalanced, so inserting already-sorted data degenerates into a linked list and
+     * costs linear time per operation; shuffle bulk input, or use a HashSet when you do not need
+     * the ordering. Not synchronised.
      */
     class TreeSet<T>(private var compareFunction: (a: T, b: T) => Int): Set<T> {
         import Am.Lang
 
+        /**
+         * Root of the search tree, or null while the set is empty.
+         */
         private var root: TreeNode<T>? = null
+        /**
+         * Number of distinct values held.
+         */
         private var size: Int = 0
 
+        /**
+         * Returns the number of distinct values in the set.
+         * @return The element count
+         */
         fun getSize(): Int {
             return this.size
         }
 
+        /**
+         * Tests whether an equal value is present, where equality means the comparison function
+         * returns 0.
+         * @param item The value to look for
+         * @return True if the value is in the set
+         */
         fun has(item: T): Bool {
             return this.findNode(this.root, item) != null
         }
 
+        /**
+         * Adds a value, keeping the set in sorted order. A value that compares equal to one already
+         * present is ignored.
+         * @param item The value to add
+         */
         fun add(item: T) {
             if (this.root == null) {
                 this.root = new TreeNode<T>(item)
@@ -49,6 +59,12 @@ namespace Am.Collections {
             }
         }
 
+        /**
+         * Searches a subtree for the node holding a value.
+         * @param node Root of the subtree to search, or null
+         * @param item The value to find
+         * @return The node holding an equal value, or null
+         */
         private fun findNode(node: TreeNode<T>?, item: T): TreeNode<T>? {
             if (node == null) {
                 return null
@@ -64,6 +80,12 @@ namespace Am.Collections {
             }
         }
 
+        /**
+         * Inserts a value into a subtree, descending until it finds the empty spot it belongs in.
+         * @param node Root of the subtree to insert into
+         * @param item The value to insert
+         * @return True if a new node was created, false when the value was already present
+         */
         private fun insertNode(node: TreeNode<T>, item: T): Bool {
             var cf = this.compareFunction
             var compareResult = cf(item, node.value)
@@ -88,6 +110,11 @@ namespace Am.Collections {
             }
         }
 
+        /**
+         * Removes a value, restructuring the tree so the remaining values stay sorted.
+         * @param item The value to remove
+         * @return True if the value was present and removed
+         */
         fun remove(item: T): Bool {
             if (this.root == null) {
                 return false
@@ -102,6 +129,13 @@ namespace Am.Collections {
             return false
         }
 
+        /**
+         * Removes a value from a subtree and returns the subtree's new root. A node with two children
+         * is replaced by its in-order successor, the smallest value in its right subtree.
+         * @param node Root of the subtree to remove from, or null
+         * @param item The value to remove
+         * @return The new subtree root together with whether anything was removed
+         */
         private fun removeNode(node: TreeNode<T>?, item: T): RemoveResult<T> {
             if (node == null) {
                 return new RemoveResult<T>(null, false)
@@ -137,6 +171,11 @@ namespace Am.Collections {
             }
         }
 
+        /**
+         * Returns the leftmost node of a subtree, which holds its smallest value.
+         * @param node Root of the subtree
+         * @return The node holding the smallest value
+         */
         private fun findMin(node: TreeNode<T>): TreeNode<T> {
             while (node.left != null) {
                 node = node.left
@@ -144,12 +183,22 @@ namespace Am.Collections {
             return node
         }
 
+        /**
+         * Returns the values in sorted order. This is how you read a TreeSet: it has no iterator, so
+         * take a list and walk that.
+         * @return A new list of the values, smallest first
+         */
         fun toList(): List<T> {
             var list = List.newList<T>()
             this.inorderTraversal(this.root, list)
             return list
         }
 
+        /**
+         * Appends a subtree's values to a list in ascending order.
+         * @param node Root of the subtree to walk, or null
+         * @param list The list to append to
+         */
         private fun inorderTraversal(node: TreeNode<T>?, list: List<T>) {
             if (node != null) {
                 this.inorderTraversal(node.left, list)
@@ -158,23 +207,45 @@ namespace Am.Collections {
             }
         }
 
+        /**
+         * Removes every value by dropping the tree.
+         */
         fun clear() {
             this.root = null
             this.size = 0
         }
 
+        /**
+         * Tests whether the set holds no values.
+         * @return True when the set is empty
+         */
         fun isEmpty(): Bool {
             return this.size == 0
         }
     }
 
+    /**
+     * One node of a TreeSet's binary search tree: a value plus links to the subtrees holding the
+     * smaller and larger values. Internal to TreeSet.
+     */
     class TreeNode<T>(var value: T) {
         import Am.Lang
 
+        /**
+         * Subtree of values that sort before this node's value, or null.
+         */
         var left: TreeNode<T>? = null
+        /**
+         * Subtree of values that sort after this node's value, or null.
+         */
         var right: TreeNode<T>? = null
     }
 
+    /**
+     * What a recursive removal step returns: the new root of the subtree it worked on, and whether
+     * the value was actually found. Internal to TreeSet, which needs both halves to rebuild the
+     * tree on the way back up.
+     */
     class RemoveResult<T>(var node: TreeNode<T>?, var removed: Bool) {
         import Am.Lang
     }

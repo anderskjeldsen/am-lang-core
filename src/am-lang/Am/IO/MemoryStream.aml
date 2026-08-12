@@ -1,13 +1,34 @@
 namespace Am.IO
 {
+    /**
+     * A Stream backed by a growable buffer in memory. Use it to build up bytes and hand them to
+     * something that expects a Stream, to parse data you already hold, or to test stream code
+     * without touching the disk. Writing past the current end appends, writing before it
+     * overwrites, and seekFromStart() moves the cursor for both reads and writes. Create an empty
+     * one with new, or wrap existing bytes with MemoryStream.newMemoryStream(...).
+     */
     class MemoryStream() : Stream
     {
         import Am.Lang
         import Am.Collections
 
+        /**
+         * The buffered bytes.
+         */
         private var data: List<UByte> = List.newList<UByte>()
+        /**
+         * Current read/write cursor, as an offset from the start.
+         */
         private var position: Long = 0L
 
+        /**
+         * Reads up to length bytes from the cursor into a buffer, advancing the cursor by the number
+         * of bytes taken.
+         * @param buffer Destination buffer
+         * @param offset Index in the DESTINATION buffer to start writing at
+         * @param length Maximum number of bytes to read
+         * @return The number of bytes actually read; 0 once the cursor is at the end
+         */
         fun read(buffer: UByte[], offset: Long, length: UInt): UInt {
             var bytesRead = 0UI
             var bufferIndex = offset
@@ -27,6 +48,13 @@ namespace Am.IO
             return bytesRead
         }
 
+        /**
+         * Writes bytes at the cursor, overwriting existing content and appending once the cursor
+         * reaches the end.
+         * @param buffer Source buffer
+         * @param offset Index in the SOURCE buffer to start reading at
+         * @param length Number of bytes to write
+         */
         fun write(buffer: UByte[], offset: Long, length: UInt) {
             var bytesWritten = 0UI
             var bufferIndex = offset
@@ -48,6 +76,11 @@ namespace Am.IO
             }
         }
 
+        /**
+         * Moves the cursor to an absolute offset. A negative offset is clamped to the start; seeking
+         * past the end is allowed and the gap fills in as you write.
+         * @param offset Byte offset from the start
+         */
         fun seekFromStart(offset: Long) {
             this.position = offset
             if (this.position < 0L) {
@@ -55,6 +88,10 @@ namespace Am.IO
             }
         }
 
+        /**
+         * Reads the byte at the cursor and advances.
+         * @return The byte value 0 to 255, or -1 at the end of the buffer
+         */
         fun readByte(): Int {
             if (this.position >= this.data.getSize().toLong()) {
                 return -1  // EOF
@@ -65,6 +102,10 @@ namespace Am.IO
             return result
         }
 
+        /**
+         * Writes one byte at the cursor, overwriting or appending, and advances.
+         * @param byte The byte value to write, 0 to 255
+         */
         fun writeByte(byte: Int) {
             var byteToWrite = byte.toUByte()
             
@@ -79,29 +120,53 @@ namespace Am.IO
             this.position++
         }
 
-        // Additional utility methods for memory stream
+        /**
+         * Returns how many bytes the stream holds, independent of where the cursor is.
+         * @return The length in bytes
+         */
         fun getLength(): Long {
             return this.data.getSize().toLong()
         }
 
+        /**
+         * Returns the current cursor offset.
+         * @return The cursor position in bytes from the start
+         */
         fun getPosition(): Long {
             return this.position
         }
 
+        /**
+         * Copies the buffered bytes into a new array — how you get the result out after writing into
+         * the stream.
+         * @return A new array holding the stream's contents
+         */
         fun toArray(): UByte[] {
             return this.data.toArray()
         }
 
+        /**
+         * Empties the buffer and rewinds the cursor to the start.
+         */
         fun clear() {
             this.data.clear()
             this.position = 0L
         }
 
+        /**
+         * Returns the number of bytes held, the same figure as getLength() reported as an Int.
+         * @return The byte count
+         */
         fun getCapacity(): Int {
             return this.data.getSize()
         }
 
-        // Static factory method for creating MemoryStream with initial data
+        /**
+         * Creates a stream holding a copy of the given bytes, with the cursor at the start — the usual
+         * way to parse data you already have in memory.
+         * @param initialData The bytes to seed the stream with
+         * @return A new stream containing those bytes
+         */
         static fun newMemoryStream(initialData: UByte[]): MemoryStream {
             var stream = new MemoryStream()
             var i = 0

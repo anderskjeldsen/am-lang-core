@@ -1,31 +1,70 @@
 namespace Am.Collections {
 
 
+    /**
+     * A hash table mapping keys to values, and the standard Map implementation. Any type works as
+     * a key provided its hash() and equals() agree — String and the primitives do, and your own
+     * classes do once you override both. Lookups and inserts are constant time on average; the
+     * table grows and rehashes itself when it passes half full. Two things to plan for: get()
+     * throws on a missing key rather than returning null, so guard with containsKey() when the key
+     * may be absent, and iteration order is unspecified — buildKeys() hands back keys in bucket
+     * order, not insertion order. Not synchronised.
+     */
     class HashMap<K, V>: Map<K, V> {
         import Am.Lang
 
+        /**
+         * Number of live entries.
+         */
         private var size: Int
-        // High-water mark of entry slots allocated when no freed slot was
-        // available to reuse. Freed slots are recycled through `freeHead`, so
-        // this stays bounded to the peak LIVE entry count and never marches past
-        // the backing arrays under add/remove churn.
+        /**
+         * High-water mark of entry slots allocated when no freed slot was available to reuse.
+         * Freed slots are recycled through freeHead, so this stays bounded to the peak live entry
+         * count and never marches past the backing arrays under add/remove churn.
+         */
         private var currentEntryIndex: Int
-        // Head of the free-slot list (0 = empty, else slot+1). remove() pushes a
-        // vacated entry slot here; privateSetKeyValue() pops one before extending
-        // currentEntryIndex. Without this, remove reclaimed nothing and the map
-        // overflowed / leaked under churn.
+        /**
+         * Head of the free-slot list, where 0 means empty and any other value is a slot index plus
+         * one. remove() pushes a vacated slot here and privateSetKeyValue() pops one before
+         * extending currentEntryIndex. Without it, removal reclaimed nothing and the map leaked
+         * under churn.
+         */
         private var freeHead: Int
-        // Backing arrays eagerly initialised to zero-length so the field
-        // declarations are honest about being non-null. The lazy-init
-        // path in `set()` gates on `length() == 0` instead of the old
-        // `== null` check; the storage materialises on first insert.
+        /**
+         * Chain links between entries sharing a bucket, also reused as the free-list link once a
+         * slot is vacated. Eagerly initialised to zero length so the field declaration is honest
+         * about being non-null; the real storage materialises on the first insert.
+         */
         private var nextIndexes: Int[] = new Int[0]
+        /**
+         * Bucket heads: for each bucket, the slot index of its first entry plus one, or 0 when the
+         * bucket is empty.
+         */
         private var keyIndexes: Int[] = new Int[0]
+        /**
+         * Entry keys, indexed by slot.
+         */
         private var keys: K[] = new K[0]
+        /**
+         * Entry values, indexed by slot and aligned with keys.
+         */
         private var values: V[] = new V[0]
+        /**
+         * Number of buckets; a key's bucket is its hash modulo this.
+         */
         private var bucketSize: Int = 10
+        /**
+         * Bookkeeping counter for chained entries, carried over from the original implementation.
+         */
         private var currentIndex: Int
 
+        /**
+         * Creates a map with the backing arrays sized up front. Worth using when you know roughly how
+         * many entries you will insert, since it avoids the rehash that would otherwise happen as the
+         * map grows.
+         * @param initialSize Number of buckets to allocate
+         * @return A new, empty map with that capacity
+         */
         static fun createWithInitialSize<K, V>(initialSize: Int): HashMap<K, V> {
             var map = new HashMap<K, V>()
             map.bucketSize = initialSize
@@ -37,10 +76,21 @@ namespace Am.Collections {
             return map
         }
 
+        /**
+         * Returns the number of entries currently held.
+         * @return The entry count
+         */
         fun getSize(): Int {
             return this.size
         }
 
+        /**
+         * Returns the value stored under a key. A missing key is an exception, not a null result, so
+         * call containsKey() first whenever the key might not be there.
+         * @param key The key to look up
+         * @return The value stored under that key
+         * @throws KeyNotFoundException if the key is not in the map
+         */
         fun get(key: K): V {
             if (this.keyIndexes.length() == 0) {
                 throw new KeyNotFoundException(key.toString())
@@ -55,6 +105,12 @@ namespace Am.Collections {
             throw new KeyNotFoundException(key.toString())
         }
 
+        /**
+         * Walks one bucket's chain looking for a key.
+         * @param keyIndex Slot index of the first entry in the chain, or -1 for an empty bucket
+         * @param key The key to find
+         * @return The slot index holding the key, or -1 when it is not in the chain
+         */
         private fun findEntry(keyIndex: Int, key: K): Int {
             while(keyIndex > -1) {
                 var key2 = this.keys[keyIndex]
@@ -66,6 +122,13 @@ namespace Am.Collections {
             return -1
         }
 
+        /**
+         * Stores a value under a key, replacing any previous value for that key. The backing arrays
+         * are allocated on the first insert and grown once the map is half full, which rehashes every
+         * live entry.
+         * @param key The key to store under
+         * @param value The value to store
+         */
         fun set(key: K, value: V) {
             if (this.nextIndexes.length() == 0) {
                 this.bucketSize = 100
@@ -117,6 +180,12 @@ namespace Am.Collections {
             this.privateSetKeyValue(key, value)
         }
 
+        /**
+         * Inserts or updates an entry without considering growth, taking an entry slot from the free
+         * list when one is available. Used both by set() and by the rehash loop.
+         * @param key The key to store under
+         * @param value The value to store
+         */
         private fun privateSetKeyValue(key: K, value: V) {
             var hash = key.hash()
             var index = hash % this.bucketSize
@@ -153,6 +222,12 @@ namespace Am.Collections {
             this.size++
         }
 
+        /**
+         * Removes an entry. The vacated slot is recycled, so repeated add-and-remove cycles do not
+         * grow the map.
+         * @param key The key to remove
+         * @return True if the key was present and removed
+         */
         fun remove(key: K): Bool {
             if (this.keyIndexes.length() == 0) {
                 return false
@@ -201,9 +276,13 @@ namespace Am.Collections {
             return false
         }
 
-        // Return an unlinked entry slot to the free list. Its nextIndexes cell is
-        // repurposed as the free-list link; the slot is off every bucket chain,
-        // so no lookup or bucket-walk visits it until it is handed back out.
+        /**
+         * Returns an unlinked entry slot to the free list. Its nextIndexes cell is repurposed as
+         * the free-list link, and the slot is off every bucket chain, so no lookup or bucket walk
+         * visits it until it is handed back out. The key and value references are dropped
+         * immediately rather than staying pinned in the backing arrays until the slot is reused.
+         * @param slot Index of the slot to release
+         */
         private fun freeSlot(slot: Int) {
             this.nextIndexes[slot] = this.freeHead
             this.freeHead = slot + 1
@@ -216,6 +295,10 @@ namespace Am.Collections {
             this.values[slot] = default(V)
         }
 
+        /**
+         * Removes every entry, keeping the allocated capacity so a map reused across rounds of work
+         * stops reallocating.
+         */
         fun clear() {
             this.size = 0
             this.currentEntryIndex = 0
@@ -230,6 +313,11 @@ namespace Am.Collections {
             }
         }
 
+        /**
+         * Tests whether a key is present. This is the guard to put in front of get().
+         * @param key The key to look for
+         * @return True if the key is in the map
+         */
         fun containsKey(key: K): Bool {
             if (this.keyIndexes.length() == 0) {
                 return false
@@ -241,6 +329,12 @@ namespace Am.Collections {
             return entryIndex >= 0
         }
 
+        /**
+         * Tests whether any entry holds an equal value. Unlike a key lookup this scans the whole map,
+         * so it is linear in the number of entries.
+         * @param value The value to look for
+         * @return True if some entry holds an equal value
+         */
         fun containsValue(value: V): Bool {
             if (this.keyIndexes.length() == 0) {
                 return false
@@ -261,11 +355,19 @@ namespace Am.Collections {
             return false
         }
 
+        /**
+         * Tests whether the map holds no entries.
+         * @return True when the entry count is zero
+         */
         fun isEmpty(): Bool {
             return this.size == 0
         }
 
-        // Same as "keys()" on other frameworks. 
+        /**
+         * Builds a list of the keys currently in the map — what other libraries call keys(). Only
+         * live bucket chains are walked, so recycled slots holding stale keys are never reported.
+         * @return A new list of the keys, in unspecified order
+         */
         fun buildKeys(): List<K> {
             var keyList = List.newList<K>()
             if (this.keyIndexes.length() == 0) {
@@ -285,6 +387,12 @@ namespace Am.Collections {
             return keyList
         }
 
+        /**
+         * Returns the keys currently in the map, in unspecified order. A snapshot: the list is not
+         * affected by later changes to the map, which also makes it the safe way to iterate while
+         * removing entries.
+         * @return A new list of the keys
+         */
         fun keys(): List<K> {
             return this.buildKeys()
         }

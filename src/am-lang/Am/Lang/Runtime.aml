@@ -1,65 +1,133 @@
 namespace Am.Lang
 {
+    /**
+     * A process-wide string keyed store plus a little information about the binary itself.
+     * Use the static set/get/has/remove methods as a simple global configuration bag that any
+     * part of the application can reach without threading a context object through every call,
+     * and use getPlatform() and getPackages() when behaviour has to vary per target or you want
+     * to report what a build contains. The store holds Strings only and is not synchronised, so
+     * populate it during startup rather than writing to it from several threads at once.
+     */
     class Runtime
     {
         import Am.Collections
 
+        /**
+         * The key/value pairs held by this instance.
+         */
         private var properties: HashMap<String, String> = new HashMap<String, String>()
+        /**
+         * The process-wide instance behind the static set/get/has/remove methods.
+         */
         private static var instance: Runtime = new Runtime()
 
+        /**
+         * Stores a value, replacing any previous value for the key.
+         * @param key The key to store under
+         * @param value The value to store
+         */
         fun setProperty(key: String, value: String)
         {
             this.properties.set(key, value)
         }
 
+        /**
+         * Reads the value stored for a key. A missing key throws rather than returning null, so
+         * check hasProperty() first when the key is optional.
+         * @param key The key to read
+         * @return The stored value
+         * @throws KeyNotFoundException if the key has never been set
+         */
         fun getProperty(key: String): String
         {
             return this.properties.get(key)
         }
 
+        /**
+         * Tests whether a key has a value.
+         * @param key The key to test
+         * @return True when the key is present
+         */
         fun hasProperty(key: String): Bool
         {
             return this.properties.containsKey(key)
         }
 
+        /**
+         * Removes a key and its value.
+         * @param key The key to remove
+         * @return True if the key was present and removed
+         */
         fun removeProperty(key: String): Bool
         {
             return this.properties.remove(key)
         }
 
+        /**
+         * Returns the live map behind this instance, for iterating over everything that has been
+         * set. Changes to the returned map are changes to the store.
+         * @return The backing map of keys to values
+         */
         fun getProperties(): HashMap<String, String>
         {
             return this.properties
         }
 
+        /**
+         * Stores a value in the process-wide store.
+         * @param key The key to store under
+         * @param value The value to store
+         */
         static fun set(key: String, value: String)
         {
             Runtime.instance.setProperty(key, value)
         }
 
+        /**
+         * Reads a value from the process-wide store. A missing key throws, so guard with has().
+         * @param key The key to read
+         * @return The stored value
+         * @throws KeyNotFoundException if the key has never been set
+         */
         static fun get(key: String): String
         {
             return Runtime.instance.getProperty(key)
         }
 
+        /**
+         * Tests whether the process-wide store holds a key.
+         * @param key The key to test
+         * @return True when the key is present
+         */
         static fun has(key: String): Bool
         {
             return Runtime.instance.hasProperty(key)
         }
 
+        /**
+         * Removes a key from the process-wide store.
+         * @param key The key to remove
+         * @return True if the key was present and removed
+         */
         static fun remove(key: String): Bool
         {
             return Runtime.instance.removeProperty(key)
         }
 
-        // Lazily-built registry of every non-test package compiled into
-        // this binary, package id -> version (e.g. "am-git" -> "0.12.0").
-        // The entries come from Am.Lang.BuildInfo, a class the compiler
-        // GENERATES from the resolved package graph on every build - so
-        // the data is always in sync with the package.yml files that
-        // actually produced the binary.
+        /**
+         * Lazily-built registry of every non-test package compiled into this binary, package id
+         * to version. The entries come from Am.Lang.BuildInfo, a class the compiler generates
+         * from the resolved package graph on every build, so the data always matches the
+         * package.yml files that produced the binary.
+         */
         private static var packages: HashMap<String, String>? = null
 
+        /**
+         * Returns every package compiled into this binary as a map of package id to version, for
+         * example "am-git" to "0.12.0". Built on first use and cached afterwards. Handy for a
+         * version banner or a bug report that has to say exactly what went into the build.
+         * @return Package ids mapped to their versions
+         */
         static fun getPackages(): HashMap<String, String> {
             var p = Runtime.packages
             if (p != null) {
@@ -71,8 +139,11 @@ namespace Am.Lang
             return m
         }
 
-        // Version of one package, or null when the id isn't part of
-        // this binary.
+        /**
+         * Returns the version of one package compiled into this binary.
+         * @param id The package id to look up, as written in package.yml
+         * @return The version string, or null when the package is not part of this binary
+         */
         static fun getPackageVersion(id: String): String? {
             var m = Runtime.getPackages()
             if (m.containsKey(id)) {
@@ -81,13 +152,14 @@ namespace Am.Lang
             return null
         }
 
-        // Returns the target platform id the current binary was built
-        // for — e.g. "macos-arm", "linux-x64", "amigaos", "morphos-ppc".
-        // Compiler-provided: the body is emitted by
-        // `CRenderer.renderSpecialFunctionFull` and reads a
-        // `-DAM_PLATFORM_ID=...` define injected by `MakefileRenderer`,
-        // so `Runtime.getPlatform()` resolves at C-compile time to the
-        // literal string of the platform whose Makefile is in use.
+        /**
+         * Returns the target platform this binary was built for, for example "macos-arm",
+         * "linux-x64", "amigaos" or "morphos-ppc". The body is provided by the compiler and
+         * resolves to a literal at C-compile time from the platform whose Makefile is in use, so
+         * this costs nothing at runtime and is the right way to branch on target-specific
+         * behaviour.
+         * @return The platform id of the running binary
+         */
         special static fun getPlatform(): String
     }
 }

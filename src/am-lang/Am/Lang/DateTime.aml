@@ -1,70 +1,158 @@
 namespace Am.Lang
 {
     #implementationPlatforms "libc", "amigaos", "morphos-ppc"
+    /**
+     * A moment in time with calendar and timezone handling: an instant stored as milliseconds
+     * since the Unix epoch, plus the timezone offset used to present it. Create one with
+     * DateTime.now(), DateTime.create(...) or DateTime.parse(...); read the parts with the
+     * getters; and note that every add/subtract method returns a NEW instance rather than
+     * mutating this one. Comparisons work on the underlying instant, so two DateTimes that name
+     * the same moment in different timezones compare equal.
+     */
     native class DateTime {
+        /**
+         * The instant, in milliseconds since the Unix epoch; defaults to the current time.
+         */
         private var epochMillis: ULong = DateTime.getMillis()
+        /**
+         * Minutes east of UTC used when presenting the instant; defaults to the system timezone.
+         */
         private var timezoneOffsetMinutes: Int = DateTime.getLocalTimezoneOffset()
 
         // Property accessors
+        /**
+         * Returns the calendar year in this instance's timezone.
+         * @return The four-digit year
+         */
         fun getYear(): Int {
             return DateTime.extractYear(this.epochMillis, this.timezoneOffsetMinutes)
         }
 
+        /**
+         * Returns the calendar month in this instance's timezone, where 1 is January.
+         * @return The month, 1 to 12
+         */
         fun getMonth(): Int {
             return DateTime.extractMonth(this.epochMillis, this.timezoneOffsetMinutes)
         }
 
+        /**
+         * Returns the day of the month in this instance's timezone.
+         * @return The day, 1 to 31
+         */
         fun getDay(): Int {
             return DateTime.extractDay(this.epochMillis, this.timezoneOffsetMinutes)
         }
 
+        /**
+         * Returns the hour of the day in this instance's timezone, on a 24-hour clock.
+         * @return The hour, 0 to 23
+         */
         fun getHour(): Int {
             return DateTime.extractHour(this.epochMillis, this.timezoneOffsetMinutes)
         }
 
+        /**
+         * Returns the minute within the hour.
+         * @return The minute, 0 to 59
+         */
         fun getMinute(): Int {
             return DateTime.extractMinute(this.epochMillis, this.timezoneOffsetMinutes)
         }
 
+        /**
+         * Returns the second within the minute.
+         * @return The second, 0 to 59
+         */
         fun getSecond(): Int {
             return DateTime.extractSecond(this.epochMillis, this.timezoneOffsetMinutes)
         }
 
+        /**
+         * Returns the milliseconds within the second. Independent of timezone.
+         * @return The millisecond, 0 to 999
+         */
         fun getMillisecond(): Int {
             return DateTime.extractMillisecond(this.epochMillis)
         }
 
+        /**
+         * Returns the day of the week in this instance's timezone, counting from Sunday as 0.
+         * @return The day of week, 0 to 6
+         */
         fun getDayOfWeek(): Int {
             return DateTime.extractDayOfWeek(this.epochMillis, this.timezoneOffsetMinutes)
         }
 
+        /**
+         * Returns the timezone offset used when presenting this instant, in minutes east of UTC.
+         * @return The offset in minutes
+         */
         fun getTimezoneOffsetMinutes(): Int {
             return this.timezoneOffsetMinutes
         }
 
+        /**
+         * Returns the underlying instant, independent of timezone. Use this to serialise a DateTime
+         * or to compute a difference between two of them.
+         * @return Milliseconds since the Unix epoch
+         */
         fun getEpochMillis(): ULong {
             return this.epochMillis
         }
 
         // Set methods for construction
+        /**
+         * Moves this instance to another instant, leaving the timezone offset alone. Mutates in
+         * place, unlike the add/subtract methods.
+         * @param milliseconds Milliseconds since the Unix epoch
+         */
         fun setEpochMillis(milliseconds: ULong) {
             this.epochMillis = milliseconds
         }
 
+        /**
+         * Changes the timezone used to present this instant, without moving the instant itself.
+         * @param offsetMinutes Minutes east of UTC
+         */
         fun setTimezoneOffset(offsetMinutes: Int) {
             this.timezoneOffsetMinutes = offsetMinutes
         }
 
+        /**
+         * Sets the calendar fields, interpreting them in this instance's current timezone.
+         * @param year The four-digit year
+         * @param month The month, 1 to 12
+         * @param day The day of the month
+         * @param hour The hour, 0 to 23
+         * @param minute The minute, 0 to 59
+         * @param second The second, 0 to 59
+         */
         fun setDateTime(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int) {
             this.epochMillis = DateTime.toEpochMillis(year, month, day, hour, minute, second, this.timezoneOffsetMinutes)
         }
 
+        /**
+         * Sets the calendar fields and the timezone they are expressed in.
+         * @param year The four-digit year
+         * @param month The month, 1 to 12
+         * @param day The day of the month
+         * @param hour The hour, 0 to 23
+         * @param minute The minute, 0 to 59
+         * @param second The second, 0 to 59
+         * @param timezoneOffsetMinutes Minutes east of UTC
+         */
         fun setDateTime(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int, timezoneOffsetMinutes: Int) {
             this.epochMillis = DateTime.toEpochMillis(year, month, day, hour, minute, second, timezoneOffsetMinutes)
             this.timezoneOffsetMinutes = timezoneOffsetMinutes
         }
 
         // Date arithmetic methods
+        /**
+         * Returns a new DateTime this many years later, keeping the month, day and time of day.
+         * @param years Number of years to add; negative moves backwards
+         * @return The shifted DateTime
+         */
         fun addYears(years: Int): DateTime {
             var year = this.getYear()
             var month = this.getMonth()
@@ -78,6 +166,12 @@ namespace Am.Lang
             return newDateTime
         }
 
+        /**
+         * Returns a new DateTime this many months later. When the day of month does not exist in the
+         * target month it is clamped, so 31 January plus one month is 28 or 29 February.
+         * @param months Number of months to add; negative moves backwards
+         * @return The shifted DateTime
+         */
         fun addMonths(months: Int): DateTime {
             var year = this.getYear()
             var month = this.getMonth()
@@ -101,6 +195,11 @@ namespace Am.Lang
             return newDateTime
         }
 
+        /**
+         * Returns a new DateTime this many days later, computed as exact 24-hour spans.
+         * @param days Number of days to add; negative moves backwards
+         * @return The shifted DateTime
+         */
         fun addDays(days: Int): DateTime {
             var newMillis = this.epochMillis + (days.toULong() * 86400000UL)  // 24 * 60 * 60 * 1000
             var newDateTime = DateTime.fromEpochMillis(newMillis)
@@ -108,6 +207,11 @@ namespace Am.Lang
             return newDateTime
         }
 
+        /**
+         * Returns a new DateTime this many hours later.
+         * @param hours Number of hours to add; negative moves backwards
+         * @return The shifted DateTime
+         */
         fun addHours(hours: Int): DateTime {
             var newMillis = this.epochMillis + (hours.toULong() * 3600000UL)  // 60 * 60 * 1000
             var newDateTime = DateTime.fromEpochMillis(newMillis)
@@ -115,6 +219,11 @@ namespace Am.Lang
             return newDateTime
         }
 
+        /**
+         * Returns a new DateTime this many minutes later.
+         * @param minutes Number of minutes to add; negative moves backwards
+         * @return The shifted DateTime
+         */
         fun addMinutes(minutes: Int): DateTime {
             var newMillis = this.epochMillis + (minutes.toULong() * 60000UL)  // 60 * 1000
             var newDateTime = DateTime.fromEpochMillis(newMillis)
@@ -122,6 +231,11 @@ namespace Am.Lang
             return newDateTime
         }
 
+        /**
+         * Returns a new DateTime this many seconds later.
+         * @param seconds Number of seconds to add; negative moves backwards
+         * @return The shifted DateTime
+         */
         fun addSeconds(seconds: Int): DateTime {
             var newMillis = this.epochMillis + (seconds.toULong() * 1000UL)
             var newDateTime = DateTime.fromEpochMillis(newMillis)
@@ -129,42 +243,90 @@ namespace Am.Lang
             return newDateTime
         }
 
+        /**
+         * Returns a new DateTime this many years earlier.
+         * @param years Number of years to subtract
+         * @return The shifted DateTime
+         */
         fun subtractYears(years: Int): DateTime {
             return this.addYears(-years)
         }
 
+        /**
+         * Returns a new DateTime this many months earlier, with the same end-of-month clamping as
+         * addMonths.
+         * @param months Number of months to subtract
+         * @return The shifted DateTime
+         */
         fun subtractMonths(months: Int): DateTime {
             return this.addMonths(-months)
         }
 
+        /**
+         * Returns a new DateTime this many days earlier.
+         * @param days Number of days to subtract
+         * @return The shifted DateTime
+         */
         fun subtractDays(days: Int): DateTime {
             return this.addDays(-days)
         }
 
+        /**
+         * Returns a new DateTime this many hours earlier.
+         * @param hours Number of hours to subtract
+         * @return The shifted DateTime
+         */
         fun subtractHours(hours: Int): DateTime {
             return this.addHours(-hours)
         }
 
+        /**
+         * Returns a new DateTime this many minutes earlier.
+         * @param minutes Number of minutes to subtract
+         * @return The shifted DateTime
+         */
         fun subtractMinutes(minutes: Int): DateTime {
             return this.addMinutes(-minutes)
         }
 
+        /**
+         * Returns a new DateTime this many seconds earlier.
+         * @param seconds Number of seconds to subtract
+         * @return The shifted DateTime
+         */
         fun subtractSeconds(seconds: Int): DateTime {
             return this.addSeconds(-seconds)
         }
 
         // Date formatting
+        /**
+         * Formats this instant in its own timezone using a pattern of the usual letter codes: yyyy
+         * for the year, MM for the month, dd for the day, HH for the hour, mm for minutes and ss for
+         * seconds, as in "yyyy-MM-dd HH:mm:ss".
+         * @param pattern The format pattern
+         * @return The formatted text
+         */
         fun format(pattern: String): String {
             return DateTime.formatDateTime(this.epochMillis, this.timezoneOffsetMinutes, pattern)
         }
 
         // Timezone operations
+        /**
+         * Returns the same instant presented in UTC.
+         * @return A new DateTime with a zero timezone offset
+         */
         fun toUtc(): DateTime {
             var newDateTime = DateTime.fromEpochMillis(this.epochMillis)
             newDateTime.timezoneOffsetMinutes = 0
             return newDateTime
         }
 
+        /**
+         * Returns the same instant presented in another timezone. The moment does not move, only the
+         * calendar fields you read back.
+         * @param timezoneOffsetMinutes Minutes east of UTC
+         * @return A new DateTime in that timezone
+         */
         fun toTimezone(timezoneOffsetMinutes: Int): DateTime {
             var newDateTime = DateTime.fromEpochMillis(this.epochMillis)
             newDateTime.timezoneOffsetMinutes = timezoneOffsetMinutes
@@ -172,27 +334,57 @@ namespace Am.Lang
         }
 
         // Comparison methods
+        /**
+         * Tests whether this instant is earlier than another, regardless of the timezones the two
+         * are presented in.
+         * @param other The DateTime to compare against
+         * @return True if this instant comes first
+         */
         fun isBefore(other: DateTime): Bool {
             return this.epochMillis < other.epochMillis
         }
 
+        /**
+         * Tests whether this instant is later than another.
+         * @param other The DateTime to compare against
+         * @return True if this instant comes second
+         */
         fun isAfter(other: DateTime): Bool {
             return this.epochMillis > other.epochMillis
         }
 
+        /**
+         * Tests whether both name the same instant, ignoring timezone.
+         * @param other The DateTime to compare against
+         * @return True if the instants match
+         */
         fun isEqual(other: DateTime): Bool {
             return this.epochMillis == other.epochMillis
         }
 
         // Override methods
+        /**
+         * Formats the value as "yyyy-MM-dd HH:mm:ss" in this instance's timezone.
+         * @return The formatted timestamp
+         */
         override fun toString(): String {
             return this.format("yyyy-MM-dd HH:mm:ss")
         }
 
+        /**
+         * Returns a hash derived from the instant, truncated to 32 bits.
+         * @return The hash value
+         */
         override fun hash(): UInt {
             return this.epochMillis.toUInt()
         }
 
+        /**
+         * Compares against another DateTime by instant. Anything that is not a DateTime, including
+         * null, compares false.
+         * @param other The object to compare with
+         * @return True if other is a DateTime naming the same instant
+         */
         override fun equals(other: Object): Bool {
             // Must null-check before `other is DateTime` — the `is`
             // check faults on a null reference. Without this guard,
@@ -210,15 +402,30 @@ namespace Am.Lang
         }
 
         // Static factory methods
+        /**
+         * Returns the current moment in the system timezone.
+         * @return A DateTime for now
+         */
         static fun now(): DateTime {
             return new DateTime()
         }
 
+        /**
+         * Returns the current moment presented in UTC — the form to prefer for logs and anything
+         * that crosses machines.
+         * @return A DateTime for now, in UTC
+         */
         static fun utcNow(): DateTime {
             var dt = new DateTime()
             return dt.toUtc()
         }
 
+        /**
+         * Builds a DateTime from a raw timestamp, presented in the system timezone. The inverse of
+         * getEpochMillis().
+         * @param milliseconds Milliseconds since the Unix epoch
+         * @return The corresponding DateTime
+         */
         static fun fromEpochMillis(milliseconds: ULong): DateTime {
             var dt = new DateTime()
             dt.setEpochMillis(milliseconds)
@@ -226,47 +433,175 @@ namespace Am.Lang
             return dt
         }
 
+        /**
+         * Builds a DateTime from calendar fields interpreted in the system timezone.
+         * @param year The four-digit year
+         * @param month The month, 1 to 12
+         * @param day The day of the month
+         * @param hour The hour, 0 to 23
+         * @param minute The minute, 0 to 59
+         * @param second The second, 0 to 59
+         * @return The corresponding DateTime
+         */
         static fun create(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int): DateTime {
             var dt = new DateTime()
             dt.setDateTime(year, month, day, hour, minute, second)
             return dt
         }
 
+        /**
+         * Builds a DateTime from calendar fields interpreted in an explicit timezone.
+         * @param year The four-digit year
+         * @param month The month, 1 to 12
+         * @param day The day of the month
+         * @param hour The hour, 0 to 23
+         * @param minute The minute, 0 to 59
+         * @param second The second, 0 to 59
+         * @param timezoneOffsetMinutes Minutes east of UTC
+         * @return The corresponding DateTime
+         */
         static fun create(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int, timezoneOffsetMinutes: Int): DateTime {
             var dt = new DateTime()
             dt.setDateTime(year, month, day, hour, minute, second, timezoneOffsetMinutes)
             return dt
         }
 
+        /**
+         * Parses text into a DateTime using the same pattern letters as format().
+         * @param dateString The text to parse
+         * @param pattern The pattern the text follows
+         * @return The parsed DateTime
+         */
         static fun parse(dateString: String, pattern: String): DateTime {
             var epochMillis = DateTime.parseDateTime(dateString, pattern)
             return DateTime.fromEpochMillis(epochMillis)
         }
 
         // Static utility methods
+        /**
+         * Tests whether a year is a leap year under the Gregorian rules.
+         * @param year The four-digit year
+         * @return True for a leap year
+         */
         static fun isLeapYear(year: Int): Bool {
             return DateTime.checkLeapYear(year)
         }
 
+        /**
+         * Returns the length of a month, accounting for leap years.
+         * @param year The four-digit year
+         * @param month The month, 1 to 12
+         * @return The number of days in that month
+         */
         static fun getDaysInMonth(year: Int, month: Int): Int {
             return DateTime.calculateDaysInMonth(year, month)
         }
 
         // Native method declarations
+        /**
+         * Reads the system clock.
+         * @return Milliseconds since the Unix epoch
+         */
         private static native fun getMillis(): ULong
+        /**
+         * Reads the system timezone.
+         * @return Minutes east of UTC
+         */
         private static native fun getLocalTimezoneOffset(): Int
+        /**
+         * Converts calendar fields in a given timezone to an instant.
+         * @param year The four-digit year
+         * @param month The month, 1 to 12
+         * @param day The day of the month
+         * @param hour The hour, 0 to 23
+         * @param minute The minute, 0 to 59
+         * @param second The second, 0 to 59
+         * @param timezoneOffsetMinutes Minutes east of UTC
+         * @return Milliseconds since the Unix epoch
+         */
         private static native fun toEpochMillis(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int, timezoneOffsetMinutes: Int): ULong
+        /**
+         * Extracts the calendar year from an instant.
+         * @param epochMillis Milliseconds since the Unix epoch
+         * @param timezoneOffsetMinutes Minutes east of UTC
+         * @return The four-digit year
+         */
         private static native fun extractYear(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
+        /**
+         * Extracts the calendar month from an instant.
+         * @param epochMillis Milliseconds since the Unix epoch
+         * @param timezoneOffsetMinutes Minutes east of UTC
+         * @return The month, 1 to 12
+         */
         private static native fun extractMonth(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
+        /**
+         * Extracts the day of the month from an instant.
+         * @param epochMillis Milliseconds since the Unix epoch
+         * @param timezoneOffsetMinutes Minutes east of UTC
+         * @return The day, 1 to 31
+         */
         private static native fun extractDay(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
+        /**
+         * Extracts the hour of the day from an instant.
+         * @param epochMillis Milliseconds since the Unix epoch
+         * @param timezoneOffsetMinutes Minutes east of UTC
+         * @return The hour, 0 to 23
+         */
         private static native fun extractHour(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
+        /**
+         * Extracts the minute within the hour from an instant.
+         * @param epochMillis Milliseconds since the Unix epoch
+         * @param timezoneOffsetMinutes Minutes east of UTC
+         * @return The minute, 0 to 59
+         */
         private static native fun extractMinute(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
+        /**
+         * Extracts the second within the minute from an instant.
+         * @param epochMillis Milliseconds since the Unix epoch
+         * @param timezoneOffsetMinutes Minutes east of UTC
+         * @return The second, 0 to 59
+         */
         private static native fun extractSecond(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
+        /**
+         * Extracts the milliseconds within the second from an instant. Independent of timezone.
+         * @param epochMillis Milliseconds since the Unix epoch
+         * @return The millisecond, 0 to 999
+         */
         private static native fun extractMillisecond(epochMillis: ULong): Int
+        /**
+         * Extracts the day of the week from an instant, counting from Sunday as 0.
+         * @param epochMillis Milliseconds since the Unix epoch
+         * @param timezoneOffsetMinutes Minutes east of UTC
+         * @return The day of week, 0 to 6
+         */
         private static native fun extractDayOfWeek(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
+        /**
+         * Formats an instant using the pattern letters described on format().
+         * @param epochMillis Milliseconds since the Unix epoch
+         * @param timezoneOffsetMinutes Minutes east of UTC
+         * @param pattern The format pattern
+         * @return The formatted text
+         */
         private static native fun formatDateTime(epochMillis: ULong, timezoneOffsetMinutes: Int, pattern: String): String
+        /**
+         * Parses text into an instant using the pattern letters described on format().
+         * @param dateString The text to parse
+         * @param pattern The pattern the text follows
+         * @return Milliseconds since the Unix epoch
+         */
         private static native fun parseDateTime(dateString: String, pattern: String): ULong
+        /**
+         * Applies the Gregorian leap-year rules.
+         * @param year The four-digit year
+         * @return True for a leap year
+         */
         private static native fun checkLeapYear(year: Int): Bool
+        /**
+         * Returns the length of a month, accounting for leap years.
+         * @param year The four-digit year
+         * @param month The month, 1 to 12
+         * @return The number of days in that month
+         */
         private static native fun calculateDaysInMonth(year: Int, month: Int): Int
     }
 }

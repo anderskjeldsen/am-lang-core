@@ -1,4 +1,9 @@
 namespace Am.Collections {
+    /**
+     * Walks a HashSet bucket by bucket, following each bucket's chain. Created by
+     * HashSet.iterator(); you rarely name this type. It reads the set's backing arrays directly,
+     * so changing the set while iterating will produce wrong results.
+     */
     class HashSetIterator<T>(
         private var valueIndexes: Int[],
         private var nextIndexes: Int[],
@@ -6,9 +11,19 @@ namespace Am.Collections {
         private var bucketSize: Int
     ) : Iterator<T> {
         import Am.Lang
+        /**
+         * Bucket currently being walked.
+         */
         private var bucketIndex: Int = 0
+        /**
+         * Slot of the next value to return, or -1 when the current bucket is exhausted.
+         */
         private var valueIndex: Int = -1
 
+        /**
+         * Tests whether any values remain, skipping over empty buckets to find the next one.
+         * @return True while values remain
+         */
         fun hasNext(): Bool {
             if (this.valueIndex >= 0) {
                 return true
@@ -24,6 +39,11 @@ namespace Am.Collections {
             return false
         }
 
+        /**
+         * Returns the value at the current position and advances, moving to the next bucket when the
+         * current chain ends. Only call it after hasNext() has returned true.
+         * @return The next value
+         */
         fun next(): T {
             var item = this.values[this.valueIndex]
             var nextVI = this.nextIndexes[this.valueIndex] - 1

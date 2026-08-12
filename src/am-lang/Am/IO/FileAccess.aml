@@ -1,5 +1,15 @@
 namespace Am.IO
 {
+    /**
+     * How a file should be opened, passed to the FileStream constructor. The six modes map onto
+     * the familiar C ones: readOnly requires the file to exist and only reads ("r"); writeOnly
+     * truncates an existing file or creates a new one ("w"); appendOnly writes at the end and
+     * creates the file when missing ("a"); readWrite reads and writes an existing file without
+     * truncating it ("r+"); readWriteTruncate reads and writes, creating the file or emptying it
+     * first ("w+"); and readAppend reads and appends, creating the file when missing but keeping
+     * existing content ("a+"). Pick the narrowest mode that does the job — reaching for
+     * readWriteTruncate out of habit silently empties a file you meant to update.
+     */
     enum FileAccess {
         import Am.Lang
 

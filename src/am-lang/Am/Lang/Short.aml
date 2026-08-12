@@ -1,28 +1,102 @@
 
 namespace Am.Lang 
 {
+    /**
+     * A 16-bit signed integer, range -32768 to 32767. Useful for compact records and for
+     * hardware-facing data on 16-bit platforms. Literals take an S suffix, as in 100S.
+     */
     primitive native class Short {
+        /**
+         * Formats the value as decimal text.
+         * @return The value as a String
+         */
         override native fun toString(): String
+        /**
+         * Returns a hash of the value so it can be used as a HashMap or HashSet key.
+         * @return The hash value
+         */
         override native fun hash(): UInt
+        /**
+         * Converts this Short value to a Byte (8-bit signed).
+         * The target type is narrower, so values that do not fit are truncated.
+         * @return The value as a Byte
+         */
         native fun toByte(): Byte
+        /**
+         * Converts this Short value to a Int (32-bit signed).
+         * @return The value as a Int
+         */
         native fun toInt(): Int
+        /**
+         * Converts this Short value to a Long (64-bit signed).
+         * @return The value as a Long
+         */
         native fun toLong(): Long
+        /**
+         * Converts this Short value to a UByte (8-bit unsigned).
+         * The target type is narrower, so values that do not fit are truncated.
+         * @return The value as a UByte
+         */
         native fun toUByte(): UByte
+        /**
+         * Converts this Short value to a UShort (16-bit unsigned).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a UShort
+         */
         native fun toUShort(): UShort
+        /**
+         * Converts this Short value to a UInt (32-bit unsigned).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a UInt
+         */
         native fun toUInt(): UInt
+        /**
+         * Converts this Short value to a ULong (64-bit unsigned).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a ULong
+         */
         native fun toULong(): ULong
         #require floatingPoint
+        /**
+         * Converts this Short value to a Float (32-bit floating-point).
+         * @return The value as a Float
+         */
         native fun toFloat(): Float
         #require floatingPoint
+        /**
+         * Converts this Short value to a Double (64-bit floating-point).
+         * @return The value as a Double
+         */
         native fun toDouble(): Double
 
+        /**
+         * Converts to a Bool, where zero is false and any other value is true.
+         * @return True when the value is not zero
+         */
         native fun toBool(): Bool     
 
+        /**
+         * Parses decimal text into a Short.
+         * @param s The text to parse
+         * @return The parsed value
+         */
         static native fun parse(s: String): Short
 
+        /**
+         * The largest value a Short can hold.
+         */
         static const var maxValue: Short = 0x7fffS
+        /**
+         * The smallest value a Short can hold.
+         */
         static const var minValue: Short = 0x8000S
 
+        /**
+         * Returns the smaller of two values.
+         * @param a The first value
+         * @param b The second value
+         * @return a if it is less than b, otherwise b
+         */
         static fun min(a: Short, b: Short): Short {
             if (a < b) {
                 return a
@@ -30,6 +104,12 @@ namespace Am.Lang
             return b
         }
 
+        /**
+         * Returns the larger of two values.
+         * @param a The first value
+         * @param b The second value
+         * @return a if it is greater than b, otherwise b
+         */
         static fun max(a: Short, b: Short): Short {
             if (a > b) {
                 return a
@@ -37,6 +117,11 @@ namespace Am.Lang
             return b
         }
 
+        /**
+         * Returns the magnitude of this value, dropping the sign. Note that minValue has no
+         * positive counterpart, so abs() of minValue wraps back to minValue.
+         * @return The absolute value
+         */
         fun abs(): Short {
             if (this < 0) {
                 return -this

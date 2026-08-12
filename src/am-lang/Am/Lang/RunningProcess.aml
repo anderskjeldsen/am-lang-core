@@ -1,159 +1,145 @@
 namespace Am.Lang
 {
-    // An async child process bound to a pseudo-terminal owned by the
-    // IDE. The pseudo-tty is implemented natively as a custom
-    // dos.library handler Process so the child sees what looks like
-    // a real CON: window — Read() blocks until we feed it bytes via
-    // writeInput, Write() lines flow back through tryReadOutput.
-    //
-    // Spawned via Process.start. The caller polls tryReadOutput()
-    // (non-blocking) for stdout chunks as they arrive and writeInput()
-    // to send data to the child's stdin. Replaces the earlier PIPE:
-    // experiment — PIPE-Handler's WaitForChar doesn't behave the way
-    // the docs suggest, and bytes written by a child via inherited
-    // Output() didn't reach the parent reader reliably. The handler
-    // approach owns both ends of the I/O protocol directly, so
-    // there's no third-party device to rely on.
-    //
-    // Lifecycle:
-    //   var p = Process.start("bebbossh user@host", "amStudio:")
-    //   while (p.isAlive() || p.tryReadOutput().length() > 0) {
-    //       Thread.sleep(20L)
-    //   }
-    //   p.close()
-    //
-    // close() is safe to call at any time; the destructor calls it
-    // implicitly via _native_release_0.
     #implementationPlatforms "libc", "amigaos", "morphos-ppc"
+    /**
+     * A handle to a child process running asynchronously with a pseudo-terminal attached, as
+     * returned by Process.start, Process.startBinary and Process.startWithReportedSize. The
+     * child sees what looks like a real console: it blocks reading stdin until you feed it bytes
+     * with writeInput(), and everything it writes comes back through tryReadOutput(). Reads never
+     * block, so drive it from a loop that polls, does its other work, and sleeps briefly. A
+     * typical lifecycle is: var p = Process.start("bebbossh user@host", "amStudio:") then loop
+     * while (p.isAlive() || p.tryReadOutput().length() > 0) doing Thread.sleep(20L), and finally
+     * p.close(). close() is safe to call at any time and happens automatically when the handle is
+     * released, so an explicit call is only needed to free the child early.
+     */
     native class RunningProcess {
         import Am.Lang
 
-        // Spawn the handler Process AND the child. Called by
-        // Process.start after `new RunningProcess()`. Throws if the
-        // handler Process can't be created or the SystemTagList
-        // spawn fails. Empty `workingDir` means "current dir".
+        /**
+         * Spawns the child and the console handler behind it. Called by the Process.start family
+         * after the handle is created; there is no reason to call it yourself.
+         * @param command The command line to execute
+         * @param workingDir Directory to run in, or an empty string for the current one
+         * @throws Exception if the handler or the child process cannot be created
+         */
         native fun startNative(command: String, workingDir: String)
 
-        // Non-blocking read. Returns whatever bytes are currently
-        // queued in the handler's stdout ring buffer; empty when
-        // nothing's available. Never blocks. After the child has
-        // exited AND its final output has been drained, subsequent
-        // calls return empty — combine with isAlive() to know when
-        // to stop polling.
+        /**
+         * Reads whatever output has arrived since the last call, without blocking. Returns an
+         * empty string when nothing is queued, which is the normal case most of the time. After
+         * the child has exited and its final output has been drained this keeps returning empty,
+         * so pair it with isAlive() to decide when to stop polling.
+         * @return The output collected so far, or an empty string
+         */
         native fun tryReadOutput(): String
 
-        // Send `text` to the child's stdin verbatim. Append "\n"
-        // yourself if the program expects line-buffered input
-        // (most do). Writing after close() is a no-op.
+        /**
+         * Sends text to the child's standard input verbatim. Most programs expect line-buffered
+         * input, so append a newline yourself. Writing after close() does nothing.
+         * @param text The text to send
+         */
         native fun writeInput(text: String)
 
-        // ---- binary I/O (opt-in via Process.startBinary) ------------
-        //
-        // tryReadOutput()/writeInput() are String-typed and NUL-truncate
-        // (the read side null-terminates + creates a String via strlen),
-        // so they can't carry arbitrary bytes — fine for a terminal,
-        // fatal for a git packfile. These byte-oriented variants move
-        // raw bytes to/from the same underlying ring/pipe with no
-        // encoding or terminal translation, so a binary protocol (e.g.
-        // the ssh git transport through bebbossh -T) survives intact.
-        //
-        // Non-blocking read: returns the bytes currently available
-        // (empty UByte[0] when none). Pair with isAlive() to know when
-        // the stream has ended.
+        /**
+         * Reads whatever bytes have arrived, without blocking — the binary counterpart of
+         * tryReadOutput(), for processes started with Process.startBinary. Use this when the
+         * stream carries arbitrary bytes, because the String-based read truncates at the first
+         * NUL and would corrupt, say, a git packfile.
+         * @return The bytes available now, or an empty array
+         */
         native fun tryReadOutputBytes(): UByte[]
 
-        // Write `length` bytes of `data` starting at `offset` to the
-        // child's stdin. Returns the count accepted.
+        /**
+         * Writes raw bytes to the child's standard input, with no encoding or terminal
+         * translation. The binary counterpart of writeInput().
+         * @param data The buffer to write from
+         * @param offset Index of the first byte to write
+         * @param length Number of bytes to write
+         * @return The number of bytes actually accepted
+         */
         native fun writeInputBytes(data: UByte[], offset: Long, length: UInt): UInt
 
-        // Flip this process into binary mode. MUST be called before the
-        // child is spawned (Process.startBinary does this). On libc it
-        // switches the backend from a cooked pty to a raw socketpair; on
-        // AmigaOS it tells the dos-handler to skip the console-size probe
-        // interception so no 4-byte payload is ever swallowed. Called by
-        // Process.startBinary before startNative.
+        /**
+         * Switches this handle into binary mode, which must happen before the child is spawned —
+         * Process.startBinary does it for you. On the libc platforms it swaps the cooked
+         * pseudo-terminal for a raw socket pair; on AmigaOS it tells the console handler not to
+         * intercept the terminal-size probe, so no bytes are ever swallowed from the stream.
+         */
         native fun enableBinaryMode()
 
-        // True until the child has exited. After exit, may still
-        // return true once more while the stdout ring drains.
+        /**
+         * Tests whether the child is still running. It may report true once more after the child
+         * has exited, while the last of its output is still being drained.
+         * @return True while the child is alive
+         */
         native fun isAlive(): Bool
 
-        // Exit status of the child. Valid only after isAlive() has
-        // returned false. Returns 0 while still running.
-        //
-        // Used by amStudio's New CLI to detect ixemul's "libc init
-        // failed" sentinel (code 161) — the only case the panel's
-        // auto-retry-via-sync path should fire on. Earlier the
-        // retry was gated on "zero bytes written" which also matched
-        // any side-effect command that succeeds silently (`delete`,
-        // `mkdir`, etc.) and caused those to run twice.
+        /**
+         * Returns the child's exit status. Only meaningful once isAlive() has returned false;
+         * while the child is still running this returns 0.
+         * @return The exit code of the finished child
+         */
         native fun exitCode(): Int
 
-        // True iff the child has put stdin into raw mode via
-        // SetMode(fh, 1) — the AmigaOS equivalent of a Unix
-        // terminal's "ECHO off + line-discipline off". Set when the
-        // child issues ACTION_SCREEN_MODE with dp_Arg1 != 0; cleared
-        // on the matching SetMode(fh, 0). A CLI panel should switch
-        // to char-at-a-time passthrough (no local echo, special
-        // keys translated to ANSI sequences) while this is true,
-        // and on the way back to FALSE return to its line-buffered
-        // default. Read every paint / keyboard tick — cheap.
+        /**
+         * Tests whether the child has switched its input to raw mode, the equivalent of a Unix
+         * terminal turning off echo and line discipline. While this is true a terminal view should
+         * pass keystrokes through one character at a time, without local echo, translating special
+         * keys to escape sequences; when it goes back to false, return to line-buffered input. The
+         * call is cheap enough to read on every paint or keyboard tick.
+         * @return True while the child has stdin in raw mode
+         */
         native fun isRawMode(): Bool
 
-        // Tell the handler what to answer when the child queries
-        // terminal dimensions (CSI 0 SP q on AmigaOS — bebbossh's
-        // getConsoleSize() sends this on Write(stdin,...) and reads
-        // the reply on Read(stdin,...)). Set when the CliView
-        // allocates / resizes its TerminalEmulator grid so the
-        // remote PTY matches the local viewport. Defaults to 24x80
-        // until called.
+        /**
+         * Sets the terminal dimensions reported to the child when it queries the console size. Call
+         * this when your terminal view is created or resized so the remote side matches the local
+         * viewport. Defaults to 24 rows by 80 columns until called; to have the very first query
+         * answered correctly, start the child with Process.startWithReportedSize instead.
+         * @param rows Terminal height in character rows
+         * @param cols Terminal width in character columns
+         */
         native fun setReportedSize(rows: Int, cols: Int)
 
-        // Force-terminate the child if still running, tear down the
-        // handler Process. Idempotent; called automatically by the
-        // GC via _native_release_0, so explicit calls are only
-        // needed when you want to release the handler early.
+        /**
+         * Terminates the child if it is still running and tears down the console handler behind
+         * it. Idempotent, and called automatically when the handle is released, so you only need
+         * it to free things early. To stop a live child from a user action, prefer
+         * terminateChild(): closing out from under a running child on AmigaOS tears down the
+         * handler while the child may still issue calls through it.
+         */
         native fun close()
 
-        // Async graceful kill: signal the child (SIGBREAKF_CTRL_C on
-        // amigaos, no-op on other platforms — libc's close_0 already
-        // covers the equivalent path via SIGKILL). Returns
-        // immediately; the child exits on its own from its libc's
-        // CTRL_C check, then rp_child_exit fires and the next
-        // drainProcess tick reaps via isAlive()==false → close().
-        //
-        // Use this instead of close() for user-initiated kills
-        // while the child is still alive — direct close() on amigaos
-        // tears the DOS handler down under a live child, which
-        // alerts the next time the child issues a syscall through
-        // the now-freed fh_Type MsgPort.
+        /**
+         * Asks the child to stop, and returns immediately. On AmigaOS this signals the child the
+         * way Ctrl-C does, letting it exit on its own terms; the handle is then reaped by the
+         * normal isAlive() polling. This is the right call for a user-initiated stop while the
+         * child is alive.
+         */
         native fun terminateChild()
 
-        // Register a task + signal-bit to be Signal()'d whenever the
-        // child writes output. Lets the AmLang main loop (whose
-        // Wait() blocks on that signal) wake up immediately when
-        // streaming output arrives, instead of relying on a poller.
-        // Pass `taskPtr` = Window.getUserPortTaskPtr() and
-        // `sigBit`  = Window.getUserPortSigBit().
-        // Pass taskPtr=0 to disable.
+        /**
+         * Registers a task and signal bit to be signalled whenever any child writes output, so an
+         * event loop that is blocked waiting for input wakes immediately on streaming output
+         * instead of relying on a timer. Pass the values from your window's user port, and pass a
+         * taskPtr of 0 to disable it again.
+         * @param taskPtr Pointer to the task to signal
+         * @param sigBit The signal bit to set on that task
+         */
         native static fun setGlobalWake(taskPtr: Long, sigBit: Int)
 
-        // Force every still-running handler Process this AmLang
-        // program ever spawned to terminate, and wait briefly for
-        // each to actually exit. Necessary because the handler
-        // Processes carry pointers into this AmLang program's
-        // seglist; if `main()` returns and the C runtime
-        // UnLoadSeg()s the program while a handler is still
-        // alive, the next time that handler is dispatched it
-        // executes garbage and the user sees a "Program failed"
-        // alert under a stale `AmLangTTY` (historically amStudioTTY) name. Triggered via
-        // `#runOnExit` so application code doesn't need to opt
-        // in.
+        /**
+         * Terminates every console handler this program has spawned and waits briefly for each to
+         * exit. This has to happen before the program's code is unloaded, because a handler still
+         * alive afterwards would execute freed memory the next time it was dispatched. It runs
+         * automatically at exit, so application code does not need to call it.
+         */
         native static fun shutdownAllNative()
 
-        // Compiler-injected cleanup. Visibility is enforced at
-        // AmLang resolution time only — the generated C call from
-        // startup.c isn't blocked by `private`.
+        /**
+         * Exit hook that shuts down any handlers still running. Registered by the compiler through
+         * the #runOnExit directive; the generated call is not blocked by `private`.
+         */
         #runOnExit
         private static fun shutdownAllOnExit() {
             RunningProcess.shutdownAllNative()

@@ -1,5 +1,10 @@
 namespace Am.Lang 
 {
+    /**
+     * Base class for annotations — the @Name markers you can attach to a class declaration.
+     * Derive from it to declare your own; the compiler records the annotation on the class it
+     * decorates, so tooling and generated code can look for it.
+     */
     class Annotation 
     {
 

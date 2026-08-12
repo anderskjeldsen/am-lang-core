@@ -1,27 +1,102 @@
 
 namespace Am.Lang 
 {
+    /**
+     * A 16-bit unsigned integer, range 0 to 65535. This is also the character type used by
+     * String.characterAt and StringBuilder.addChar, so character codes are written with a US
+     * suffix, as in 10US for a line feed.
+     */
     primitive native class UShort {
+        /**
+         * Formats the value as decimal text.
+         * @return The value as a String
+         */
         override native fun toString(): String
+        /**
+         * Returns a hash of the value so it can be used as a HashMap or HashSet key.
+         * @return The hash value
+         */
         override native fun hash(): UInt
+        /**
+         * Converts this UShort value to a Byte (8-bit signed).
+         * The target type is narrower, so values that do not fit are truncated.
+         * @return The value as a Byte
+         */
         native fun toByte(): Byte
+        /**
+         * Converts this UShort value to a Short (16-bit signed).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a Short
+         */
         native fun toShort(): Short
+        /**
+         * Converts this UShort value to a Int (32-bit signed).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a Int
+         */
         native fun toInt(): Int
+        /**
+         * Converts this UShort value to a Long (64-bit signed).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a Long
+         */
         native fun toLong(): Long
+        /**
+         * Converts this UShort value to a UByte (8-bit unsigned).
+         * The target type is narrower, so values that do not fit are truncated.
+         * @return The value as a UByte
+         */
         native fun toUByte(): UByte
+        /**
+         * Converts this UShort value to a UInt (32-bit unsigned).
+         * @return The value as a UInt
+         */
         native fun toUInt(): UInt
+        /**
+         * Converts this UShort value to a ULong (64-bit unsigned).
+         * @return The value as a ULong
+         */
         native fun toULong(): ULong
         #require floatingPoint
+        /**
+         * Converts this UShort value to a Float (32-bit floating-point).
+         * @return The value as a Float
+         */
         native fun toFloat(): Float
         #require floatingPoint
+        /**
+         * Converts this UShort value to a Double (64-bit floating-point).
+         * @return The value as a Double
+         */
         native fun toDouble(): Double
+        /**
+         * Converts to a Bool, where zero is false and any other value is true.
+         * @return True when the value is not zero
+         */
         native fun toBool(): Bool        
 
+        /**
+         * Parses decimal text into a UShort.
+         * @param s The text to parse
+         * @return The parsed value
+         */
         static native fun parse(s: String): UShort
 
+        /**
+         * The largest value a UShort can hold.
+         */
         static const var maxValue: UShort = 0xffffUS
+        /**
+         * The smallest value a UShort can hold.
+         */
         static const var minValue: UShort = 0x0000US
 
+        /**
+         * Returns the smaller of two values.
+         * @param a The first value
+         * @param b The second value
+         * @return a if it is less than b, otherwise b
+         */
         static fun min(a: UShort, b: UShort): UShort {
             if (a < b) {
                 return a
@@ -29,6 +104,12 @@ namespace Am.Lang
             return b
         }
 
+        /**
+         * Returns the larger of two values.
+         * @param a The first value
+         * @param b The second value
+         * @return a if it is greater than b, otherwise b
+         */
         static fun max(a: UShort, b: UShort): UShort {
             if (a > b) {
                 return a

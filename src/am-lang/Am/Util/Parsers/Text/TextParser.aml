@@ -1,11 +1,32 @@
 namespace Am.Util.Parsers.Text {
 
+    /**
+     * A cursor over a string, for hand-written parsers. It keeps a position and offers the moves a
+     * recursive-descent or line-oriented parser needs: take everything up to a delimiter, skip to
+     * one, look ahead without consuming. Construct it with the text to parse and drive it forward;
+     * the position only ever moves forward, so there is no backtracking.
+     * Note that several packages expect a TextParser rather than a raw String — Am.Json's parser
+     * among them — so wrap your input here first.
+     */
     class TextParser(private var string: String) {
         import Am.Lang
 
+        /**
+         * Current position in the string, in characters from the start.
+         */
         private var index: Int
+        /**
+         * Scratch builder reused by parseUntil() so repeated calls do not each allocate.
+         */
         private var sb: StringBuilder = new StringBuilder()
 
+        /**
+         * Consumes characters until the predicate matches one, and returns what was consumed. The
+         * matching character is left unconsumed, so the caller decides what to do with the delimiter.
+         * Reaching the end of the string simply stops.
+         * @param predicate Test applied to each character; true stops the scan
+         * @return The text consumed before the stopping character
+         */
         fun parseUntil(predicate: (c: UShort) => Bool) : String {
             this.sb.clear()
             while(this.index < this.string.getLength()) {
@@ -20,6 +41,12 @@ namespace Am.Util.Parsers.Text {
             return this.sb.toString()
         }
 
+        /**
+         * Advances until the predicate matches, discarding what it passes over. The matching character
+         * is left unconsumed.
+         * @param predicate Test applied to each character; true stops the scan
+         * @return True if a matching character was found, false if the string ran out first
+         */
         fun skipUntil(predicate: (c: UShort) => Bool): Bool {
             while(this.index < this.string.getLength()) {
                 var c = this.string.characterAt(this.index)
@@ -32,10 +59,20 @@ namespace Am.Util.Parsers.Text {
             return false
         }
 
+        /**
+         * Tests whether any characters remain to be read.
+         * @return True while the cursor is before the end of the string
+         */
         fun hasMore(): Bool {
             return this.index < this.string.getLength()
         }
 
+        /**
+         * Returns the next characters without consuming them, for deciding what to parse next. Asking
+         * for more than remains returns just the remainder rather than failing.
+         * @param len How many characters to look at
+         * @return The upcoming text, possibly shorter than requested
+         */
         fun peek(len: UInt) : String {
             var remaining = (this.string.getLength() - this.index).toUInt()
             var actualLen = len
@@ -45,10 +82,22 @@ namespace Am.Util.Parsers.Text {
             return this.string.substring(this.index as UInt, actualLen)
         }
 
+        /**
+         * Returns the character at the cursor without consuming it. Check hasMore() first, since
+         * reading past the end throws.
+         * @return The character code at the cursor
+         * @throws IndexOutOfBoundsException if the cursor is at the end of the string
+         */
         fun peekChar() : UShort {
             return this.string.characterAt(this.index)
         }
 
+        /**
+         * Moves the cursor forward without reading anything, typically to step over a delimiter you
+         * have just peeked at. The cursor is not clamped, so skipping past the end leaves the parser
+         * with no more input.
+         * @param len How many characters to skip
+         */
         fun skip(len: UInt) {
             this.index += len.toInt()
         }

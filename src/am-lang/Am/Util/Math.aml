@@ -1,23 +1,86 @@
 namespace Am.Util {
     #require floatingPoint
+    /**
+     * Trigonometry and the two constants that go with it. Everything is static, so call it as
+     * Math.sin(x). The class needs the floatingPoint package feature, which also means it is absent
+     * on targets built without floating-point support — on those, work in fixed-point Int
+     * arithmetic or precomputed tables instead. Angles are in radians; convert with toRadians() and
+     * toDegrees().
+     */
     native class Math {
         import Am.Lang
         
+        /**
+         * Returns the sine of an angle.
+         * @param angle The angle in radians
+         * @return The sine, between -1 and 1
+         */
         native static fun sin(angle: Double): Double
+        /**
+         * Returns the cosine of an angle.
+         * @param angle The angle in radians
+         * @return The cosine, between -1 and 1
+         */
         native static fun cos(angle: Double): Double
+        /**
+         * Returns the tangent of an angle. Unbounded near a quarter turn, where the true value is
+         * infinite.
+         * @param angle The angle in radians
+         * @return The tangent
+         */
         native static fun tan(angle: Double): Double
+        /**
+         * Returns the angle whose sine is the given value.
+         * @param value A value between -1 and 1
+         * @return The angle in radians, between minus and plus a quarter turn
+         */
         native static fun asin(value: Double): Double
+        /**
+         * Returns the angle whose cosine is the given value.
+         * @param value A value between -1 and 1
+         * @return The angle in radians, between 0 and half a turn
+         */
         native static fun acos(value: Double): Double
+        /**
+         * Returns the angle whose tangent is the given value. Use atan2() when you have both
+         * coordinates, since it can tell the quadrants apart.
+         * @param value The tangent
+         * @return The angle in radians
+         */
         native static fun atan(value: Double): Double
+        /**
+         * Returns the angle from the positive x axis to the point (x, y), using the signs of both
+         * arguments to place it in the right quadrant. This is what you want for the heading between
+         * two points.
+         * @param y The vertical component
+         * @param x The horizontal component
+         * @return The angle in radians, between minus and plus half a turn
+         */
         native static fun atan2(y: Double, x: Double): Double
         
+        /**
+         * The ratio of a circle's circumference to its diameter.
+         */
         static const var PI: Double = 3.14159265358979323846
+        /**
+         * The base of the natural logarithm.
+         */
         static const var E: Double = 2.71828182845904523536
         
+        /**
+         * Converts degrees to the radians every function here expects.
+         * @param degrees The angle in degrees
+         * @return The same angle in radians
+         */
         static fun toRadians(degrees: Double): Double {
             return degrees * Math.PI / 180.0
         }
         
+        /**
+         * Converts radians to degrees, for display or for an API that works in degrees.
+         * @param radians The angle in radians
+         * @return The same angle in degrees
+         */
         static fun toDegrees(radians: Double): Double {
             return radians * 180.0 / Math.PI
         }

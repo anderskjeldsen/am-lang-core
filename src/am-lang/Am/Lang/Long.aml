@@ -1,27 +1,105 @@
 
 namespace Am.Lang 
 {
+    /**
+     * A 64-bit signed integer, for values that do not fit in an Int such as file offsets and
+     * millisecond timestamps. Range is -9223372036854775808 to 9223372036854775807. On 16/32-bit
+     * targets like m68k, Long arithmetic is emulated and noticeably slower than Int, so prefer
+     * Int where the range allows. Literals take an L suffix, as in 1000L.
+     */
     primitive native class Long {
+        /**
+         * Formats the value as decimal text.
+         * @return The value as a String
+         */
         override native fun toString(): String
+        /**
+         * Returns a hash of the value so it can be used as a HashMap or HashSet key.
+         * @return The hash value
+         */
         override native fun hash(): UInt
+        /**
+         * Converts this Long value to a Short (16-bit signed).
+         * The target type is narrower, so values that do not fit are truncated.
+         * @return The value as a Short
+         */
         native fun toShort(): Short
+        /**
+         * Converts this Long value to a Int (32-bit signed).
+         * The target type is narrower, so values that do not fit are truncated.
+         * @return The value as a Int
+         */
         native fun toInt(): Int
+        /**
+         * Converts this Long value to a Byte (8-bit signed).
+         * The target type is narrower, so values that do not fit are truncated.
+         * @return The value as a Byte
+         */
         native fun toByte(): Byte
+        /**
+         * Converts this Long value to a UByte (8-bit unsigned).
+         * The target type is narrower, so values that do not fit are truncated.
+         * @return The value as a UByte
+         */
         native fun toUByte(): UByte
+        /**
+         * Converts this Long value to a UShort (16-bit unsigned).
+         * The target type is narrower, so values that do not fit are truncated.
+         * @return The value as a UShort
+         */
         native fun toUShort(): UShort
+        /**
+         * Converts this Long value to a UInt (32-bit unsigned).
+         * The target type is narrower, so values that do not fit are truncated.
+         * @return The value as a UInt
+         */
         native fun toUInt(): UInt
+        /**
+         * Converts this Long value to a ULong (64-bit unsigned).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a ULong
+         */
         native fun toULong(): ULong
         #require floatingPoint
+        /**
+         * Converts this Long value to a Float (32-bit floating-point).
+         * @return The value as a Float
+         */
         native fun toFloat(): Float
         #require floatingPoint
+        /**
+         * Converts this Long value to a Double (64-bit floating-point).
+         * @return The value as a Double
+         */
         native fun toDouble(): Double
+        /**
+         * Converts to a Bool, where zero is false and any other value is true.
+         * @return True when the value is not zero
+         */
         native fun toBool(): Bool
 
+        /**
+         * Parses decimal text into a Long.
+         * @param s The text to parse
+         * @return The parsed value
+         */
         static native fun parse(s: String): Long
 
+        /**
+         * The largest value a Long can hold.
+         */
         static const var maxValue: Long = 0x7fffffffffffffffL
+        /**
+         * The smallest value a Long can hold.
+         */
         static const var minValue: Long = 0x8000000000000000L
 
+        /**
+         * Returns the smaller of two values.
+         * @param a The first value
+         * @param b The second value
+         * @return a if it is less than b, otherwise b
+         */
         static fun min(a: Long, b: Long): Long {
             if (a < b) {
                 return a
@@ -29,6 +107,12 @@ namespace Am.Lang
             return b
         }
 
+        /**
+         * Returns the larger of two values.
+         * @param a The first value
+         * @param b The second value
+         * @return a if it is greater than b, otherwise b
+         */
         static fun max(a: Long, b: Long): Long {
             if (a > b) {
                 return a
@@ -36,6 +120,11 @@ namespace Am.Lang
             return b
         }
 
+        /**
+         * Returns the magnitude of this value, dropping the sign. Note that minValue has no
+         * positive counterpart, so abs() of minValue wraps back to minValue.
+         * @return The absolute value
+         */
         fun abs(): Long {
             if (this < 0) {
                 return -this

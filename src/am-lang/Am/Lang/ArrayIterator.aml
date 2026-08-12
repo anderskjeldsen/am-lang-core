@@ -1,12 +1,30 @@
 namespace Am.Collections {
+    /**
+     * Walks an Array from start to end as an Iterator, which is what lets a plain array be used
+     * with `each` and with the code in Am.Collections that expects an Iterator. Single use:
+     * create a new one for each pass. It holds a position into the array and does not copy it,
+     * so do not resize or replace the backing array while iterating.
+     */
     class ArrayIterator<T>(private var array: Array<T>) : Iterator<T> {
         import Am.Lang
+        /**
+         * Position of the next element to return.
+         */
         private var index: Int = 0
 
+        /**
+         * Tests whether any elements remain.
+         * @return True while the position is still inside the array
+         */
         fun hasNext(): Bool {
             return this.index < this.array.length()
         }
 
+        /**
+         * Returns the element at the current position and advances. Call hasNext() first — stepping
+         * past the end throws an IndexOutOfBoundsException from the array itself.
+         * @return The next element
+         */
         fun next(): T {
             var t = this.array[this.index]
             this.index++

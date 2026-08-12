@@ -1,7 +1,20 @@
 namespace Am.Util {
+    /**
+     * Base64 encoding, as used by HTTP basic authentication, data URLs and anywhere binary data has
+     * to travel through a text-only channel. Encoding only for now — there is no decoder yet, so
+     * round-tripping needs one of your own.
+     */
     class Base64 {
         import Am.Lang
         
+        /**
+         * Encodes bytes as standard Base64 text, with the usual A-Z a-z 0-9 + / alphabet and "="
+         * padding at the end. Pass the number of bytes to encode explicitly, which lets you encode the
+         * filled prefix of a larger buffer.
+         * @param data The bytes to encode
+         * @param length How many bytes from the start of data to encode
+         * @return The Base64 text
+         */
         static fun encode(data: Byte[], length: UInt): String {
             // Base64 character set
             const var base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"

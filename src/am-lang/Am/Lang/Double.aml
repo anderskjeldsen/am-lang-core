@@ -2,25 +2,113 @@
 namespace Am.Lang 
 {
     #require floatingPoint
+    /**
+     * A 64-bit IEEE floating-point number, with roughly 15 significant digits. Only available
+     * when the package enables the floatingPoint feature (see package.yml). On targets without
+     * an FPU every operation is emulated in software, so prefer Float, or fixed-point Int
+     * arithmetic, where precision allows.
+     */
     primitive native class Double {
+        /**
+         * Formats the value as decimal text.
+         * @return The value as a String
+         */
         override native fun toString(): String
+        /**
+         * Returns a hash of the value so it can be used as a HashMap or HashSet key.
+         * @return The hash value
+         */
         override native fun hash(): UInt
+        /**
+         * Converts this Double value to a Byte (8-bit signed).
+         * The fractional part is discarded (truncation towards zero), and values outside the
+         * target range are undefined.
+         * @return The value as a Byte
+         */
         native fun toByte(): Byte
+        /**
+         * Converts this Double value to a Short (16-bit signed).
+         * The fractional part is discarded (truncation towards zero), and values outside the
+         * target range are undefined.
+         * @return The value as a Short
+         */
         native fun toShort(): Short
+        /**
+         * Converts this Double value to a Int (32-bit signed).
+         * The fractional part is discarded (truncation towards zero), and values outside the
+         * target range are undefined.
+         * @return The value as a Int
+         */
         native fun toInt(): Int
+        /**
+         * Converts this Double value to a Long (64-bit signed).
+         * The fractional part is discarded (truncation towards zero), and values outside the
+         * target range are undefined.
+         * @return The value as a Long
+         */
         native fun toLong(): Long
+        /**
+         * Converts this Double value to a UByte (8-bit unsigned).
+         * The fractional part is discarded (truncation towards zero), and values outside the
+         * target range are undefined.
+         * @return The value as a UByte
+         */
         native fun toUByte(): UByte
+        /**
+         * Converts this Double value to a UShort (16-bit unsigned).
+         * The fractional part is discarded (truncation towards zero), and values outside the
+         * target range are undefined.
+         * @return The value as a UShort
+         */
         native fun toUShort(): UShort
+        /**
+         * Converts this Double value to a UInt (32-bit unsigned).
+         * The fractional part is discarded (truncation towards zero), and values outside the
+         * target range are undefined.
+         * @return The value as a UInt
+         */
         native fun toUInt(): UInt
+        /**
+         * Converts this Double value to a ULong (64-bit unsigned).
+         * The fractional part is discarded (truncation towards zero), and values outside the
+         * target range are undefined.
+         * @return The value as a ULong
+         */
         native fun toULong(): ULong
+        /**
+         * Converts this Double value to a Float (32-bit floating-point).
+         * The target type is narrower, so values that do not fit are truncated.
+         * @return The value as a Float
+         */
         native fun toFloat(): Float
+        /**
+         * Converts to a Bool, where zero is false and any other value is true.
+         * @return True when the value is not zero
+         */
         native fun toBool(): Bool
 
+        /**
+         * Parses decimal text into a Double.
+         * @param s The text to parse
+         * @return The parsed value
+         */
         static native fun parse(s: String): Double
 
+        /**
+         * The largest value a Double can hold.
+         */
         static const var maxValue: Double = 1.7976931348623157e308
+        /**
+         * The smallest value a Double can hold.
+         */
         static const var minValue: Double = -1.7976931348623157e308
 
+        /**
+         * Returns the smaller of two values.
+         * @param a The first value
+         * @param b The second value
+         * @return a if it is less than b, otherwise b
+         */
         static fun min(a: Double, b: Double): Double {
             if (a < b) {
                 return a
@@ -28,6 +116,12 @@ namespace Am.Lang
             return b
         }
 
+        /**
+         * Returns the larger of two values.
+         * @param a The first value
+         * @param b The second value
+         * @return a if it is greater than b, otherwise b
+         */
         static fun max(a: Double, b: Double): Double {
             if (a > b) {
                 return a
@@ -35,6 +129,10 @@ namespace Am.Lang
             return b
         }
 
+        /**
+         * Returns the magnitude of this value, dropping the sign.
+         * @return The absolute value
+         */
         fun abs(): Double {
             if (this < 0.0) {
                 return -this
@@ -42,6 +140,10 @@ namespace Am.Lang
             return this
         }
         
+        /**
+         * Returns the square root of this value. The result is undefined for negative input.
+         * @return The square root
+         */
         native fun sqrt(): Double
 
     }

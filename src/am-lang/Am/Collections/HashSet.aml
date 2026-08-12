@@ -1,24 +1,62 @@
 namespace Am.Collections {
 
+    /**
+     * A hash-based set of distinct values, for membership tests and de-duplication. Adding a value
+     * that is already present does nothing, and has() is constant time on average, which makes
+     * this far better than List.contains() when you test membership often. Element types need
+     * hash() and equals() that agree. Iteration order is unspecified. Not synchronised.
+     * One caveat worth knowing: remove() unlinks the value but does not recycle its slot, so a
+     * long-lived set under heavy add/remove churn keeps growing its backing arrays; rebuild the
+     * set periodically if that pattern applies to you.
+     */
     class HashSet<T>: Set<T>, Iterable<T> {
         import Am.Lang
 
+        /**
+         * Number of distinct values held.
+         */
         private var size: Int
+        /**
+         * Next free slot in the values array; only ever moves forward.
+         */
         private var currentValueIndex: Int
-        // Backing arrays eagerly initialised to zero-length so the field
-        // declarations are honest about being non-null. The lazy-init
-        // path in `add()` gates on `length() == 0` instead of the old
-        // `== null` check; the storage materialises on first insert.
+        /**
+         * Chain links between values sharing a bucket. Eagerly initialised to zero length so the
+         * field declaration is honest about being non-null; the real storage materialises on the
+         * first insert, which add() detects by checking the length rather than for null.
+         */
         private var nextIndexes: Int[] = new Int[0]
+        /**
+         * Bucket heads: for each bucket, the slot index of its first value plus one, or 0 when the
+         * bucket is empty.
+         */
         private var valueIndexes: Int[] = new Int[0]
+        /**
+         * The values themselves, indexed by slot.
+         */
         private var values: T[] = new T[0]
+        /**
+         * Number of buckets; a value's bucket is its hash modulo this.
+         */
         private var bucketSize: Int
+        /**
+         * Counter of chained entries, used together with the load factor to decide when to grow.
+         */
         private var currentIndex: Int
 
+        /**
+         * Returns the number of distinct values in the set.
+         * @return The element count
+         */
         fun getSize(): Int {
             return this.size
         }
 
+        /**
+         * Tests whether a value is in the set. Constant time on average.
+         * @param value The value to look for
+         * @return True if an equal value is present
+         */
         fun has(value: T): Bool {
             if (this.valueIndexes.length() == 0) {
                 return false
@@ -33,6 +71,12 @@ namespace Am.Collections {
             return false
         }
 
+        /**
+         * Walks one bucket's chain looking for a value.
+         * @param valueIndex Slot index of the first entry in the chain, or -1 for an empty bucket
+         * @param value The value to find
+         * @return The slot index holding the value, or -1 when it is not in the chain
+         */
         private inline fun findEntry(valueIndex: Int, value: T): Int {
             while(valueIndex > -1) {
 //                var valueIndex = this.valueIndexes[index] - 1
@@ -45,6 +89,11 @@ namespace Am.Collections {
             return -1
         }
 
+        /**
+         * Adds a value if it is not already present. The backing arrays are allocated on the first add
+         * and grown when the set passes half full, which rehashes everything.
+         * @param value The value to add
+         */
         fun add(value: T) {
             if (this.nextIndexes.length() == 0) {
                 this.bucketSize = 1024
@@ -79,6 +128,11 @@ namespace Am.Collections {
             this.privateSetValue(value)
         }
 
+        /**
+         * Inserts a value without considering growth, ignoring it when an equal value is already
+         * present. Used both by add() and by the rehash loop.
+         * @param value The value to insert
+         */
         private fun privateSetValue(value: T) {
             var hash = value.hash()
             var index = hash % this.bucketSize
@@ -113,14 +167,29 @@ namespace Am.Collections {
             }
             this.currentValueIndex++
         }
+        /**
+         * Tests whether a value is in the set; an alias for has() that matches the naming used by List.
+         * @param value The value to look for
+         * @return True if an equal value is present
+         */
         fun contains(value: T): Bool {
             return this.has(value)
         }
 
+        /**
+         * Tests whether the set holds no values.
+         * @return True when the set is empty
+         */
         fun isEmpty(): Bool {
             return this.size == 0
         }
 
+        /**
+         * Removes a value from the set. The slot it occupied is not returned to a free list, so heavy
+         * add/remove churn grows the backing arrays over time.
+         * @param value The value to remove
+         * @return True if the value was present and removed
+         */
         fun remove(value: T): Bool {
             if (this.valueIndexes.length() == 0) {
                 return false
@@ -169,6 +238,9 @@ namespace Am.Collections {
             return false
         }
 
+        /**
+         * Removes every value, keeping the allocated capacity.
+         */
         fun clear() {
             this.size = 0
             this.currentValueIndex = 0
@@ -182,6 +254,11 @@ namespace Am.Collections {
             }
         }
 
+        /**
+         * Returns a fresh iterator over the values, in unspecified order. This is what `each` uses; do
+         * not add to or remove from the set while iterating.
+         * @return An iterator over the values
+         */
         fun iterator(): Iterator<T> {
             if (this.valueIndexes.length() == 0) {
                 return new HashSetIterator<T>(new Int[0], new Int[0], this.values, 0)
@@ -189,6 +266,10 @@ namespace Am.Collections {
             return new HashSetIterator<T>(this.valueIndexes, this.nextIndexes, this.values, this.bucketSize)
         }
 
+        /**
+         * Copies the values into a new array sized exactly to the set, in unspecified order.
+         * @return A new array holding the values
+         */
         fun toArray(): T[] {
             if (this.size == 0) {
                 return new T[0]

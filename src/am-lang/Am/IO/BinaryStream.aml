@@ -3,37 +3,78 @@ TODO: Make it as an interface
 */
 namespace Am.IO
 {
+    /**
+     * Wraps any Stream to read multi-byte numbers in big-endian order, most significant byte
+     * first, which is the layout used by most file formats and network protocols. Wrap a
+     * FileStream or MemoryStream in one when parsing a binary header. Only reading is provided so
+     * far — write the bytes yourself for output.
+     */
     native class BinaryStream(private var stream: Stream) : Stream
     {
         import Am.Lang
 
+        /**
+         * Reads raw bytes from the underlying stream.
+         * @param buffer Destination buffer
+         * @param offset Position in the stream to read from
+         * @param length Maximum number of bytes to read
+         * @return The number of bytes actually read
+         */
         fun read(buffer: UByte[], offset: Long, length: UInt): UInt {
             return this.stream.read(buffer, offset, length)
         }
 
+        /**
+         * Writes raw bytes to the underlying stream.
+         * @param buffer Source buffer
+         * @param offset Position in the stream to write at
+         * @param length Number of bytes to write
+         */
         fun write(buffer: UByte[], offset: Long, length: UInt) {
             this.stream.write(buffer, offset, length)
 
         }
 
+        /**
+         * Moves the underlying stream's position to an absolute offset.
+         * @param offset Byte offset from the start
+         */
         fun seekFromStart(offset: Long) {
             this.stream.seekFromStart(offset)
         }
 
+        /**
+         * Reads a single byte from the underlying stream.
+         * @return The byte value, or a negative value at end of stream
+         */
         fun readByte(): Int {
             return this.stream.readByte()
         }
 
+        /**
+         * Writes a single byte to the underlying stream.
+         * @param byte The byte value to write
+         */
         fun writeByte(byte: Int) {
             this.stream.writeByte(byte)
         }
 
+        /**
+         * Reads two bytes as a big-endian 16-bit value. At end of stream the missing bytes read as -1
+         * and the result is meaningless, so check the position yourself when the input may be
+         * truncated.
+         * @return The 16-bit value
+         */
         fun readShort(): Short {
             var s1 = this.readByte()
             var s2 = this.readByte()
             return ((s1 << 8) | s2).toShort()
         }
 
+        /**
+         * Reads four bytes as a big-endian 32-bit value.
+         * @return The 32-bit value
+         */
         fun readInt(): Int {
             var s1 = this.readShort().toInt()
             var s2 = this.readShort().toInt()

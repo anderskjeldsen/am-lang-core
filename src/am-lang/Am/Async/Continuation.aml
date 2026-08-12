@@ -1,38 +1,31 @@
 namespace Am.Async {
 
-    // Handle on a suspended computation. Eventually exactly one of
-    // `resume()` or `resumeWithError(ex)` should be called; the first
-    // call drives the parent suspend chain to its resume point.
-    // Subsequent calls are silently dropped — so a
-    // `whoever-finishes-first-wins` race between two completion
-    // sources is safe by construction.
-    //
-    // `resume` is callable from any thread. The parent suspend chain
-    // resumes on whichever thread invoked `resume` — there is no
-    // implicit hop back to the originating thread. If main-thread
-    // affinity is needed, wire it up explicitly (e.g. enqueue
-    // `cont.resume()` onto a developer-managed task queue pumped by
-    // the main loop).
-    //
-    // Phase 1 (this version): non-generic, value-less. Only the
-    // "fired exactly once" semantics are wired up. Useful for testing
-    // the C runtime, and lets cooperating code wait for a flag.
-    //
-    // Phase 2: the language-level `suspend(cont) { ... }` block will
-    // hand the user a `Continuation<T>` whose `resume(value: T)` both
-    // sets the value into the parent's suspend_state result slot and
-    // re-enters the parent. The compiler will reject native generic
-    // classes other than Array today, so we keep Phase 1 non-generic
-    // and let the Phase 2 language change relax that.
+    /**
+     * A handle on a suspended computation, used to resume it once whatever it was waiting for has
+     * happened. Exactly one call to resume() drives the suspended chain onwards; every later call
+     * is silently ignored, so a race between two completion sources is safe by construction and the
+     * first one to finish wins.
+     * resume() may be called from any thread, and the suspended code continues on whichever thread
+     * called it — there is no implicit hop back to the thread that suspended. When you need the
+     * continuation to run on the main thread, queue it there yourself, for example through
+     * TaskScheduler.
+     * This first version is value-less: it carries the fact that something completed, not a result.
+     * Passing a value back through a resume is planned for the language-level suspend block.
+     */
     #implementationPlatforms "libc"
     native class Continuation() {
         import Am.Lang
 
-        // Fire the continuation. Idempotent: first call wins, every
-        // subsequent call is a no-op (no error, no corruption).
+        /**
+         * Resumes the suspended computation. Idempotent: the first call wins and later calls do nothing
+         * at all, neither erroring nor corrupting state.
+         */
         native fun resume()
 
-        // Has resume() already been called?
+        /**
+         * Tests whether resume() has already been called.
+         * @return True once the continuation has fired
+         */
         native fun isDone(): Bool
     }
 }

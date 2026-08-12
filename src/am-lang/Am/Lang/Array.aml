@@ -6,12 +6,32 @@
 
 namespace Am.Lang
 {
+    /**
+     * A fixed-length, indexed block of values of one type, written T[] in source, as in
+     * String[] or UByte[]. Arrays are the low-level storage the collections are built on: the
+     * length is fixed at creation, indexing is bounds-checked and throws on an out-of-range
+     * index, and element access is direct with no boxing. Reach for List when you need to grow
+     * or shrink, and for an array when the size is known and you want the cheapest possible
+     * access. Iterate with `each`, or with a while loop over length() in hot code.
+     */
     native class Array<T>()
     {
         import Am.Lang
         import Am.Collections
+        /**
+         * Returns the number of elements the array was created with.
+         * @return The element count
+         */
         native fun length(): UInt
 
+        /**
+         * Copies a range into a new array of the same element type. As with String.substring, the
+         * second argument is a LENGTH rather than an end index. Reading past the end of the source
+         * array throws.
+         * @param offset Zero-based index of the first element to copy
+         * @param length Number of elements to copy
+         * @return A new array holding the copied elements
+         */
         fun subArray(offset: UInt, length: UInt): T[] {
             var newArray = this.createEmptyArrayOfSameType(length)
             var i = offset
@@ -25,6 +45,12 @@ namespace Am.Lang
             return newArray
         }
 
+        /**
+         * Allocates an uninitialised array with this array's element type, used by subArray to
+         * build its result without knowing T at runtime.
+         * @param length Number of elements to allocate
+         * @return The new array
+         */
         private native fun createEmptyArrayOfSameType(length: UInt): T[]
     }
 }

@@ -1,31 +1,114 @@
 
 namespace Am.Lang 
 {
+    /**
+     * An immutable sequence of characters, backed by the C runtime. Every method that appears
+     * to modify a string returns a new one instead. Build strings piecewise with StringBuilder
+     * rather than repeated concatenation. Two things commonly trip up newcomers: substring
+     * takes a start and a LENGTH (not an end index), and the ordering operators < and > compare
+     * references rather than text, so use equals() for comparisons and write your own loop if
+     * you need lexicographic ordering.
+     */
     native class String {
         import Am.Collections
         import Am.IO
 
+        /**
+         * Returns a content-derived hash, so equal strings hash equally and String works as a
+         * HashMap or HashSet key.
+         * @return The hash value
+         */
         override native fun hash(): UInt
+        /**
+         * Returns the string itself.
+         * @return This string
+         */
         override fun toString(): String {
             return this
         }
         // TODO: change to length
+        /**
+         * Returns the length of the string in characters.
+         * @return The character count
+         */
         native fun getLength(): Int
+        /**
+         * Returns the length of the string in characters; an alias for getLength().
+         * @return The character count
+         */
         fun length(): Int {
             return this.getLength()
         }
+        /**
+         * Tests whether the string has no characters. Note this is a length test only — a string
+         * of spaces is not empty.
+         * @return True if the length is zero
+         */
         fun isEmpty(): Bool {
             return this.getLength() == 0
         }
+        /**
+         * Writes the string to standard output without a trailing newline. Use println() when you
+         * want the line terminator.
+         */
         native fun print()
+        /**
+         * Compares this string with another object by content. Passing a null reference throws, so
+         * narrow a nullable String to a non-null local before calling this.
+         * @param other The object to compare with
+         * @return True if other is a String with the same characters
+         */
         native override fun equals(other: Object): Bool
+        /**
+         * Concatenates two strings into a new string. Each + allocates, so prefer StringBuilder
+         * inside loops.
+         * @param s The string to append
+         * @return A new string holding both operands
+         */
         native op + (s: String): String
+        /**
+         * Decodes a byte array into a string using the named encoding, for example "UTF-8". This
+         * is the counterpart of toBytes and the usual way to turn bytes read from a Stream into
+         * text.
+         * @param bytes The bytes to decode
+         * @param encoding Name of the character encoding
+         * @return The decoded string
+         */
         native static fun fromBytes(bytes: UByte[], encoding: String): String
+        /**
+         * Encodes this string into bytes using the named encoding, for example "UTF-8".
+         * @param encoding Name of the character encoding
+         * @return The encoded bytes
+         */
         native fun toBytes(encoding: String): UByte[]
+        /**
+         * Finds the first occurrence of a substring.
+         * @param s The substring to search for
+         * @return The zero-based index of the first match, or -1 if there is none
+         */
         native fun indexOf(s: String): Int
+        /**
+         * Finds the last occurrence of a substring.
+         * @param s The substring to search for
+         * @return The zero-based index of the last match, or -1 if there is none
+         */
         native fun lastIndexOf(s: String): Int
+        /**
+         * Extracts a range of characters. The second argument is a LENGTH, not an end index —
+         * passing an end index reads past the string and hangs or faults. Use substringToEnd when
+         * you want everything from a position onwards.
+         * @param start Zero-based index of the first character to take
+         * @param length Number of characters to take
+         * @return The extracted substring
+         */
         native fun substring(start: UInt, length: UInt): String
         
+        /**
+         * Returns everything from a position to the end of the string, or an empty string if the
+         * position is at or past the end. Safer than computing a length yourself for substring().
+         * @param start Zero-based index of the first character to take
+         * @return The remainder of the string
+         */
         fun substringToEnd(start: UInt): String {
             var totalLength = this.getLength().toUInt()
             if (start >= totalLength) {
@@ -35,6 +118,13 @@ namespace Am.Lang
             return this.substring(start, remainingLength)
         }
         
+        /**
+         * Finds the first occurrence of a substring at or after a starting position; the building
+         * block for scanning a string repeatedly.
+         * @param s The substring to search for
+         * @param startIndex Zero-based index to start searching from
+         * @return The index of the first match, or -1 if there is none or the arguments are out of range
+         */
         fun indexOfAfter(s: String, startIndex: Int): Int {
             var searchText = this
             var searchLen = searchText.getLength()
@@ -63,7 +153,19 @@ namespace Am.Lang
             return -1
         }
 
+        /**
+         * Unchecked character read used by characterAt() once the index has been validated.
+         * @param index Zero-based character index
+         * @return The character code at that index
+         */
         native private fun characterAtNative(index: UInt): UShort
+        /**
+         * Returns the character code at a position, for example 65US for 'A'. Compare the result
+         * against character-code literals such as 32US.
+         * @param index Zero-based character index
+         * @return The character code at that index
+         * @throws IndexOutOfBoundsException if the index is at or past the end of the string
+         */
         fun characterAt(index: UInt): UShort {
             if (index >= this.getLength().toUInt()) {
                 throw new IndexOutOfBoundsException(index.toInt(), this.length().toUInt())
@@ -73,10 +175,22 @@ namespace Am.Lang
 
 
 
+        /**
+         * Tests whether the string ends with a suffix.
+         * @param s The suffix to look for
+         * @return True if the string ends with s
+         */
         fun endsWith(s: String): Bool {
             return this.lastIndexOf(s) == (this.getLength() - s.getLength()).toUInt()
         }
 
+        /**
+         * Splits the string on a single separator character given as a code, for example 44US for a
+         * comma. Consecutive separators yield empty entries, but a trailing separator does not add
+         * an empty entry at the end. Use splitByString to split on a multi-character separator.
+         * @param character The separator character code
+         * @return The pieces between separators
+         */
         fun split(character: UShort): String[] {
             var result = List<String>.newList<String>()
             var sb = new StringBuilder()
@@ -98,6 +212,13 @@ namespace Am.Lang
             return result.toArray()
         }
         
+        /**
+         * Splits the string on a multi-character separator. Empty pieces are preserved, including a
+         * trailing empty piece when the string ends with the separator. An empty separator returns
+         * the original string as the only element.
+         * @param separator The separator to split on
+         * @return The pieces between separators
+         */
         fun splitByString(separator: String): String[] {
             var result = List<String>.newList<String>()
             var separatorLen = separator.getLength()
@@ -136,11 +257,20 @@ namespace Am.Lang
             return result.toArray()
         }
 
+        /**
+         * Writes the string followed by a newline to standard output. This is the idiomatic way to
+         * print in AmLang: call it on the string itself, as in "hello".println().
+         */
         fun println() {
             var s = this + "\n"
             s.print()
         }
 
+        /**
+         * Returns a copy with ASCII letters a-z folded to upper case. Bytes outside that range,
+         * including accented and non-Latin characters, are copied unchanged.
+         * @return The upper-cased string
+         */
         fun toUpperCase(): String {
             var sb = new StringBuilder()
             var len = this.getLength()
@@ -159,6 +289,11 @@ namespace Am.Lang
             return sb.toString()
         }
 
+        /**
+         * Returns a copy with ASCII letters A-Z folded to lower case. Bytes outside that range,
+         * including accented and non-Latin characters, are copied unchanged.
+         * @return The lower-cased string
+         */
         fun toLowerCase(): String {
             var sb = new StringBuilder()
             var len = this.getLength()
@@ -177,6 +312,12 @@ namespace Am.Lang
             return sb.toString()
         }
 
+        /**
+         * Returns a copy without leading and trailing whitespace, where whitespace means space,
+         * tab, line feed or carriage return. A string that is entirely whitespace trims to an empty
+         * string.
+         * @return The trimmed string
+         */
         fun trim(): String {
             var len = this.getLength().toUInt()
             if (len == 0UI) {
@@ -215,6 +356,11 @@ namespace Am.Lang
             return this.substring(start, trimmedLength)
         }
         
+        /**
+         * Tests whether the string begins with a prefix. An empty prefix always matches.
+         * @param prefix The prefix to look for
+         * @return True if the string starts with prefix
+         */
         fun startsWith(prefix: String): Bool {
             var prefixLen = prefix.getLength().toUInt()
             var thisLen = this.getLength().toUInt()
@@ -242,6 +388,11 @@ namespace Am.Lang
         }
         
         // File operations
+        /**
+         * Writes this string to a file, truncating any existing contents. Convenience wrapper over
+         * File, FileStream and TextStream for one-shot writes.
+         * @param filename Path of the file to write
+         */
         fun writeToFile(filename: String) {
             var file = new File(filename)
             var fileStream = new FileStream(file, FileAccess.readWriteTruncate)
@@ -249,6 +400,12 @@ namespace Am.Lang
             textStream.writeString(this)
         }
         
+        /**
+         * Reads an entire file into a string. Convenience wrapper over File, FileStream and
+         * TextStream; the whole file is held in memory, so prefer a TextStream for large files.
+         * @param filename Path of the file to read
+         * @return The file contents
+         */
         static fun readFromFile(filename: String): String {
             var file = new File(filename)
             var fileStream = new FileStream(file, FileAccess.readOnly)
@@ -256,6 +413,13 @@ namespace Am.Lang
             return textStream.readString()
         }
         
+        /**
+         * Joins an array of strings, placing the separator between adjacent elements. The inverse
+         * of split / splitByString.
+         * @param strings The strings to join
+         * @param separator Text to insert between elements
+         * @return The joined string, or an empty string when the array is empty
+         */
         static fun join(strings: String[], separator: String): String {
             if (strings.length() == 0) {
                 return ""

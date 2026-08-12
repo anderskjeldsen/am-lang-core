@@ -1,7 +1,16 @@
 
 namespace Am.Lang 
 {
+    /**
+     * A true/false value. Conditions in if and while statements take a Bool and nothing else —
+     * there is no implicit truthiness for numbers or references, so write `if (count > 0)` rather
+     * than `if (count)`. Use toBool() on a numeric type when you want the zero/non-zero rule.
+     */
     primitive native class Bool {
+        /**
+         * Formats the value as the text "true" or "false".
+         * @return The value as a String
+         */
         override fun toString(): String {
             if (this) {
                 return "true"
@@ -9,6 +18,10 @@ namespace Am.Lang
             return "false"
         }
 
+        /**
+         * Returns 1 for true and 0 for false.
+         * @return The hash value
+         */
         override fun hash(): UInt {
             if (this) {
                 return 1UI
@@ -16,6 +29,13 @@ namespace Am.Lang
             return 0UI
         }
 
+        /**
+         * Parses the text "true" or "false", ignoring surrounding whitespace. Anything else is an
+         * error rather than a silent false, so validate input you do not control.
+         * @param s The text to parse
+         * @return True for "true" and false for "false"
+         * @throws Exception if the text is neither "true" nor "false"
+         */
         static fun parse(s: String): Bool {
             var trimmed = s.trim()
             if (trimmed == "true") {

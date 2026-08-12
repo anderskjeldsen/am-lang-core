@@ -1,16 +1,43 @@
 namespace Am.Collections {
 
+    /**
+     * A growable, ordered sequence — the collection to reach for by default. Elements are held in
+     * an array that grows by half again whenever it fills, so appending is cheap on average while
+     * inserting or removing in the middle costs a shift of everything after it. Create one with
+     * `List.newList<T>()` rather than `new`, iterate it with `each`, and remember it is not
+     * synchronised: hand a list between threads only with your own Mutex around it. Requires
+     * `import Am.Collections`, without which the compiler reports that it cannot inject the list
+     * operators.
+     */
     class List<T>: Iterable<T> {
         import Am.Lang
 
+        /**
+         * Number of elements in use, which is not the same as the capacity.
+         */
         private var size: Int = 0
+        /**
+         * Length of the backing array; grown by half again whenever the list fills up.
+         */
         private var capacity: Int = 5
+        /**
+         * Backing storage. Only the first `size` slots hold live elements.
+         */
         private var items: T[] = new T[5]
 
+        /**
+         * Creates an empty list. This is the idiomatic way to make one — write
+         * `List.newList<String>()` rather than calling the constructor directly.
+         * @return A new, empty list
+         */
         static fun newList<T>(): List<T> {
             return new List<T>()
         }
 
+        /**
+         * Appends every element of an array, in order.
+         * @param items The elements to append
+         */
         fun addArray(items: T[]) {
             var x = 0
             while(x < items.length()) {
@@ -19,10 +46,19 @@ namespace Am.Collections {
             }
         }
 
+        /**
+         * Returns the number of elements currently in the list.
+         * @return The element count
+         */
         fun getSize(): Int {
             return this.size
         }
 
+        /**
+         * Appends an element to the end, growing the backing array when it is full. Cheap on average;
+         * the occasional growth copies the existing elements.
+         * @param item The element to append
+         */
         fun add(item: T) {
 //            if (item !=  null) {
                 if (this.size >= this.capacity) {
@@ -44,6 +80,13 @@ namespace Am.Collections {
 //           }
         }
 
+        /**
+         * Inserts an element at a position, shifting everything from that position onwards one place
+         * to the right. Inserting at getSize() is the same as add().
+         * @param index Position to insert at, from 0 to getSize()
+         * @param item The element to insert
+         * @throws Exception if the index is negative or greater than the size
+         */
         fun insertAt(index: Int, item: T) {
             if (index < 0 || index > this.size) {
                 throw new Exception("Index out of bounds: " + index.toString())
@@ -75,6 +118,12 @@ namespace Am.Collections {
             this.size++
         }
 
+        /**
+         * Removes elements equal to the one given, closing the gap behind each. Comparison uses the
+         * element type's equality, so a class that has not overridden equals is matched by identity.
+         * Removing an element that is not present is not an error.
+         * @param item The element to remove
+         */
         fun remove(item: T) {
 //            if (item != null) {
                 var i = 0
@@ -95,6 +144,13 @@ namespace Am.Collections {
 //            }
         }
 
+        /**
+         * Removes the element at a position and returns it, shifting everything after it one place to
+         * the left. The index is not validated, so check it against getSize() first — an out-of-range
+         * index reads past the live elements rather than throwing.
+         * @param index Position of the element to remove
+         * @return The removed element
+         */
         fun removeAt(index: Int): T {
             var i = index
             var value = this.items[i]
@@ -110,6 +166,12 @@ namespace Am.Collections {
             return value
         }
 
+        /**
+         * Removes the last element and returns it, which is the cheapest removal since nothing has to
+         * shift. Together with add() this makes a list usable as a stack.
+         * @return The removed element
+         * @throws Exception if the list is empty
+         */
         fun removeLast(): T {
             if (this.size == 0) {
                 throw new Exception("Cannot remove last element from empty list")
@@ -118,6 +180,14 @@ namespace Am.Collections {
             return this.items[this.size]
         }
 
+        /**
+         * Returns the element at a position. Note the bounds check only rejects an index greater than
+         * the size, so reading exactly at getSize() returns unspecified contents instead of throwing;
+         * compare against getSize() yourself when the index comes from arithmetic.
+         * @param index Zero-based position
+         * @return The element at that position
+         * @throws Exception if the index is negative or past the end
+         */
         fun get(index: Int): T {
             if (index < 0 || index > this.size) {
                 throw new Exception("Index out of bounds: " + index.toString())                
@@ -125,6 +195,11 @@ namespace Am.Collections {
             return this.items[index]
         }
 
+        /**
+         * Returns the last element without removing it.
+         * @return The last element
+         * @throws Exception if the list is empty
+         */
         fun getLast(): T {
             if (this.size == 0) {
                 throw new Exception("Cannot get last element from empty list")
@@ -132,6 +207,13 @@ namespace Am.Collections {
             return this.items[this.size - 1]
         }
 
+        /**
+         * Replaces the element at a position. Only valid for positions that already hold an element —
+         * use add() or insertAt() to extend the list.
+         * @param index Zero-based position to overwrite
+         * @param item The replacement element
+         * @throws Exception if the index is outside the list
+         */
         fun set(index: Int, item: T) {
             if (index < 0 || index >= this.size) {
                 throw new Exception("Index out of bounds: " + index.toString())                
@@ -139,6 +221,11 @@ namespace Am.Collections {
             this.items[index] = item
         }
 
+        /**
+         * Copies the elements into a new array sized exactly to the list. Useful for returning a
+         * snapshot that the caller cannot grow, and for APIs that take arrays.
+         * @return A new array holding the elements in order
+         */
         fun toArray(): T[] {
             var arr = new T[this.size]
             var i = 0
@@ -149,20 +236,39 @@ namespace Am.Collections {
             return arr
         }
 
+        /**
+         * Returns a fresh iterator positioned at the first element. This is what `each` uses; do not
+         * add to or remove from the list while an iterator over it is in use.
+         * @return An iterator over the elements, in order
+         */
         fun iterator(): Iterator<T> {
             var x = new ListIterator<T>(this)
             var y = x as Iterator<T>
             return y
         }
 
+        /**
+         * Empties the list. The backing array and its capacity are kept, so a list reused across
+         * rounds of work stops reallocating after the first round.
+         */
         fun clear() {
             this.size = 0
         }
 
+        /**
+         * Tests whether the list holds no elements.
+         * @return True when the size is zero
+         */
         fun isEmpty(): Bool {
             return this.size == 0
         }
 
+        /**
+         * Tests whether an equal element is present, scanning from the front. Linear in the size of
+         * the list — use a HashSet when membership tests are frequent.
+         * @param item The element to look for
+         * @return True if an equal element is in the list
+         */
         fun contains(item: T): Bool {
             var i = 0
             while(i < this.size) {

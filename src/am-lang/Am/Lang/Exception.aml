@@ -1,42 +1,83 @@
 
 namespace Am.Lang 
 {
+    /**
+     * Thrown when an index falls outside a collection, array or string. Array subscripting,
+     * String.characterAt and the collection accessors all raise it, and the message carries both
+     * the offending index and the length that was exceeded.
+     */
     class IndexOutOfBoundsException(var index: Int, var length: UInt) : Exception("Index out of bounds $index for length $length") {
     }
 
+    /**
+     * Thrown when a null reference is dereferenced. Narrow nullable values to non-null locals
+     * before use rather than catching this.
+     */
     class NullReferenceException() : Exception("Null reference exception") {
     }
 
+    /**
+     * Thrown by HashMap.get and the other keyed lookups when the key is absent. Lookups do not
+     * return null for a missing key, so guard with containsKey() when the key may be missing.
+     */
     class KeyNotFoundException(var key: String) : Exception("Key not found: " + key) {
     }
 
-    // Thrown from `new` codegen when the underlying `calloc` returns NULL.
-    // A single instance is preallocated at startup — `__init_oom_singleton`
-    // in core.c — so throwing OOM never itself needs to allocate. Users
-    // MAY catch this, but recovery is best-effort: the runtime holds one
-    // frozen instance and re-uses it for every OOM, so the stack trace
-    // reflects the FIRST throw, not the current one. The rethrow is
-    // otherwise indistinguishable from any other exception.
+    /**
+     * Thrown from `new` when the underlying allocation fails — the realistic case on small
+     * retro targets. A single instance is preallocated at startup so that throwing it never
+     * needs to allocate, which means you may catch it and try to recover, but recovery is
+     * best-effort: the runtime re-uses that one frozen instance for every out-of-memory
+     * condition, so the stack trace reflects the first throw rather than the current one.
+     * In every other respect it behaves like any other exception.
+     */
     class OutOfMemoryException() : Exception("Out of memory") {
     }
 
+    /**
+     * Base class for everything thrown with `throw`, carrying a human-readable message and the
+     * stack trace captured as the exception travelled outwards. Derive your own types from it to
+     * let callers catch specific failures: `class ParseError(var line: Int) : Exception("bad
+     * input")`. Catch with try/catch, and note that a `return` inside catch is not an early
+     * return — code after the try block still runs unless you guard it with a success flag.
+     */
     class Exception(var message: String) {
         import Am.Collections
 
+        /**
+         * Frames recorded as the exception propagated, innermost first.
+         */
         private var stackTrace: List<String> = List.newList<String>()
 
+        /**
+         * Appends one frame; called by the generated unwinding code, not from application code.
+         * @param stackTraceItem Description of the frame
+         */
         private fun addStackTraceItem(stackTraceItem: String) {
             this.stackTrace.add(stackTraceItem)
         }
 
+        /**
+         * Returns the recorded stack frames, innermost first, for logging or for building your own
+         * error report.
+         * @return The stack trace as an array of frame descriptions
+         */
         fun getStackTrace(): String[] {
             return this.stackTrace.toArray()
         }
 
+        /**
+         * Returns the exception message.
+         * @return The message text
+         */
         override fun toString(): String {
             return this.message
         }
 
+        /**
+         * Prints the message followed by every recorded frame to standard output. The usual last
+         * step in a top-level catch block.
+         */
         fun printWithStackTrace() {
             ("Exception: " + this.message).println()
             each(this.stackTrace, sti) {

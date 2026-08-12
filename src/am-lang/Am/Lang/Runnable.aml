@@ -3,7 +3,17 @@ TODO: change from class to interface.
 */
 namespace Am.Lang 
 {
+    /**
+     * Something that can be executed with no arguments and no result. Implement it to give a
+     * Thread or a Task a body, or accept it as a parameter when your own API needs a callback.
+     * Lambdas satisfy it too, since a lambda is a FunctionReference and every FunctionReference
+     * is Runnable.
+     */
     interface Runnable {
+        /**
+         * Performs the work. On a Thread this is the body that runs on the new thread; an exception
+         * that escapes it does not propagate to the thread that started the work.
+         */
         fun run()
     }
 }

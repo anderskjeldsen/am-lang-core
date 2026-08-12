@@ -1,22 +1,59 @@
 namespace Am.Lang 
 {
+    /**
+     * The minimal contract implemented by every AmLang value, primitives included. The
+     * compiler adds this interface to every class, which is what lets a primitive such as Int
+     * be stored in an Any variable and still answer toString, hash and getClassRef.
+     */
     interface AnyInterface {
+        /**
+         * Returns a readable representation of the value.
+         * @return A String describing the value
+         */
         primitive fun toString(): String
+        /**
+         * Returns a hash of the value, suitable for HashMap and HashSet keys.
+         * @return The hash value
+         */
         primitive fun hash(): UInt
+        /**
+         * Returns the runtime class descriptor of the value, which carries its type name.
+         * @return The ClassRef describing this value's runtime type
+         */
         primitive fun getClassRef(): ClassRef
     }
 
 
+    /**
+     * The top of the whole type system: both reference types (via Object) and primitive types
+     * (Int, Bool, UByte and friends) are usable as Any. Declare a variable, parameter or
+     * collection element as Any when it must hold a value of unknown type, then recover the
+     * concrete type with `is` / `as` or by inspecting getClassRef(). Boxing a primitive into
+     * an Any allocates, so avoid Any in hot loops.
+     */
     class Any : AnyInterface
     {
+        /**
+         * Returns a readable representation of the value; the default is the literal "Any".
+         * @return A String describing the value
+         */
         open override primitive fun toString(): String {
             return "Any"
         }
 
+        /**
+         * Returns a hash of the value. The base implementation returns 0, so types intended as
+         * hash keys must override it.
+         * @return The hash value
+         */
         open override primitive fun hash(): UInt {
             return 0UI
         }
 
+        /**
+         * Returns the runtime class descriptor for this value.
+         * @return The ClassRef describing this value's runtime type
+         */
         override primitive fun getClassRef(): ClassRef {
             return ClassRef.getClassRefFromAny(this)
         }

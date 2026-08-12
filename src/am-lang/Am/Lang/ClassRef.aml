@@ -1,57 +1,140 @@
 namespace Am.Lang 
 {
+    /**
+     * Reflection descriptor for one property of a class: its name, its type and accessors that
+     * read or write it on an instance. Obtained from ClassRef.getProperties(). Reflection data
+     * only exists when the binary was compiled with the -reflection option; without it the
+     * registry is empty.
+     */
     native class PropertyInfo {
-        // Populated by the reflection runtime at startup (gated by
-        // `-reflection`). Marked nullable so the field declaration is
-        // honest; the public getter asserts non-null because the
-        // contract is "reflection setup ran before anyone reads it".
+        /**
+         * The property's name. Populated by the reflection runtime at startup (which only runs
+         * when the binary was compiled with `-reflection`). Declared nullable to be honest about
+         * that; getName() asserts non-null because the contract is that reflection setup ran
+         * before anyone reads it.
+         */
         private var name: String? = null
+        /**
+         * Slot number of this property within its class layout.
+         */
         private var index: UByte
 
+        /**
+         * Returns the property's declared name.
+         * @return The property name
+         */
         fun getName(): String {
             return this.name
         }
 
+        /**
+         * Returns the declared type of the property as a ClassRef.
+         * @return The property's type descriptor
+         */
         native fun getPropertyClassRef(): ClassRef
 
-        // only Objects have properties, Any's don't.
+        /**
+         * Reads this property from an instance. The target must be an Object — primitives carry
+         * no properties — and the value comes back as Any, so cast it to the expected type.
+         * @param target The instance to read from
+         * @return The current value of the property
+         */
         native fun getValue(target: Object): Any
+        /**
+         * Writes this property on an instance. The value must match the property's declared type;
+         * a mismatch is not checked at compile time.
+         * @param target The instance to write to
+         * @param value The value to store
+         */
         native fun setValue(target: Object, value: Any)
     }
 
+    /**
+     * Runtime descriptor of a class: its name and, when the binary was built with reflection
+     * enabled, its properties. Get one from any value with getClassRef(), by name with
+     * ClassRef.getClassRef(name), or for a type parameter with
+     * `ClassRef.getClassRefFromClass<T>()`. This is the entry point for the small amount of
+     * reflection AmLang offers — enough for generic serializers and debug dumps, and not much
+     * more.
+     */
     native class ClassRef
     {
         import Am.Collections
 
-        // Same shape as PropertyInfo: populated by the reflection
-        // runtime; getters assert non-null on read.
+        /**
+         * The class name. Same shape as PropertyInfo.name: populated by the reflection runtime,
+         * and getClassName() asserts non-null on read.
+         */
         private var className: String? = null
+        /**
+         * The class's property descriptors, or null when the binary was built without reflection.
+         */
         private var properties: Array<PropertyInfo>? = null
+        /**
+         * Registry of every class descriptor, keyed by class name and filled in at startup.
+         */
         private static var classRefs: HashMap<String, ClassRef> = new HashMap<String, ClassRef>()
 
+        /**
+         * Looks up a class descriptor by name. The name must match what the runtime registered, and
+         * an unknown name throws rather than returning null.
+         * @param name The class name to look up
+         * @return The descriptor for that class
+         * @throws KeyNotFoundException if no class with that name is registered
+         */
         static fun getClassRef(name: String): ClassRef {
             return ClassRef.classRefs.get(name)
         }
 
+        /**
+         * Returns the descriptor for a type known at compile time, as in
+         * `ClassRef.getClassRefFromClass<MyType>()`.
+         * @return The descriptor for T
+         */
         static fun getClassRefFromClass<T>(): ClassRef {
             return ClassRef.classRefs.get(nameof(T))
         }
 
 
+        /**
+         * Returns the descriptor for the runtime type of a value — the type it actually is, not the
+         * type of the variable holding it.
+         * @param any The value to inspect
+         * @return The descriptor for that value's runtime type
+         */
         native static fun getClassRefFromAny(any: Any): ClassRef
 
+        /**
+         * Adds a descriptor to the registry. Called by generated startup code; application code has
+         * no reason to call it.
+         * @param name The class name to register under
+         * @param classRef The descriptor to register
+         */
         static fun registerClassRef(name: String, classRef: ClassRef) {
             ClassRef.classRefs.set(name, classRef)
         }
 
+        /**
+         * Returns the class's properties. Only populated when the binary was compiled with
+         * reflection enabled.
+         * @return The property descriptors for this class
+         */
         fun getProperties(): PropertyInfo[] {
             return this.properties
         }
 
+        /**
+         * Returns the name of the class this descriptor represents.
+         * @return The class name
+         */
         fun getClassName(): String {
             return this.className
         }
 
+        /**
+         * Returns the class name.
+         * @return The class name
+         */
         override fun toString(): String {
             return this.className
         }

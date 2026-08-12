@@ -1,6 +1,11 @@
 
 namespace Am.Lang 
 {
+    /**
+     * A callable value: either a lambda or a reference to an existing function. Because it
+     * extends Runnable, anything that accepts a Runnable — Thread, Task and your own callback
+     * APIs — also accepts a lambda.
+     */
     interface FunctionReference : Runnable {
 
     }

@@ -1,30 +1,48 @@
 namespace Am.Threading {
 
     #implementationPlatforms "libc", "amigaos", "morphos-ppc"
+    /**
+     * A separate thread of execution. Construct one with the Runnable (or lambda) you want run,
+     * set its name, call start(), and call join() when you need to wait for it to finish. Always
+     * set the name before starting — a thread started without one is unreliable. Objects shared
+     * between threads are reference counted across the boundary, which costs more than a
+     * single-threaded access and can churn wrappers if two threads touch the same object
+     * constantly, so prefer handing each thread its own data and communicating through a queue or
+     * a Mutex-guarded structure. An exception that escapes run() does not reach the thread that
+     * started the work.
+     * Higher-level alternatives worth knowing about: TaskScheduler, for queueing small units of
+     * work onto shared workers, and the suspend/Continuation mechanism for asynchronous code that
+     * does not need a thread of its own.
+     */
     native class Thread(var runnable: Runnable) {
         import Am.Lang
         import Am.Collections
 
+        /**
+         * The thread's name, used for diagnostics and by the platform's task list. Set this before
+         * calling start().
+         */
         var name: String = "thread"
 
-        // Per-thread finalizers run on the thread itself, in reverse
-        // registration order, after `runnable.run()` returns but before
-        // the native task is torn down. Used by code that has to clean
-        // up task-bound state — most importantly per-task AmigaOS
-        // library opens (bsdsocket.library, amissl), which the library
-        // tracks by `FindTask(NULL)` and would leak if not closed from
-        // the same task that opened them.
-        //
-        // Wrapped in `ThreadFinalizer` rather than stored as a bare
-        // `List<() => Bool>` because direct lists of function types
-        // trip the binder; the wrapper class mirrors how
-        // `Am.Threading.Task` carries its `() => Bool`.
-        //
-        // Initialised lazily on first `addFinalizer()` rather than in
-        // an init block so threads that never touch task-bound libs
-        // pay zero overhead.
+        /**
+         * Cleanup callbacks that run on this thread itself, in reverse registration order, after the
+         * runnable returns but before the native task is torn down. The motivating case is per-task
+         * AmigaOS library opens such as bsdsocket.library and amissl, which the library tracks per
+         * task and which leak unless they are closed from the same task that opened them. Each
+         * callback is boxed in a ThreadFinalizer because a bare list of function types trips the
+         * binder, and the list itself is only allocated on the first addFinalizer() call so threads
+         * that need no cleanup pay nothing.
+         */
         private var finalizers: List<ThreadFinalizer>? = null
 
+        /**
+         * Registers a callback to run on this thread when its work is finished, before the thread is
+         * torn down. Use it to release anything the platform binds to the task itself — an opened
+         * library, a per-task handle — since releasing it from another thread would leak or fault.
+         * Callbacks run in reverse registration order, so a later one may assume earlier ones are
+         * still valid.
+         * @param fn The cleanup callback to register
+         */
         fun addFinalizer(fn: () => Bool) {
             if (this.finalizers == null) {
                 this.finalizers = List.newList<ThreadFinalizer>()
@@ -32,12 +50,11 @@ namespace Am.Threading {
             this.finalizers.add(new ThreadFinalizer(fn))
         }
 
-        // Dispatched by the native thread cleanup path (amigaos
-        // Thread.c#_InitTask) right after the user runnable returns.
-        // Reverse order matches the typical stack-of-cleanups idiom —
-        // a later registrant assumes earlier registrants are still live.
-        // `private` so application code doesn't trigger the cleanup
-        // mid-flight; the native side is the only legitimate caller.
+        /**
+         * Runs the registered finalizers in reverse order. Dispatched by the native thread cleanup path
+         * right after the runnable returns; private so application code cannot trigger cleanup while
+         * the thread is still working.
+         */
         private fun runFinalizers() {
             if (this.finalizers == null) {
                 return
@@ -50,19 +67,41 @@ namespace Am.Threading {
             }
         }
 
+        /**
+         * Starts the thread and returns immediately; the runnable then executes on the new thread. Set
+         * name first, and do not call this twice on the same Thread.
+         */
         native fun start()
+        /**
+         * Blocks the calling thread until this thread has finished. Call it before reading anything the
+         * thread produced, so the writes are complete and visible.
+         */
         native fun join()
 
+        /**
+         * Returns the Thread the calling code is running on.
+         * @return The current thread
+         */
         native static fun getCurrent(): Thread
+        /**
+         * Pauses the calling thread for at least the given time. The usual way to pace a polling loop
+         * so it does not spin the CPU.
+         * @param milliseconds How long to sleep, in milliseconds
+         */
         native static fun sleep(milliseconds: Long)
     }
 
-    // Box for a single thread-finalizer lambda. Same shape as
-    // `Am.Threading.Task` — keeps `List<ThreadFinalizer>` off the
-    // List-of-function-type binder path.
+    /**
+     * Box holding a single thread-finalizer callback. It exists so the list of finalizers can be a
+     * list of ordinary objects rather than a list of function types, which the binder does not
+     * handle. Same shape as Task.
+     */
     class ThreadFinalizer(var fn: () => Bool) {
         import Am.Lang
 
+        /**
+         * Calls the wrapped callback.
+         */
         fun invoke() {
             this.fn()
         }

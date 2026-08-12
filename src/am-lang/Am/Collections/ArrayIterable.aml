@@ -1,9 +1,18 @@
 
 namespace Am.Collections
 {
+    /**
+     * Presents a plain array as an Iterable, so an array can be passed to anything expecting a
+     * collection and used with the filter/map/toList extension functions. The usual way to get one
+     * is the asIterable() extension on Array. It wraps the array without copying it.
+     */
     class ArrayIterable<T>(private var array: Array<T>) : Iterable<T> {
         import Am.Lang
 
+        /**
+         * Returns a fresh iterator over the wrapped array.
+         * @return An iterator over the array elements, in order
+         */
         fun iterator(): Iterator<T> {
             return new ArrayIterator<T>(this.array) as Iterator<T>
         }

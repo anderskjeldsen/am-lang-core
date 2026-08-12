@@ -3,31 +3,74 @@ TODO: Make it as an interface
 */
 namespace Am.IO
 {
+    /**
+     * A Stream over a file on disk. Construct one from a File and a FileAccess mode — the file is
+     * opened there and then, so a missing file or a permission problem shows up at construction
+     * rather than at the first read. Wrap it in a TextStream for text or a BinaryStream for
+     * multi-byte numbers. The handle is released when the object is, but call close() explicitly
+     * when another part of the program needs to open the same path immediately afterwards.
+     */
     native class FileStream(private var file: File, private var access: FileAccess) : Stream
     {
         import Am.Lang
         import Am.Collections
 
+        /**
+         * Reads up to length bytes from the file into a buffer.
+         * @param buffer Destination buffer
+         * @param offset Position in the FILE to read from
+         * @param length Maximum number of bytes to read
+         * @return The number of bytes actually read; 0 at end of file
+         */
         native fun read(buffer: UByte[], offset: Long, length: UInt): UInt
+        /**
+         * Writes length bytes from a buffer to the file.
+         * @param buffer Source buffer
+         * @param offset Position in the FILE to write at
+         * @param length Number of bytes to write
+         */
         native fun write(buffer: UByte[], offset: Long, length: UInt)
+        /**
+         * Moves the file position to an absolute offset from the beginning of the file.
+         * @param offset Byte offset from the start
+         */
         native fun seekFromStart(offset: Long)
+        /**
+         * Reads a single byte from the file. Slow in a loop — use read() or readAll() for anything
+         * larger than a header.
+         * @return The byte value 0 to 255, or a negative value at end of file
+         */
         native fun readByte(): Int
+        /**
+         * Writes a single byte to the file.
+         * @param byte The byte value to write, 0 to 255
+         */
         native fun writeByte(byte: Int)
-        // Size of the OPEN file via the handle (fseek/ftell), NOT a path
-        // stat() — cwd-independent, so it works even when a -noixemul child
-        // has a mismatched libc cwd. readAll() uses this to always take the
-        // fast bulk path. Returns 0 if the handle is unusable.
+        /**
+         * Returns the size of the open file, measured through the handle rather than by looking
+         * the path up again. That distinction matters on AmigaOS, where a child built without
+         * ixemul can have a current directory that disagrees with the one its libc believes in.
+         * @return The file size in bytes, or 0 when the handle cannot be measured
+         */
         native fun fileSize(): Long
 
-        // Release the underlying OS file handle now, instead of waiting
-        // for the runtime to release the FileStream object. Needed when
-        // a writer and a reader of the same path coexist briefly inside
-        // one process: on AmigaOS DOS the reader's fopen doesn't see
-        // the writer's bytes cleanly until the writer's FILE* is gone.
-        // Safe to call more than once; subsequent reads/writes after
-        // close are undefined.
+        /**
+         * Releases the underlying OS file handle now instead of waiting for the runtime to release
+         * the FileStream. Needed when a writer and a reader of the same path coexist briefly in
+         * one program: on AmigaOS the reader does not see the writer's bytes cleanly until the
+         * writer's handle is gone. Safe to call more than once; reading or writing after close is
+         * undefined.
+         */
         native fun close()
 
+        /**
+         * Reads the entire file into a byte array. Uses the file's size to allocate once and fill
+         * the buffer with a few bulk reads, which matters a great deal for multi-megabyte files —
+         * reading byte by byte instead costs one call into the runtime per byte. When the size
+         * cannot be determined, as for a pipe or a special file, it falls back to reading in
+         * chunks until the stream ends.
+         * @return The file's contents
+         */
         fun readAll(): UByte[] {
             // Bulk-read into a pre-sized buffer using the file's size —
             // reading byte-by-byte via readByte() is O(n) native calls and

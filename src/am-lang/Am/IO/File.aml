@@ -1,22 +1,59 @@
 namespace Am.IO
 {
+    /**
+     * A path on the filesystem, and the operations you can perform on it: test for existence, read
+     * metadata, list a directory, copy, move and delete. Constructing a File does not touch the
+     * disk — it just names a path, which may or may not exist. To read or write the contents, open
+     * a FileStream on it. Paths are host-native, so use joinPath() rather than gluing strings
+     * together with "/": on AmigaOS a volume root such as "RAM:" takes the name straight after the
+     * colon, and inserting a slash there would mean the parent directory instead of a child.
+     * The recursive operations deliberately do not follow symbolic links — they reproduce or
+     * unlink the link itself — because following one would take the operation outside the tree you
+     * asked about.
+     */
     native class File(private var filename: String)
     {
         import Am.Lang
         import Am.Collections
         
+        /**
+         * True when this File came from createTempFile().
+         */
         private var temporary: Bool = false
 
+        /**
+         * Returns the process's current working directory as a path.
+         * @return The current directory
+         */
         static native fun getCurrentDirectory(): String
 
+        /**
+         * Returns the current working directory as a File, ready to list or join paths against.
+         * @return A File naming the current directory
+         */
         static fun getCurrentDirectoryFile(): File {
             return new File(File.getCurrentDirectory())
         }
 
-        // Internal native method that creates the physical temporary file
+        /**
+         * Creates the physical temporary file and returns its path, or null on failure. Use
+         * createTempFile() instead, which wraps the result and marks it temporary.
+         * @param directory Directory to create the file in
+         * @param prefix Text to start the generated name with
+         * @param suffix Text to end the generated name with, typically an extension
+         * @return The path of the new file, or null if it could not be created
+         */
         static native fun createTempFileInternal(directory: File, prefix: String, suffix: String): String?
 
-        // Public method that creates a File object and marks it as temporary
+        /**
+         * Creates a new empty file with a generated, unique name and returns it marked as temporary.
+         * Nothing deletes it for you — call deleteRecursive() or delete() when you are finished.
+         * @param directory Directory to create the file in
+         * @param prefix Text to start the generated name with
+         * @param suffix Text to end the generated name with, typically an extension
+         * @return The newly created file
+         * @throws Exception if the file could not be created
+         */
         static fun createTempFile(directory: File, prefix: String, suffix: String): File {
             var tempFilePath = File.createTempFileInternal(directory, prefix, suffix)
             if (tempFilePath == null) {
@@ -27,6 +64,11 @@ namespace Am.IO
             return file
         }
 
+        /**
+         * Lists the entries of this directory as File objects with full paths. The convenient form for
+         * walking a tree; use list() if you only need the paths as strings.
+         * @return The directory's entries
+         */
         fun listFiles(): File[] {
             var filenames = this.list()
             var files = new File[filenames.length()]
@@ -38,6 +80,11 @@ namespace Am.IO
             return files
         }
 
+        /**
+         * Lists the entries of this directory as full paths, joined onto this file's own path with the
+         * separator the host expects.
+         * @return The paths of the directory's entries
+         */
         fun list(): String[] {
             var l = List.newList<String>()
             var l2 = List.newList<String>()
@@ -57,45 +104,144 @@ namespace Am.IO
             return l2.toArray()
         }
 
+        /**
+         * Fills a list with the bare entry names of a directory.
+         * @param folderFilename Path of the directory to read
+         * @param list List to append the names to
+         */
         private native fun listNative(folderFilename: String, list: List<String>)
 
-        // Bare names of the sub-DIRECTORIES of this directory (no path
-        // joining, no "."/".."). The directory bit comes from the single
-        // native listing walk (fib_DirEntryType on AmigaOS, d_type on
-        // POSIX), so callers that only recurse into folders — repo
-        // scanners, tree builders — avoid a stat/Lock+Examine round
-        // trip per entry. Order is directory-listing order.
+        /**
+         * Returns the bare names of this directory's sub-directories — no path joining, and no "." or
+         * ".." entries. The directory flag comes from the same single listing walk that produces the
+         * names, so a scanner that only recurses into folders avoids one metadata lookup per entry,
+         * which is a large saving on a slow filesystem. Order is whatever the filesystem returns.
+         * @return The names of the sub-directories
+         */
         fun listDirectoryNames(): String[] {
             var l = List.newList<String>()
             this.listDirsNative(this.filename, l)
             return l.toArray()
         }
 
+        /**
+         * Fills a list with the bare names of a directory's sub-directories.
+         * @param folderFilename Path of the directory to read
+         * @param list List to append the names to
+         */
         private native fun listDirsNative(folderFilename: String, list: List<String>)
 
+        /**
+         * Tests whether this path is a directory. This FOLLOWS symbolic links, so a link pointing at a
+         * directory answers true — code that walks a tree must ask isSymbolicLink() first or it will
+         * descend through the link into whatever it points at. Throws when the path cannot be examined
+         * at all, a dangling symbolic link being the common case, so wrap it in a try/catch when
+         * walking directories you do not control.
+         * @return True if the path is a directory
+         * @throws Exception if the path cannot be examined
+         */
         native fun isDirectory(): Bool
 
-        // File metadata methods
+        /**
+         * Tests whether this path is itself a symbolic link; the link is never followed. Always false
+         * on AmigaOS and MorphOS, which have no symbolic links.
+         * @return True if the path is a symbolic link
+         */
+        native fun isSymbolicLink(): Bool
+
+        /**
+         * Reads the target of a symbolic link.
+         * @return The link's target, or null when this path is not a link
+         */
+        private native fun readLinkNative(): String?
+        /**
+         * Returns the target of this symbolic link. The target may be relative to the link's own
+         * directory, so resolve it against that rather than against the current directory.
+         * @return The link's target, or null when this path is not a link
+         */
+        fun readLink(): String? {
+            return this.readLinkNative()
+        }
+
+        /**
+         * Creates a symbolic link at linkPath pointing at target.
+         * @param linkPath Path of the link to create
+         * @param target What the link should point at
+         * @return True on success; false where symbolic links do not exist (AmigaOS and MorphOS) or the path is taken
+         */
+        static native fun createSymbolicLink(linkPath: String, target: String): Bool
+
+        /**
+         * Tests whether this path exists. Follows symbolic links, so a dangling link reports false.
+         * @return True if the path exists
+         */
         native fun exists(): Bool
+        /**
+         * Returns the size of this file in bytes.
+         * @return The file size in bytes
+         */
         native fun getSize(): Long
+        /**
+         * Returns when this file was last written, as a timestamp comparable with other files'.
+         * @return The modification time
+         */
         native fun getLastModified(): Long
+        /**
+         * Tests whether the program is allowed to read this file.
+         * @return True if the file is readable
+         */
         native fun canRead(): Bool
+        /**
+         * Tests whether the program is allowed to write this file.
+         * @return True if the file is writable
+         */
         native fun canWrite(): Bool
 
-        // File operations methods
+        /**
+         * Deletes this file, or this directory when it is already empty. Use deleteRecursive() to
+         * remove a directory with contents.
+         * @return True if the entry was removed
+         */
         native fun delete(): Bool
+        /**
+         * Deletes a file by path, without constructing a File yourself.
+         * @param filename Path of the file to delete
+         * @return True if the entry was removed
+         */
         static fun delete(filename: String): Bool {
             var file = new File(filename)
             return file.delete()
         }
+        /**
+         * Creates a single directory. The parent must already exist — use createDirectories() to
+         * create a whole path at once.
+         * @param path Path of the directory to create
+         * @return True if the directory was created
+         */
         static native fun createDirectory(path: String): Bool
+        /**
+         * Copies this single file to another path, overwriting whatever is there. For a directory tree
+         * use copyRecursive().
+         * @param destination Path to copy to
+         * @return True if the copy succeeded
+         */
         native fun copy(destination: String): Bool
+        /**
+         * Moves or renames this entry. Moving across filesystems may not be supported by the host.
+         * @param destination Path to move to
+         * @return True if the move succeeded
+         */
         native fun move(destination: String): Bool
 
-        // Joins a directory path and a bare entry name using the separator the
-        // host filesystem expects. AmigaDOS volume roots ("RAM:") and paths
-        // already ending in a separator take the name directly — sticking a
-        // "/" after a colon would mean *parent* on AmigaDOS, not a child.
+        /**
+         * Joins a directory path and a bare entry name with the separator the host filesystem expects.
+         * AmigaDOS volume roots such as "RAM:", and any path already ending in a separator, take the
+         * name directly — putting a "/" after a colon would mean the parent on AmigaDOS rather than a
+         * child. Always use this instead of concatenating paths by hand.
+         * @param directory The directory path
+         * @param name The entry name to append
+         * @return The joined path
+         */
         static fun joinPath(directory: String, name: String): String {
             if (directory.endsWith(":") || directory.endsWith("/")) {
                 return directory + name
@@ -103,13 +249,24 @@ namespace Am.IO
             return directory + "/" + name
         }
 
-        // Creates this directory and every missing parent above it. Returns
-        // true if the directory exists when we're done (already existing is
-        // success, matching mkdir -p).
+        /**
+         * Creates a directory and every missing parent above it, the equivalent of mkdir -p. A
+         * directory that already exists counts as success.
+         * @param path Path of the directory to create
+         * @return True if the directory exists once the call returns
+         */
         static fun createDirectories(path: String): Bool {
             var dir = new File(path)
             if (dir.exists()) {
-                return dir.isDirectory()
+                var isDir = false
+                try {
+                    isDir = dir.isDirectory()
+                } catch (e: Exception) {
+                    // Existing but unstatable (dangling symlink with a same-
+                    // named target, racing deletion): not a usable directory.
+                    isDir = false
+                }
+                return isDir
             }
             var index = path.lastIndexOf("/")
             if (index > 0) {
@@ -125,13 +282,64 @@ namespace Am.IO
             return dir.exists()
         }
 
-        // Copies this file — or, if it is a directory, this whole tree — to
-        // `destination`. Directory contents land *inside* `destination`
-        // (i.e. `new File("src").copyRecursive("dst")` gives `dst/<entries>`),
-        // which is what `cp -R src/. dst/` does. Written in AmLang on top of
-        // the single-file native copy so every platform gets it for free.
+        /**
+         * Reproduces this path at the destination when it is a symbolic link, removing anything already
+         * there first so repeated copies stay idempotent. Returns false for everything else so callers
+         * fall through to their normal file or directory handling.
+         * @param destination Path to recreate the link at
+         * @return True if this was a link and it was recreated
+         */
+        private fun copyLinkTo(destination: String): Bool {
+            var isLink = false
+            try {
+                isLink = this.isSymbolicLink()
+            } catch (e: Exception) {
+                return false
+            }
+            if (!isLink) {
+                return false
+            }
+            var target: String? = this.readLink()
+            if (target == null) {
+                return false
+            }
+            var dest = new File(destination)
+            dest.deleteRecursive()
+            return File.createSymbolicLink(destination, target)
+        }
+
+        /**
+         * Copies this file, or this whole tree when it is a directory, to another path. Directory
+         * contents land inside the destination, so copying "src" to "dst" gives you dst holding src's
+         * entries — the same shape as cp -R src/. dst/. Symbolic links are reproduced as links rather
+         * than followed, which is what stops a small link to a large tree from turning into a deep
+         * copy of it. An entry that cannot be examined is skipped rather than aborting the whole walk,
+         * so a partial failure returns false while the rest of the tree still copies.
+         * @param destination Path to copy to
+         * @return True when every entry copied successfully
+         */
         fun copyRecursive(destination: String): Bool {
-            if (!this.isDirectory()) {
+            // Reproduce a symbolic link AS a link (cp -R semantics) instead of
+            // following it — otherwise a link to a large tree gets deep-copied
+            // (a 27-byte link once became a 155 MB copy of a Homebrew keg).
+            if (this.copyLinkTo(destination)) {
+                return true
+            }
+            // isDirectory() THROWS when stat fails — a dangling symlink is
+            // enough (homebrew kegs are full of them, and c-libs/openssl
+            // points into one). An unstatable entry must degrade to a
+            // skipped file, not take down the whole tree walk.
+            var isDir = false
+            var statOk = true
+            try {
+                isDir = this.isDirectory()
+            } catch (e: Exception) {
+                statOk = false
+            }
+            if (!statOk) {
+                return false
+            }
+            if (!isDir) {
                 return this.copy(destination)
             }
             if (!File.createDirectories(destination)) {
@@ -143,7 +351,13 @@ namespace Am.IO
             while (i < children.length()) {
                 var child = children[i]
                 var target = File.joinPath(destination, child.getName())
-                if (!child.copyRecursive(target)) {
+                var childOk = true
+                try {
+                    childOk = child.copyRecursive(target)
+                } catch (e2: Exception) {
+                    childOk = false
+                }
+                if (!childOk) {
                     ok = false
                 }
                 i++
@@ -151,18 +365,117 @@ namespace Am.IO
             return ok
         }
 
-        // Deletes this file, or this directory and everything below it.
-        // Returns false if any entry could not be removed. A path that does
-        // not exist counts as already deleted.
+        /**
+         * Copies a tree like copyRecursive(), but skips any file whose destination already looks
+         * current: it exists, has the same size, and is at least as new as the source. Leaving those
+         * files untouched is the whole point, because build tools treat a re-copied identical file as
+         * changed and rebuild everything downstream of it. This is the same quick check rsync makes by
+         * default, which means an edit that preserves both size and modification time is not detected.
+         * @param destination Path to copy to
+         * @return True when every entry is either up to date or copied successfully
+         */
+        fun copyRecursiveIfNewer(destination: String): Bool {
+            if (this.copyLinkTo(destination)) {
+                return true
+            }
+            // See copyRecursive: stat-backed calls throw on unstatable
+            // entries (dangling symlinks); tolerate and skip.
+            var isDir = false
+            var statOk = true
+            try {
+                isDir = this.isDirectory()
+            } catch (e: Exception) {
+                statOk = false
+            }
+            if (!statOk) {
+                return false
+            }
+            if (!isDir) {
+                var upToDate = false
+                try {
+                    var dest = new File(destination)
+                    if (dest.exists() && !dest.isDirectory()) {
+                        if (dest.getSize() == this.getSize() && dest.getLastModified() >= this.getLastModified()) {
+                            upToDate = true
+                        }
+                    }
+                } catch (e2: Exception) {
+                    // Unstatable destination: fall through and overwrite it.
+                    upToDate = false
+                }
+                if (upToDate) {
+                    return true
+                }
+                return this.copy(destination)
+            }
+            if (!File.createDirectories(destination)) {
+                return false
+            }
+            var ok = true
+            var children = this.listFiles()
+            var i = 0
+            while (i < children.length()) {
+                var child = children[i]
+                var target = File.joinPath(destination, child.getName())
+                var childOk = true
+                try {
+                    childOk = child.copyRecursiveIfNewer(target)
+                } catch (e3: Exception) {
+                    childOk = false
+                }
+                if (!childOk) {
+                    ok = false
+                }
+                i++
+            }
+            return ok
+        }
+
+        /**
+         * Deletes this file, or this directory and everything below it. A path that does not exist
+         * counts as already deleted. A symbolic link is unlinked and never followed — deleting through
+         * one would destroy whatever it points at, outside the tree you asked to remove — and the link
+         * check happens before the existence check, so a dangling link is removed rather than being
+         * reported as already gone and left behind.
+         * @return True when everything was removed
+         */
         fun deleteRecursive(): Bool {
+            // A symbolic link is UNLINKED, never followed — deleting through a
+            // link would destroy whatever it points at, outside the tree the
+            // caller asked to remove. This is what rm -rf does, and skipping
+            // it is how a `c-libs/openssl -> /opt/homebrew/...` link once took
+            // a Homebrew keg with it. Checked before exists(), because exists()
+            // follows the link and a DANGLING one would otherwise report
+            // "already gone" and be left behind forever.
+            var isLink = false
+            try {
+                isLink = this.isSymbolicLink()
+            } catch (eL: Exception) {
+                isLink = false
+            }
+            if (isLink) {
+                return this.delete()
+            }
             if (!this.exists()) {
                 return true
             }
-            if (this.isDirectory()) {
+            var isDir = false
+            try {
+                isDir = this.isDirectory()
+            } catch (e: Exception) {
+                isDir = false
+            }
+            if (isDir) {
                 var children = this.listFiles()
                 var i = 0
                 while (i < children.length()) {
-                    if (!children[i].deleteRecursive()) {
+                    var childOk = true
+                    try {
+                        childOk = children[i].deleteRecursive()
+                    } catch (e2: Exception) {
+                        childOk = false
+                    }
+                    if (!childOk) {
                         return false
                     }
                     i++
@@ -171,11 +484,20 @@ namespace Am.IO
             return this.delete()
         }
 
-        // Check if this file is marked as temporary
+        /**
+         * Tests whether this File came from createTempFile(). Nothing cleans temporary files up
+         * automatically; this simply records how the object was made.
+         * @return True if this file was created as a temporary file
+         */
         fun isTemporary(): Bool {
             return this.temporary
         }
 
+        /**
+         * Returns the last component of the path — the file or directory name without its directories.
+         * Handles both "/" and AmigaDOS volume separators.
+         * @return The entry name
+         */
         fun getName(): String {
             var index = this.filename.lastIndexOf("/")
             if (index < 0) {
@@ -189,6 +511,10 @@ namespace Am.IO
             return this.filename
         }
 
+        /**
+         * Returns the full path this File names.
+         * @return The path
+         */
         override fun toString(): String {
             return this.filename
         }

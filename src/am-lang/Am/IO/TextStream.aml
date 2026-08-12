@@ -1,34 +1,74 @@
 
 namespace Am.IO
 {
+    /**
+     * Wraps any Stream to read and write text as UTF-8. Construct it around a FileStream or a
+     * MemoryStream and use readString() and writeString(); the byte-level Stream methods are still
+     * available and pass straight through to the stream underneath. Note that readString() reads
+     * to the end of the stream in one go, so it suits configuration files and small documents
+     * rather than streaming a large log line by line.
+     */
     class TextStream(private var stream: Stream) : Stream
     {
         import Am.Lang
         import Am.Collections
 
+        /**
+         * Scratch buffer reused by readString() so a long read does not allocate per chunk.
+         */
         private var buffer: UByte[] = new UByte[1024]        
 
+        /**
+         * Reads raw bytes from the underlying stream, without any text decoding.
+         * @param buffer Destination buffer
+         * @param offset Position in the stream to read from
+         * @param length Maximum number of bytes to read
+         * @return The number of bytes actually read
+         */
         fun read(buffer: UByte[], offset: Long, length: UInt): UInt {
             return this.stream.read(buffer, offset, length)
         }
 
+        /**
+         * Writes raw bytes to the underlying stream, without any text encoding.
+         * @param buffer Source buffer
+         * @param offset Position in the stream to write at
+         * @param length Number of bytes to write
+         */
         fun write(buffer: UByte[], offset: Long, length: UInt) {
             this.stream.write(buffer, offset, length)
         }
 
+        /**
+         * Moves the underlying stream's position to an absolute offset.
+         * @param offset Byte offset from the start
+         */
         fun seekFromStart(offset: Long) {
             this.stream.seekFromStart(offset)
         }
 
+        /**
+         * Reads a single byte from the underlying stream.
+         * @return The byte value, or a negative value at end of stream
+         */
         fun readByte(): Int {
             return this.stream.readByte()
         }
 
+        /**
+         * Writes a single byte to the underlying stream.
+         * @param byte The byte value to write
+         */
         fun writeByte(byte: Int) {
             this.stream.writeByte(byte)
         }
 
 
+        /**
+         * Reads the rest of the stream and decodes it as UTF-8. The whole content ends up in memory,
+         * so use a chunked read for large inputs.
+         * @return The decoded text
+         */
         fun readString(): String {
             var read = this.read(this.buffer, 0L, this.buffer.length())
             var list = List.newList<UByte>()
@@ -58,6 +98,10 @@ namespace Am.IO
             return str
         }
 
+        /**
+         * Encodes text as UTF-8 and writes it. No line terminator is added.
+         * @param string The text to write
+         */
         fun writeString(string: String) {
             var bytes = string.toBytes("UTF-8")
             this.write(bytes, 0L, bytes.length())

@@ -3,29 +3,103 @@ TODO: Decide what to do with the U*-series
 */
 namespace Am.Lang 
 {
+    /**
+     * An 8-bit unsigned integer, range 0 to 255, and the element type for raw binary data:
+     * Stream reads and writes, String.toBytes and String.fromBytes all work in UByte arrays.
+     * Literals take a UB suffix, as in 0xffUB.
+     */
     primitive native class UByte {
+        /**
+         * Formats the value as decimal text.
+         * @return The value as a String
+         */
         override native fun toString(): String
+        /**
+         * Returns a hash of the value so it can be used as a HashMap or HashSet key.
+         * @return The hash value
+         */
         override native fun hash(): UInt
+        /**
+         * Converts this UByte value to a Short (16-bit signed).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a Short
+         */
         native fun toShort(): Short
+        /**
+         * Converts this UByte value to a Int (32-bit signed).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a Int
+         */
         native fun toInt(): Int
+        /**
+         * Converts this UByte value to a Long (64-bit signed).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a Long
+         */
         native fun toLong(): Long
+        /**
+         * Converts this UByte value to a Byte (8-bit signed).
+         * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
+         * @return The value as a Byte
+         */
         native fun toByte(): Byte
+        /**
+         * Converts this UByte value to a UShort (16-bit unsigned).
+         * @return The value as a UShort
+         */
         native fun toUShort(): UShort
+        /**
+         * Converts this UByte value to a UInt (32-bit unsigned).
+         * @return The value as a UInt
+         */
         native fun toUInt(): UInt
+        /**
+         * Converts this UByte value to a ULong (64-bit unsigned).
+         * @return The value as a ULong
+         */
         native fun toULong(): ULong
         #require floatingPoint
+        /**
+         * Converts this UByte value to a Float (32-bit floating-point).
+         * @return The value as a Float
+         */
         native fun toFloat(): Float
         #require floatingPoint
+        /**
+         * Converts this UByte value to a Double (64-bit floating-point).
+         * @return The value as a Double
+         */
         native fun toDouble(): Double
 
+        /**
+         * Converts to a Bool, where zero is false and any other value is true.
+         * @return True when the value is not zero
+         */
         native fun toBool(): Bool
 
+        /**
+         * Parses decimal text into a UByte.
+         * @param s The text to parse
+         * @return The parsed value
+         */
         static native fun parse(s: String): UByte
 
+        /**
+         * The largest value a UByte can hold.
+         */
         static const var maxValue: UByte = 0xffUB
+        /**
+         * The smallest value a UByte can hold.
+         */
         static const var minValue: UByte = 0x00UB
 
 
+        /**
+         * Returns the smaller of two values.
+         * @param a The first value
+         * @param b The second value
+         * @return a if it is less than b, otherwise b
+         */
         static fun min(a: UByte, b: UByte): UByte {
             if (a < b) {
                 return a
@@ -33,6 +107,12 @@ namespace Am.Lang
             return b
         }
 
+        /**
+         * Returns the larger of two values.
+         * @param a The first value
+         * @param b The second value
+         * @return a if it is greater than b, otherwise b
+         */
         static fun max(a: UByte, b: UByte): UByte {
             if (a > b) {
                 return a

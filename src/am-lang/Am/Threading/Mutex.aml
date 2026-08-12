@@ -1,54 +1,39 @@
 
 namespace Am.Threading {
 
-    // Mutual-exclusion primitive. Recursive — the same task may
-    // call lock() N times and must call unlock() N times. Blocks
-    // (does NOT spin) when another task holds the lock.
-    //
-    // Per platform:
-    //   - libc        : pthread_mutex_t with PTHREAD_MUTEX_RECURSIVE
-    //   - amigaos     : exec.library struct SignalSemaphore +
-    //                   ObtainSemaphore / ReleaseSemaphore /
-    //                   AttemptSemaphore. Recursive by design.
-    //   - morphos-ppc : same as amigaos (exec-compatible).
-    //
-    // Usage pattern (manual — until the `lock { }` keyword lands):
-    //
-    //   var m = new Mutex()
-    //   m.lock()
-    //   try {
-    //       // critical section
-    //   } catch (e: Exception) {
-    //       m.unlock()
-    //       throw e
-    //   }
-    //   m.unlock()
-    //
-    // For non-blocking acquisition, use tryLock() which returns
-    // true on success / false if another task currently holds it.
-    //
-    // See docs/LOCK_KEYWORD_DESIGN.md in am-lang-compiler-code for
-    // the planned `lock(mutex) { }` / `lock { }` keyword sugar.
+    /**
+     * A mutual-exclusion lock, for guarding data that more than one thread touches. It is
+     * recursive, so the same thread may lock it several times as long as it unlocks the same
+     * number of times, and it blocks rather than spinning while another thread holds it. Underneath
+     * it is a recursive pthread mutex on the libc platforms and an exec.library signal semaphore on
+     * AmigaOS and MorphOS.
+     * Until the planned lock-block syntax lands, take and release the lock by hand and make sure
+     * the release happens on every path: lock(), then a try block for the critical section whose
+     * catch unlocks and rethrows, then unlock() at the end. Use tryLock() when you would rather do
+     * other work than wait.
+     */
     #implementationPlatforms "libc", "amigaos", "morphos-ppc"
     native class Mutex() {
         import Am.Lang
 
-        // Block until this mutex is acquired by the current task.
-        // Recursive — a task already holding the mutex returns
-        // immediately and increments the hold count.
+        /**
+         * Blocks until the calling thread holds the lock. A thread that already holds it returns
+         * immediately and increments the hold count.
+         */
         native fun lock()
 
-        // Release one hold on this mutex. Must be called exactly
-        // once per successful lock() / tryLock() that returned
-        // true. Calling unlock() without a matching lock is
-        // undefined behaviour on AmigaOS (the underlying
-        // SignalSemaphore corrupts its wait queue).
+        /**
+         * Releases one hold on the lock. Call it exactly once for every successful lock() or tryLock().
+         * Unlocking a mutex you do not hold is undefined behaviour — on AmigaOS it corrupts the
+         * semaphore's wait queue rather than failing cleanly.
+         */
         native fun unlock()
 
-        // Non-blocking acquire. Returns true if the lock was
-        // taken (caller must unlock() when done), false if
-        // another task currently holds it. Recursive — returns
-        // true immediately if the current task already holds it.
+        /**
+         * Takes the lock if it is free and returns immediately either way. A thread that already holds
+         * the lock gets true straight away.
+         * @return True if the lock is now held by the caller, who must unlock() it
+         */
         native fun tryLock(): Bool
     }
 }

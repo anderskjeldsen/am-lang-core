@@ -1,12 +1,28 @@
 namespace Am.Collections {
+    /**
+     * Walks a List from front to back. Created by List.iterator(); you rarely name this type. It
+     * holds a position rather than a copy, so adding to or removing from the list while iterating
+     * will skip or repeat elements.
+     */
     class ListIterator<T>(private var list: List<T>) : Iterator<T> {
         import Am.Lang
+        /**
+         * Position of the next element to return.
+         */
         private var index: Int = 0
 
+        /**
+         * Tests whether any elements remain.
+         * @return True while the position is still inside the list
+         */
         fun hasNext(): Bool {
             return this.index < this.list.getSize()
         }
 
+        /**
+         * Returns the element at the current position and advances.
+         * @return The next element
+         */
         fun next(): T {
             var t = this.list.get(this.index)
             this.index++
