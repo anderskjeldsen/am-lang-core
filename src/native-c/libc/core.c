@@ -1475,6 +1475,10 @@ void __pass_exception(function_result *result, aobject * const exception, aobjec
 //    result.exception_holder->last_stack_trace_item = new_item;
 }
 
+int __suspend_root_rendezvous(suspend_state *st) {
+    return (int) __amlc_atomic_fetch_add(&st->root_handoff, 1);
+}
+
 bool __any_null(const nullable_value a) {
     if (__is_primitive_nullable(a)) {
         return __is_primitive_null(a);

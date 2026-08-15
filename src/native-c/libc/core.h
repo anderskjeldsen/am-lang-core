@@ -378,7 +378,18 @@ struct _suspend_state {
     unsigned int state_objects_count; // to be used by parent function at re-entry
     nullable_value *state_objects; // to be used by parent function at re-entry
     function_result result; // created by parent, set by child
+    // Root-call rendezvous (parent == NULL only). A non-suspend caller and
+    // the completing chain each bump this once via __suspend_root_rendezvous;
+    // the SECOND arrival (return value != 0) owns the state: the caller
+    // reads result.exception (propagating it) and frees, or — when the chain
+    // completed detached, after a real suspension — the chain frees.
+    // Exactly-once free with no use-after-free in either interleaving.
+    __amlc_atomic_int root_handoff;
 };
+
+// Returns the previous rendezvous count: 0 = arrived first (other party will
+// finish the hand-off), non-zero = arrived second (this party owns cleanup).
+int __suspend_root_rendezvous(suspend_state *st);
 
 struct _anonymous_class_state_data {
     unsigned int state_objects_count; // to be used by parent function at re-entry

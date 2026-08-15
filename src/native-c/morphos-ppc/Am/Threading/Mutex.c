@@ -4,7 +4,7 @@
 #include <Am/Lang/Bool.h>
 #include <libc/core_inline_functions.h>
 
-#include <amigaos/amiga.h>
+#include <morphos-ppc/morphos.h>
 
 #include <exec/types.h>
 #include <exec/semaphores.h>
