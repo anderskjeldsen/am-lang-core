@@ -47,7 +47,7 @@ namespace Am.Lang
 
         /**
          * Frames recorded as the exception propagated, innermost first — PACKED: entries come in
-         * pairs. A generated site stores (aclass pointer, line*4+kind) and is formatted lazily on
+         * pairs. A generated site stores (aclass pointer, line*8+kind) and is formatted lazily on
          * read (Debug.formatExceptionSite); a frame added as an explicit string stores
          * (0, index into traceStrings). Packing keeps one 8-byte record per site instead of a
          * pooled pre-formatted string per call site — see __pass_exception_site in core.c.
@@ -63,7 +63,7 @@ namespace Am.Lang
          * Appends one packed frame; called by the generated unwinding code (via
          * __pass_exception_site / __throw_exception_site), not from application code.
          * @param cls The site's aclass pointer as a Long
-         * @param lineKind The site's line*4+kind
+         * @param lineKind The site's line*8+kind (kinds: 0 pass, 1 throw, 2 suspend child, 3 resumed, 4 allocation failed)
          */
         private fun addStackTraceSite(cls: Long, lineKind: Long) {
             this.traceSites.add(cls)
@@ -97,6 +97,7 @@ namespace Am.Lang
          * error report.
          * @return The stack trace as an array of frame descriptions
          */
+        #nativeEntry
         fun getStackTrace(): String[] {
             var n = this.traceSites.getSize() / 2
             var arr = new String[n]

@@ -50,6 +50,7 @@ namespace Am.Collections {
          * Returns the number of elements currently in the list.
          * @return The element count
          */
+        #nativeEntry
         fun getSize(): Int {
             return this.size
         }
@@ -188,6 +189,7 @@ namespace Am.Collections {
          * @return The element at that position
          * @throws Exception if the index is negative or past the end
          */
+        #nativeEntry
         fun get(index: Int): T {
             if (index < 0 || index > this.size) {
                 throw new Exception("Index out of bounds: " + index.toString())                

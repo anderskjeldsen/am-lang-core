@@ -38,6 +38,7 @@ namespace Am.Lang
          * Returns the length of the string in characters; an alias for getLength().
          * @return The character count
          */
+        #nativeEntry
         fun length(): Int {
             return this.getLength()
         }
@@ -61,6 +62,7 @@ namespace Am.Lang
          * @param other The object to compare with
          * @return True if other is a String with the same characters
          */
+        #nativeEntry
         #noThrow
         native override fun equals(other: Object): Bool
         /**
@@ -91,6 +93,7 @@ namespace Am.Lang
          * @param s The substring to search for
          * @return The zero-based index of the first match, or -1 if there is none
          */
+        #nativeEntry
         #noThrow
         native fun indexOf(s: String): Int
         /**
@@ -98,6 +101,7 @@ namespace Am.Lang
          * @param s The substring to search for
          * @return The zero-based index of the last match, or -1 if there is none
          */
+        #nativeEntry
         #noThrow
         native fun lastIndexOf(s: String): Int
         /**
@@ -108,6 +112,7 @@ namespace Am.Lang
          * @param length Number of characters to take
          * @return The extracted substring
          */
+        #nativeEntry
         native fun substring(start: UInt, length: UInt): String
         
         /**
@@ -165,6 +170,7 @@ namespace Am.Lang
          * @param index Zero-based character index
          * @return The character code at that index
          */
+        #nativeEntry
         native private fun characterAtNative(index: UInt): UShort
         /**
          * Returns the character code at a position, for example 65US for 'A'. Compare the result
