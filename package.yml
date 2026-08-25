@@ -100,16 +100,70 @@ platforms:
         outputFilename: morphos.o
     gccAdditionalOptions:
       - -noixemul
-  - id: aros-x86-64
+  # Shared AROS base for every architecture. AROS presents ONE API surface
+  # (exec/dos/intuition + posixc) regardless of CPU, so the natives live here
+  # in src/native-c/aros/ and the per-arch platforms below add only their
+  # toolchain. Arch-specific overrides go in that arch's own folder.
+  - id: aros
+    abstract: true
     extends: libc
-    gccCommand: gcc
     additionalHeaders:
       - aros.h
-    additionalCSources: 
-      - inputFilename: aros.c     
+    additionalCSources:
+      - inputFilename: aros.c
         outputFilename: aros.o
     gccAdditionalOptions:
-#      - -noixemul
+      # libc/Am/Threading/Thread.c needs pthreads, and the AROS drivers (both
+      # the real clang one and our shims) only pull in -lpthread when they see
+      # -pthread. AROS ships libpthread.a for every arch, so this belongs on
+      # the shared base.
+      - -pthread
+    additionalLinkerFlags:
+      # gccAdditionalOptions only reaches the compile rules — repeat it here or
+      # the link drops libpthread.
+      - -pthread
+
+  - id: aros-x86-64
+    extends: aros
+    # The standard AROS cross-compiler name — provided both by
+    # amigadev/crosstools:x86_64-aros and by our ../aros-x64-dev:sdk shim
+    # image (host x86_64 gcc + the SDK off the pc-x86_64 ISO).
+    gccCommand: x86_64-aros-gcc -O2
+  # AROS on 64-bit ARM (the raspi-aarch64 target - Raspberry Pi 3/4/5).
+  # Inherits aros.h/aros.c from aros-x86-64, the same way linux-arm64v8
+  # inherits from linux-x64: the AROS API surface is identical, only the
+  # compiler driver differs.
+  #
+  # There is no GNU aarch64-aros toolchain - AROS builds raspi-aarch64 with
+  # LLVM/clang 20.1.0 only. `aarch64-aros-gcc` is a wrapper around that clang
+  # (target triple + AROS SDK include/lib paths) provided by the
+  # aros-arm64-dev:sdk image; see ../aros-arm64-dev/README.md.
+  # AROS on 68k - the amiga-m68k target, i.e. AROS as a Kickstart replacement
+  # on real Amiga hardware.
+  #
+  # Extends amigaos, not aros-x86-64, and that is the interesting part: AROS
+  # m68k executables are AmigaOS *hunk* binaries, not ELF. AROS compiles to
+  # m68k ELF and then runs elf2hunk, exactly as bebbo's m68k-amigaos-gcc does,
+  # because Amiga LoadSeg() only understands hunk. Checked against the nightly
+  # ISO - /C/Version and friends are all "AmigaOS loadseg()ble executable".
+  #
+  # So the toolchain, the object format and the ABI are the AmigaOS ones, and
+  # the amigaos natives (amiga.c, errno.c) are the right implementations. What
+  # this platform buys is a distinct AM_PLATFORM_ID, a place to hang
+  # AROS-specific overrides, and its own build/test target.
+  - id: aros-m68k
+    extends: amigaos
+    gccCommand: m68k-amigaos-gcc -O2
+    gccAdditionalOptions:
+      # See ../aros-arm64-dev/README.md and the bebbo -fbbb note in MEMORY:
+      # the default -fbbb optimiser miscompiles array stores at -O2/-O3.
+      - -fbbb=abcefhlmnprsz0
+      - -noixemul
+    additionalLinkerFlags:
+      - -noixemul
+  - id: aros-arm64
+    extends: aros
+    gccCommand: aarch64-aros-gcc -O2
 #  - id: msdos-x86
 #    extends: libc
 #    gccCommand: gcc
@@ -173,6 +227,43 @@ buildTargets:
     platform: aros-x86-64
     commands: 
       - docker run --rm -v "${build_dir}":/work -i amigadev/crosstools:x86_64-aros make aros-x86-64.makefile all
+  # In-environment build: needs aarch64-aros-gcc on PATH, i.e. run from inside
+  # the aros-arm64-dev:sdk container (no docker-in-docker).
+  - id: aros-arm64
+    platform: aros-arm64
+    features: ["floatingPoint"]
+  # Host-side build: amlc mounts builds/ at /host and runs make in the image.
+  # Build the image first with `make sdk-image` in ../aros-arm64-dev/.
+  - id: aros-m68k
+    platform: aros-m68k
+    features: ["floatingPoint"]
+  # Host-side build in the amiga-gcc image, same contract as amigaos-docker.
+  - id: aros-m68k-docker
+    platform: aros-m68k
+    features: ["floatingPoint"]
+    dockerBuild:
+      image: amiga-gcc:latest
+      buildPath: /host
+    # Boots AROS m68k under Amiberry and runs the test binary there. Build the
+    # image first with ../amiberry-aros-m68k/build.sh. The rig needs no
+    # Kickstart ROM - Amiberry's own AROS ROM is the kickstart, and the AROS
+    # nightly boot floppy supplies SYS:/C:.
+    dockerTest:
+      image: amlang-aros-m68k:latest
+      timeoutSeconds: 3000
+  - id: aros-x86-64-docker
+    platform: aros-x86-64
+    features: ["floatingPoint"]
+    dockerBuild:
+      image: aros-x64-dev:sdk
+      buildPath: /host
+
+  - id: aros-arm64-docker
+    platform: aros-arm64
+    features: ["floatingPoint"]
+    dockerBuild:
+      image: aros-arm64-dev:sdk
+      buildPath: /host
   - id: linux-x64_docker
     platform: linux-x64
     features: ["floatingPoint"]
