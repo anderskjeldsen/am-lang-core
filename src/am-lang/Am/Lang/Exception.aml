@@ -43,18 +43,53 @@ namespace Am.Lang
      */
     class Exception(var message: String) {
         import Am.Collections
+        import Am.Lang.Diagnostics
 
         /**
-         * Frames recorded as the exception propagated, innermost first.
+         * Frames recorded as the exception propagated, innermost first — PACKED: entries come in
+         * pairs. A generated site stores (aclass pointer, line*4+kind) and is formatted lazily on
+         * read (Debug.formatExceptionSite); a frame added as an explicit string stores
+         * (0, index into traceStrings). Packing keeps one 8-byte record per site instead of a
+         * pooled pre-formatted string per call site — see __pass_exception_site in core.c.
          */
-        private var stackTrace: List<String> = List.newList<String>()
+        private var traceSites: List<Long> = List.newList<Long>()
 
         /**
-         * Appends one frame; called by the generated unwinding code, not from application code.
+         * Frames that were recorded as explicit strings (native throw sites, user additions).
+         */
+        private var traceStrings: List<String> = List.newList<String>()
+
+        /**
+         * Appends one packed frame; called by the generated unwinding code (via
+         * __pass_exception_site / __throw_exception_site), not from application code.
+         * @param cls The site's aclass pointer as a Long
+         * @param lineKind The site's line*4+kind
+         */
+        private fun addStackTraceSite(cls: Long, lineKind: Long) {
+            this.traceSites.add(cls)
+            this.traceSites.add(lineKind)
+        }
+
+        /**
+         * Appends one frame; called by the native unwinding code, not from application code.
          * @param stackTraceItem Description of the frame
          */
         private fun addStackTraceItem(stackTraceItem: String) {
-            this.stackTrace.add(stackTraceItem)
+            this.traceStrings.add(stackTraceItem)
+            this.traceSites.add(0L)
+            this.traceSites.add((this.traceStrings.getSize() - 1) as Long)
+        }
+
+        /**
+         * Formats the frame whose pair starts at the given traceSites index.
+         */
+        private fun frameAt(index: Int): String {
+            var cls = this.traceSites.get(index)
+            var lineKind = this.traceSites.get(index + 1)
+            if (cls == 0L) {
+                return this.traceStrings.get(lineKind as Int)
+            }
+            return Debug.formatExceptionSite(cls, lineKind)
         }
 
         /**
@@ -63,7 +98,14 @@ namespace Am.Lang
          * @return The stack trace as an array of frame descriptions
          */
         fun getStackTrace(): String[] {
-            return this.stackTrace.toArray()
+            var n = this.traceSites.getSize() / 2
+            var arr = new String[n]
+            var i = 0
+            while (i < n) {
+                arr[i] = this.frameAt(i * 2)
+                i++
+            }
+            return arr
         }
 
         /**
@@ -80,8 +122,11 @@ namespace Am.Lang
          */
         fun printWithStackTrace() {
             ("Exception: " + this.message).println()
-            each(this.stackTrace, sti) {
-                sti.println()
+            var n = this.traceSites.getSize()
+            var i = 0
+            while (i < n) {
+                this.frameAt(i).println()
+                i = i + 2
             }
             "End of stacktrace".println()
         }

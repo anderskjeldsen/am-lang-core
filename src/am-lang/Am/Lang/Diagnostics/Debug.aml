@@ -14,5 +14,15 @@ namespace Am.Lang.Diagnostics {
          */
         #noThrow
         native static fun setConditionalLogging(on: Bool)
+
+        /**
+         * Formats one packed exception stack-trace site into the human-readable frame text
+         * ("... in class X on line N" and friends). Called lazily by Exception when a trace is
+         * read; generated unwinding code stores only the packed pair.
+         * @param cls The site's aclass pointer as a Long (0 is formatted as "?")
+         * @param lineKind The site's source line * 8 + kind (0 pass, 1 throw, 2 suspend child, 3 resumed, 4 allocation failed)
+         * @return The formatted frame line
+         */
+        native static fun formatExceptionSite(cls: Long, lineKind: Long): String
     }
 }

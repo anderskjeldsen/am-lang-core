@@ -53,9 +53,14 @@ function_result Am_Lang_Process_run_0(aobject * command)
 	// SYS_Input/SYS_Output omitted on purpose: SystemTagList then inherits the
 	// caller's stdin/stdout, so the command's output reaches the user's shell.
 	// Passing NULL would silently redirect to NIL:.
+	// NP_StackSize: without it the spawned command runs on the boot shell's
+	// default stack (~4 KB), which silently kills any non-trivial child —
+	// an AmLang binary (aminet-cli from the IDE) dies before main. Same fix
+	// the capture variants below already carry.
 	struct TagItem tags[] = {
 		{ SYS_Asynch,    FALSE },
 		{ SYS_UserShell, TRUE },
+		{ NP_StackSize,  (ULONG) 262144 },
 		{ TAG_DONE,      0 },
 	};
 

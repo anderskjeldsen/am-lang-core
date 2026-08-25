@@ -1,6 +1,6 @@
 namespace Am.Lang
 {
-    #implementationPlatforms "libc", "amigaos", "morphos-ppc"
+    #implementationPlatforms "libc", "amigaos", "morphos-ppc", "aros-arm64"
     /**
      * A handle to a child process running asynchronously with a pseudo-terminal attached, as
      * returned by Process.start, Process.startBinary and Process.startWithReportedSize. The

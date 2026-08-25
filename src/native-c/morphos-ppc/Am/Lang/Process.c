@@ -71,7 +71,9 @@ function_result Am_Lang_Process_run_0(aobject * command)
 	struct TagItem tags[] = {
 		{ SYS_Asynch,    FALSE },
 		{ SYS_UserShell, TRUE },
-		{ NP_StackSize,  (ULONG) 100000 },
+		// 256 KB, not 100 KB: the child may be a full AmLang binary
+		// (aminet-cli) doing an OpenSSL handshake on its main stack.
+		{ NP_StackSize,  (ULONG) 262144 },
 		{ TAG_DONE,      0 },
 	};
 

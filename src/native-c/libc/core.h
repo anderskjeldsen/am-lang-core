@@ -519,6 +519,24 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
 // function_result const __default_return();
 void __throw_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text);
 void __pass_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text);
+// Packed site-info variants: generated code passes the site as
+// (aclass*, line*8+kind) instead of a pooled/literal pre-formatted string;
+// the Exception stores the pair (addStackTraceSite) and formats it lazily
+// when the trace is read (Debug.formatExceptionSite). kind: 0 pass,
+// 1 throw, 2 throw at a suspend-child return, 3 throw at a resumed
+// continuation, 4 allocation failed (OOM guard sites).
+void __throw_exception_site(function_result *result, aobject * const exception, void * const site_class, unsigned int line_kind);
+void __pass_exception_site(function_result *result, aobject * const exception, void * const site_class, unsigned int line_kind);
+// Packed twins of __throw_simple_exception / __throw_out_of_memory_exception:
+// the MESSAGE stays a C literal (it carries per-site variable names); only
+// the stack-trace site is packed.
+void __throw_simple_exception_site(const char * const message, void * const site_class, unsigned int line_kind, function_result * const result);
+// Fixed-message hot checks (array subscripts, array sizing): the message
+// literal lives ONCE here instead of in every translation unit that
+// bounds-checks an array.
+void __throw_index_bounds_site(function_result * const result, void * const site_class, unsigned int line_kind);
+void __throw_negative_size_site(function_result * const result, void * const site_class, unsigned int line_kind);
+void __throw_out_of_memory_exception_site(function_result * const result, void * const site_class, unsigned int line_kind);
 void __throw_simple_exception(const char * const message, const char * const stack_trace_item_text, function_result * const result);
 // Like __throw_simple_exception, but COPIES `message` into the exception
 // (the plain variant wraps the pointer as a string constant and must only
@@ -591,6 +609,7 @@ void __print_memory_header(aobject * const obj, const char * prefix);
 #define __out_of_memory_exception_constructor_alias Am_Lang_OutOfMemoryException_f_OutOfMemoryException_0
 #define __out_of_memory_exception_init_instance_function_alias Am_Lang_OutOfMemoryException___init_instance
 #define __add_stack_trace_item_function_alias Am_Lang_Exception_f_addStackTraceItem_0
+#define __add_stack_trace_site_function_alias Am_Lang_Exception_f_addStackTraceSite_0
 #define __exception_constructor_alias Am_Lang_Exception_f_Exception_0
 #define __exception_init_instance_function_alias Am_Lang_Exception___init_instance
 #define __property_info_class_alias Am_Lang_PropertyInfo

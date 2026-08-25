@@ -344,6 +344,21 @@ aobject * __allocate_iface_object(aclass * const __class, aobject * const implem
         }
     }
 
+    // Fallback: match by iface CLASS (same class_static) when the exact
+    // variant pointer misses — e.g. shared generic code wrapping against
+    // one variant of an interface while the object's table names another
+    // variant of the SAME interface. Safe: the table found is the object's
+    // OWN implementation table, so dispatch stays self-consistent.
+    if (impl == NULL) {
+        for(int i = 0; i < implementation_object->class_ptr->iface_implementation_count; i++) {
+            iface_implementation * impl2 = &implementation_object->class_ptr->iface_implementations[i];
+            if (impl2->iface_class != NULL && impl2->iface_class->statics == __class->statics) {
+                impl = impl2;
+                break;
+            }
+        }
+    }
+
     iface_reference ref_t = { .implementation_object = implementation_object, .iface_implementation = impl };
     memcpy(&iface_object->object_properties.iface_reference, &ref_t, sizeof(iface_reference));
 
@@ -1475,6 +1490,42 @@ void __pass_exception(function_result *result, aobject * const exception, aobjec
 //    result.exception_holder->last_stack_trace_item = new_item;
 }
 
+// Packed site-info (see core.h): store (aclass*, line*4+kind) on the
+// exception instead of appending a pre-formatted string. Mirrors
+// __throw_exception / __pass_exception including their refcount contract
+// (throw retains the exception, pass transfers the callee's reference).
+void __throw_exception_site(function_result *result, aobject * const exception, void * const site_class, unsigned int line_kind) {
+    __add_stack_trace_site_function_alias(exception, (long long) (unsigned long) site_class, (long long) line_kind);
+    if (result->exception) {
+        __decrease_reference_count(result->exception);
+    }
+    result->exception = exception;
+    __increase_reference_count(exception);
+}
+
+void __pass_exception_site(function_result *result, aobject * const exception, void * const site_class, unsigned int line_kind) {
+    __add_stack_trace_site_function_alias(exception, (long long) (unsigned long) site_class, (long long) line_kind);
+    if (result->exception) {
+        __decrease_reference_count(result->exception);
+    }
+    result->exception = exception;
+}
+
+// Packed twin of __throw_simple_exception: same fallback ladder, but the
+// site travels as (aclass*, line*8+kind) instead of a .rodata string.
+void __throw_simple_exception_site(const char * const message, void * const site_class, unsigned int line_kind, function_result * const result) {
+    aobject * ex_msg = __create_string_constant(message, &__string_class_alias);
+    if (ex_msg == NULL) {
+        __throw_out_of_memory_exception_site(result, site_class, line_kind);
+        return;
+    }
+    aobject * ex = __create_exception(ex_msg);
+    __throw_exception_site(result, ex, site_class, line_kind);
+    __decrease_reference_count(ex_msg);
+    __decrease_reference_count(ex);
+}
+
+
 int __suspend_root_rendezvous(suspend_state *st) {
     return (int) __amlc_atomic_fetch_add(&st->root_handoff, 1);
 }
@@ -1823,6 +1874,27 @@ void __init_oom_singleton(void) {
     ex->owner_thread = __current_thread();
     ex->first_object_wrapper = NULL;
     __oom_singleton = ex;
+}
+
+void __throw_index_bounds_site(function_result * const result, void * const site_class, unsigned int line_kind) {
+    __throw_simple_exception_site("Array index out of bounds", site_class, line_kind, result);
+}
+
+void __throw_negative_size_site(function_result * const result, void * const site_class, unsigned int line_kind) {
+    __throw_simple_exception_site("Array size can't be negative", site_class, line_kind, result);
+}
+
+void __throw_out_of_memory_exception_site(function_result * const result, void * const site_class, unsigned int line_kind) {
+    if (__oom_singleton == NULL) {
+        fprintf(stderr, "AmLang: OOM before OutOfMemoryException singleton initialised; aborting (at %s line %u)\n",
+                site_class != NULL ? ((aclass *) site_class)->name : "?", line_kind >> 3);
+        fflush(stderr);
+        abort();
+    }
+    // NOTE: attaching the packed frame goes through Exception.addStackTraceSite
+    // (List.add) which may allocate; under true OOM that can fail — same
+    // bounded hazard as the string-based path since the packed-trace rework.
+    __throw_exception_site(result, __oom_singleton, site_class, line_kind);
 }
 
 void __throw_out_of_memory_exception(function_result * const result, const char * const stack_trace_item_text) {

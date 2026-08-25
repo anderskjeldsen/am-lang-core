@@ -1,0 +1,1794 @@
+// Async child-process wrapper for AROS.
+//
+// Ported from the MorphOS implementation
+// (native/morphos-ppc/Am/Lang/RunningProcess.c), which was itself the AmigaOS
+// one minus the m68k-only pieces. That made it the right base: AROS is neither
+// m68k nor MorphOS, and the MorphOS version had already replaced the one
+// construct that does not travel - NP_ExitCode's D0/D1 register binding.
+//
+// AROS differences from the MorphOS original, all marked "AROS:" below:
+//   1. No NP_CodeType. That tag is a MorphOS invention for its m68k/PPC
+//      trampolines; AROS has a single native code type.
+//   2. NP_ExitCode IS usable here, and with a plain C signature. AROS's
+//      CreateNewProc calls pr_ExitCode as void(*)(IPTR result, IPTR data) on
+//      every non-m68k architecture (rom/dos/createnewproc.c) - only the m68k
+//      path uses the inline-asm D0/D1 convention. So unlike MorphOS we get a
+//      real exit code, and a second, earlier signal that the child is gone.
+//      ACTION_END detection is kept as the primary mechanism regardless: it is
+//      what proved out on MorphOS, and it fires even if a child never returns
+//      through the normal process-exit path.
+//
+// Architecture (proven in HandlerTest/parent.c against child2):
+//
+//   - We spawn a custom-handler Process. It owns a public MsgPort
+//     and serves DOS packets (ACTION_FINDINPUT, ACTION_WRITE,
+//     ACTION_READ, ACTION_END, ACTION_DIE, etc.) directly from
+//     two shared ring buffers:
+//        * out_ring  — child writes go here; AmLang's tryReadOutput
+//                      pops from it.
+//        * in_ring   — AmLang's writeInput pushes here; child's
+//                      ACTION_READ pops from it (or defers).
+//
+//   - The child is spawned via LoadSeg + CreateNewProcTags with:
+//        NP_Input        = FakeFileHandle pointing at handler port
+//        NP_Output       = same (separate FH, same handler)
+//        NP_ConsoleTask  = handler port  → child's Open("*") routes
+//                                          to us (where bebbossh's
+//                                          password prompts live)
+//        NP_Cli          = TRUE          → libnix's CLI-startup
+//                                          path is honoured
+//        NP_Arguments    = command-tail string
+//        NP_ExitCode     = exit callback → flips state->child_exited
+//
+//   Why this avoids the prior PIPE:-based design's traps:
+//   - Queue-Handler PIPE: buffers all writes until writer-close;
+//     interactive children never get to flush. Our handler delivers
+//     every byte immediately into the ring buffer (no batching).
+//   - SystemTagList derives the child's pr_ConsoleTask from its
+//     SYS_Input handler, ignoring NP_ConsoleTask in the tag list.
+//     By calling CreateNewProcTags directly we keep NP_ConsoleTask
+//     authoritative, so bebbossh's Open("*") lands on us.
+
+#include <libc/core.h>
+#include <Am/Lang/RunningProcess.h>
+#include <aros-arm64/Am/Lang/RunningProcess.h>
+#include <Am/Lang/ClassRef.h>
+#include <Am/Lang/String.h>
+#include <Am/Lang/Object.h>
+#include <Am/Lang/Bool.h>
+#include <Am/Lang/UByte.h>
+#include <Am/Lang/Array.h>
+#include <libc/core_inline_functions.h>
+
+#include <exec/types.h>
+#include <exec/memory.h>
+#include <exec/ports.h>
+#include <dos/dos.h>
+#include <dos/dosextens.h>
+#include <dos/dostags.h>
+#include <proto/exec.h>
+#include <proto/dos.h>
+#include <utility/tagitem.h>
+
+#include <string.h>
+
+// Task name of the pipe-handler Process RunningProcess spawns per
+// child. Used for NP_Name and the exit-time FindTask sweep - keep the
+// two in sync via this define. 
+#define RP_TTY_TASK_NAME "AmLangTTY"
+
+// =================================================================
+// Diagnostic log (same shape as before — invaluable for debugging
+// the dos.library handler protocol)
+// =================================================================
+
+static BPTR g_log_fh = 0;
+static BOOL g_log_open_attempted = FALSE;
+static char g_log_path[64] = { 0 };
+
+// Compile-time gate for the per-packet "hnd RX type=" / wake-stats
+// chatter. Once the handler bridge is proven to work end-to-end (we
+// passed that point on 2026-06-05 with bebbossh's interactive SSH
+// shell), the per-packet logging is pure overhead — bebbossh's idle
+// polling fires ACTION_EXAMINE_FH dozens of times per second, and
+// each line is a synchronous disk Write that drags amStudio down
+// (visibly so on quit/teardown when the log buffer flushes). Define
+// `RP_VERBOSE_LOG` at compile time to re-enable for diagnostics.
+#ifndef RP_VERBOSE_LOG
+#  define RP_VERBOSE_LOG 0
+#endif
+
+static const char * const RP_LOG_PATHS[] = {
+    "PROGDIR:tty.log",
+    "SYS:tty.log",
+    "T:amStudio-tty.log",
+    "RAM:amStudio-tty.log",
+    NULL
+};
+
+static void rp_log_open(void) {
+    if (g_log_open_attempted) return;
+    g_log_open_attempted = TRUE;
+#if !RP_VERBOSE_LOG
+    // Logging disabled: never open the file, so every rp_log_str /
+    // rp_log_event stays a no-op (they early-out on g_log_fh == 0).
+    g_log_path[0] = 0;
+    return;
+#endif
+    for (int i = 0; RP_LOG_PATHS[i] != NULL; i++) {
+        g_log_fh = Open((CONST_STRPTR) RP_LOG_PATHS[i], MODE_NEWFILE);
+        if (g_log_fh != 0) {
+            const char * src = RP_LOG_PATHS[i];
+            int j = 0;
+            while (src[j] != 0 && j < (int) sizeof(g_log_path) - 1) {
+                g_log_path[j] = src[j]; j++;
+            }
+            g_log_path[j] = 0;
+            return;
+        }
+    }
+    g_log_path[0] = 0;
+}
+
+static void rp_log_str(const char * s) {
+    if (g_log_fh == 0) return;
+    Write(g_log_fh, (APTR) s, (LONG) strlen(s));
+    Flush(g_log_fh);
+}
+
+// AROS: takes SIPTR, not LONG. Half the call sites log a pointer (handler
+// port, BPTRs) and on this LP64 target a LONG parameter would truncate them to
+// 32 bits, making the diagnostic log actively misleading.
+static void rp_log_event(const char * msg, SIPTR val) {
+    if (g_log_fh == 0) return;
+    char buf[160]; int p = 0;
+    while (*msg) buf[p++] = *msg++;
+    buf[p++] = ' ';
+    BOOL neg = FALSE; SIPTR v = val;
+    if (v < 0) { neg = TRUE; v = -v; }
+    char tmp[24]; int t = 0;
+    if (v == 0) tmp[t++] = '0';
+    while (v > 0) { tmp[t++] = (char)('0' + (v % 10)); v /= 10; }
+    if (neg) buf[p++] = '-';
+    while (t > 0) buf[p++] = tmp[--t];
+    buf[p++] = '\n';
+    Write(g_log_fh, buf, p);
+    Flush(g_log_fh);
+}
+
+// =================================================================
+// Ring buffer
+// =================================================================
+
+#define RP_RING_SIZE (64 * 1024)
+
+typedef struct rp_ring {
+    UBYTE * data;
+    ULONG   head, tail, count;
+    BOOL    writer_closed;
+} rp_ring;
+
+static ULONG rp_push(rp_ring * r, const UBYTE * src, ULONG n) {
+    ULONG pushed = 0;
+    while (pushed < n && r->count < RP_RING_SIZE) {
+        r->data[r->head] = src[pushed];
+        r->head = (r->head + 1) % RP_RING_SIZE;
+        r->count++; pushed++;
+    }
+    return pushed;
+}
+
+static ULONG rp_pop(rp_ring * r, UBYTE * dst, ULONG n) {
+    ULONG popped = 0;
+    while (popped < n && r->count > 0) {
+        dst[popped] = r->data[r->tail];
+        r->tail = (r->tail + 1) % RP_RING_SIZE;
+        r->count--; popped++;
+    }
+    return popped;
+}
+
+// =================================================================
+// Shared state
+// =================================================================
+
+typedef struct rp_state rp_state;
+struct rp_state {
+    volatile LONG refcount;
+
+    rp_ring in;
+    rp_ring out;
+
+    struct Process * handler_proc;
+    struct MsgPort * handler_port;
+
+    struct DosPacket * deferred_read_pkt;
+    int  open_count;
+    BOOL any_open;
+
+    volatile BOOL child_exited;
+    volatile BOOL shutdown_requested;
+
+    // AROS: the child's return code, delivered by rp_child_exit via
+    // NP_ExitCode. MorphOS had no way to get this (its NP_ExitCode is
+    // m68k-only) and hardcoded 0; AROS calls pr_ExitCode as a plain C
+    // function on every non-m68k arch, so the real value is available.
+    // exit_code_valid distinguishes "child returned 0" from "never ran".
+    volatile LONG child_exit_code;
+    volatile BOOL exit_code_valid;
+
+    // ACTION_SCREEN_MODE arg — TRUE = child put stdin into raw mode
+    // (SetMode(fh, 1) on AmigaOS, equivalent to terminal raw mode
+    // on Unix). Flipped by the SCREEN_MODE packet handler; read by
+    // the AmLang side via isRawMode() to switch the CLI panel into
+    // char-at-a-time passthrough + terminal-emulator rendering.
+    volatile BOOL raw_mode;
+
+    // Binary mode (Process.startBinary): skip the 4-byte CSI 0 SP q
+    // console-size probe interception so a raw binary stream (bebbossh
+    // -T carrying a git packfile) is never partially swallowed.
+    volatile BOOL binary;
+
+    // Reported terminal dimensions, used to answer the bebbossh-
+    // style CSI 0 SP q "what's your size?" query that programs send
+    // by Write()-ing to stdin (yes, really — the AmigaOS console
+    // protocol replies in-band on the same FH). Default 24x80; the
+    // AmLang side calls setReportedSize() to override.
+    volatile LONG reported_rows;
+    volatile LONG reported_cols;
+
+    // Single-linked-list pointer threading every live handler
+    // state into `g_handler_list_head`. Used by the runOnExit
+    // hook (shutdownAllNative) to find every still-running
+    // AmLangTTY Process and tell it to die before the AmLang
+    // program's seglist gets unloaded. Pure bookkeeping — the
+    // handler itself never touches it.
+    struct rp_state * next_handler;
+};
+
+// Singly-linked list of every live handler state. Mutated only
+// under Forbid(). Walked by shutdownAllNative on exit.
+static struct rp_state * g_handler_list_head = NULL;
+
+// Count of handler Processes whose entry function has NOT yet
+// returned. Polled by shutdownAllNative — when this reaches 0
+// we know no handler is still executing in this program's
+// seglist and exit is safe. Tracked separately from the list
+// because the list only empties when rp_state is freed, which
+// requires _native_release_0 — and that doesn't run if the
+// AmLang RunningProcess instance is alive in a static field
+// at exit time.
+static volatile LONG g_live_handler_count = 0;
+
+// Diagnostic counters that the handler increments at three
+// known points. Comparing them at shutdownAllNative tells us
+// which segment of the handler's lifecycle is hanging:
+//   entered  — first thing in rp_handler_entry (after st check).
+//   die_seen — incremented under Forbid the moment a handler
+//              observes shutdown_requested == TRUE.
+//   exited   — last thing before rp_handler_entry returns.
+//
+// Pure exec stores — no DOS / IO involved, so they're safe to
+// touch from the handler task.
+static volatile LONG g_handler_entered_count = 0;
+static volatile LONG g_handler_die_seen_count = 0;
+static volatile LONG g_handler_exited_count = 0;
+
+// FH captured at first startNative — amStudio's main task's
+// Output(), which is the redirected stdout the user reads in
+// closedown.log. We hold onto this so handler-task code can
+// log there too: handlers are spawned without NP_Output set,
+// so calling Output() from inside the handler returns NIL:
+// (default) and any writes silently vanish. Capturing once
+// from the main task gives every handler a real FH to write
+// to.
+static BPTR g_parent_stdout = 0;
+
+// Write a NUL-terminated string to the parent task's stdout
+// (captured at startNative time). Best-effort — silent no-op
+// if we never captured one. Falls back to the current task's
+// Output() if the global isn't set yet (e.g. shutdownAllNative
+// being called before any handler started — though that path
+// is the no-handlers fast-return).
+static void rp_stdout_line(const char * msg) {
+#if !RP_VERBOSE_LOG
+    (void) msg;
+    return;
+#endif
+    BPTR out = g_parent_stdout;
+    if (out == 0) {
+        out = Output();
+    }
+    if (out == 0) return;
+    int n = 0; while (msg[n] != 0) n++;
+    Write(out, (APTR) msg, (LONG) n);
+    Write(out, (APTR) "\n", 1);
+}
+
+// Add to the global list (call under Forbid).
+static void rp_list_add(struct rp_state * st) {
+    st->next_handler = g_handler_list_head;
+    g_handler_list_head = st;
+}
+
+// Remove from the global list (call under Forbid). Tolerates
+// st not being on the list (a no-op).
+static void rp_list_remove(struct rp_state * st) {
+    struct rp_state ** link = &g_handler_list_head;
+    while (*link != NULL) {
+        if (*link == st) {
+            *link = st->next_handler;
+            st->next_handler = NULL;
+            return;
+        }
+        link = &(*link)->next_handler;
+    }
+}
+
+// Process-global wake target — set once by the AmLang main thread
+// via setGlobalWake(); used by every handler's ACTION_WRITE to
+// Signal() the task whose Wait() the main loop is blocked on. This
+// makes streaming output (ping, tail -f, shell prompts) appear in
+// the panel within a microsecond of the write, instead of waiting
+// for the user's next keystroke. Bounded by `volatile` so the
+// handler tasks see updates promptly.
+static volatile struct Task * g_wake_task = NULL;
+static volatile UBYTE         g_wake_sig_bit = 0;
+
+static volatile ULONG g_wake_signal_count = 0;
+static volatile ULONG g_wake_skipped_count = 0;
+
+static void rp_signal_main_wake(void) {
+    struct Task * t = (struct Task *) g_wake_task;
+    UBYTE bit = g_wake_sig_bit;
+    if (t != NULL && bit < 32) {
+        Signal(t, 1L << bit);
+        g_wake_signal_count++;
+    } else {
+        g_wake_skipped_count++;
+    }
+}
+
+typedef struct _running_process_data running_process_data;
+struct _running_process_data {
+    rp_state * state;
+    int   binary;           // 1 = Process.startBinary (raw byte stream)
+    BPTR  fh_in_bptr;
+    BPTR  fh_out_bptr;
+    BPTR  fh_err_bptr;
+    BPTR  child_seg;        // tracked for cleanup if spawn failed
+    BOOL  child_owns_seg;   // TRUE when NP_FreeSeglist=TRUE → child unloads
+    BPTR  old_cwd_lock;
+    BOOL  has_old_cwd;
+};
+
+// =================================================================
+// State refcount + cleanup
+// =================================================================
+
+static void rp_state_free(rp_state * st) {
+    // Unlink from the global handler list so shutdownAllNative
+    // doesn't race against a freed pointer. Forbid for the list
+    // mutation only — the FreeMems below don't need it.
+    Forbid();
+    rp_list_remove(st);
+    Permit();
+    if (st->in.data  != NULL) { FreeMem(st->in.data,  RP_RING_SIZE); st->in.data  = NULL; }
+    if (st->out.data != NULL) { FreeMem(st->out.data, RP_RING_SIZE); st->out.data = NULL; }
+    FreeMem(st, sizeof(*st));
+}
+
+static void rp_state_release(rp_state * st) {
+    if (st == NULL) return;
+    LONG count;
+    Forbid();
+    st->refcount--;
+    count = st->refcount;
+    Permit();
+    if (count <= 0) {
+        // No rp_log_event here — rp_state_release can be called
+        // from the handler's exit path, and DOS calls (Write
+        // included) from a custom DOS handler recurse through
+        // its own pr_MsgPort and ate the DIE messages, leaving
+        // the handler stuck. See banner in rp_handler_entry.
+        rp_state_free(st);
+    }
+}
+
+// =================================================================
+// Handler Process
+// =================================================================
+
+static void rp_pkt_reply(struct DosPacket * pkt, LONG res1, LONG res2) {
+    struct Message * msg = pkt->dp_Link;
+    pkt->dp_Res1 = res1;
+    pkt->dp_Res2 = res2;
+    struct MsgPort * reply_port = pkt->dp_Port;
+    struct Process * self = (struct Process *) FindTask(NULL);
+    pkt->dp_Port = &self->pr_MsgPort;
+    // Tag the reply so the receiving handler can distinguish "fresh
+    // packet" from "reply to one of mine". Matters specifically for
+    // the fire-and-forget ACTION_DIE we send to ourselves via
+    // rp_handler_die — without this the reply loops as a new DIE
+    // packet and the handler spins thousands of cycles, never
+    // processing the deferred ACTION_READ that bebbossh's password
+    // prompt is waiting on.
+    msg->mn_Node.ln_Type = NT_REPLYMSG;
+    PutMsg(reply_port, msg);
+}
+
+// Must be called with Forbid() held.
+static void rp_fulfil_deferred(rp_state * st) {
+    if (st->deferred_read_pkt == NULL) return;
+    if (st->in.count == 0 && !st->in.writer_closed && !st->shutdown_requested) return;
+    struct DosPacket * pkt = st->deferred_read_pkt;
+    UBYTE * dst = (UBYTE *) pkt->dp_Arg2;
+    LONG    n   = pkt->dp_Arg3;
+    LONG popped = (LONG) rp_pop(&st->in, dst, (ULONG) n);
+    st->deferred_read_pkt = NULL;
+    rp_pkt_reply(pkt, popped, 0);
+}
+
+static void rp_handler_entry(void) {
+    struct Process * self = (struct Process *) FindTask(NULL);
+    rp_state * st = (rp_state *) self->pr_ExitData;
+    if (st == NULL) return;
+    struct MsgPort * port = &self->pr_MsgPort;
+
+    // NO DOS CALLS FROM HERE (Write/Read/Open/Close/printf/etc).
+    // This is a custom DOS handler — its main loop reads packets
+    // from `port`. Any DOS function we call internally PutMsg's
+    // a request to a target FH's handler and then WaitPort's on
+    // OUR OWN port for the reply, which can consume DIE/other
+    // messages meant for us. The first such call (originally
+    // `rp_log_event("handler started", ...)` here) ate the
+    // first ACTION_DIE that close() sent right after, so the
+    // handler stayed in WaitPort forever and amStudio's
+    // seglist got UnLoadSeg'd while the handler was still
+    // alive — causing the #80000004 / #87000004 alerts. We
+    // log via the still-safe (main-task-only) callers in
+    // rp_handler_die / shutdownAllNative instead. Confirmed
+    // 2026-06-08 — also a "[rp] handler: shutdown observed"
+    // rp_stdout_line was enough to crash with #87000004.
+    // crash with #87000004 right after.
+
+    g_handler_entered_count++;
+
+    BOOL running = TRUE;
+    while (running) {
+        WaitPort(port);
+        struct Message * msg;
+        while ((msg = GetMsg(port)) != NULL) {
+            // Skip replies to our own messages. The fire-and-forget
+            // DIE we send via rp_handler_die has its reply port set
+            // to our own port; without this guard we'd treat the
+            // reply as a new packet and spin forever.
+            if (msg->mn_Node.ln_Type == NT_REPLYMSG) {
+                FreeMem(msg, msg->mn_Length);
+                continue;
+            }
+            struct DosPacket * pkt = (struct DosPacket *) msg->mn_Node.ln_Name;
+            if (pkt == NULL) continue;
+            LONG type = pkt->dp_Type;
+#if RP_VERBOSE_LOG
+            // ACTION_DIE deliberately not logged even in verbose
+            // mode — amStudio's main loop spins up tasks whose
+            // pr_ConsoleTask inherits from us, and each sends a DIE
+            // on exit (tens of thousands per session). Logging the
+            // other types is useful for diagnosing handler protocol
+            // issues; off by default because bebbossh's idle polling
+            // fires ACTION_EXAMINE_FH dozens of times per second.
+            if (type != ACTION_DIE) {
+                rp_log_event("hnd RX type=", type);
+            }
+#endif
+
+            Forbid();
+            if (st->shutdown_requested) {
+                g_handler_die_seen_count++;
+                // Reply to the packet that woke us into the
+                // shutdown branch.
+                switch (type) {
+                    case ACTION_READ:       rp_pkt_reply(pkt, 0, 0); break;
+                    case ACTION_WRITE:      rp_pkt_reply(pkt, pkt->dp_Arg3, 0); break;
+                    case ACTION_FINDINPUT:
+                    case ACTION_FINDOUTPUT: rp_pkt_reply(pkt, DOSFALSE, 0); break;
+                    default:                rp_pkt_reply(pkt, DOSTRUE, 0); break;
+                }
+                // Drain whatever is CURRENTLY in the queue with
+                // quick replies. Two things matter here:
+                //
+                // 1) The child's `ACTION_END` packets for its
+                //    pr_CIS/pr_COS/pr_CES often arrive shortly
+                //    before/after close()'s DIE. If we exit
+                //    without replying to them, the FakeFile-
+                //    Handles' Close() blocks (or worse, the OS
+                //    later does PutMsg to our pr_MsgPort after
+                //    the handler Process is gone — instant
+                //    #80000004).
+                //
+                // 2) A run-away flooder (~1.5M packets/sec; root
+                //    cause uncertain, possibly pr_ConsoleTask
+                //    inheritance) traps a naïve `continue` in
+                //    the inner GetMsg loop forever — confirmed
+                //    2026-06-08 via HeadlessLoad. So this drain
+                //    has a hard cap so we can never spin.
+                int drain_left = 64;
+                struct Message * drain_msg;
+                while (drain_left > 0 && (drain_msg = GetMsg(port)) != NULL) {
+                    drain_left--;
+                    if (drain_msg->mn_Node.ln_Type == NT_REPLYMSG) {
+                        FreeMem(drain_msg, drain_msg->mn_Length);
+                        continue;
+                    }
+                    struct DosPacket * dp = (struct DosPacket *) drain_msg->mn_Node.ln_Name;
+                    if (dp == NULL) continue;
+                    switch (dp->dp_Type) {
+                        case ACTION_READ:       rp_pkt_reply(dp, 0, 0); break;
+                        case ACTION_WRITE:      rp_pkt_reply(dp, dp->dp_Arg3, 0); break;
+                        case ACTION_FINDINPUT:
+                        case ACTION_FINDOUTPUT: rp_pkt_reply(dp, DOSFALSE, 0); break;
+                        default:                rp_pkt_reply(dp, DOSTRUE, 0); break;
+                    }
+                }
+                running = FALSE;
+                Permit();
+                break;
+            }
+
+            switch (type) {
+                case ACTION_FINDINPUT:
+                case ACTION_FINDOUTPUT: {
+                    struct FileHandle * fh = (struct FileHandle *) BADDR(pkt->dp_Arg1);
+                    fh->fh_Type = port;
+                    fh->fh_Arg1 = (SIPTR) st;   // AROS: SIPTR - (LONG) truncates on LP64
+                    st->open_count++;
+                    st->any_open = TRUE;
+                    rp_pkt_reply(pkt, DOSTRUE, 0);
+                    break;
+                }
+                case ACTION_END:
+                    // MorphOS-specific: NP_ExitCode isn't available
+                    // (m68k register convention only), so ACTION_END
+                    // is our child-exit signal. When all 3 inherited
+                    // FHs (stdin/stdout/stderr) have been closed,
+                    // the child has released everything and we flip
+                    // child_exited + wake any deferred Read.
+                    if (st->open_count > 0) st->open_count--;
+                    if (st->open_count == 0 && st->any_open) {
+                        st->child_exited = TRUE;
+                        st->in.writer_closed = TRUE;
+                        rp_fulfil_deferred(st);
+                    }
+                    rp_pkt_reply(pkt, DOSTRUE, 0);
+                    break;
+                case ACTION_DIE:
+                    // Advisory unless AmLang side has requested shutdown.
+                    rp_pkt_reply(pkt, DOSTRUE, 0);
+                    break;
+                case ACTION_WRITE: {
+                    UBYTE * src = (UBYTE *) pkt->dp_Arg2;
+                    LONG    n   = pkt->dp_Arg3;
+                    // Intercept the AmigaOS "what's your terminal
+                    // size?" query — bebbossh's getConsoleSize()
+                    // (and any other libnix program that wants to
+                    // know the console dimensions) sends 4 bytes:
+                    //   \x9b  '0'  ' '  'q'
+                    // (i.e. CSI 0 SP q, DECREQTPARM) via Write on
+                    // its stdin FH, then Reads back the response on
+                    // the same FH. A real CON: handler reflects the
+                    // answer; we have to do the same or the caller
+                    // times out and sends rows=cols=0 to the SSH
+                    // server, which then opens a 0x0 PTY and nano
+                    // / vim refuse to lay out.
+                    //
+                    // The answer format that bebbossh's parser
+                    // expects ([console.cpp:51] in the source tree):
+                    //   skip 5 bytes  -> tmp[5] is first rows digit
+                    //   read digits until ';'   -> numRows
+                    //   skip the ';'
+                    //   read digits until ' '   -> numCols
+                    // That maps to "CSI 1 ; <rows> ; <cols> SP q"
+                    // when CSI is the 2-byte form "ESC [".
+                    // Probe interception stays active even in binary mode —
+                    // bebbossh blocks on the size reply and the 4 probe
+                    // bytes would otherwise corrupt the out stream.
+                    if (n == 4 && src[0] == 0x9b && src[1] == 0x30
+                                 && src[2] == 0x20 && src[3] == 0x71) {
+                        UBYTE resp[40];
+                        int rp = 0;
+                        resp[rp++] = 0x1b; resp[rp++] = '[';
+                        resp[rp++] = '1';  resp[rp++] = ';';
+                        LONG rows = st->reported_rows;
+                        if (rows < 1) rows = 24;
+                        // itoa rows
+                        {
+                            char tmp[12]; int t = 0;
+                            if (rows == 0) tmp[t++] = '0';
+                            while (rows > 0) { tmp[t++] = (char)('0' + (rows % 10)); rows /= 10; }
+                            while (t > 0) resp[rp++] = (UBYTE) tmp[--t];
+                        }
+                        resp[rp++] = ';';
+                        LONG cols = st->reported_cols;
+                        if (cols < 1) cols = 80;
+                        {
+                            char tmp[12]; int t = 0;
+                            if (cols == 0) tmp[t++] = '0';
+                            while (cols > 0) { tmp[t++] = (char)('0' + (cols % 10)); cols /= 10; }
+                            while (t > 0) resp[rp++] = (UBYTE) tmp[--t];
+                        }
+                        resp[rp++] = ' ';
+                        resp[rp++] = 'q';
+                        rp_push(&st->in, resp, (ULONG) rp);
+                        rp_fulfil_deferred(st);
+                        rp_pkt_reply(pkt, n, 0);
+                        break;
+                    }
+                    rp_push(&st->out, src, (ULONG) n);
+                    rp_pkt_reply(pkt, n, 0);
+                    // Wake the main task AFTER the bytes are in the
+                    // ring and the packet is replied. Signal'ing
+                    // BEFORE the push lets drainProcess race in,
+                    // see an empty ring, reschedule, and miss the
+                    // data — the bytes only surface on the user's
+                    // next keystroke.
+                    rp_signal_main_wake();
+                    break;
+                }
+                case ACTION_READ: {
+                    if (st->in.count > 0) {
+                        UBYTE * dst = (UBYTE *) pkt->dp_Arg2;
+                        LONG    n   = pkt->dp_Arg3;
+                        LONG popped = (LONG) rp_pop(&st->in, dst, (ULONG) n);
+                        rp_pkt_reply(pkt, popped, 0);
+                    } else if (st->in.writer_closed) {
+                        rp_pkt_reply(pkt, 0, 0);
+                    } else if (st->raw_mode) {
+                        // Raw mode + empty ring -> reply 0 immediately
+                        // instead of deferring. bebbossh's interactive
+                        // event loop calls Read(stdin, p, 512) right
+                        // after SetMode(1) fires (the !stdoutBptr
+                        // fallback in handleKeyboard); if we deferred
+                        // here, the eventLoop would wedge in that Read
+                        // until the user typed a key, and the SSH
+                        // socket would never get pumped. Returning 0
+                        // makes bebbossh's `if (n <= 0) return;` fire,
+                        // handleKeyboard returns, eventLoop runs
+                        // WaitSelect, and the banner / shell prompt
+                        // streams correctly.
+                        //
+                        // We still block (defer) when raw_mode is
+                        // FALSE — that's how the password fgets in
+                        // loginPass() waits for the user to finish
+                        // typing.
+                        rp_pkt_reply(pkt, 0, 0);
+                    } else {
+                        if (st->deferred_read_pkt != NULL) {
+                            rp_pkt_reply(st->deferred_read_pkt, 0, 0);
+                        }
+                        st->deferred_read_pkt = pkt;
+                    }
+                    break;
+                }
+                case ACTION_WAIT_CHAR:
+                    // Honest "is data ready right now?" reply.
+                    // Returning DOSTRUE unconditionally (the prior
+                    // behaviour) wedges bebbossh's post-login
+                    // interactive loop: handleKeyboard polls with
+                    // WaitForChar(stdinBptr, 1us) every event-loop
+                    // tick — we'd say TRUE, it'd call Read(1) which
+                    // we then DEFER on the empty ring, and the
+                    // outer WaitSelect on the SSH socket never ran.
+                    // Result: each user Enter pumped exactly one
+                    // SSH packet, banner / shell output stalled.
+                    //
+                    // The earlier worry (fgets bails with EOF when
+                    // WAIT_CHAR is FALSE) doesn't actually fire in
+                    // our setup — libnix fgets in our HandlerTest
+                    // reproducer never sends a WAIT_CHAR packet at
+                    // all; it goes straight to ACTION_READ which we
+                    // still defer correctly until writeInput pushes
+                    // bytes. If a future code path does drive fgets
+                    // through WAIT_CHAR we'll need to defer the
+                    // packet with a timer fulfilment, but for the
+                    // bebbossh shell loop the immediate honest
+                    // answer is exactly what dos.library expects.
+                    if (st->in.count > 0 || st->in.writer_closed) {
+                        rp_pkt_reply(pkt, DOSTRUE, 0);
+                    } else {
+                        rp_pkt_reply(pkt, DOSFALSE, 0);
+                    }
+                    break;
+                case ACTION_SCREEN_MODE:
+                    // dp_Arg1 = TRUE (1) → raw mode; FALSE (0) → cooked.
+                    // bebbossh sends SetMode(stdin, 1) at grabConsole;
+                    // restoreConsole sends SetMode(stdin, 0) on exit.
+                    // The AmLang side polls isRawMode() to switch CliView
+                    // into char-at-a-time passthrough + terminal-emulator
+                    // rendering vs the default line-buffered scrollback.
+                    //
+                    // ALWAYS logged (cheap — fires <= a few times per
+                    // session, not in the hot path): without this we
+                    // can't tell from a tty.log whether a missing
+                    // raw-mode transition is because bebbossh skipped
+                    // SetMode or because we mishandled the packet.
+                    rp_log_event("[rp] SCREEN_MODE arg=", pkt->dp_Arg1);
+                    st->raw_mode = (pkt->dp_Arg1 != 0) ? TRUE : FALSE;
+                    rp_pkt_reply(pkt, DOSTRUE, 0);
+                    break;
+                case ACTION_CHANGE_SIGNAL:
+                    rp_pkt_reply(pkt, DOSTRUE, 0);
+                    break;
+                case ACTION_DISK_INFO: {
+                    // IsInteractive() in dos.library V36+ asks the
+                    // handler "what disk type are you?" via this
+                    // packet, then returns DOSTRUE iff id_DiskType
+                    // equals the historical 'CON\0' sentinel
+                    // (0x434F4E00). bebbossh's grabConsole() bails
+                    // when IsInteractive returns FALSE, so without
+                    // this our FHs look like a regular file and
+                    // grabConsole never calls SetMode(stdin, 1),
+                    // raw_mode never flips, the CLI panel never
+                    // switches to passthrough.
+                    //
+                    // We populate the bare minimum — the disk-state
+                    // field gets ID_VALIDATED so any caller that
+                    // checks it sees a "healthy" volume rather than
+                    // an unmounted error. Block counts stay zero;
+                    // they're meaningless for a console stream and
+                    // no AmigaOS code we care about reads them.
+                    struct InfoData * id = (struct InfoData *) BADDR(pkt->dp_Arg2);
+                    if (id != NULL) {
+                        UBYTE * z = (UBYTE *) id;
+                        ULONG i;
+                        for (i = 0; i < sizeof(struct InfoData); i++) {
+                            z[i] = 0;
+                        }
+                        // 'CON\0' makes IsInteractive() TRUE; in binary
+                        // mode report a plain type so it stays FALSE and the
+                        // child treats us as a pipe (no terminal escapes that
+                        // would corrupt a binary git stream).
+                        id->id_DiskType = st->binary ? ID_DOS_DISK : 0x434F4E00L;
+                        id->id_DiskState = ID_VALIDATED;
+                    }
+                    rp_pkt_reply(pkt, DOSTRUE, 0);
+                    break;
+                }
+                case ACTION_SAME_LOCK:
+                case ACTION_FH_FROM_LOCK:
+                case ACTION_SEEK:           /* 1008 — stream is not seekable */
+                    rp_pkt_reply(pkt, -1, ERROR_ACTION_NOT_KNOWN);
+                    break;
+                case ACTION_EXAMINE_FH: {   /* 1034 */
+                    // Two-mode behaviour, gated on raw_mode:
+                    //
+                    // raw_mode == FALSE (initial state, before
+                    // bebbossh's eventLoop has triggered SetMode):
+                    //   reply DOSFALSE. This makes bebbossh's
+                    //   handleKeyboard take its `else SetMode(stdin,
+                    //   1);` branch, which sends ACTION_SCREEN_MODE
+                    //   with arg=1, which flips raw_mode to TRUE.
+                    //   That's how raw mode actually engages — V40
+                    //   IsInteractive does NOT return TRUE for our
+                    //   AllocDosObject'd FHs (it uses some private
+                    //   check, not ACTION_DISK_INFO as we'd hoped),
+                    //   so grabConsole always bails, so the SetMode
+                    //   in grabConsole never runs. The handleKeyboard
+                    //   fallback is the only entry point left.
+                    //
+                    // raw_mode == TRUE:
+                    //   reply DOSTRUE with fib_Size = current input
+                    //   ring depth. This is the libnix non-blocking
+                    //   polling idiom — caller does
+                    //     ExamineFH; sz = fib_Size;
+                    //     if (!sz) return;
+                    //     n = Read(fh, p, sz);
+                    //   so when the ring is empty (sz=0) the caller
+                    //   bails out of handleKeyboard immediately and
+                    //   eventLoop's WaitSelect runs on the SSH
+                    //   socket, pumping output.
+                    //
+                    // The IMMEDIATE Read(stdin, p, 512) that follows
+                    // SetMode in the !stdoutBptr branch is handled in
+                    // ACTION_READ — when raw_mode is TRUE, an empty
+                    // ring returns 0 instead of deferring, so the
+                    // event loop doesn't wedge on that one Read.
+                    if (!st->raw_mode) {
+                        rp_pkt_reply(pkt, DOSFALSE, 0);
+                        break;
+                    }
+                    struct FileInfoBlock * fib =
+                        (struct FileInfoBlock *) BADDR(pkt->dp_Arg2);
+                    if (fib != NULL) {
+                        UBYTE * z = (UBYTE *) fib;
+                        for (ULONG i = 0; i < sizeof(struct FileInfoBlock); i++) {
+                            z[i] = 0;
+                        }
+                        fib->fib_Size = (LONG) st->in.count;
+                    }
+                    rp_pkt_reply(pkt, DOSTRUE, 0);
+                    break;
+                }
+                default:
+                    // No rp_log_event here — DOS-in-handler rule
+                    // (see banner at function entry).
+                    rp_pkt_reply(pkt, DOSTRUE, 0);
+                    break;
+            }
+            Permit();
+        }
+    }
+
+    Forbid();
+    if (st->deferred_read_pkt != NULL) {
+        rp_pkt_reply(st->deferred_read_pkt, 0, 0);
+        st->deferred_read_pkt = NULL;
+    }
+    // Null handler_port so any subsequent rp_handler_die call
+    // (e.g. when the AmLang side gets ARC-released during
+    // teardown) sees NULL and skips the PutMsg. Otherwise the
+    // pr_MsgPort backing it is freed when this Process exits
+    // and the PutMsg goes into freed memory.
+    st->handler_port = NULL;
+    // Drop the live counter so shutdownAllNative's poll can
+    // unblock. We do this BEFORE rp_state_release because
+    // release may free `st`.
+    g_live_handler_count--;
+    g_handler_exited_count++;
+    Permit();
+
+    // No rp_log_event here — DOS-in-handler rule (see banner
+    // at rp_handler_entry top). rp_state_release also avoids
+    // its log line for the same reason.
+    rp_state_release(st);
+}
+
+// =================================================================
+// Child-exit detection
+// =================================================================
+//
+// AmigaOS uses NP_ExitCode (with m68k D0/D1 register binding) to
+// observe child exit synchronously. PowerPC MorphOS doesn't support
+// that m68k calling convention, and CreateNewProc's NP_ExitCode path
+// has historically been fragile across emulator versions. We use the
+// portable signal instead: when the child closes its 3 inherited
+// stdio FileHandles, dos.library sends ACTION_END for each. Once
+// open_count drops to 0 we know the child has released all ends,
+// which is exactly the "process exited" moment we care about.
+//
+// This is handled inline in the ACTION_END branch of rp_handler_entry
+// (further down). Nothing to declare here.
+
+// =================================================================
+// AmLang-facing
+// =================================================================
+
+// AROS: NP_ExitCode callback. dos.library calls pr_ExitCode as
+//     void (*)(IPTR result, IPTR exitData)
+// on every non-m68k architecture (rom/dos/createnewproc.c: only the m68k path
+// uses the inline-asm D0/D1 convention that made this unusable on MorphOS).
+// We pass the rp_state as NP_ExitData, so no globals are involved.
+//
+// This runs on the CHILD's context as it exits, so it does the minimum: record
+// the code, flip child_exited, and wake anything blocked. ACTION_END remains
+// the primary exit signal - this is the belt to its braces, and additionally
+// covers a child that exits without its file handles being closed.
+// No __saveds: it is an m68k small-data (a4) concern and AROS defines it empty
+// on every other architecture, in libcore/compiler.h - a header this file has
+// no other reason to pull in.
+static void rp_child_exit(IPTR result, IPTR exit_data)
+{
+    rp_state * st = (rp_state *) exit_data;
+    if (st == NULL) return;
+
+    st->child_exit_code = (LONG) result;
+    st->exit_code_valid = TRUE;
+    st->child_exited    = TRUE;
+
+    // Writer side is gone: unblock a tryReadOutput that would otherwise wait
+    // for more bytes, and let the handler retire any deferred ACTION_READ.
+    st->out.writer_closed = TRUE;
+    rp_signal_main_wake();
+}
+
+static running_process_data * rp_data(aobject * const this) {
+    if (this == NULL) return NULL;
+    return (running_process_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
+}
+
+function_result Am_Lang_RunningProcess__native_init_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    running_process_data * d = calloc(1, sizeof(running_process_data));
+    if (d != NULL) {
+        this->object_properties.class_object_properties.object_data.value.custom_value = d;
+    }
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess__native_mark_children_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    (void) this;
+    return __result;
+}
+
+// Signal the handler to shut down. We DO NOT wait for the ack —
+// blocking on WaitPort here would freeze the UI thread when this is
+// called from _native_release_0 during GC, and was the source of
+// the amStudio freeze observed after `!bebbossh`. Handler picks up
+// shutdown_requested on its next packet (often ACTION_END from
+// child exit). If it never sees another packet it'll stay alive as
+// an orphan — costs one Process slot until amStudio exits, but
+// doesn't deadlock anything.
+//
+// We do send an ACTION_DIE packet to wake the handler out of
+// WaitPort, but as a fire-and-forget. Reply port is the handler's
+// own pr_MsgPort so the ack just round-trips back to it and gets
+// consumed by the next GetMsg / falls on the floor when the handler
+// exits.
+static void rp_handler_die(rp_state * st) {
+    if (st == NULL) {
+        rp_stdout_line("[rp] handler_die: st=NULL, skipping");
+        return;
+    }
+    if (st->handler_port == NULL) {
+        rp_stdout_line("[rp] handler_die: handler_port=NULL, skipping");
+        return;
+    }
+    rp_stdout_line("[rp] handler_die: sending ACTION_DIE");
+    Forbid(); st->shutdown_requested = TRUE; Permit();
+
+    struct StandardPacket * sp = (struct StandardPacket *)
+        AllocMem(sizeof(*sp), MEMF_PUBLIC | MEMF_CLEAR);
+    if (sp == NULL) return;
+    sp->sp_Msg.mn_Node.ln_Type = NT_MESSAGE;
+    sp->sp_Msg.mn_Node.ln_Name = (char *) &sp->sp_Pkt;
+    sp->sp_Msg.mn_ReplyPort    = st->handler_port; /* self-reply, no waiter */
+    sp->sp_Msg.mn_Length       = sizeof(*sp);
+    sp->sp_Pkt.dp_Link         = &sp->sp_Msg;
+    sp->sp_Pkt.dp_Port         = st->handler_port;
+    sp->sp_Pkt.dp_Type         = ACTION_DIE;
+    PutMsg(st->handler_port, &sp->sp_Msg);
+    /* sp leaks; handler exits before it could free its own. Bounded
+     * by handler count = number of CLI commands run in this amStudio
+     * session — small. */
+}
+
+function_result Am_Lang_RunningProcess__native_release_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    running_process_data * d = rp_data(this);
+    if (d != NULL) {
+        if (d->state != NULL) {
+            rp_handler_die(d->state);
+            rp_state_release(d->state);
+            d->state = NULL;
+        }
+        // DON'T FreeDosObject the FakeFileHandles — V40 dos.library
+        // (or libnix's exit cleanup, or both) appears to release the
+        // FH memory when the child Closes its inherited stdin/stdout/
+        // stderr. Calling FreeDosObject again here is a double-free
+        // and bus-errors the main task right after the child exits.
+        // Confirmed against the [HandlerTest/parent.c] reference: it
+        // skips FreeDosObject, runs the same bebbossh child, and
+        // exits cleanly. We follow the same convention.
+        //
+        // The leaked allocation is bounded: one set of 3 FHs per
+        // spawn-and-close cycle, ~80 bytes apiece. For an interactive
+        // CLI panel that's negligible across an amStudio session.
+        // The bptrs are still zeroed so any code inspecting them
+        // post-release sees them as "not present".
+        d->fh_in_bptr  = 0;
+        d->fh_out_bptr = 0;
+        d->fh_err_bptr = 0;
+        // If the spawn failed before NP_FreeSeglist took ownership,
+        // we still hold the seg; unload it.
+        if (d->child_seg != 0 && !d->child_owns_seg) {
+            UnLoadSeg(d->child_seg);
+            d->child_seg = 0;
+        }
+        free(d);
+        this->object_properties.class_object_properties.object_data.value.custom_value = NULL;
+    }
+    return __result;
+}
+
+// Split "cmd args..." into the binary path and the argument tail
+// (used as NP_Arguments). The arg tail is NEWLINE-terminated as
+// libnix expects — without the trailing \n libnix's ReadArgs-style
+// parser sometimes spins.
+static void rp_split_cmd(const char * src, char * cmd_out, int cmd_max,
+                                          char * args_out, int args_max) {
+    int p = 0;
+    while (src[p] != 0 && src[p] != ' ' && src[p] != '\t' && p < cmd_max - 1) {
+        cmd_out[p] = src[p]; p++;
+    }
+    cmd_out[p] = 0;
+    while (src[p] == ' ' || src[p] == '\t') p++;
+    int a = 0;
+    while (src[p] != 0 && a < args_max - 2) {
+        args_out[a++] = src[p++];
+    }
+    args_out[a++] = '\n';
+    args_out[a]   = 0;
+}
+
+// True iff `name` already contains a path separator — either '/' for
+// a subdir or ':' for a volume / assign reference. Such names are
+// taken verbatim and we don't do any PATH walking on them.
+static BOOL rp_name_has_path(const char * name) {
+    for (int i = 0; name[i] != 0; i++) {
+        if (name[i] == '/' || name[i] == ':') return TRUE;
+    }
+    return FALSE;
+}
+
+// PathNode in AmigaOS dos.library is two BPTRs back-to-back:
+//   offset 0: BPTR path_Next   (BPTR to next PathNode, 0 = end)
+//   offset 4: BPTR path_Lock   (BPTR lock to the directory)
+// The struct isn't in the public NDK headers but the layout is
+// documented and stable across V36+. We model it locally.
+struct rp_path_node {
+    BPTR path_Next;
+    BPTR path_Lock;
+};
+
+// Locate `name` along the AmigaShell PATH (pr_CLI->cli_CommandDir) +
+// the C: assign, then LoadSeg() it. Returns the loaded segment BPTR
+// or 0 if no candidate succeeded.
+//
+// Why we do this ourselves instead of relying on LoadSeg's own
+// resolution: V40 dos.library's LoadSeg() honours only the current
+// directory; it does NOT walk the Shell's PATH (cli_CommandDir
+// chain) the way the Shell itself does when you type a bare
+// command name. So a binary that lives in
+// `amStudio:extensions/bebbossh/C/bebbosshkeygen`, added to PATH at
+// install time via `Path amStudio:extensions/bebbossh/C ADD`, would
+// be unspawnable from our handler even though the same bare command
+// runs fine from a Shell window.
+//
+// We try in this order:
+//   1. The name verbatim — handles absolute paths, volume-prefixed
+//      names, and binaries that happen to be in the current dir.
+//   2. Each entry in cli_CommandDir, prepended via NameFromLock so
+//      we don't need to flip CurrentDir() per attempt.
+//   3. "C:" prefix — every Workbench install has C: assigned and
+//      most standard commands live there.
+//
+// Returns 0 if all attempts failed; the caller logs IoErr() of the
+// LAST attempt for diagnostics.
+static BPTR rp_loadseg_with_path(const char * name) {
+    if (name == NULL || name[0] == 0) return 0;
+
+    // 1. Verbatim. Also catches the case where the caller already
+    //    passed a fully-qualified name.
+    BPTR seg = LoadSeg((CONST_STRPTR) name);
+    if (seg != 0) return seg;
+
+    // If there's already a path separator, don't walk PATH — the
+    // caller meant exactly that path; failing was the answer.
+    if (rp_name_has_path(name)) return 0;
+
+    // 2. Walk pr_CLI->cli_CommandDir.
+    struct Process * self = (struct Process *) FindTask(NULL);
+    struct CommandLineInterface * cli = (struct CommandLineInterface *) BADDR(self->pr_CLI);
+    if (cli != NULL) {
+        struct rp_path_node * node = (struct rp_path_node *) BADDR(cli->cli_CommandDir);
+        char buf[260];
+        while (node != NULL) {
+            BPTR lock = node->path_Lock;
+            if (lock != 0) {
+                if (NameFromLock(lock, (STRPTR) buf, (LONG) sizeof(buf) - 1) != DOSFALSE) {
+                    // Append the command name, inserting a '/' only
+                    // when the dir name doesn't already end on a
+                    // path separator (volume root "DH1:" ends in
+                    // ':' and needs no slash).
+                    int len = 0;
+                    while (buf[len] != 0 && len < (int) sizeof(buf) - 2) len++;
+                    if (len > 0 && buf[len - 1] != '/' && buf[len - 1] != ':'
+                            && len < (int) sizeof(buf) - 2) {
+                        buf[len++] = '/';
+                        buf[len] = 0;
+                    }
+                    int n = 0;
+                    while (name[n] != 0 && len + n < (int) sizeof(buf) - 1) {
+                        buf[len + n] = name[n];
+                        n++;
+                    }
+                    buf[len + n] = 0;
+                    seg = LoadSeg((CONST_STRPTR) buf);
+                    if (seg != 0) return seg;
+                }
+            }
+            node = (struct rp_path_node *) BADDR(node->path_Next);
+        }
+    }
+
+    // 3. C: fallback. Every standard Workbench install has C:
+    //    assigned to wherever the shell commands live.
+    char buf[260];
+    buf[0] = 'C'; buf[1] = ':';
+    int n = 0;
+    while (name[n] != 0 && n < (int) sizeof(buf) - 3) {
+        buf[2 + n] = name[n];
+        n++;
+    }
+    buf[2 + n] = 0;
+    seg = LoadSeg((CONST_STRPTR) buf);
+    return seg;  // 0 on failure
+}
+
+function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobject * command, aobject * workingDir) {
+    function_result __result = { .has_return_value = false };
+
+    rp_log_open();
+    rp_log_event("startNative", 0);
+
+    running_process_data * d = rp_data(this);
+    if (d == NULL) {
+        __throw_simple_exception("RunningProcess: object_data missing", "in startNative", &__result);
+        goto __exit;
+    }
+
+    rp_state * st = (rp_state *) AllocMem(sizeof(*st), MEMF_PUBLIC | MEMF_CLEAR);
+    if (st == NULL) {
+        __throw_simple_exception("RunningProcess: AllocMem(state) failed", "in startNative", &__result);
+        goto __exit;
+    }
+    st->refcount = 1;
+    st->reported_rows = 24;
+    st->reported_cols = 80;
+    st->in.data  = (UBYTE *) AllocMem(RP_RING_SIZE, MEMF_PUBLIC);
+    st->out.data = (UBYTE *) AllocMem(RP_RING_SIZE, MEMF_PUBLIC);
+    if (st->in.data == NULL || st->out.data == NULL) {
+        if (st->in.data  != NULL) FreeMem(st->in.data,  RP_RING_SIZE);
+        if (st->out.data != NULL) FreeMem(st->out.data, RP_RING_SIZE);
+        FreeMem(st, sizeof(*st));
+        __throw_simple_exception("RunningProcess: AllocMem(ring) failed", "in startNative", &__result);
+        goto __exit;
+    }
+    d->state = st;
+    st->binary = (d->binary != 0) ? TRUE : FALSE;
+
+    // Capture the parent task's Output() FH so handler tasks
+    // (which inherit NIL: as their stdout) have a real FH to
+    // log to. Idempotent — first call wins, subsequent calls
+    // are no-ops.
+    if (g_parent_stdout == 0) {
+        g_parent_stdout = Output();
+    }
+
+    // Spawn handler Process.
+    //
+    // AROS: no NP_CodeType here. That tag is MorphOS-specific - it exists
+    // because MorphOS's dos.library is 68k and CreateNewProc would otherwise
+    // treat NP_Entry as a 68k entry point, leaving a PPC rp_handler_entry
+    // created but never executed. AROS has one native code type per build, so
+    // NP_Entry is called directly and the tag has no AROS equivalent.
+    Forbid();
+    st->handler_proc = CreateNewProcTags(
+        NP_Entry,     (IPTR) rp_handler_entry,
+        NP_Name,      (IPTR) RP_TTY_TASK_NAME,
+        NP_StackSize, 8192,
+        TAG_DONE);
+    if (st->handler_proc != NULL) {
+        st->handler_proc->pr_ExitData = (IPTR) st;   // AROS: IPTR - (LONG) truncates on LP64
+        st->handler_port = &st->handler_proc->pr_MsgPort;
+        st->refcount++;
+        // Register on the global list NOW (still inside Forbid)
+        // so shutdownAllNative can find us if the AmLang program
+        // exits before this RunningProcess is otherwise released.
+        rp_list_add(st);
+        // Independent counter shutdownAllNative polls. The list
+        // alone isn't enough because rp_state_release only frees
+        // (and thus unlinks) when refcount hits 0 — which means
+        // the AmLang object also has to be released. At runOnExit
+        // the AmLang object may still be live in a static field.
+        g_live_handler_count++;
+    }
+    Permit();
+    if (st->handler_proc == NULL) {
+        __throw_simple_exception("RunningProcess: CreateNewProc(handler) failed", "in startNative", &__result);
+        goto __exit;
+    }
+    rp_log_event("[rp] handler_port=", (IPTR) st->handler_port);
+
+    // Allocate FakeFileHandles via AllocDosObject(DOS_FILEHANDLE).
+    // Plain AllocMem(sizeof(struct FileHandle)) gives only the public
+    // 44-byte struct, but V40 dos.library has PRIVATE fields beyond
+    // that which FPuts (LVO -342) requires. Without those, FPuts
+    // silently drops writes — which is why bebbossh's amiprintf
+    // (which routes through FPuts via amistdio.h) was invisible
+    // to our handler. Confirmed via child5 in HandlerTest harness.
+    struct FileHandle * fh_in  = (struct FileHandle *) AllocDosObject(DOS_FILEHANDLE, NULL);
+    struct FileHandle * fh_out = (struct FileHandle *) AllocDosObject(DOS_FILEHANDLE, NULL);
+    struct FileHandle * fh_err = (struct FileHandle *) AllocDosObject(DOS_FILEHANDLE, NULL);
+    if (fh_in == NULL || fh_out == NULL || fh_err == NULL) {
+        if (fh_in  != NULL) FreeDosObject(DOS_FILEHANDLE, fh_in);
+        if (fh_out != NULL) FreeDosObject(DOS_FILEHANDLE, fh_out);
+        if (fh_err != NULL) FreeDosObject(DOS_FILEHANDLE, fh_err);
+        __throw_simple_exception("RunningProcess: AllocDosObject(fh) failed", "in startNative", &__result);
+        goto __exit;
+    }
+    // AROS: fh_Port is NOT a port. dosextens.h aliases it onto
+    // fh_Interactive, a LONG, and rom/dos/isinteractive.c returns that field
+    // verbatim - `return (LONG)fh->fh_Interactive;`, with no normalisation.
+    // So it must be exactly DOSTRUE (-1), which is what callers test for
+    // (`IsInteractive(fh) != DOSTRUE`). The MorphOS original stores the
+    // handler port here and relies on "non-NULL is truthy"; that returns a
+    // positive address, fails the == DOSTRUE test, and sends programs down
+    // their not-a-tty branch. It is also a 64-bit pointer being squeezed into
+    // a 32-bit field on this target. This follows the AmigaOS version, which
+    // already carries the fix.
+    //
+    // Binary mode deliberately reports DOSFALSE: a child that believes it has
+    // a terminal runs console setup and prefixes its stdout with escape
+    // sequences, which corrupts a raw binary stream.
+    LONG fh_interactive = (st->binary != FALSE) ? DOSFALSE : DOSTRUE;
+    fh_in->fh_Type  = st->handler_port;
+    fh_in->fh_Port  = fh_interactive;
+    fh_in->fh_Arg1  = (SIPTR) st;
+    fh_out->fh_Type = st->handler_port;
+    fh_out->fh_Port = fh_interactive;
+    fh_out->fh_Arg1 = (SIPTR) st;
+    fh_err->fh_Type = st->handler_port;
+    fh_err->fh_Port = fh_interactive;
+    fh_err->fh_Arg1 = (SIPTR) st;
+    d->fh_in_bptr  = MKBADDR(fh_in);
+    d->fh_out_bptr = MKBADDR(fh_out);
+    d->fh_err_bptr = MKBADDR(fh_err);
+    st->open_count = 3;
+    st->any_open   = TRUE;
+
+    // Banner — lands in the panel as the first thing the user sees.
+    {
+        char banner[160]; int p = 0;
+        const char * pre = "[amStudio] tty ready, log=";
+        while (*pre) banner[p++] = *pre++;
+        if (g_log_path[0] != 0) {
+            for (int i = 0; g_log_path[i] != 0; i++) banner[p++] = g_log_path[i];
+        } else {
+            const char * np = "(none)"; while (*np) banner[p++] = *np++;
+        }
+        banner[p++] = '\n';
+        Forbid();
+        rp_push(&st->out, (const UBYTE *) banner, (ULONG) p);
+        Permit();
+    }
+
+    // CWD swap (LoadSeg honours current dir).
+    if (workingDir != NULL) {
+        string_holder * wd_holder = (string_holder *) (workingDir + 1);
+        const char * wd_str = wd_holder->string_value;
+        if (wd_str != NULL && wd_str[0] != 0) {
+            BPTR new_lock = Lock((CONST_STRPTR) wd_str, ACCESS_READ);
+            if (new_lock != 0) {
+                d->old_cwd_lock = CurrentDir(new_lock);
+                d->has_old_cwd = TRUE;
+            }
+        }
+    }
+
+    // Parse "binary args..." and LoadSeg.
+    string_holder * cmd_holder = (string_holder *) (command + 1);
+    const char * cmd_str = (cmd_holder != NULL) ? cmd_holder->string_value : NULL;
+    if (cmd_str == NULL || cmd_str[0] == 0) {
+        if (d->has_old_cwd) {
+            BPTR nl = CurrentDir(d->old_cwd_lock);
+            if (nl != 0) UnLock(nl);
+            d->has_old_cwd = FALSE;
+        }
+        __throw_simple_exception("RunningProcess: empty command", "in startNative", &__result);
+        goto __exit;
+    }
+    static char g_cmd_buf[256];
+    static char g_arg_buf[512];
+    rp_split_cmd(cmd_str, g_cmd_buf, sizeof(g_cmd_buf), g_arg_buf, sizeof(g_arg_buf));
+    rp_log_str("[rp] LoadSeg "); rp_log_str(g_cmd_buf); rp_log_str("\n");
+    rp_log_str("[rp] args=");    rp_log_str(g_arg_buf);
+
+    BPTR seg = rp_loadseg_with_path(g_cmd_buf);
+    if (seg == 0) {
+        rp_log_event("[rp] LoadSeg failed, IoErr=", IoErr());
+        if (d->has_old_cwd) {
+            BPTR nl = CurrentDir(d->old_cwd_lock);
+            if (nl != 0) UnLock(nl);
+            d->has_old_cwd = FALSE;
+        }
+        __throw_simple_exception("RunningProcess: LoadSeg failed (binary not found)", "in startNative", &__result);
+        goto __exit;
+    }
+    d->child_seg = seg;
+
+    // Spawn the child. NP_FreeSeglist=TRUE so the child unloads its
+    // own seg on exit.
+    Forbid();
+    struct Process * child = CreateNewProcTags(
+        NP_Seglist,     (IPTR) seg,
+        NP_FreeSeglist, TRUE,
+        NP_Cli,         TRUE,
+        NP_Input,       (IPTR) d->fh_in_bptr,
+        NP_Output,      (IPTR) d->fh_out_bptr,
+        NP_Error,       (IPTR) d->fh_err_bptr,    /* ignored on V40, see below */
+        NP_ConsoleTask, (IPTR) st->handler_port,
+        NP_Arguments,   (IPTR) g_arg_buf,
+        NP_Name,        (IPTR) "amStudioChild",
+        NP_StackSize,   32768,
+        // AROS: unlike MorphOS, NP_ExitCode is usable and gives us the real
+        // return code. ACTION_END still flips child_exited first in the
+        // normal case; see rp_child_exit.
+        NP_ExitCode,    (IPTR) rp_child_exit,
+        NP_ExitData,    (IPTR) st,
+        TAG_DONE);
+    // NDK note in dostags.h: "V40 DID NOT, unlike claimed, support
+    // NP_Error and NP_CloseError." On Kickstart 3.1 (V40) NP_Error
+    // is silently dropped — pr_CES stays 0, and libnix's stdio
+    // init then opens CONSOLE: (a fresh visible window) as stderr.
+    // bebbossh writes its cert / password prompt to that stderr,
+    // so we never see it in the panel and the user gets a popup
+    // CON: window instead. Manually set pr_CES while Forbid is
+    // held so the child hasn't run yet.
+    if (child != NULL) {
+        // V40 fix: NP_Error silently dropped, set pr_CES manually.
+        child->pr_CES = d->fh_err_bptr;
+
+        // V40 fix: CLI struct's standard I/O fields aren't fully
+        // populated from NP_Input/NP_Output either — some programs
+        // (incl. stock C:Version) write via cli_CurrentOutput rather
+        // than pr_COS, and that field's left as whatever dos.library
+        // happened to inherit. Set them all explicitly so the child
+        // has no ambiguity.
+        struct CommandLineInterface * cli =
+            (struct CommandLineInterface *) BADDR(child->pr_CLI);
+        if (cli != NULL) {
+            cli->cli_StandardInput  = d->fh_in_bptr;
+            cli->cli_CurrentInput   = d->fh_in_bptr;
+            cli->cli_StandardOutput = d->fh_out_bptr;
+            cli->cli_CurrentOutput  = d->fh_out_bptr;
+            rp_log_event("[rp] CLI patched, cli=", (IPTR) cli);
+        } else {
+            rp_log_event("[rp] no CLI on child (pr_CLI=", (IPTR) child->pr_CLI);
+        }
+    }
+    Permit();
+
+    // Restore CWD regardless of spawn outcome.
+    if (d->has_old_cwd) {
+        BPTR nl = CurrentDir(d->old_cwd_lock);
+        if (nl != 0) UnLock(nl);
+        d->has_old_cwd = FALSE;
+        d->old_cwd_lock = 0;
+    }
+
+    if (child == NULL) {
+        rp_log_event("[rp] CreateNewProc(child) failed", 0);
+        UnLoadSeg(seg);
+        d->child_seg = 0;
+        __throw_simple_exception("RunningProcess: CreateNewProc(child) failed", "in startNative", &__result);
+        goto __exit;
+    }
+    d->child_owns_seg = TRUE;
+    // Confirm the new process actually got our FH wiring + handler
+    // port. If any of these don't match what we passed in NP_*, the
+    // tag wasn't honoured for some reason and we'll see writes go
+    // elsewhere.
+    rp_log_event("[rp] child pr_CIS=",         (IPTR) child->pr_CIS);
+    rp_log_event("[rp] child pr_COS=",         (IPTR) child->pr_COS);
+    rp_log_event("[rp] child pr_CES=",         (IPTR) child->pr_CES);
+    rp_log_event("[rp] child pr_ConsoleTask=", (IPTR) child->pr_ConsoleTask);
+    rp_log_event("[rp] expected fh_out_bptr=", (IPTR) d->fh_out_bptr);
+    rp_log_event("[rp] expected handler_port=",(IPTR) st->handler_port);
+
+__exit: ;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_tryReadOutput_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    __result.return_value.value.object_value = __create_string("", &Am_Lang_String);
+
+#if RP_VERBOSE_LOG
+    // Periodic Signal-counter dump for verifying the wake mechanism
+    // (Forbid-block logging from the handler hot path crashed
+    // earlier; doing it here on the main thread is safe). Off by
+    // default — fires on every drainProcess tick, which is N times
+    // per second of an active session.
+    static ULONG s_last_sig = 0;
+    static ULONG s_last_skip = 0;
+    if (g_wake_signal_count != s_last_sig || g_wake_skipped_count != s_last_skip) {
+        char lbuf[80]; int lp = 0;
+        const char * lbl = "[wake-stats] sig="; while (*lbl) lbuf[lp++] = *lbl++;
+        ULONG v = g_wake_signal_count;
+        char tmp[12]; int t = 0;
+        if (v == 0) tmp[t++] = '0';
+        while (v > 0) { tmp[t++] = (char)('0' + (v % 10)); v /= 10; }
+        while (t > 0) lbuf[lp++] = tmp[--t];
+        const char * lbl2 = " skipped="; while (*lbl2) lbuf[lp++] = *lbl2++;
+        v = g_wake_skipped_count; t = 0;
+        if (v == 0) tmp[t++] = '0';
+        while (v > 0) { tmp[t++] = (char)('0' + (v % 10)); v /= 10; }
+        while (t > 0) lbuf[lp++] = tmp[--t];
+        lbuf[lp++] = '\n';
+        if (g_log_fh != 0) { Write(g_log_fh, lbuf, lp); Flush(g_log_fh); }
+        s_last_sig = g_wake_signal_count;
+        s_last_skip = g_wake_skipped_count;
+    }
+#endif
+
+    running_process_data * d = rp_data(this);
+    if (d == NULL || d->state == NULL) goto __exit;
+
+    UBYTE buf[2048];
+    Forbid();
+    ULONG n = rp_pop(&d->state->out, buf, sizeof(buf) - 1);
+    Permit();
+    if (n > 0) {
+        buf[n] = 0;
+        __result.return_value.value.object_value = __create_string((char const *) buf, &Am_Lang_String);
+    }
+
+__exit: ;
+    return __result;
+}
+
+// Binary read: pop raw bytes from the out ring into a fresh UByte[]
+// (no NUL-terminate / strlen), so a binary packfile survives intact.
+function_result Am_Lang_RunningProcess_tryReadOutputBytes_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    running_process_data * d = rp_data(this);
+    UBYTE buf[2048];
+    ULONG n = 0;
+    if (d != NULL && d->state != NULL) {
+        Forbid();
+        n = rp_pop(&d->state->out, buf, sizeof(buf));
+        Permit();
+    }
+    aobject * arr = __create_array((unsigned int) n, 1, &Am_Lang_Array_ta_Am_Lang_UByte, uchar_type);
+    if (n > 0) {
+        array_holder * ah = (array_holder *) &arr[1];
+        memcpy(ah->array_data, buf, (size_t) n);
+    }
+    __result.return_value.value.object_value = arr;
+    return __result;
+}
+
+// Binary write: push raw bytes from a UByte[] into the in ring.
+function_result Am_Lang_RunningProcess_writeInputBytes_0(aobject * const this, aobject * data, const long long offset, const unsigned int length) {
+    function_result __result = { .has_return_value = true };
+    unsigned int wrote = 0;
+    running_process_data * d = rp_data(this);
+    if (d != NULL && d->state != NULL && data != NULL && !d->state->child_exited) {
+        array_holder * ah = (array_holder *) &data[1];
+        if ((unsigned long long) offset + length <= ah->size) {
+            Forbid();
+            wrote = (unsigned int) rp_push(&d->state->in,
+                        (const UBYTE *) ((unsigned char *) ah->array_data + offset),
+                        (ULONG) length);
+            rp_fulfil_deferred(d->state);
+            Permit();
+        }
+    }
+    __result.return_value.value.uint_value = wrote;
+    __result.return_value.flags = PRIMITIVE_UINT;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_enableBinaryMode_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    running_process_data * d = rp_data(this);
+    if (d != NULL) d->binary = 1;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_writeInput_0(aobject * const this, aobject * text) {
+    function_result __result = { .has_return_value = false };
+
+    running_process_data * d = rp_data(this);
+    if (d == NULL || d->state == NULL || text == NULL) goto __exit;
+    rp_state * st = d->state;
+    if (st->child_exited) goto __exit;
+
+    string_holder * h = (string_holder *) (text + 1);
+    if (h == NULL || h->string_value == NULL) goto __exit;
+    // AmLang strings are NOT necessarily \0-terminated — use the
+    // explicit `length` field. Using strlen here previously made
+    // writeInput silently truncate at the first incidental \0 in
+    // adjacent memory.
+    LONG len = (LONG) h->length;
+    if (len <= 0) goto __exit;
+
+    // Log the actual writeInput bytes — length-bounded so we use
+    // h->length (AmLang strings are NOT \0-terminated). Both a
+    // textual line and a hex dump help spot stray control chars.
+    {
+        char tbuf[200]; int tp = 0;
+        const char * lbl = "[rp] writeInput[";
+        while (*lbl) tbuf[tp++] = *lbl++;
+        // numeric length
+        LONG v = len; int dt = 0; char tmp[12];
+        if (v == 0) tmp[dt++] = '0';
+        while (v > 0) { tmp[dt++] = (char)('0' + (v % 10)); v /= 10; }
+        while (dt > 0) tbuf[tp++] = tmp[--dt];
+        tbuf[tp++] = ']'; tbuf[tp++] = ':'; tbuf[tp++] = ' ';
+        LONG i = 0;
+        while (i < len && tp < 180) {
+            UBYTE b = (UBYTE) h->string_value[i];
+            tbuf[tp++] = (b >= 32 && b < 127) ? (char) b : '.';
+            i++;
+        }
+        tbuf[tp++] = '\n';
+        if (g_log_fh != 0) Write(g_log_fh, tbuf, tp);
+
+        char hbuf[200]; int hp = 0;
+        const char * pre = "[rp]   bytes=";
+        while (*pre) hbuf[hp++] = *pre++;
+        i = 0;
+        while (i < len && hp < 180) {
+            UBYTE b = (UBYTE) h->string_value[i];
+            const char * hx = "0123456789abcdef";
+            hbuf[hp++] = hx[(b >> 4) & 0xF];
+            hbuf[hp++] = hx[b & 0xF];
+            hbuf[hp++] = ' ';
+            i++;
+        }
+        hbuf[hp++] = '\n';
+        if (g_log_fh != 0) Write(g_log_fh, hbuf, hp);
+    }
+    Forbid();
+    rp_push(&st->in, (const UBYTE *) h->string_value, (ULONG) len);
+    rp_fulfil_deferred(st);
+    Permit();
+
+__exit: ;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_isAlive_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    running_process_data * d = rp_data(this);
+    BOOL alive = FALSE;
+    if (d != NULL && d->state != NULL) {
+        Forbid();
+        BOOL exited = d->state->child_exited;
+        ULONG queued = d->state->out.count;
+        Permit();
+        if (!exited || queued > 0) alive = TRUE;
+    }
+    __result.return_value.value.bool_value = alive ? true : false;
+    return __result;
+}
+
+// AROS: a real exit status, recorded by the NP_ExitCode callback. Falls back
+// to 0 when the child was never spawned or exited by a path that skipped
+// pr_ExitCode, which keeps the New CLI retry gate (it compares against 161)
+// from tripping on a missing value.
+function_result Am_Lang_RunningProcess_exitCode_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    running_process_data * d = rp_data(this);
+    LONG code = 0;
+    if (d != NULL && d->state != NULL && d->state->exit_code_valid) {
+        code = d->state->child_exit_code;
+    }
+    __result.return_value.value.int_value = (int) code;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_setReportedSize_0(aobject * const this, int var_rows, int var_cols) {
+    function_result __result = { .has_return_value = false };
+    running_process_data * d = rp_data(this);
+    if (d != NULL && d->state != NULL) {
+        LONG r = (LONG) var_rows;
+        LONG c = (LONG) var_cols;
+        if (r < 1) r = 1;
+        if (c < 1) c = 1;
+        d->state->reported_rows = r;
+        d->state->reported_cols = c;
+    }
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_isRawMode_0(aobject * const this) {
+    function_result __result = { .has_return_value = true };
+    running_process_data * d = rp_data(this);
+    BOOL raw = FALSE;
+    if (d != NULL && d->state != NULL) {
+        raw = d->state->raw_mode;
+    }
+    __result.return_value.value.bool_value = raw ? true : false;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_close_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    running_process_data * d = rp_data(this);
+    if (d != NULL && d->state != NULL) {
+        rp_handler_die(d->state);
+        rp_state_release(d->state);
+        d->state = NULL;
+    }
+    return __result;
+}
+
+// See amigaos backend for the rationale. Stub on morphos-ppc — the
+// close_0 tear-down path here doesn't have the freed-fh_Type hazard
+// that terminateChild fixes, so a no-op is safe.
+function_result Am_Lang_RunningProcess_terminateChild_0(aobject * const this) {
+    function_result __result = { .has_return_value = false };
+    (void) this;
+    return __result;
+}
+
+// Static method — sets the process-global wake target for ALL future
+// (and current) handler tasks. Pass taskPtr=0 to clear.
+function_result Am_Lang_RunningProcess_setGlobalWake_0(long long var_taskPtr, int var_sigBit) {
+    function_result __result = { .has_return_value = false };
+    g_wake_task = (struct Task *) (IPTR) var_taskPtr;   // AROS: IPTR, not ULONG - LP64 would truncate
+    if (var_sigBit >= 0 && var_sigBit < 32) {
+        g_wake_sig_bit = (UBYTE) var_sigBit;
+    } else {
+        g_wake_sig_bit = 0;
+        g_wake_task = NULL;
+    }
+    rp_log_event("[rp] setGlobalWake taskPtr=", (LONG) var_taskPtr);
+    rp_log_event("[rp] setGlobalWake sigBit=", (LONG) var_sigBit);
+    return __result;
+}
+
+// Force every still-running handler Process to terminate, then
+// wait briefly for each to actually go away. Called from the
+// `#runOnExit` hook in RunningProcess.aml so it fires after
+// `main()` returns but before the runtime tears down statics.
+//
+// Why we can't just rely on per-instance release: when the
+// AmLang program exits "the hard way" (window-close → main
+// returns without explicitly close()-ing each CliApp's
+// RunningProcess), the AmLang GC never runs and the handler
+// Processes stay in WaitPort forever. The C runtime then
+// UnLoadSeg()s the program; the handlers' code pages get
+// freed; the next time an idle handler is dispatched it
+// executes garbage and the user sees an alert with the stale
+// `AmLangTTY` name. Solving that needs a sweep at exit time
+// that walks every live handler and tells it to die.
+//
+// Strategy: snapshot the list of handler Processes (so we
+// don't have to hold Forbid for the duration of the wait),
+// send each one an ACTION_DIE + flag shutdown_requested, then
+// poll-with-Delay until the global list empties. Capped at
+// ~1.2s total wait so a wedged handler can't block exit
+// forever — in that bad case the user might still see a
+// stale alert, but that's strictly better than today's
+// "every exit shows one".
+#define RP_SHUTDOWN_TIMEOUT_TICKS  60   // 60 ticks = ~1.2 seconds
+#define RP_SHUTDOWN_POLL_TICKS      2   // 2 ticks  = ~40 ms per poll
+
+function_result Am_Lang_RunningProcess_shutdownAllNative_0(void) {
+    function_result __result = { .has_return_value = false };
+
+    // Print a single combined diagnostic line covering all four
+    // counters so we can tell at a glance which segment of the
+    // handler lifecycle is hanging:
+    //   live     — handlers tracked as alive (++start, --end)
+    //   entered  — handler entry function actually ran
+    //   die_seen — handler observed shutdown_requested
+    //   exited   — handler reached its exit cleanup
+    {
+        char msg[160]; int p = 0;
+        const char * pre = "[rp] shutdownAll: live=";
+        while (*pre) msg[p++] = *pre++;
+        LONG values[4] = {
+            g_live_handler_count,
+            g_handler_entered_count,
+            g_handler_die_seen_count,
+            g_handler_exited_count
+        };
+        const char * labels[4] = { "", " entered=", " die_seen=", " exited=" };
+        for (int k = 0; k < 4; k++) {
+            const char * lab = labels[k];
+            while (*lab) msg[p++] = *lab++;
+            LONG v = values[k]; BOOL neg = (v < 0); if (neg) v = -v;
+            char tmp[12]; int t = 0;
+            if (v == 0) tmp[t++] = '0';
+            while (v > 0) { tmp[t++] = (char)('0' + v % 10); v /= 10; }
+            if (neg) msg[p++] = '-';
+            while (t > 0) msg[p++] = tmp[--t];
+        }
+        msg[p] = 0;
+        rp_stdout_line(msg);
+    }
+
+    LONG live = g_live_handler_count;
+    if (live <= 0) {
+        rp_stdout_line("[rp] shutdownAll: no live handlers");
+        return __result;
+    }
+
+    // Walk the list once under Forbid, mark every handler for
+    // shutdown, and snapshot the ports we still need to DIE
+    // into a local array. We send the DIEs OUTSIDE Forbid
+    // because rp_handler_die calls AllocMem internally.
+    //
+    // 64 handlers is way more than any realistic amStudio
+    // session — if you exceed this you've got bigger problems
+    // than menu-item cleanup. Excess handlers fall through to
+    // the poll loop and time out unkilled.
+    #define RP_MAX_SHUTDOWN_TARGETS 64
+    rp_state * targets[RP_MAX_SHUTDOWN_TARGETS];
+    int n_targets = 0;
+
+    Forbid();
+    rp_state * cur = g_handler_list_head;
+    while (cur != NULL && n_targets < RP_MAX_SHUTDOWN_TARGETS) {
+        cur->shutdown_requested = TRUE;
+        if (cur->handler_port != NULL) {
+            targets[n_targets++] = cur;
+        }
+        cur = cur->next_handler;
+    }
+    Permit();
+
+    // Probe whether the handler Task we tracked is actually
+    // still in exec's task list. FindTask returns NULL if no
+    // task with that name exists. If we see live=1 but
+    // FindTask returns NULL, the handler died via some path
+    // that bypassed our counter decrement (e.g. a crash /
+    // RemTask). If FindTask returns non-NULL, the handler is
+    // alive but ignoring DIE.
+    {
+        struct Task * found = FindTask((STRPTR) RP_TTY_TASK_NAME);
+        char msg[80]; int p = 0;
+        const char * pre = "[rp] shutdownAll: FindTask(AmLangTTY)=";
+        while (*pre) msg[p++] = *pre++;
+        if (found == NULL) {
+            const char * tag = "NULL";
+            while (*tag) msg[p++] = *tag++;
+        } else {
+            const char * tag = "ALIVE";
+            while (*tag) msg[p++] = *tag++;
+        }
+        msg[p] = 0;
+        rp_stdout_line(msg);
+    }
+
+    // Send DIE to each captured handler. Each one wakes the
+    // handler out of WaitPort; it sees shutdown_requested and
+    // exits its main loop, ending with g_live_handler_count--.
+    for (int i = 0; i < n_targets; i++) {
+        rp_handler_die(targets[i]);
+    }
+
+    // Poll the live counter. Each tick is ~20ms (50 Hz);
+    // RP_SHUTDOWN_TIMEOUT_TICKS=60 → ~1.2s cap. In practice a
+    // handler picks up the DIE and exits within one or two
+    // ticks, so we typically return well under 100ms.
+    ULONG waited = 0;
+    while (waited < RP_SHUTDOWN_TIMEOUT_TICKS) {
+        if (g_live_handler_count <= 0) break;
+        Delay(RP_SHUTDOWN_POLL_TICKS);
+        waited += RP_SHUTDOWN_POLL_TICKS;
+    }
+
+    {
+        char msg[200]; int p = 0;
+        const char * pre = "[rp] shutdownAll: done, remaining=";
+        while (*pre) msg[p++] = *pre++;
+        LONG values[5] = {
+            g_live_handler_count, (LONG) waited,
+            g_handler_entered_count, g_handler_die_seen_count, g_handler_exited_count
+        };
+        const char * labels[5] = {
+            "", " waited_ticks=", " entered=", " die_seen=", " exited="
+        };
+        for (int k = 0; k < 5; k++) {
+            const char * lab = labels[k];
+            while (*lab) msg[p++] = *lab++;
+            LONG v = values[k]; BOOL neg = (v < 0); if (neg) v = -v;
+            char tmp[12]; int t = 0;
+            if (v == 0) tmp[t++] = '0';
+            while (v > 0) { tmp[t++] = (char)('0' + v % 10); v /= 10; }
+            if (neg) msg[p++] = '-';
+            while (t > 0) msg[p++] = tmp[--t];
+        }
+        msg[p] = 0;
+        rp_stdout_line(msg);
+    }
+
+    return __result;
+}
