@@ -22,6 +22,7 @@ namespace Am.Lang
          * Returns the number of elements the array was created with.
          * @return The element count
          */
+        #noThrow
         native fun length(): UInt
 
         /**

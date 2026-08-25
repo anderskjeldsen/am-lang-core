@@ -10,6 +10,7 @@ namespace Am.Util {
          * @param max The upper bound
          * @return A pseudo-random value in that range
          */
+        #noThrow
         native static fun randomInt(max: Int): Int
     }
 }

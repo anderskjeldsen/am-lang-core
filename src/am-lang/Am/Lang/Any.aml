@@ -10,11 +10,13 @@ namespace Am.Lang
          * Returns a readable representation of the value.
          * @return A String describing the value
          */
+        #noThrow
         primitive fun toString(): String
         /**
          * Returns a hash of the value, suitable for HashMap and HashSet keys.
          * @return The hash value
          */
+        #noThrow
         primitive fun hash(): UInt
         /**
          * Returns the runtime class descriptor of the value, which carries its type name.
@@ -37,6 +39,7 @@ namespace Am.Lang
          * Returns a readable representation of the value; the default is the literal "Any".
          * @return A String describing the value
          */
+        #noThrow
         open override primitive fun toString(): String {
             return "Any"
         }
@@ -46,6 +49,7 @@ namespace Am.Lang
          * hash keys must override it.
          * @return The hash value
          */
+        #noThrow
         open override primitive fun hash(): UInt {
             return 0UI
         }

@@ -12,6 +12,7 @@ namespace Am.Lang.Diagnostics {
          * the section of code you are actually investigating instead of logging the whole run.
          * @param on True to start logging, false to stop
          */
+        #noThrow
         native static fun setConditionalLogging(on: Bool)
     }
 }

@@ -121,6 +121,20 @@ platforms:
 #    gccAdditionalOptions:
 #      - -noixemul
 buildTargets:
+  # Plain in-environment build: runs `make -f amigaos.makefile` directly,
+  # so m68k-amigaos-gcc must be on PATH — i.e. ON-Amiga (ADE) or INSIDE the
+  # amiga-gcc / amiga-gcc-amlang docker images (`amlc build . -bt amigaos`
+  # in the container; no docker-in-docker). Host-side builds without the
+  # toolchain should use amigaos-docker below instead.
+  - id: amigaos
+    platform: amigaos
+    features: ["floatingPoint"]
+  # No floatingPoint: Double, Float and Math are left out of the build and the
+  # value union loses its double/float members, so the generated C needs no
+  # soft-float helpers at all. For a stock 68000 with no coprocessor.
+  - id: amigaos-nofloat
+    platform: amigaos
+    features: []
   - id: amigaos-docker
     platform: amigaos
     features: ["floatingPoint"]

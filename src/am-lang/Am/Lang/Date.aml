@@ -59,6 +59,7 @@ namespace Am.Lang
          * Reads the system clock.
          * @return Milliseconds since the epoch
          */
+        #noThrow
         private static native fun getMillis(): ULong
     }
 }

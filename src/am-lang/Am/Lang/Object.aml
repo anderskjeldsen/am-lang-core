@@ -12,12 +12,14 @@ namespace Am.Lang
          * @param b The second object
          * @return True if both references point at the same instance
          */
+        #noThrow
         static native fun equals(a: Object, b: Object): Bool
         /**
          * Computes a hash for an object from its runtime identity.
          * @param o The object to hash
          * @return An identity-derived hash value
          */
+        #noThrow
         static native fun hash(o: Object): UInt
         /**
          * Prints runtime diagnostics for an object (type and reference-count information) to
@@ -61,6 +63,7 @@ namespace Am.Lang
          * @param other The object to compare with
          * @return True if the two objects are considered equal
          */
+        #noThrow
         open fun equals(other: Object): Bool {
             return ObjectHelper.equals(this, other)
         }

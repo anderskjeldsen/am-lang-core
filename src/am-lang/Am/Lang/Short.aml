@@ -10,69 +10,81 @@ namespace Am.Lang
          * Formats the value as decimal text.
          * @return The value as a String
          */
+        #noThrow
         override native fun toString(): String
         /**
          * Returns a hash of the value so it can be used as a HashMap or HashSet key.
          * @return The hash value
          */
+        #noThrow
         override native fun hash(): UInt
         /**
          * Converts this Short value to a Byte (8-bit signed).
          * The target type is narrower, so values that do not fit are truncated.
          * @return The value as a Byte
          */
+        #noThrow
         native fun toByte(): Byte
         /**
          * Converts this Short value to a Int (32-bit signed).
          * @return The value as a Int
          */
+        #noThrow
         native fun toInt(): Int
         /**
          * Converts this Short value to a Long (64-bit signed).
          * @return The value as a Long
          */
+        #noThrow
         native fun toLong(): Long
         /**
          * Converts this Short value to a UByte (8-bit unsigned).
          * The target type is narrower, so values that do not fit are truncated.
          * @return The value as a UByte
          */
+        #noThrow
         native fun toUByte(): UByte
         /**
          * Converts this Short value to a UShort (16-bit unsigned).
          * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
          * @return The value as a UShort
          */
+        #noThrow
         native fun toUShort(): UShort
         /**
          * Converts this Short value to a UInt (32-bit unsigned).
          * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
          * @return The value as a UInt
          */
+        #noThrow
         native fun toUInt(): UInt
         /**
          * Converts this Short value to a ULong (64-bit unsigned).
          * Signed and unsigned differ here, so out-of-range values are reinterpreted rather than clamped.
          * @return The value as a ULong
          */
+        #noThrow
         native fun toULong(): ULong
         #require floatingPoint
         /**
          * Converts this Short value to a Float (32-bit floating-point).
          * @return The value as a Float
          */
+        #noThrow
         native fun toFloat(): Float
         #require floatingPoint
         /**
          * Converts this Short value to a Double (64-bit floating-point).
          * @return The value as a Double
          */
+        #noThrow
         native fun toDouble(): Double
 
         /**
          * Converts to a Bool, where zero is false and any other value is true.
          * @return True when the value is not zero
          */
+        #noThrow
         native fun toBool(): Bool     
 
         /**
@@ -80,6 +92,7 @@ namespace Am.Lang
          * @param s The text to parse
          * @return The parsed value
          */
+        #noThrow
         static native fun parse(s: String): Short
 
         /**

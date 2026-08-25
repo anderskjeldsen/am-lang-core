@@ -9,6 +9,7 @@
 
 #include <stdio.h>
 #include <errno.h>
+#include <string.h>
 
 typedef struct _file_holder file_holder;
 
@@ -70,7 +71,12 @@ function_result Am_IO_FileStream__native_init_0(aobject * const this)
 	FILE *f = fopen(path, mode);
 	// throw exception if not found or any other error
 	if (f == NULL) {
-		__throw_simple_exception("Failed to open file", "in Am_IO_FileStream__native_init_0", &__result);
+		// Name the file (and mode / OS reason) — "Failed to open file" alone
+		// is useless when a config or asset path is wrong on the user's box.
+		char msg[1024];
+		snprintf(msg, sizeof(msg), "Failed to open file '%s' (mode %s): %s",
+			path != NULL ? path : "(null)", mode != NULL ? mode : "(null)", strerror(errno));
+		__throw_simple_exception_copy(msg, "in Am_IO_FileStream__native_init_0", &__result);
 		goto __exit;
     }
 	file_holder *holder = calloc(1, sizeof(file_holder));

@@ -14,6 +14,7 @@ namespace Am.Lang.Diagnostics
          * output. Verbose in a real application; call it around a suspected leak rather than at
          * arbitrary points.
          */
+        #noThrow
         native static fun printAllocatedObjects()
 
         /**
@@ -22,6 +23,7 @@ namespace Am.Lang.Diagnostics
          * allocation churn of the work in between.
          * @return The cumulative allocation count
          */
+        #noThrow
         native static fun getAllocationCount(): Long
 
         /**
@@ -30,6 +32,7 @@ namespace Am.Lang.Diagnostics
          * an object being passed between threads more often than intended.
          * @return The live wrapper count
          */
+        #noThrow
         native static fun getLiveWrapperCount(): Long
 
         /**
@@ -37,6 +40,7 @@ namespace Am.Lang.Diagnostics
          * platforms where the figure is not available.
          * @return Resident memory in KiB, or 0 when unknown
          */
+        #noThrow
         native static fun getResidentMemoryKb(): Long
     }
 }

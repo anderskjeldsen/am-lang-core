@@ -13,11 +13,13 @@ namespace Am.Lang
          * Formats the value as decimal text.
          * @return The value as a String
          */
+        #noThrow
         override native fun toString(): String
         /**
          * Returns a hash of the value so it can be used as a HashMap or HashSet key.
          * @return The hash value
          */
+        #noThrow
         override native fun hash(): UInt
         /**
          * Converts this Double value to a Byte (8-bit signed).
@@ -25,6 +27,7 @@ namespace Am.Lang
          * target range are undefined.
          * @return The value as a Byte
          */
+        #noThrow
         native fun toByte(): Byte
         /**
          * Converts this Double value to a Short (16-bit signed).
@@ -32,6 +35,7 @@ namespace Am.Lang
          * target range are undefined.
          * @return The value as a Short
          */
+        #noThrow
         native fun toShort(): Short
         /**
          * Converts this Double value to a Int (32-bit signed).
@@ -39,6 +43,7 @@ namespace Am.Lang
          * target range are undefined.
          * @return The value as a Int
          */
+        #noThrow
         native fun toInt(): Int
         /**
          * Converts this Double value to a Long (64-bit signed).
@@ -46,6 +51,7 @@ namespace Am.Lang
          * target range are undefined.
          * @return The value as a Long
          */
+        #noThrow
         native fun toLong(): Long
         /**
          * Converts this Double value to a UByte (8-bit unsigned).
@@ -53,6 +59,7 @@ namespace Am.Lang
          * target range are undefined.
          * @return The value as a UByte
          */
+        #noThrow
         native fun toUByte(): UByte
         /**
          * Converts this Double value to a UShort (16-bit unsigned).
@@ -60,6 +67,7 @@ namespace Am.Lang
          * target range are undefined.
          * @return The value as a UShort
          */
+        #noThrow
         native fun toUShort(): UShort
         /**
          * Converts this Double value to a UInt (32-bit unsigned).
@@ -67,6 +75,7 @@ namespace Am.Lang
          * target range are undefined.
          * @return The value as a UInt
          */
+        #noThrow
         native fun toUInt(): UInt
         /**
          * Converts this Double value to a ULong (64-bit unsigned).
@@ -74,17 +83,20 @@ namespace Am.Lang
          * target range are undefined.
          * @return The value as a ULong
          */
+        #noThrow
         native fun toULong(): ULong
         /**
          * Converts this Double value to a Float (32-bit floating-point).
          * The target type is narrower, so values that do not fit are truncated.
          * @return The value as a Float
          */
+        #noThrow
         native fun toFloat(): Float
         /**
          * Converts to a Bool, where zero is false and any other value is true.
          * @return True when the value is not zero
          */
+        #noThrow
         native fun toBool(): Bool
 
         /**
@@ -92,6 +104,7 @@ namespace Am.Lang
          * @param s The text to parse
          * @return The parsed value
          */
+        #noThrow
         static native fun parse(s: String): Double
 
         /**
@@ -144,6 +157,7 @@ namespace Am.Lang
          * Returns the square root of this value. The result is undefined for negative input.
          * @return The square root
          */
+        #noThrow
         native fun sqrt(): Double
 
     }

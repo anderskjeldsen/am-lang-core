@@ -18,6 +18,7 @@ namespace Am.Lang
          * HashMap or HashSet key.
          * @return The hash value
          */
+        #noThrow
         override native fun hash(): UInt
         /**
          * Returns the string itself.
@@ -31,6 +32,7 @@ namespace Am.Lang
          * Returns the length of the string in characters.
          * @return The character count
          */
+        #noThrow
         native fun getLength(): Int
         /**
          * Returns the length of the string in characters; an alias for getLength().
@@ -51,6 +53,7 @@ namespace Am.Lang
          * Writes the string to standard output without a trailing newline. Use println() when you
          * want the line terminator.
          */
+        #noThrow
         native fun print()
         /**
          * Compares this string with another object by content. Passing a null reference throws, so
@@ -58,6 +61,7 @@ namespace Am.Lang
          * @param other The object to compare with
          * @return True if other is a String with the same characters
          */
+        #noThrow
         native override fun equals(other: Object): Bool
         /**
          * Concatenates two strings into a new string. Each + allocates, so prefer StringBuilder
@@ -65,6 +69,7 @@ namespace Am.Lang
          * @param s The string to append
          * @return A new string holding both operands
          */
+        #noThrow
         native op + (s: String): String
         /**
          * Decodes a byte array into a string using the named encoding, for example "UTF-8". This
@@ -86,12 +91,14 @@ namespace Am.Lang
          * @param s The substring to search for
          * @return The zero-based index of the first match, or -1 if there is none
          */
+        #noThrow
         native fun indexOf(s: String): Int
         /**
          * Finds the last occurrence of a substring.
          * @param s The substring to search for
          * @return The zero-based index of the last match, or -1 if there is none
          */
+        #noThrow
         native fun lastIndexOf(s: String): Int
         /**
          * Extracts a range of characters. The second argument is a LENGTH, not an end index —
@@ -176,12 +183,30 @@ namespace Am.Lang
 
 
         /**
-         * Tests whether the string ends with a suffix.
+         * Tests whether the string ends with a suffix. An empty suffix always matches, and a
+         * suffix longer than the string never does.
          * @param s The suffix to look for
          * @return True if the string ends with s
          */
         fun endsWith(s: String): Bool {
-            return this.lastIndexOf(s) == (this.getLength() - s.getLength()).toUInt()
+            var suffixLength = s.getLength()
+            var totalLength = this.getLength()
+
+            // An empty suffix should always return true
+            if (suffixLength == 0) {
+                return true
+            }
+
+            // A suffix longer than the string cannot be a suffix. This guard is
+            // load-bearing: without it the subtraction below goes negative, and
+            // the old toUInt() wrapped it to 4294967295, which compared equal to
+            // lastIndexOf's -1 "not found" result. That made "".endsWith(x) — and
+            // every other too-short receiver — answer true.
+            if (suffixLength > totalLength) {
+                return false
+            }
+
+            return this.lastIndexOf(s) == totalLength - suffixLength
         }
 
         /**

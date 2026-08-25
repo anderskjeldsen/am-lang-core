@@ -4,6 +4,11 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <unistd.h>
+// Generated class header: carries the __DIRECT_NOTHROW_ABI marker macros
+// that select vtable-dispatch consumption ABI below. Must be included
+// here (not relied on from the including TU) — startup.c includes this
+// file before any class header.
+#include <Am/Lang/Object.h>
 #include <libc/core.h>
 
 #include <Am/Lang/Exception.h>
@@ -759,9 +764,17 @@ static inline bool __object_equals(aobject * const a_in, aobject * const b_in) {
             return __object_equals(a, b->object_properties.iface_reference.implementation_object);
         }
         __object_equals_alias af = (__object_equals_alias) a->class_ptr->functions[__object_equals_index];
+        // ABI-follows-throws: under -fthrows-opt the equals chain is
+        // contract-nothrow, so the slot (and its generated typedef, which
+        // __object_equals_alias is #defined to) returns plain bool. The
+        // generated Am/Lang/Object.h defines the marker macro.
+#ifdef Am_Lang_Object_f_equals_0__DIRECT_NOTHROW_ABI
+        return af(a, b);
+#else
         function_result res = af(a, b);
         // Am_Lang_Object_equals_0(a, b);
         return res.return_value.value.bool_value;
+#endif
     }
     return a == b;
 }

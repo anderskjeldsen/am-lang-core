@@ -237,12 +237,19 @@ namespace Am.IO
          * Joins a directory path and a bare entry name with the separator the host filesystem expects.
          * AmigaDOS volume roots such as "RAM:", and any path already ending in a separator, take the
          * name directly — putting a "/" after a colon would mean the parent on AmigaDOS rather than a
-         * child. Always use this instead of concatenating paths by hand.
+         * child. An empty directory yields the bare name, so a relative path stays relative.
+         * Always use this instead of concatenating paths by hand.
          * @param directory The directory path
          * @param name The entry name to append
          * @return The joined path
          */
         static fun joinPath(directory: String, name: String): String {
+            // Explicit rather than incidental: this used to fall out of endsWith
+            // answering true for an empty receiver, and prefixing a separator here
+            // would turn a relative name into an absolute path.
+            if (directory == "") {
+                return name
+            }
             if (directory.endsWith(":") || directory.endsWith("/")) {
                 return directory + name
             }

@@ -150,29 +150,29 @@ function_result Am_Lang_String__op__plus_0(aobject * const this, aobject * s)
 	string_holder *holder1 = this->object_properties.class_object_properties.object_data.value.custom_value;
 	string_holder *holder2 = s->object_properties.class_object_properties.object_data.value.custom_value;
 
-	if ( holder1 != NULL && holder2 != NULL ) {
-		aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + holder1->length + holder2->length + 1);
-		string_holder *holder = (string_holder *) (str_obj + 1);
-		str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
-		char * new_str = (char *) (holder + 1);
-//		printf("copy %s\n", holder1->string_value);
-//		printf("append %s\n", holder2->string_value);
-		strcpy(new_str, holder1->string_value);
-	    strcat(new_str, holder2->string_value);
-//		printf("new string: %s\n", newStr);
-		unsigned int hash = __string_hash(new_str);
-		*holder = (string_holder) { .is_string_constant = false, .length = holder1->length + holder2->length, .string_value = new_str, .hash = hash };
-//		memcpy(holder, &t_holder, sizeof(string_holder));
-		// holder->string_value = newStr; // assume that string constants will never change
-		// holder->length = holder1->length + holder2->length; // TODO: how many characters exactly?
-		// holder->is_string_constant = false;
-
-		__result.return_value.value.object_value = str_obj;
-//		__increase_reference_count(str_obj);
+	if (holder2 == NULL) {
+		__result.return_value.value.object_value = this;
+		__increase_reference_count(this);
+		goto __exit;
 	}
 
-	// TODO: implement native function MyNamespace_CustomMyClass__op__plus_0
-//	printf("TODO: implement native function Am_Lang__op__plus_0\n");
+	if (holder1 == NULL) {
+		__result.return_value.value.object_value = s;
+		__increase_reference_count(s);
+		goto __exit;
+	}
+
+	aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + holder1->length + holder2->length + 1);
+	string_holder *holder = (string_holder *) (str_obj + 1);
+	str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
+	char * new_str = (char *) (holder + 1);
+	strcpy(new_str, holder1->string_value);
+	strcat(new_str, holder2->string_value);
+	unsigned int hash = __string_hash(new_str);
+	*holder = (string_holder) { .is_string_constant = false, .length = holder1->length + holder2->length, .string_value = new_str, .hash = hash };
+
+	__result.return_value.value.object_value = str_obj;
+
 __exit: ;
 	return __result;
 };

@@ -143,7 +143,11 @@ void Am_Threading_Thread__InitTask()
 			// Calling on this task (not the joiner) means finalizers
 			// still see FindTask(NULL) == own_task. Pass the wrapper —
 			// AmLang-side callee unwraps itself.
+#ifdef Am_Threading_Thread_f_runFinalizers_0__DIRECT_NOTHROW_ABI
+			Am_Threading_Thread_f_runFinalizers_0__direct(thread_ref);
+#else
 			Am_Threading_Thread_f_runFinalizers_0(thread_ref);
+#endif
 //			printf("[_InitTask] runFinalizers returned\n");
 //			fflush(stdout);
 

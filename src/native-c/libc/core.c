@@ -1773,6 +1773,24 @@ void __throw_simple_exception(const char * const message, const char * const sta
     __decrease_reference_count(ex); // safe on the OOM singleton too — its rc just churns.
 }
 
+void __throw_simple_exception_copy(const char * const message, const char * const stack_trace_item_text, function_result * const result) {
+    // `__create_string` copies `message` into the new String, so callers
+    // may pass a stack buffer (snprintf'd path + strerror) safely.
+    aobject * ex_msg = __create_string(message, &__string_class_alias);
+    aobject * stit = __create_string_constant(stack_trace_item_text, &__string_class_alias);
+    if (ex_msg == NULL || stit == NULL) {
+        if (ex_msg != NULL) __decrease_reference_count(ex_msg);
+        if (stit != NULL) __decrease_reference_count(stit);
+        __throw_out_of_memory_exception(result, stack_trace_item_text);
+        return;
+    }
+    aobject * ex = __create_exception(ex_msg);
+    __throw_exception(result, ex, stit);
+    __decrease_reference_count(ex_msg);
+    __decrease_reference_count(stit);
+    __decrease_reference_count(ex);
+}
+
 // The `__oom_singleton` definition + lifetime notes live above
 // `__create_exception` so that fallback path can compile against it.
 // If startup fails to allocate this singleton the process is already in

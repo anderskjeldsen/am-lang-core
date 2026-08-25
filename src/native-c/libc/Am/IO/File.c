@@ -95,7 +95,9 @@ function_result Am_IO_File_listNative_0(aobject * const this, aobject * folderFi
 	struct dirent *dir;
 	d = opendir(filename_string_holder->string_value);
 	if (!d) {
-		__throw_simple_exception("Failed to open directory", "in Am_IO_File_listNative_0", &__result);
+		char msg[1024];
+		snprintf(msg, sizeof(msg), "Failed to open directory '%s': %s", filename_string_holder->string_value, strerror(errno));
+		__throw_simple_exception_copy(msg, "in Am_IO_File_listNative_0", &__result);
 		goto __exit;
 	}
 	while ((dir = readdir(d)) != NULL) {
@@ -110,7 +112,11 @@ function_result Am_IO_File_listNative_0(aobject * const this, aobject * folderFi
 			continue;
 		}
 		aobject *filename_str = __create_string(dir->d_name, &Am_Lang_String);
+#ifdef Am_Collections_List_ta_Am_Lang_String_f_add_0__DIRECT_NOTHROW_ABI
+		Am_Collections_List_ta_Am_Lang_String_f_add_0__direct(list, filename_str);
+#else
 		Am_Collections_List_ta_Am_Lang_String_f_add_0(list, filename_str);
+#endif
 		__decrease_reference_count(filename_str);
 	}
 	closedir(d);
@@ -137,7 +143,9 @@ function_result Am_IO_File_listDirsNative_0(aobject * const this, aobject * fold
 	// libnix). FIB must be longword-aligned → AllocDosObject.
 	BPTR lock = Lock((CONST_STRPTR) dir_path, ACCESS_READ);
 	if (lock == (BPTR) NULL) {
-		__throw_simple_exception("Failed to open directory", "in Am_IO_File_listDirsNative_0", &__result);
+		char msg[1024];
+		snprintf(msg, sizeof(msg), "Failed to open directory '%s' (IoErr %ld)", dir_path, (long) IoErr());
+		__throw_simple_exception_copy(msg, "in Am_IO_File_listDirsNative_0", &__result);
 		goto __exit;
 	}
 	struct FileInfoBlock *fib = (struct FileInfoBlock *) AllocDosObject(DOS_FIB, NULL);
@@ -154,7 +162,11 @@ function_result Am_IO_File_listDirsNative_0(aobject * const this, aobject * fold
 			LONG t = fib->fib_DirEntryType;
 			if (t > 0 && t != ST_SOFTLINK) {
 				aobject *name_str = __create_string((const char *) fib->fib_FileName, &Am_Lang_String);
+#ifdef Am_Collections_List_ta_Am_Lang_String_f_add_0__DIRECT_NOTHROW_ABI
+				Am_Collections_List_ta_Am_Lang_String_f_add_0__direct(list, name_str);
+#else
 				Am_Collections_List_ta_Am_Lang_String_f_add_0(list, name_str);
+#endif
 				__decrease_reference_count(name_str);
 			}
 		}
@@ -164,7 +176,9 @@ function_result Am_IO_File_listDirsNative_0(aobject * const this, aobject * fold
 #else
 	DIR *d = opendir(dir_path);
 	if (!d) {
-		__throw_simple_exception("Failed to open directory", "in Am_IO_File_listDirsNative_0", &__result);
+		char msg[1024];
+		snprintf(msg, sizeof(msg), "Failed to open directory '%s': %s", dir_path, strerror(errno));
+		__throw_simple_exception_copy(msg, "in Am_IO_File_listDirsNative_0", &__result);
 		goto __exit;
 	}
 	struct dirent *dir;
@@ -193,7 +207,11 @@ function_result Am_IO_File_listDirsNative_0(aobject * const this, aobject * fold
 		}
 		if (is_dir) {
 			aobject *name_str = __create_string(dir->d_name, &Am_Lang_String);
+#ifdef Am_Collections_List_ta_Am_Lang_String_f_add_0__DIRECT_NOTHROW_ABI
+			Am_Collections_List_ta_Am_Lang_String_f_add_0__direct(list, name_str);
+#else
 			Am_Collections_List_ta_Am_Lang_String_f_add_0(list, name_str);
+#endif
 			__decrease_reference_count(name_str);
 		}
 	}
@@ -549,6 +567,5 @@ function_result Am_IO_File_createTempFileInternal_0(aobject * directory, aobject
 __exit: ;
 	return __result;
 };
-
 
 

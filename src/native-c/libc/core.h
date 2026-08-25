@@ -520,6 +520,11 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
 void __throw_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text);
 void __pass_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text);
 void __throw_simple_exception(const char * const message, const char * const stack_trace_item_text, function_result * const result);
+// Like __throw_simple_exception, but COPIES `message` into the exception
+// (the plain variant wraps the pointer as a string constant and must only
+// be given literals). Use this for messages built at runtime — e.g. an
+// error text that embeds the filename that failed to open.
+void __throw_simple_exception_copy(const char * const message, const char * const stack_trace_item_text, function_result * const result);
 // Preallocated OutOfMemoryException singleton — throw when `calloc` returns
 // NULL in generated `new` codegen. Uses a frozen instance built at startup
 // (`__init_oom_singleton`), so the throw itself never touches `calloc`.

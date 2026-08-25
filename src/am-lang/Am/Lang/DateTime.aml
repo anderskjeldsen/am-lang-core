@@ -368,7 +368,7 @@ namespace Am.Lang
          * @return The formatted timestamp
          */
         override fun toString(): String {
-            return this.format("yyyy-MM-dd HH:mm:ss")
+            return either(this.format("yyyy-MM-dd HH:mm:ss"), "DateTime")
         }
 
         /**
@@ -395,8 +395,12 @@ namespace Am.Lang
                 return false
             }
             if (other is DateTime) {
-                var otherDateTime = other as DateTime
-                return this.epochMillis == otherDateTime.epochMillis
+                try {
+                    var otherDateTime = other as DateTime
+                    return this.epochMillis == otherDateTime.epochMillis
+                } catch (e: Exception) {
+                    return false
+                }
             }
             return false
         }
@@ -502,11 +506,13 @@ namespace Am.Lang
          * Reads the system clock.
          * @return Milliseconds since the Unix epoch
          */
+        #noThrow
         private static native fun getMillis(): ULong
         /**
          * Reads the system timezone.
          * @return Minutes east of UTC
          */
+        #noThrow
         private static native fun getLocalTimezoneOffset(): Int
         /**
          * Converts calendar fields in a given timezone to an instant.
@@ -519,6 +525,7 @@ namespace Am.Lang
          * @param timezoneOffsetMinutes Minutes east of UTC
          * @return Milliseconds since the Unix epoch
          */
+        #noThrow
         private static native fun toEpochMillis(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int, timezoneOffsetMinutes: Int): ULong
         /**
          * Extracts the calendar year from an instant.
@@ -526,6 +533,7 @@ namespace Am.Lang
          * @param timezoneOffsetMinutes Minutes east of UTC
          * @return The four-digit year
          */
+        #noThrow
         private static native fun extractYear(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
         /**
          * Extracts the calendar month from an instant.
@@ -533,6 +541,7 @@ namespace Am.Lang
          * @param timezoneOffsetMinutes Minutes east of UTC
          * @return The month, 1 to 12
          */
+        #noThrow
         private static native fun extractMonth(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
         /**
          * Extracts the day of the month from an instant.
@@ -540,6 +549,7 @@ namespace Am.Lang
          * @param timezoneOffsetMinutes Minutes east of UTC
          * @return The day, 1 to 31
          */
+        #noThrow
         private static native fun extractDay(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
         /**
          * Extracts the hour of the day from an instant.
@@ -547,6 +557,7 @@ namespace Am.Lang
          * @param timezoneOffsetMinutes Minutes east of UTC
          * @return The hour, 0 to 23
          */
+        #noThrow
         private static native fun extractHour(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
         /**
          * Extracts the minute within the hour from an instant.
@@ -554,6 +565,7 @@ namespace Am.Lang
          * @param timezoneOffsetMinutes Minutes east of UTC
          * @return The minute, 0 to 59
          */
+        #noThrow
         private static native fun extractMinute(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
         /**
          * Extracts the second within the minute from an instant.
@@ -561,12 +573,14 @@ namespace Am.Lang
          * @param timezoneOffsetMinutes Minutes east of UTC
          * @return The second, 0 to 59
          */
+        #noThrow
         private static native fun extractSecond(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
         /**
          * Extracts the milliseconds within the second from an instant. Independent of timezone.
          * @param epochMillis Milliseconds since the Unix epoch
          * @return The millisecond, 0 to 999
          */
+        #noThrow
         private static native fun extractMillisecond(epochMillis: ULong): Int
         /**
          * Extracts the day of the week from an instant, counting from Sunday as 0.
@@ -574,6 +588,7 @@ namespace Am.Lang
          * @param timezoneOffsetMinutes Minutes east of UTC
          * @return The day of week, 0 to 6
          */
+        #noThrow
         private static native fun extractDayOfWeek(epochMillis: ULong, timezoneOffsetMinutes: Int): Int
         /**
          * Formats an instant using the pattern letters described on format().
@@ -595,6 +610,7 @@ namespace Am.Lang
          * @param year The four-digit year
          * @return True for a leap year
          */
+        #noThrow
         private static native fun checkLeapYear(year: Int): Bool
         /**
          * Returns the length of a month, accounting for leap years.
@@ -602,6 +618,7 @@ namespace Am.Lang
          * @param month The month, 1 to 12
          * @return The number of days in that month
          */
+        #noThrow
         private static native fun calculateDaysInMonth(year: Int, month: Int): Int
     }
 }

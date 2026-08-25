@@ -28,8 +28,12 @@ namespace Am.Lang
          * @return The buffer contents as a String
          */
         override fun toString(): String {
-            var byteArray = this.buffer.toArray()
-            return String.fromBytes(byteArray, this.encoding)
+            try {
+                var byteArray = this.buffer.toArray()
+                return String.fromBytes(byteArray, this.encoding)
+            } catch (e: Exception) {
+                return ""
+            }
         }
 
         /**

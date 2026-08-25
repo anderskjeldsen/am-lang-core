@@ -87,7 +87,11 @@ function_result Am_Async_Continuation__native_release_0(aobject * const this)
             suspend_state *state_to_fire = (suspend_state *) data->state;
             if (state_to_fire != NULL && state_to_fire->function != NULL) {
                 aobject *ex = __allocate_object(&Am_Async_ContinuationCancelledException);
+#ifdef Am_Async_ContinuationCancelledException_f_ContinuationCancelledException_0__DIRECT_NOTHROW_ABI
+                Am_Async_ContinuationCancelledException_f_ContinuationCancelledException_0__direct(ex);
+#else
                 Am_Async_ContinuationCancelledException_f_ContinuationCancelledException_0(ex);
+#endif
                 Am_Async_ContinuationCancelledException___init_instance(
                     (nullable_value){ .value.object_value = ex });
                 aobject *stit = __create_string_constant(

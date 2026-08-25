@@ -15,12 +15,14 @@ namespace Am.Util {
          * @param angle The angle in radians
          * @return The sine, between -1 and 1
          */
+        #noThrow
         native static fun sin(angle: Double): Double
         /**
          * Returns the cosine of an angle.
          * @param angle The angle in radians
          * @return The cosine, between -1 and 1
          */
+        #noThrow
         native static fun cos(angle: Double): Double
         /**
          * Returns the tangent of an angle. Unbounded near a quarter turn, where the true value is
@@ -28,18 +30,21 @@ namespace Am.Util {
          * @param angle The angle in radians
          * @return The tangent
          */
+        #noThrow
         native static fun tan(angle: Double): Double
         /**
          * Returns the angle whose sine is the given value.
          * @param value A value between -1 and 1
          * @return The angle in radians, between minus and plus a quarter turn
          */
+        #noThrow
         native static fun asin(value: Double): Double
         /**
          * Returns the angle whose cosine is the given value.
          * @param value A value between -1 and 1
          * @return The angle in radians, between 0 and half a turn
          */
+        #noThrow
         native static fun acos(value: Double): Double
         /**
          * Returns the angle whose tangent is the given value. Use atan2() when you have both
@@ -47,6 +52,7 @@ namespace Am.Util {
          * @param value The tangent
          * @return The angle in radians
          */
+        #noThrow
         native static fun atan(value: Double): Double
         /**
          * Returns the angle from the positive x axis to the point (x, y), using the signs of both
@@ -56,6 +62,7 @@ namespace Am.Util {
          * @param x The horizontal component
          * @return The angle in radians, between minus and plus half a turn
          */
+        #noThrow
         native static fun atan2(y: Double, x: Double): Double
         
         /**
