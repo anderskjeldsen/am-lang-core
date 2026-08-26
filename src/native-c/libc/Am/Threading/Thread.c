@@ -161,6 +161,22 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
     function_result __result = { .has_return_value = false };
     bool __returning = false;
 
+#ifdef AM_SINGLE_THREADED
+    // This program was built with the single-threaded ARC fast path: the
+    // refcount helpers were compiled with the owner-vs-foreign classification
+    // removed, so a second thread would not merely misbehave — it would
+    // corrupt reference counts. Refuse at the one operation that would break
+    // the assumption, rather than letting the program run on false invariants.
+    // Throwing (not aborting) keeps it catchable, so a library that spawns
+    // threads opportunistically can fall back to a synchronous path.
+    (void) this;
+    __throw_simple_exception(
+        "Thread.start is unavailable: this program was built single-threaded. "
+        "Rebuild without the singleThreaded option to use threads.",
+        "in Am_Threading_Thread_start_0", &__result);
+    __returning = true;
+    return __result;
+#else
     pthread_once(&current_thread_key_once, make_current_thread_key);
 
     // Thread-safe ARC (BRC): from here on the process is multi-threaded, so the
@@ -213,6 +229,7 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 
 __exit: ;
     return __result;
+#endif // AM_SINGLE_THREADED
 }
 
 function_result Am_Threading_Thread_join_0(aobject * const this)

@@ -89,13 +89,17 @@ bool __conditional_logging_on = false;
 // to track the live-wrapper count across the codebase. The cost is
 // that long-running programs which briefly share an object once pay
 // the unwrap branch forever after — fine in practice.
+#ifndef AM_SINGLE_THREADED
 bool __amlc_any_wrappers_alive = false;
+#endif
 
 // Thread-safe ARC (BRC) — see core.h. Flipped on the first time a thread is
 // spawned (Am_Threading_Thread_start_0). Gates the owner-vs-foreign branch in
 // the refcount helpers so single-threaded programs never call
 // __current_thread() on the hot path. One-way.
+#ifndef AM_SINGLE_THREADED
 bool __amlc_multithreaded = false;
+#endif
 
 // Always-defined so callers compiled with DEBUG can link even when
 // core.c itself was compiled without DEBUG. Body only does anything
@@ -1147,6 +1151,7 @@ void clear_allocated_objects() {
 // overhead, but unlike inlined ternaries this doesn't blow the
 // 26 k-line JsBytecodeVm.run frame — function calls reserve a fixed
 // per-call stack chunk, not per-call-site stack.
+#ifndef AM_SINGLE_THREADED
 aobject * __wrap_if_foreign(aobject * const __raw) {
     // Thread-safe ARC (BRC): wrappers are gone. Cross-thread references now use
     // the SAME real pointer, and foreign liveness is tracked via
@@ -1158,6 +1163,8 @@ aobject * __wrap_if_foreign(aobject * const __raw) {
     // Return the pointer as-is.
     return __raw;
 }
+#endif
+
 
 // AMLC_XTHREAD_RC=1: report reference_count mutations performed by a
 // thread that does NOT own the object. reference_count is owner-thread-
@@ -1296,6 +1303,7 @@ static void __wrap_trace_dump(void) {
 }
 #endif
 
+#ifndef AM_SINGLE_THREADED
 aobject * __create_wrapper(aobject * const __realobj) {
     #if defined(__linux__)
     // Opt-in wrapper-leak forensics (AMLC_WRAP_TRACE=1): records the minting
@@ -1382,6 +1390,7 @@ aobject * __create_wrapper(aobject * const __realobj) {
 
     return __wrapper;
 }
+#endif // AM_SINGLE_THREADED
 
 void __deallocate_wrapper(aobject * const __wrapper) {
     aobject * const __realobj =

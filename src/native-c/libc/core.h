@@ -453,14 +453,30 @@ void * __current_thread(void);
 // -O3` then constant-propagates and DCEs the wrapper-following branch
 // entirely. At `gcc -O0` (dev builds) we still pay one load + branch
 // per property read; that's manageable.
+#ifdef AM_SINGLE_THREADED
+// Single-threaded build: no thread can ever hold a foreign reference, so no
+// wrapper can exist. A literal 0 lets the compiler delete the wrapper-following
+// branch in __unwrap outright instead of testing a flag that never changes.
+#define __amlc_any_wrappers_alive 0
+#else
 extern bool __amlc_any_wrappers_alive;
+#endif
 
 // Thread-safe ARC (BRC): set to `true` the first time a thread is spawned
 // (in Am_Threading_Thread_start_0). Gates the owner-vs-foreign branch in the
 // refcount inc/dec helpers so purely single-threaded programs keep paying only
 // a predictable-branch load — never a __current_thread() call — on the
 // refcount hot path. One-way; never cleared.
+#ifdef AM_SINGLE_THREADED
+// Single-threaded build: every object is owned by the only thread there is, so
+// the owner-vs-foreign classification is statically decidable. As a literal 0
+// it folds the whole foreign path (atomic counter, shared lock, owner_gone /
+// destruction_claimed bookkeeping) out of every inlined refcount site.
+// Am_Threading_Thread_start_0 throws rather than letting a second thread exist.
+#define __amlc_multithreaded 0
+#else
 extern bool __amlc_multithreaded;
+#endif
 
 // Allocate a wrapper aobject in the current thread, pointing at the
 // real aobject (which is owned by some other thread). Subscribes the
@@ -470,7 +486,9 @@ extern bool __amlc_multithreaded;
 // `__realobj` is named with that suffix because gcc treats `__real`
 // as a reserved keyword (the `__real__`/`__imag__` complex-number
 // builtins) and rejects it as a parameter name.
+#ifndef AM_SINGLE_THREADED
 aobject * __create_wrapper(aobject * const __realobj);
+#endif
 
 // Called by codegen whenever an aobject reference is acquired from a
 // nullable_value source (property read, function return, etc.). If
@@ -482,7 +500,12 @@ aobject * __create_wrapper(aobject * const __realobj);
 // owner_thread == current) pass through. Wrappers from OTHER threads
 // shouldn't normally appear here because `__set_property` unwraps
 // before storing; if one does, we'd re-wrap (correct but wasteful).
+#ifdef AM_SINGLE_THREADED
+// Identity, and with no call: cross-thread borrows cannot occur here.
+#define __wrap_if_foreign(__raw) (__raw)
+#else
 aobject * __wrap_if_foreign(aobject * const __raw);
+#endif
 
 // AMLC_XTHREAD_RC=1 diagnostics: report rc mutations by non-owner threads
 // (races that can pin rc above zero forever). Zero-cost when off beyond a
