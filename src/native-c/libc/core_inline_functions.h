@@ -179,6 +179,7 @@ static inline void __decrease_reference_count(aobject * const __obj) {
         // (Foreign *increments* stay lock-free: you can only retain through an
         // already-live reference, which itself pins the object.) Gated on
         // __amlc_multithreaded so single-threaded programs skip __current_thread().
+#if AMLC_ARC_STRATEGY != AMLC_ARC_STRATEGY_ATOMIC
         if (__amlc_multithreaded && __obj->owner_thread != __current_thread()) {
             __arc_shared_lock();
             int __after = __amlc_atomic_fetch_sub(&__obj->foreign_reference_count, 1) - 1;
@@ -197,8 +198,25 @@ static inline void __decrease_reference_count(aobject * const __obj) {
             }
             return;
         }
+#endif
 
+        // ATOMIC: every thread decrements the SAME counter, atomically, with
+        // no owner test — one instruction. Step one of the collapse keeps the
+        // existing end-of-life predicate below (propref / wrapper list), which
+        // is only consulted on the RARE zero transition; step two (making
+        // proprefs and wrappers hold ordinary counted references) is what lets
+        // the predicate — and the lock with it — disappear entirely.
+        // The zero transition must come from the DECREMENT ITSELF (the
+        // instruction's own Z flag), never from re-reading the counter
+        // afterwards: with one shared counter another thread can change it
+        // between the two, and then either nobody frees (leak) or two
+        // threads both believe they hit zero (double free).
+#if AMLC_ARC_STRATEGY == AMLC_ARC_STRATEGY_ATOMIC
+        bool __amlc_hit_zero = __amlc_arc_dec_is_zero(&__obj->reference_count);
+#else
         __obj->reference_count--;
+        bool __amlc_hit_zero = (__obj->reference_count == 0);
+#endif
         #if defined(DEBUG) && defined(ARCLOG)
         #ifdef CONDLOG
         if (__conditional_logging_on) {
@@ -215,7 +233,7 @@ static inline void __decrease_reference_count(aobject * const __obj) {
         #endif
         #endif
 
-        if ( __obj->reference_count == 0) {
+        if (__amlc_hit_zero) {
             // Owner reads its OWN reference_count above (own write,
             // sequentially consistent — no lock needed). We do NOT
             // touch property_reference_count until inside the lock —
@@ -314,6 +332,16 @@ static inline void __increase_reference_count(aobject * const __obj) {
     // was only legal when no counted reference to retain FROM existed). On
     // AmigaOS the lock is an inline Forbid/Permit. Gated on
     // __amlc_multithreaded so single-threaded programs skip __current_thread().
+#if AMLC_ARC_STRATEGY == AMLC_ARC_STRATEGY_ATOMIC
+    // ATOMIC strategy (uniprocessor): ONE counter for every thread. The bias
+    // has nothing left to buy here — on 68k `addq.l #1,(rc,a0)` IS both the
+    // plain increment and the atomic one (a task switch lands on instruction
+    // boundaries, so a single-instruction memory RMW cannot be split), so the
+    // owner test was pure overhead: a `__amlc_multithreaded` load, a branch,
+    // an owner_thread compare and a thread-identity read to avoid ONE
+    // instruction. No lock, no foreign counter, no owner test.
+    __amlc_arc_inc(&__obj->reference_count);
+#else
     if (__amlc_multithreaded && __obj->owner_thread != __current_thread()) {
         __arc_shared_lock();
         __amlc_atomic_fetch_add(&__obj->foreign_reference_count, 1);
@@ -322,6 +350,7 @@ static inline void __increase_reference_count(aobject * const __obj) {
     }
 
     __obj->reference_count++;
+#endif
     #if defined(DEBUG) && defined(ARCLOG)
     #ifdef CONDLOG
     if (__conditional_logging_on) {

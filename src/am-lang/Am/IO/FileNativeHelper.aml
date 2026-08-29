@@ -1,0 +1,29 @@
+namespace Am.IO
+{
+    #implementationPlatforms "libc", "amigaos", "morphos-ppc", "aros"
+    /**
+     * Host filesystem facts that differ per platform and have no portable expression.
+     *
+     * Everything here is a `native` with one implementation per platform, deliberately rather
+     * than one implementation full of #ifdefs: the platform list is already the mechanism the
+     * build uses to pick natives, so the differences belong in separate files where each reads
+     * as ordinary code for its own system.
+     *
+     * `aros` covers every AROS architecture (aarch64, x86_64, ...) because they share one native
+     * folder; aros-m68k extends amigaos and picks up that implementation instead. Both answer the
+     * same thing, so the split costs nothing.
+     */
+    native class FileNativeHelper {
+
+        /**
+         * The directory the host keeps temporary files in, with no trailing separator.
+         *
+         * Use File.getSystemTempFolder() rather than calling this directly. Combine the result with
+         * File.joinPath(), which knows that AmigaDOS-style "T:" takes a name directly while "/tmp"
+         * needs a "/" first.
+         *
+         * @return The system temporary directory, e.g. "/tmp" or "T:"
+         */
+        static native fun getSystemTempFolder(): String
+    }
+}

@@ -524,35 +524,37 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_IO_File_createTempFileInternal_0(aobject * directory, aobject * prefix, aobject * suffix)
+function_result Am_IO_File_createTempFileInternal_0(aobject * pathPrefix, aobject * suffix)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	aobject *dir_filename = directory->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
-	string_holder *dir_string_holder = (string_holder *) (dir_filename + 1);
-	string_holder *prefix_string_holder = (string_holder *) (prefix + 1);
+	string_holder *prefix_string_holder = (string_holder *) (pathPrefix + 1);
 	string_holder *suffix_string_holder = (string_holder *) (suffix + 1);
-	
-	// Create temporary filename in the specified directory
+
+	// The path arrives already joined. File.createTempFile() resolved the
+	// directory -- falling back to FileNativeHelper.getSystemTempFolder(),
+	// which is "/tmp" here and the "T:" assign on AmigaOS-like systems -- and
+	// spelled the join with joinPath(). Nothing here has to guess what a path
+	// looks like on this host; the only job left is making the name unique.
 	char temp_template[512];
-	snprintf(temp_template, sizeof(temp_template), "%s/%s_XXXXXX", 
-		dir_string_holder->string_value, prefix_string_holder->string_value);
-	
+	snprintf(temp_template, sizeof(temp_template), "%s_XXXXXX",
+		prefix_string_holder->string_value);
+
 	// Use mkstemp for safe temporary file creation
 	char temp_filename[512];
 	strcpy(temp_filename, temp_template);
-	
+
 	int fd = mkstemp(temp_filename);
 	if (fd == -1) {
 		__result.return_value.value.object_value = NULL;
 	} else {
 		close(fd); // Close the file descriptor, the file now exists on disk
-		
+
 		// Now add the suffix by renaming the file
 		char final_filename[512];
 		snprintf(final_filename, sizeof(final_filename), "%s%s", temp_filename, suffix_string_holder->string_value);
-		
+
 		if (rename(temp_filename, final_filename) != 0) {
 			// If rename fails, clean up and return null
 			unlink(temp_filename);

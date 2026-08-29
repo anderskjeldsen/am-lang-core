@@ -27,50 +27,69 @@ namespace Tests {
         }
         
         test testWriteAndRead() {
-            var filename = "/tmp/fileaccess_test.txt"
+            // A relative name, like the other file tests here: "/tmp" is a
+            // POSIX convention, and on AmigaOS a leading "/" is the PARENT
+            // directory, so the open could only fail there. What this test is
+            // about is the FileAccess modes, not where the file lives.
+            var filename = "fileaccess_test.txt"
             
             // Test write mode - creates new file
             var file = new File(filename)
             var stream = new FileStream(file, FileAccess.writeOnly)
             var textStream = new TextStream(stream)
             textStream.writeString("Test content")
+            // Close before reopening: AmigaOS gives a file opened for writing
+            // an EXCLUSIVE lock, so the read below cannot open it while this
+            // stream is alive. POSIX is happy to let both handles coexist,
+            // which is the only reason leaving it open ever worked.
+            stream.close()
             
             // Test read mode
             var readFile = new File(filename)
             var readStream = new FileStream(readFile, FileAccess.readOnly)
             var readTextStream = new TextStream(readStream)
             var content = readTextStream.readString()
+            readStream.close()
             
             if (content != "Test content") {
+                File.delete(filename)
                 throw new Exception("Expected 'Test content' but got '" + content + "'")
             }
+            File.delete(filename)
         }
         
         test testAppendMode() {
-            var filename = "/tmp/append_test.txt"
+            var filename = "append_test.txt"
             
             // Create initial content using writeOnly
             var file1 = new File(filename)
             var stream1 = new FileStream(file1, FileAccess.writeOnly)
             var textStream1 = new TextStream(stream1)
             textStream1.writeString("Initial")
+            // One writer at a time: AmigaOS holds an exclusive lock on a file
+            // opened for writing, so the append below has to wait for this
+            // stream to be closed.
+            stream1.close()
             
             // Test appendOnly mode
             var file2 = new File(filename)
             var stream2 = new FileStream(file2, FileAccess.appendOnly)
             var textStream2 = new TextStream(stream2)
             textStream2.writeString(" added")
+            stream2.close()
             
             // Read back and verify
             var readFile = new File(filename)
             var readStream = new FileStream(readFile, FileAccess.readOnly)
             var readTextStream = new TextStream(readStream)
             var finalContent = readTextStream.readString()
+            readStream.close()
             
             if (finalContent != "Initial added") {
+                File.delete(filename)
                 throw new Exception("Expected 'Initial added' but got '" + finalContent + "'")
             }
+            File.delete(filename)
         }
     }
-}
 }

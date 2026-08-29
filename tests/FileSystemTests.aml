@@ -147,8 +147,11 @@ namespace Tests {
         }
 
         fun createAndTestTempFile(): String {
-            // Create a temporary file using File.createTempFile in current directory
-            var tempDir = new File(".")
+            // Name the current directory properly rather than as ".": getCurrentDirectory()
+            // answers with a real host path, so joinPath() can spell the join correctly on
+            // AmigaOS as well as POSIX. Passing "." would ask createTempFile() for the system
+            // temporary directory instead, which is a different test.
+            var tempDir = File.getCurrentDirectoryFile()
             var tempFile = File.createTempFile(tempDir, "test", ".tmp")
             
             if (tempFile == null) {
@@ -177,6 +180,29 @@ namespace Tests {
             
             return tempFilePath
             // File should automatically delete when tempFile goes out of scope
+        }
+
+        test testSystemTempFolderDefault() {
+            // "." means "no directory named", and createTempFile() then asks the host where
+            // temporary files go instead of building a relative path -- "./x" is a path on POSIX
+            // and nothing at all on AmigaOS, where a leading "/" is the parent directory.
+            var tempFolder = File.getSystemTempFolder()
+            if (tempFolder == "") {
+                throw new Exception("System temp folder should not be empty")
+            }
+
+            var tempFile = File.createTempFile(new File("."), "systemtemp", ".tmp")
+            var tempFilePath = tempFile.toString()
+
+            if (!tempFile.exists()) {
+                throw new Exception("Temporary file should exist in " + tempFolder)
+            }
+
+            if (!tempFilePath.startsWith(tempFolder)) {
+                throw new Exception("Expected a path under '" + tempFolder + "' but got '" + tempFilePath + "'")
+            }
+
+            tempFile.delete()
         }
 
         test testTempFile() {

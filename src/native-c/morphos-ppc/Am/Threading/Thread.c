@@ -310,8 +310,13 @@ function_result Am_Threading_Thread_sleep_0(long long milliseconds)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 
-	int ticks = (int) (milliseconds / 20);
-//	printf("Sleep %d ticks\n", ticks);
+	// Delay() is 50 Hz (1 tick = 20ms). A plain integer divide FLOORED any sub-20ms
+	// sleep to 0 ticks, and Delay(0) returns immediately — so Thread.sleep(2) (the
+	// chunk-loader worker's idle back-off) did NOT sleep, and the idle workers spun
+	// hot, saturating the single CPU and starving the main thread (frozen UI, CPU
+	// pegged a few seconds into play once the workers ran out of chunks). CEIL instead
+	// so any positive request waits at least one tick; 0ms stays a no-op (yield).
+	int ticks = (int) ((milliseconds + 19) / 20);
 	Delay(ticks); // Ticks (50 per second)
 
 __exit: ;

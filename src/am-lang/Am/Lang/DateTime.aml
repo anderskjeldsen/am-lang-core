@@ -180,9 +180,14 @@ namespace Am.Lang
             var minute = this.getMinute()
             var second = this.getSecond()
             
-            var totalMonths = month + months
-            var newYear = year + (totalMonths - 1) / 12
-            var newMonth = ((totalMonths - 1) % 12) + 1
+            // Count in months since year zero, so the division is a floor even
+            // when the shift crosses a year boundary backwards. C truncates
+            // toward zero, so the old "year + (month + months - 1) / 12" made
+            // February minus three months land in month -1 of the SAME year:
+            // (2 - 3 - 1) / 12 is 0, not -1, and (-2) % 12 is -2, not 10.
+            var totalMonths = year * 12 + (month - 1) + months
+            var newYear = totalMonths / 12
+            var newMonth = (totalMonths % 12) + 1
             
             // Handle day overflow (e.g., Jan 31 + 1 month should be Feb 28/29)
             var maxDayInMonth = DateTime.getDaysInMonth(newYear, newMonth)

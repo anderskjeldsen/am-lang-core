@@ -28,6 +28,33 @@ namespace Am.IO
         static native fun getCurrentDirectory(): String
 
         /**
+         * The directory the host system keeps temporary files in. Use this instead of hardcoding
+         * "/tmp": that is a POSIX convention, and on AmigaOS-like systems (AmigaOS, AROS, MorphOS)
+         * a leading "/" means the PARENT directory, so such a path cannot even be opened there.
+         * Those systems return the "T:" assign instead.
+         *
+         * The result is a directory path with no trailing separator, so combine it with joinPath()
+         * rather than by hand — joinPath already knows that "T:" takes a name directly while "/tmp"
+         * needs a "/" first.
+         *
+         *     var f = new File(File.joinPath(File.getSystemTempFolder(), "scratch.txt"))
+         *
+         * @return The system temporary directory, e.g. "/tmp" or "T:"
+         */
+        static fun getSystemTempFolder(): String {
+            return FileNativeHelper.getSystemTempFolder()
+        }
+
+        /**
+         * The system temporary directory as a File. The convenient form when you want to pass it
+         * straight to createTempFile().
+         * @return The system temporary directory
+         */
+        static fun getSystemTempFolderFile(): File {
+            return new File(File.getSystemTempFolder())
+        }
+
+        /**
          * Returns the current working directory as a File, ready to list or join paths against.
          * @return A File naming the current directory
          */
@@ -38,24 +65,37 @@ namespace Am.IO
         /**
          * Creates the physical temporary file and returns its path, or null on failure. Use
          * createTempFile() instead, which wraps the result and marks it temporary.
-         * @param directory Directory to create the file in
-         * @param prefix Text to start the generated name with
+         *
+         * Takes the directory and the start of the name already joined into one path, because
+         * joining them is the part that differs between hosts and joinPath() is where that
+         * knowledge lives. The native only has to make the name unique and append the suffix.
+         * @param pathPrefix Directory and name prefix, already joined with joinPath()
          * @param suffix Text to end the generated name with, typically an extension
          * @return The path of the new file, or null if it could not be created
          */
-        static native fun createTempFileInternal(directory: File, prefix: String, suffix: String): String?
+        static native fun createTempFileInternal(pathPrefix: String, suffix: String): String?
 
         /**
          * Creates a new empty file with a generated, unique name and returns it marked as temporary.
-         * Nothing deletes it for you — call deleteRecursive() or delete() when you are finished.
-         * @param directory Directory to create the file in
+         * The file is deleted for you when this File is released, so keep the object alive for as
+         * long as you need the file; call delete() yourself to remove it sooner.
+         * @param directory Directory to create the file in; an empty path or "." means the system
+         *                  temporary directory, as returned by getSystemTempFolder()
          * @param prefix Text to start the generated name with
          * @param suffix Text to end the generated name with, typically an extension
          * @return The newly created file
          * @throws Exception if the file could not be created
          */
         static fun createTempFile(directory: File, prefix: String, suffix: String): File {
-            var tempFilePath = File.createTempFileInternal(directory, prefix, suffix)
+            // Work out where the file goes here, not in the native. A caller who names no
+            // directory means "somewhere temporary", and the host is the only authority on where
+            // that is -- "/tmp" is a POSIX convention and unopenable on AmigaOS, where a leading
+            // "/" is the parent directory. joinPath() then spells the path the host's way.
+            var directoryPath = directory.toString()
+            if (directoryPath == "" || directoryPath == ".") {
+                directoryPath = File.getSystemTempFolder()
+            }
+            var tempFilePath = File.createTempFileInternal(File.joinPath(directoryPath, prefix), suffix)
             if (tempFilePath == null) {
                 throw new Exception("Failed to create temporary file")
             }
@@ -492,8 +532,8 @@ namespace Am.IO
         }
 
         /**
-         * Tests whether this File came from createTempFile(). Nothing cleans temporary files up
-         * automatically; this simply records how the object was made.
+         * Tests whether this File came from createTempFile(). A temporary file is deleted when its
+         * File is released, so this also says whether that will happen.
          * @return True if this file was created as a temporary file
          */
         fun isTemporary(): Bool {

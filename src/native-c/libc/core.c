@@ -35,13 +35,46 @@ void __arc_shared_lock(void)   { pthread_mutex_lock(&__arc_shared_mutex); }
 void __arc_shared_unlock(void) { pthread_mutex_unlock(&__arc_shared_mutex); }
 void * __current_thread(void)  { return (void *) pthread_self(); }
 #elif defined(__MORPHOS__)
-// MorphOS PPC: ExecBase is opaque, so no raw TDNestCnt (see core.h). Forbid()/
-// Permit() library calls give the same task-level mutual exclusion for the ARC
-// critical sections, and they nest. Thread identity is FindTask(NULL).
+// MorphOS PPC: the ARC cross-thread critical sections need a REAL mutual-exclusion
+// lock, not Forbid()/Permit(). Confirmed on HW: with Forbid the game hard-freezes in
+// the first NPC's am-js rt.run (the thread-safe biased-refcount "foreign" path racing
+// the chunk-worker threads); switching to a SignalSemaphore gets past it. MorphOS
+// treats Forbid as unreliable for mutual exclusion, and a SignalSemaphore is the
+// recommended primitive — it NESTS for the same task (ObtainSemaphore is recursive
+// per owner), matching the recursive lock the ARC needs. Gated on __amlc_multithreaded
+// so single-threaded programs keep a zero-cost path. Thread id is FindTask(NULL).
+// (NB: the SEPARATE "runs a few seconds then CPU-locks" bug was Thread.sleep flooring
+// sub-20ms sleeps to Delay(0) -> chunk-worker hot-spin; fixed in Thread.c. Both fixes
+// are needed.)
 #include <proto/exec.h>
-void __arc_shared_mutex_init(void) {}
-void __arc_shared_lock(void)   { Forbid(); }
-void __arc_shared_unlock(void) { Permit(); }
+#include <exec/semaphores.h>
+static struct SignalSemaphore __arc_shared_sem;
+static bool __arc_shared_sem_initialised = false;
+void __arc_shared_mutex_init(void) {
+    if (__arc_shared_sem_initialised) return;
+    InitSemaphore(&__arc_shared_sem);
+    __arc_shared_sem_initialised = true;
+}
+// NEVER gate these on __amlc_multithreaded: that flag flips false->true when the
+// FIRST thread starts, so a lock/unlock pair straddling that moment would SKIP the
+// Obtain but still run the Release — releasing a semaphore this task does not own,
+// which corrupts its wait queue and makes every later ObtainSemaphore block forever
+// (observed as: main/render thread wedges while the loader thread keeps iterating).
+// Obtain/Release must be perfectly symmetric; an uncontended ObtainSemaphore is cheap.
+// Defensive init: ObtainSemaphore on a zeroed (never-InitSemaphore'd) SignalSemaphore
+// is invalid. main() calls __arc_shared_mutex_init() first, but if any allocation
+// somehow runs earlier we self-init here. Safe: that can only happen before the first
+// thread exists, so there is no race on the flag.
+void __arc_shared_lock(void)   {
+    if (!__arc_shared_sem_initialised) { __arc_shared_mutex_init(); }
+    ObtainSemaphore(&__arc_shared_sem);
+}
+void __arc_shared_unlock(void) { ReleaseSemaphore(&__arc_shared_sem); }
+// MorphOS: ExecBase is OPAQUE here — `SysBase->ThisTask` does not compile
+// ("invalid use of undefined type 'struct ExecBase'"), which is the same reason
+// the raw-TDNestCnt trick is unavailable on this platform. So thread identity must
+// go through the FindTask(NULL) library call. (The m68k/AmigaOS branch below CAN
+// read SysBase->ThisTask directly, because its ExecBase is a complete type.)
 void * __current_thread(void)  { return (void *) FindTask(NULL); }
 #else
 // AmigaOS: single-core, so mutual exclusion for the ARC critical sections
@@ -58,7 +91,11 @@ void * __current_thread(void)  { return (void *) FindTask(NULL); }
 void __arc_shared_mutex_init(void) {}
 void __arc_shared_lock(void)   { SysBase->TDNestCnt++; }  // inline Forbid()
 void __arc_shared_unlock(void) { SysBase->TDNestCnt--; }  // inline raw Permit()
-void * __current_thread(void)  { return (void *) FindTask(NULL); }
+// SysBase->ThisTask IS what FindTask(NULL) returns, minus the library-vector
+// call. This runs on EVERY retain/release in a multithreaded program (the
+// biased-refcount owner test), so a jsr through ExecBase here costs more than
+// the atomic it exists to avoid.
+void * __current_thread(void)  { return (void *) SysBase->ThisTask; }
 #endif
 #include <Am/Lang/Exception.h>
 #include <Am/Lang/Object.h>
@@ -1151,19 +1188,7 @@ void clear_allocated_objects() {
 // overhead, but unlike inlined ternaries this doesn't blow the
 // 26 k-line JsBytecodeVm.run frame — function calls reserve a fixed
 // per-call stack chunk, not per-call-site stack.
-#ifndef AM_SINGLE_THREADED
-aobject * __wrap_if_foreign(aobject * const __raw) {
-    // Thread-safe ARC (BRC): wrappers are gone. Cross-thread references now use
-    // the SAME real pointer, and foreign liveness is tracked via
-    // `foreign_reference_count` on the OWNED retain paths (__retain_slot_read /
-    // __increase_reference_count). This site is a BORROW — codegen emits no
-    // paired release for it (see RenderHelper.kt; same-thread was already a
-    // zero-cost identity), so it must NOT touch any counter. Bumping here would
-    // leak; the pre-BRC same-thread path already returned the raw unchanged.
-    // Return the pointer as-is.
-    return __raw;
-}
-#endif
+// __wrap_if_foreign is a macro in core.h now — see the comment there.
 
 
 // AMLC_XTHREAD_RC=1: report reference_count mutations performed by a

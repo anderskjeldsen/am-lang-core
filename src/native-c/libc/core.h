@@ -11,8 +11,92 @@
 // reference_count, property_reference_count and foreign_reference_count are
 // all zero. This replaces the per-access cross-thread wrapper-object protocol.
 // See am-lang-compiler-code/docs/BIASED_REFCOUNT_DESIGN.md.
-#if !defined(__STDC_NO_ATOMICS__) && !defined(AMIGA) && !defined(__AMIGA__) && !defined(__MORPHOS__) && !defined(AMLC_NO_ATOMICS)
-    // Real C11 atomics (linux/macos/…): the fast, lock-free path.
+// ---------------------------------------------------------------------------
+// ARC concurrency STRATEGY (per platform, overridable with -DAMLC_ARC_STRATEGY=)
+//
+//   AMLC_ARC_STRATEGY_BIASED  Biased refcounting: the owner thread bumps a
+//                             plain, non-atomic `reference_count`; only the
+//                             rare cross-thread ops touch the atomic
+//                             `foreign_reference_count`. Right when an atomic
+//                             RMW is EXPENSIVE relative to a plain increment —
+//                             i.e. real SMP, where `lock xadd` / `ldaddal`
+//                             costs ~20-40 cycles against ~1 for `++`.
+//
+//   AMLC_ARC_STRATEGY_ATOMIC  One shared counter, every retain/release atomic
+//                             (the Rust `Arc` model). Right when an atomic RMW
+//                             is CHEAP — a uniprocessor, where a single
+//                             instruction memory RMW cannot be split by a task
+//                             switch. Then the bias is a net loss: deciding
+//                             "am I the owner?" costs more (a thread-identity
+//                             read + compare) than the atomic it avoids.
+//
+// NB switching a platform to ATOMIC is NOT just a counter change: the destroy
+// decision spans owner_gone / property_reference_count / first_object_wrapper /
+// destruction_claimed, so it still needs the shared lock (or those references
+// have to become ordinary counted references first). The strategy macro exists
+// so that work can land per platform instead of all at once.
+#define AMLC_ARC_STRATEGY_BIASED 1
+#define AMLC_ARC_STRATEGY_ATOMIC 2
+
+// ---------------------------------------------------------------------------
+// PLATFORM_AMIGAOS — the AmigaOS 68k ABI.
+//
+// The Amiga branches further down are m68k INLINE ASSEMBLY (`add.l`, `addq.l`,
+// register constraints), so what they need to know is the ARCHITECTURE. Asking
+// the toolchain was the bug: `AMIGA` / `__AMIGA__` name the OS family only.
+//
+//   * AROS predefines AMIGA on EVERY architecture it targets (verified:
+//     aarch64-aros-gcc and x86_64-aros-gcc both emit `#define AMIGA 1`), so on
+//     AROS aarch64 the guard selected the 68k assembly and the build died with
+//     "impossible constraint in 'asm'". The same trap was latent on AROS
+//     x86-64, where it silently picked a non-atomic `*(p)` for the CROSS-THREAD
+//     counter instead of failing loudly.
+//   * ppc-morphos-gcc predefines __AMIGA__, which is why the branches below
+//     each had to carry their own `!defined(__MORPHOS__)` exclusion.
+//
+// So ask the PLATFORM instead. amlc platform ids carry the architecture
+// whenever it is not implied by the OS — `morphos-ppc`, `aros-arm64`,
+// `aros-x86-64` — and `amigaos` is the 68k one by definition; a different CPU
+// would be a different platform, as MorphOS and AROS both already are (neither
+// extends `amigaos`; `aros-m68k` does, precisely because it IS this ABI).
+// MakefileRenderer emits -DPLATFORM_<ID> for the target platform and every
+// platform in its `extends` chain, so that inheritance carries the define.
+//
+// NOTE a translation unit compiled OUTSIDE an amlc-generated makefile (a
+// hand-built native, a one-off probe) gets no PLATFORM_ define and so takes the
+// generic path at the bottom of the atomics block, whatever its toolchain
+// predefines. Correct for single-threaded use and for probing, but NOT atomic
+// across threads — build through amlc for anything sharing objects between
+// threads.
+
+#ifndef AMLC_ARC_STRATEGY
+    #if defined(__MORPHOS__)
+        // MorphOS PPC: uniprocessor. PPC has no single-instruction memory RMW, so
+        // an atomic retain IS a real lwarx/stwcx. pair (~4 inline instructions) —
+        // but the bias costs MORE here than it saves, because the owner test needs
+        // a thread identity and MorphOS's ExecBase is OPAQUE: `__current_thread()`
+        // has to go through the FindTask(NULL) library vector (disassembles to 9
+        // instructions ending in `bctr`), and in a multithreaded program that call
+        // runs on EVERY retain and EVERY release. That is the opposite trade from
+        // m68k, where `SysBase->ThisTask` is one cheap load and the bias is nearly
+        // free. So: ATOMIC — one shared counter, no owner test, no thread-identity
+        // call. (The destroy decision still takes the shared lock; see the note at
+        // the top of this block.)
+        #define AMLC_ARC_STRATEGY AMLC_ARC_STRATEGY_ATOMIC
+    #elif defined(PLATFORM_AMIGAOS)
+        // AmigaOS 68k: ONE counter for all threads. `addq.l #1,(rc,a0)` is
+        // simultaneously the plain increment and the atomic one, so the bias
+        // costs more than it saves (see the codegen note on __amlc_arc_inc).
+        #define AMLC_ARC_STRATEGY AMLC_ARC_STRATEGY_ATOMIC
+    #else
+        // SMP desktop: the bias genuinely pays for itself.
+        #define AMLC_ARC_STRATEGY AMLC_ARC_STRATEGY_BIASED
+    #endif
+#endif
+
+#if !defined(__STDC_NO_ATOMICS__) && !defined(PLATFORM_AMIGAOS) && !defined(__MORPHOS__) && !defined(AMLC_NO_ATOMICS)
+    // Real C11 atomics (linux/macos/… and AROS on aarch64/x86-64): the fast,
+    // lock-free path.
     #include <stdatomic.h>
     typedef _Atomic int __amlc_atomic_int;
     #define __amlc_atomic_load(p)          atomic_load_explicit((p), memory_order_acquire)
@@ -20,22 +104,30 @@
     #define __amlc_atomic_fetch_sub(p, v)  atomic_fetch_sub_explicit((p), (v), memory_order_acq_rel)
     #define __amlc_atomic_store(p, v)      atomic_store_explicit((p), (v), memory_order_release)
 #elif defined(__MORPHOS__)
-    // MorphOS PPC: the toolchain predefines AMIGA/__AMIGA__ too, but MorphOS's
-    // ExecBase is opaque here — `SysBase->TDNestCnt` won't compile (undefined
-    // struct), so the m68k raw-TDNestCnt trick below is out. MorphOS has threads
-    // (CreateNewProc loader/workers), so the non-atomic fallback would race the
-    // cross-thread foreign counter. Use the Forbid()/Permit() library calls
-    // around the RMW: task-level mutual exclusion, single-CPU-safe, and it nests
-    // (Forbid/Permit are counted) exactly like the m68k path. MUST precede the
-    // AMIGA branch since __AMIGA__ is also defined here.
-    #include <proto/exec.h>
+    // MorphOS PPC: unlike the m68k/AmigaOS branch below (gcc 6.5, no usable inline
+    // atomics), the MorphOS toolchain is gcc 15.1 and emits REAL inline PPC
+    // load-reserved / store-conditional (lwarx/stwcx.) for the __atomic builtins —
+    // verified with `ppc-morphos-gcc -S`. So use genuine hardware atomics for the
+    // cross-thread foreign refcount instead of the old Forbid()/Permit() shim (which
+    // was copy-pasted from the m68k path and is unreliable for mutual exclusion on
+    // MorphOS). This matches the desktop path's real C11 atomics. MUST precede the
+    // AMIGA branch since __AMIGA__ is also defined on this toolchain.
+    // Memory ORDERING: MorphOS is uniprocessor-only, so cross-CPU barriers buy
+    // nothing — all tasks run on one core and a context switch is itself a full
+    // synchronisation point. On PPC, __ATOMIC_ACQ_REL emits `lwsync` BEFORE and
+    // `isync` AFTER every RMW; under the ATOMIC strategy that lands on EVERY
+    // retain/release, which would eat the win. So: RELAXED for the increment (the
+    // classic Arc rule — a retain needs no ordering), and RELEASE for the decrement
+    // so the compiler cannot sink a last-use store past the release that frees the
+    // object. The lwarx/stwcx. pair still provides the atomicity that matters here
+    // (indivisibility against preemption).
     typedef int __amlc_atomic_int;
-    #define __amlc_atomic_load(p)          (*(p))
-    #define __amlc_atomic_store(p, v)      ( (*(p)) = (v) )
-    #define __amlc_atomic_fetch_add(p, v)  ({ Forbid(); int __amlc_o = *(p); *(p) = __amlc_o + (v); Permit(); __amlc_o; })
-    #define __amlc_atomic_fetch_sub(p, v)  ({ Forbid(); int __amlc_o = *(p); *(p) = __amlc_o - (v); Permit(); __amlc_o; })
-#elif defined(AMIGA) || defined(__AMIGA__)
-    // AmigaOS: the toolchain has no usable inline atomic RMW — GCC 6.5 m68k
+    #define __amlc_atomic_load(p)          __atomic_load_n((p), __ATOMIC_RELAXED)
+    #define __amlc_atomic_store(p, v)      __atomic_store_n((p), (v), __ATOMIC_RELAXED)
+    #define __amlc_atomic_fetch_add(p, v)  __atomic_fetch_add((p), (v), __ATOMIC_RELAXED)
+    #define __amlc_atomic_fetch_sub(p, v)  __atomic_fetch_sub((p), (v), __ATOMIC_RELEASE)
+#elif defined(PLATFORM_AMIGAOS)
+    // AmigaOS 68k: the toolchain has no usable inline atomic RMW — GCC 6.5 m68k
     // lowers C11 atomics / __sync builtins to ___atomic_*_4 libcalls even at
     // -mcpu=68020 (verified), and TAS is byte-only + unreliable on chip RAM.
     // Amiga is single-core, so the only concurrency is task preemption; an
@@ -51,18 +143,62 @@
     typedef int __amlc_atomic_int;
     #define __amlc_atomic_load(p)          (*(p))
     #define __amlc_atomic_store(p, v)      ( (*(p)) = (v) )
-    #define __amlc_atomic_fetch_add(p, v)  ({ SysBase->TDNestCnt++; int __amlc_o = *(p); *(p) = __amlc_o + (v); SysBase->TDNestCnt--; __amlc_o; })
-    #define __amlc_atomic_fetch_sub(p, v)  ({ SysBase->TDNestCnt++; int __amlc_o = *(p); *(p) = __amlc_o - (v); SysBase->TDNestCnt--; __amlc_o; })
+    // Single-instruction memory RMW. A task switch arrives as an interrupt and
+    // is therefore taken on an INSTRUCTION BOUNDARY, so `add.l %1,%0` with a
+    // memory destination cannot be split — it is atomic against preemption on
+    // a uniprocessor without any Forbid at all (and without needing 68020's
+    // `cas`, so plain 68000 works too). Replaces the old TDNestCnt shim: same
+    // guarantee, ~4 instructions fewer, and no deferred-reschedule side effect.
+    // The returned OLD value is read separately, so it is only meaningful when
+    // the caller serialises against other writers — which the ARC foreign paths
+    // do via __arc_shared_lock. `__amlc_arc_dec_is_zero` below needs no such
+    // help: the decrement AND the zero test come from one instruction's flags.
+    #define __amlc_atomic_fetch_add(p, v)  ({ int __amlc_o = *(p); \
+        __asm__ __volatile__("add.l %1,%0" : "+m"(*(p)) : "d"((int)(v)) : "cc", "memory"); \
+        __amlc_o; })
+    #define __amlc_atomic_fetch_sub(p, v)  ({ int __amlc_o = *(p); \
+        __asm__ __volatile__("sub.l %1,%0" : "+m"(*(p)) : "d"((int)(v)) : "cc", "memory"); \
+        __amlc_o; })
 #else
-    // Other no-atomics targets (e.g. MorphOS PPC — has real atomics, but the
-    // toolchain path is unverified): plain non-atomic fallback. Safe only where
-    // ARC is serialised to one execution context.
+    // Other no-atomics targets: plain non-atomic fallback. Safe only where ARC is
+    // serialised to one execution context. (NOT MorphOS — it has its own verified
+    // real-atomics branch above; this comment used to name it, which was stale.)
     typedef int __amlc_atomic_int;
     #define __amlc_atomic_load(p)          (*(p))
     #define __amlc_atomic_fetch_add(p, v)  ( ((*(p)) += (v)), ((*(p)) - (v)) )
     #define __amlc_atomic_fetch_sub(p, v)  ( ((*(p)) -= (v)), ((*(p)) + (v)) )
     #define __amlc_atomic_store(p, v)      ( (*(p)) = (v) )
 #endif
+
+// ---------------------------------------------------------------------------
+// Strategy-agnostic ARC primitives.
+//
+//   __amlc_arc_inc(p)          retain: atomic ++
+//   __amlc_arc_dec_is_zero(p)  release: atomic --, TRUE when it reached zero
+//
+// The dec-and-test is the operation refcounting actually needs, and it is
+// expressible as ONE instruction on m68k (`sub` sets Z on the NEW value), so
+// the AmigaOS form needs neither Forbid nor `cas`. CCR survives a task switch
+// (Exec saves the full context), so reading the flag after is safe.
+// Asking for PLATFORM_AMIGAOS rather than the toolchain's own `AMIGA`/`__AMIGA__`
+// is what keeps the non-68k Amiga-API toolchains (ppc-morphos, aros-arm64,
+// aros-x86-64) out of this `addq.l`/`subq.l` assembly — see the note at the top
+// of this file.
+// Only bites once a platform actually uses these (ATOMIC strategy).
+#if defined(PLATFORM_AMIGAOS)
+    #define __amlc_arc_inc(p) \
+        __asm__ __volatile__("addq.l #1,%0" : "+m"(*(p)) : : "cc", "memory")
+    #define __amlc_arc_dec_is_zero(p) ({ unsigned char __amlc_z; \
+        __asm__ __volatile__("subq.l #1,%1\n\tseq %0" \
+            : "=d"(__amlc_z), "+m"(*(p)) : : "cc", "memory"); \
+        __amlc_z != 0; })
+#else
+    // MorphOS (lwarx/stwcx.) and desktop (lock xadd / ldaddal) both get a real
+    // atomic here; the fetch_sub result carries the ordering the destroy needs.
+    #define __amlc_arc_inc(p)          ((void) __amlc_atomic_fetch_add((p), 1))
+    #define __amlc_arc_dec_is_zero(p)  (__amlc_atomic_fetch_sub((p), 1) == 1)
+#endif
+
 
 //#define CLASS_TYPE_PRIMITIVE 1
 //#define CLASS_TYPE_NORMAL 0
@@ -500,12 +636,19 @@ aobject * __create_wrapper(aobject * const __realobj);
 // owner_thread == current) pass through. Wrappers from OTHER threads
 // shouldn't normally appear here because `__set_property` unwraps
 // before storing; if one does, we'd re-wrap (correct but wasteful).
-#ifdef AM_SINGLE_THREADED
-// Identity, and with no call: cross-thread borrows cannot occur here.
+// Cross-thread BORROW site. Under the current biased-refcount design there is
+// nothing to do here in ANY build: cross-thread references use the same real
+// pointer, and foreign liveness is tracked on the owned retain paths
+// (__retain_slot_read / __increase_reference_count). Codegen emits no paired
+// release for this site, so it must not touch a counter either.
+//
+// It is a MACRO rather than a function in core.c because the generated C calls
+// it constantly — 13,030 sites in am-ide alone — and a non-inlined call that
+// returns its argument is pure overhead in every program, single-threaded or
+// not. The argument is evaluated exactly once and its address is never taken
+// (checked across v1's generated output and every package's natives), so the
+// macro is a drop-in for the old function.
 #define __wrap_if_foreign(__raw) (__raw)
-#else
-aobject * __wrap_if_foreign(aobject * const __raw);
-#endif
 
 // AMLC_XTHREAD_RC=1 diagnostics: report rc mutations by non-owner threads
 // (races that can pin rc above zero forever). Zero-cost when off beyond a
