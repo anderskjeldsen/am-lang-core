@@ -113,15 +113,36 @@ platforms:
       - inputFilename: aros.c
         outputFilename: aros.o
     gccAdditionalOptions:
-      # libc/Am/Threading/Thread.c needs pthreads, and the AROS drivers (both
-      # the real clang one and our shims) only pull in -lpthread when they see
-      # -pthread. AROS ships libpthread.a for every arch, so this belongs on
-      # the shared base.
-      - -pthread
-    additionalLinkerFlags:
-      # gccAdditionalOptions only reaches the compile rules — repeat it here or
-      # the link drops libpthread.
-      - -pthread
+      # REQUIRED. AROS's ELF loader flatly refuses COMMON symbols:
+      #   rom/dos/internalloadseg_elf.c
+      #     case SHN_COMMON: SetIoErr(ERROR_BAD_HUNK); return 0;
+      # and rom/dos/internalloadseg.c then overwrites that with
+      # ERROR_NOT_EXECUTABLE, so the only symptom is "file is not executable".
+      # The AROS gcc is 6.5.0, which still defaults to -fcommon (GCC 10 flipped
+      # the default), so every uninitialised file-scope global becomes a COMMON
+      # symbol and the binary will not load. Diagnosed on a Raspberry Pi:
+      # am-lang-core had 283 of them.
+      - -fno-common
+      # libc/Am/Threading/Thread.c needs pthreads and AROS ships libpthread.a
+      # for every arch, so this belongs on the shared base.
+      #
+      # Deliberately NOT -pthread: the real GNU AROS compilers reject it
+      # ("aarch64-aros-gcc: error: unrecognized command line option
+      # '-pthread'"). Only the clang-based drivers accept it. -D_REENTRANT is
+      # what -pthread would have defined, and works with every driver.
+      - -D_REENTRANT
+    gccAdditionalLibraries:
+      # gccAdditionalOptions only reaches the compile rules — the link needs
+      # libpthread named explicitly, since without -pthread no driver adds it.
+      #
+      # Declared as a LIBRARY rather than an additionalLinkerFlag because
+      # placement decides whether it works: linker flags are emitted before the
+      # object files, and GNU ld only pulls members from an archive that
+      # something ALREADY referenced, so `-lpthread ... objs` silently resolves
+      # nothing. On x86-64 that surfaced as every pthread_* symbol undefined at
+      # link even though the SDK ships libpthread.a. Libraries are emitted after
+      # the objects, which is the order archives need.
+      - pthread
 
   - id: aros-x86-64
     extends: aros
@@ -163,7 +184,46 @@ platforms:
       - -noixemul
   - id: aros-arm64
     extends: aros
+    # The real GNU aarch64-aros-gcc 6.5.0, from the published
+    # midwan/aros-compiler:aarch64-aros image (recipe:
+    # github.com/BlitterStudio/aros-compiler-docker). Its baked sysroot is the
+    # raspi-aarch64 SDK - AROS on a Raspberry Pi.
     gccCommand: aarch64-aros-gcc -O2
+    gccAdditionalOptions:
+      # NOTE: gccAdditionalOptions REPLACES the parent platform's list, it does
+      # NOT merge with it. Everything inherited from `aros` must be repeated
+      # here or it is silently lost. Dropping -fno-common produces 748 COMMON
+      # symbols and AROS refuses the binary with "file is not executable".
+      - -fno-common
+      - -D_REENTRANT
+      # x18 is the AAPCS64 *platform* register: its meaning belongs to the
+      # platform ABI, not to us. Reserving it is what makes the binary usable
+      # under Macaros (hosted AROS on macOS), which preempts AROS tasks with
+      # Darwin signals - macOS supplies zero for x18 in the signal context, so
+      # any live value in it is destroyed before AROS's handler can save it.
+      # See Macaros RELEASE-NOTES.md, "do not use x18".
+      #
+      # Safe on real hardware too: -ffixed-x18 only STOPS gcc allocating x18,
+      # it changes no calling convention (x18 carries no argument or return
+      # value), so it stays link-compatible with the raspi-aarch64 SDK.
+      #
+      # The SDK is NOT x18-free, so this flag only covers our own code. In
+      # midwan/aros-compiler:aarch64-aros (the image this target builds in),
+      # 19 archives under .../raspi-aarch64/AROS/Developer/lib use x18 - mostly
+      # bundled third-party codecs we never link (libaom 2709, libzstd 1647,
+      # libfreetype2 198, liblzma 197), but also libposixc.a (2) and
+      # libamiga.a (2).
+      #
+      # After this flag, all 172 of our objects are x18-free and the linked
+      # test_app retains exactly 2 references, both inside libamiga.a's
+      # GetDataStreamFromFormat - which has ZERO call sites in the binary. It is
+      # linked only because it shares an object file with the startup code, so
+      # it never executes and cannot be corrupted. If a future change actually
+      # calls into one of those archives, re-check with:
+      #   objdump -d --triple=aarch64 test_app | grep -cE '\bx18\b|\bw18\b'
+      #
+      # Cost is one fewer scratch register.
+      - -ffixed-x18
 #  - id: msdos-x86
 #    extends: libc
 #    gccCommand: gcc
@@ -210,30 +270,40 @@ buildTargets:
     features: ["floatingPoint"]
   - id: windows_docker
     commands: 
-      - docker run --rm -v "${build_dir}":/usr/src/ -w /usr/src/ gcc:12.1 make -f linux-x64.makefile
+      - docker run --rm -v ${build_dir}:/usr/src/ -w /usr/src/ gcc:12.1 make -f linux-x64.makefile
   - id: morphos-ppc_docker
     platform: morphos-ppc
     commands:
-      - docker run --rm -v "${build_dir}":/work -e USER=$( id -u ) -e GROUP=$( id -g ) -it amigadev/crosstools:ppc-morphos make -f morphos_ppc.makefile -C /work all
+      - docker run --rm -v ${build_dir}:/work -e USER=$( id -u ) -e GROUP=$( id -g ) -it amigadev/crosstools:ppc-morphos make -f morphos_ppc.makefile -C /work all
   - id: morphos-ppc_docker_mac
     platform: morphos-ppc
     commands:
-      - docker run --rm -v "${build_dir}":/work -i amigadev/crosstools:ppc-morphos make -f morphos-ppc.makefile -C /work all
+      - docker run --rm -v ${build_dir}:/work -i amigadev/crosstools:ppc-morphos make -f morphos-ppc.makefile -C /work all
   - id: morphos-ppc_docker_win
     platform: morphos-ppc
     commands:
-      - docker run --rm -v "${build_dir}":/work -e -i amigadev/crosstools:ppc-morphos make -f morphos-ppc.makefile -C /work all
+      - docker run --rm -v ${build_dir}:/work -e -i amigadev/crosstools:ppc-morphos make -f morphos-ppc.makefile -C /work all
   - id: aros-x86-64_docker_win
     platform: aros-x86-64
     commands: 
-      - docker run --rm -v "${build_dir}":/work -i amigadev/crosstools:x86_64-aros make aros-x86-64.makefile all
+      - docker run --rm -v ${build_dir}:/work -i amigadev/crosstools:x86_64-aros make aros-x86-64.makefile all
   # In-environment build: needs aarch64-aros-gcc on PATH, i.e. run from inside
   # the aros-arm64-dev:sdk container (no docker-in-docker).
   - id: aros-arm64
     platform: aros-arm64
     features: ["floatingPoint"]
-  # Host-side build: amlc mounts builds/ at /host and runs make in the image.
-  # Build the image first with `make sdk-image` in ../aros-arm64-dev/.
+  # Host-side build/test for AROS on a Raspberry Pi (aarch64).
+  # The image is amd64-only, hence the explicit platform - Docker would
+  # otherwise refuse it on an arm64 host, or run it emulated with a warning
+  # on every invocation. Pull once:
+  #   docker pull --platform linux/amd64 midwan/aros-compiler:aarch64-aros
+  - id: aros-arm64-docker
+    platform: aros-arm64
+    features: ["floatingPoint"]
+    dockerBuild:
+      image: midwan/aros-compiler:aarch64-aros
+      buildPath: /host
+      platform: linux/amd64
   - id: aros-m68k
     platform: aros-m68k
     features: ["floatingPoint"]
@@ -258,12 +328,6 @@ buildTargets:
       image: aros-x64-dev:sdk
       buildPath: /host
 
-  - id: aros-arm64-docker
-    platform: aros-arm64
-    features: ["floatingPoint"]
-    dockerBuild:
-      image: aros-arm64-dev:sdk
-      buildPath: /host
   - id: linux-x64_docker
     platform: linux-x64
     features: ["floatingPoint"]
