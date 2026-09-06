@@ -135,6 +135,21 @@ namespace Am.Threading {
          * to objects that have to be released cleanly. Private so application code cannot call it;
          * the generated exit call is not affected by the modifier.
          */
+        /**
+         * How long stopAll waits for the workers to leave their loops before giving up and letting
+         * teardown proceed. Generous enough for a task that is merely slow, short enough that a truly
+         * stuck task does not hold the exit forever.
+         */
+        private static const STOP_TIMEOUT_MS: Long = 10000L
+        /** Poll interval while waiting for runners to finish. */
+        private static const STOP_POLL_MS: Long = 5L
+        /**
+         * A shutdown that takes longer than this is not "slow", it is a task that is not going to
+         * return -- so say so, naming the runners still out, rather than appearing to hang. Printed
+         * once, then again if the wait actually times out.
+         */
+        private static const STOP_WARN_MS: Long = 5000L
+
         #runOnExit
         private static fun stopAll() {
             TaskScheduler.runnersMutex.lock()
@@ -154,12 +169,84 @@ namespace Am.Threading {
                 TaskScheduler.runnersMutex.unlock()
             }
 
-            // Give the runners one idle-poll's worth of time to notice
-            // the flag and leave their loop. We don't bother joining —
-            // the workers themselves never touch shared state after
-            // setting the flag, and the runtime teardown that follows
-            // doesn't depend on the threads being fully reaped.
-            Thread.sleep(50L)
+            // WAIT for the workers to actually leave their loops before
+            // returning, because what follows this hook is the runtime
+            // teardown: main() releases every static and decrements the
+            // string-constant table. A worker still inside task.execute()
+            // is touching that same object graph, and both sides take the
+            // shared ARC lock -- which is a deadlock during exit, and one
+            // the OS cannot help with (the process is already exiting, so
+            // it sits in an uninterruptible wait that even SIGKILL cannot
+            // clear until the wait returns).
+            //
+            // The old code slept a flat 50 ms and did not join. That is
+            // fine for an IDLE worker -- it notices the flag within one
+            // IDLE_SLEEP_MS poll -- but the flag is only checked BETWEEN
+            // tasks, so a worker mid-task (a git capture, an HTTP request,
+            // a directory walk) blows straight past 50 ms and races the
+            // teardown. Intermittent by nature, which is why it showed up
+            // as the occasional binary that finished its work and then
+            // could never exit.
+            //
+            // Bounded, not unbounded: a task that never returns (a blocked
+            // socket read) must not convert an occasional hang into a
+            // guaranteed one. We wait up to STOP_TIMEOUT_MS for every
+            // started runner to report `finished`, then proceed regardless
+            // -- no worse than the old behaviour in that case, and correct
+            // in every other.
+            var waited = 0L
+            var warned = false
+            var pending = true
+            while (pending && waited < TaskScheduler.STOP_TIMEOUT_MS) {
+                pending = false
+                var j = 0
+                while (j < TaskScheduler.allRunners.getSize()) {
+                    var r = TaskScheduler.allRunners.get(j)
+                    if (r.wasStarted() && !r.hasFinished()) {
+                        pending = true
+                    }
+                    j = j + 1
+                }
+                if (pending) {
+                    if (!warned && waited >= TaskScheduler.STOP_WARN_MS) {
+                        warned = true
+                        TaskScheduler.reportStillRunning()
+                    }
+                    Thread.sleep(TaskScheduler.STOP_POLL_MS)
+                    waited = waited + TaskScheduler.STOP_POLL_MS
+                }
+            }
+            if (pending) {
+                ("[exit] giving up after "
+                    + TaskScheduler.STOP_TIMEOUT_MS.toString()
+                    + " ms; continuing teardown with worker(s) still running.").println()
+                "[exit] if the process now hangs unkillably, THIS is why: a worker".println()
+                "[exit] is still touching the object graph main() is tearing down.".println()
+                TaskScheduler.reportStillRunning()
+            }
+        }
+
+        /**
+         * Names the runners that have not left their loop, and says whether each is mid-task or merely
+         * between polls. Mid-task is the case that races teardown; idle means the flag simply has not
+         * been noticed yet and one more poll would do it.
+         */
+        private static fun reportStillRunning() {
+            ("[exit] still waiting for worker thread(s) to stop after "
+                + TaskScheduler.STOP_WARN_MS.toString() + " ms:").println()
+            var j = 0
+            while (j < TaskScheduler.allRunners.getSize()) {
+                var r = TaskScheduler.allRunners.get(j)
+                if (r.wasStarted() && !r.hasFinished()) {
+                    var state = "idle between polls"
+                    if (r.isBusy()) {
+                        state = "INSIDE a task (this is what races teardown)"
+                    }
+                    ("[exit]   " + r.name + " - " + state
+                        + ", " + r.pendingCount().toString() + " queued").println()
+                }
+                j = j + 1
+            }
         }
     }
 }

@@ -102,6 +102,18 @@ namespace Am.Lang
         native fun setReportedSize(rows: Int, cols: Int)
 
         /**
+         * Sets the stack, in bytes, allocated to the child. Call it BEFORE the process is started
+         * — the stack is fixed when the child is created, so a later call has no effect on a
+         * running one. Platforms whose children grow their stack on demand ignore this.
+         *
+         * It matters on AmigaOS, where a task's stack is a fixed allocation: a child that
+         * recurses past it corrupts memory instead of failing cleanly, and the crash surfaces far
+         * from the cause. Compilers and parsers are the usual reason to raise it.
+         * @param bytes Stack size in bytes; values below a platform minimum are raised to it
+         */
+        native fun setStackSize(bytes: Int)
+
+        /**
          * Terminates the child if it is still running and tears down the console handler behind
          * it. Idempotent, and called automatically when the handle is released, so you only need
          * it to free things early. To stop a live child from a user action, prefer

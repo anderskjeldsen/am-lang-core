@@ -237,7 +237,15 @@ function_result Am_Lang_String_characterAtNative_0(aobject * const this, unsigne
 		__throw_simple_exception("Index out of bounds", "in Am_Lang_String_characterAt_0", &__result);
 		goto __exit;
 	}
-	__result.return_value.value.ushort_value = string_holder->string_value[index];
+	// Cast through unsigned char: plain `char` is SIGNED on most of our
+	// targets (Apple arm64, x86, m68k gcc), so a byte >= 0x80 would
+	// sign-extend into the UShort -- 0xEF read back as 0xFFEF. Callers
+	// that then write the value out as a codepoint (JSON's \uXXXX
+	// escape) emit garbage in the 0xFFxx range, and on the next parse
+	// that garbage becomes three bytes of UTF-8, which the next save
+	// escapes as three more codepoints. A single Norwegian 'o-slash'
+	// grew to ~100 characters over a handful of chat round trips.
+	__result.return_value.value.ushort_value = (unsigned char) string_holder->string_value[index];
 
 __exit: ;
 	return __result;

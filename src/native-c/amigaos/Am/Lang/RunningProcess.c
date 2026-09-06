@@ -61,6 +61,14 @@
 // two in sync via this define. 
 #define RP_TTY_TASK_NAME "AmLangTTY"
 
+// Child stack, in bytes. The old hard-coded 32 KB was enough for a shell
+// command but not for a compiler, and AmigaOS does not grow a task stack —
+// overrunning it corrupts memory rather than failing. Callers override via
+// RunningProcess.setStackSize; the floor stops a bad value from being worse
+// than the default.
+#define RP_DEFAULT_CHILD_STACK 32768
+#define RP_MIN_CHILD_STACK      8192
+
 // =================================================================
 // Diagnostic log (same shape as before — invaluable for debugging
 // the dos.library handler protocol)
@@ -421,6 +429,9 @@ struct _running_process_data {
     // early getConsoleSize probe arrives). When state is NULL we
     // stash here; startNative copies us into state at allocation.
     // Default 24/80 until the caller overrides.
+    // Child stack in bytes, set by setStackSize before the spawn. 0 = use
+    // the built-in default. Fixed at creation, so it is only read once.
+    LONG  pending_stack;
     LONG  pending_rows;
     LONG  pending_cols;
 };
@@ -1359,6 +1370,17 @@ static void __saveds rp_child_exit(
     st->in.writer_closed = TRUE;
     rp_fulfil_deferred(st);
     Permit();
+
+    // Wake the main loop on EXIT, not just on output. The drain loop
+    // (CliView.drainProcess) reschedules itself while the child is alive
+    // and only detects the exit -- and clears CliView.running -- on the
+    // NEXT wake. Output wakes it via ACTION_WRITE's rp_signal_main_wake;
+    // a child that exits right after its last output (make "Nothing to be
+    // done", a fast tool) produced no further wake, so the exit-detecting
+    // drain starved: CliView.running stayed non-null, every keystroke was
+    // routed to the dead child, and the panel stopped repainting until it
+    // was closed and reopened. One signal here closes that gap.
+    rp_signal_main_wake();
 }
 
 // =================================================================
@@ -1376,6 +1398,7 @@ function_result Am_Lang_RunningProcess__native_init_0(aobject * const this) {
     if (d != NULL) {
         // Sensible defaults so a startNative without a preceding
         // setReportedSize() still reports a usable terminal size.
+        d->pending_stack = 0;
         d->pending_rows = 24;
         d->pending_cols = 80;
         this->object_properties.class_object_properties.object_data.value.custom_value = d;
@@ -1898,13 +1921,28 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     // AmLang main task, not the handler. If DupLock fails the child
     // just inherits a null HomeDir (libnix programs cope fine).
     BPTR child_home_lock = 0;
+    // ...and once more for the child's CURRENT dir. Without NP_CurrentDir
+    // the child does not inherit ours — it starts at the boot volume root,
+    // so a relative path handed to the child (`amlc new MyProject`) was
+    // created in `SYS:` no matter what directory the terminal was showing.
+    // NP_HomeDir and NP_CurrentDir are freed independently when the child
+    // exits, so these must be two separate DupLocks, never the same one.
+    BPTR child_cwd_lock = 0;
     {
         struct Process * self_proc = (struct Process *) FindTask(NULL);
         BPTR src_lock = (self_proc != NULL) ? self_proc->pr_CurrentDir : 0;
         if (src_lock != 0) {
             child_home_lock = DupLock(src_lock);
+            child_cwd_lock  = DupLock(src_lock);
         }
     }
+    // Stack for the child. AmigaOS never grows one, so too small is a
+    // memory-corrupting crash somewhere unrelated rather than a clean
+    // failure; the caller can raise it via RunningProcess.setStackSize.
+    LONG child_stack = (d->pending_stack > 0) ? d->pending_stack : RP_DEFAULT_CHILD_STACK;
+    if (child_stack < RP_MIN_CHILD_STACK) child_stack = RP_MIN_CHILD_STACK;
+    rp_log_event("[rp] child stack =", child_stack);
+
     struct Process * child = CreateNewProcTags(
         NP_Seglist,     (ULONG) seg,
         NP_FreeSeglist, TRUE,
@@ -1915,8 +1953,9 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         NP_ConsoleTask, (ULONG) st->handler_port,
         NP_Arguments,   (ULONG) g_arg_buf,
         NP_Name,        (ULONG) "amStudioChild",
-        NP_StackSize,   32768,
+        NP_StackSize,   (ULONG) child_stack,
         NP_HomeDir,     (ULONG) child_home_lock,
+        NP_CurrentDir,  (ULONG) child_cwd_lock,
         NP_CopyVars,    TRUE,
         NP_ExitCode,    (ULONG) rp_child_exit,
         NP_ExitData,    (LONG)  st,
@@ -2218,6 +2257,20 @@ function_result Am_Lang_RunningProcess_exitCode_0(aobject * const this) {
         }
     }
     __result.return_value.value.int_value = (int) code;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_setStackSize_0(aobject * const this, int var_bytes) {
+    function_result __result = { .has_return_value = false };
+    running_process_data * d = rp_data(this);
+    if (d != NULL) {
+        LONG b = (LONG) var_bytes;
+        // Only meaningful before the spawn; a live child's stack is
+        // already allocated and cannot be resized.
+        if (b > 0 && b < RP_MIN_CHILD_STACK) b = RP_MIN_CHILD_STACK;
+        d->pending_stack = b;
+        rp_log_event("[rp] setStackSize =", b);
+    }
     return __result;
 }
 

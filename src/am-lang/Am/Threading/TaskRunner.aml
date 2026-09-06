@@ -34,6 +34,18 @@ namespace Am.Threading {
          */
         private var stopRequested: Bool
         /**
+         * Set by the worker as the last thing it does before returning, so shutdown can distinguish a
+         * runner that has genuinely left its loop from one still inside `task.execute()`. Read without
+         * the mutex: a single Bool write the reader only ever polls for `true`.
+         */
+        private var finished: Bool = false
+        /**
+         * True while the worker is inside `task.execute()`. Shutdown reports this so a stuck exit
+         * names the runner AND says whether it is mid-task (the case that actually races teardown) or
+         * merely between polls.
+         */
+        private var busy: Bool = false
+        /**
          * The worker thread, created on start() and never recreated. Nullable so the "not started yet"
          * state is honest; getThread() assumes it is only called after start().
          */
@@ -104,11 +116,57 @@ namespace Am.Threading {
             while (!this.stopRequested) {
                 var task = this.poll()
                 if (task != null) {
+                    this.busy = true
                     task.execute()
+                    this.busy = false
                 } else {
                     Thread.sleep(TaskRunner.IDLE_SLEEP_MS)
                 }
             }
+            // Last act: tell shutdown this worker is out of the loop and will
+            // touch no more shared state. stopAll waits for this rather than
+            // sleeping a fixed 50 ms and hoping.
+            this.finished = true
+        }
+
+        /**
+         * True once the worker has left its loop for good.
+         * @return Whether this runner's thread has finished
+         */
+        fun hasFinished(): Bool {
+            return this.finished
+        }
+
+        /**
+         * True when the worker is currently running a task.
+         * @return Whether a task is executing right now
+         */
+        fun isBusy(): Bool {
+            return this.busy
+        }
+
+        /**
+         * How many tasks are still queued behind the running one.
+         * @return Queue depth
+         */
+        fun pendingCount(): Int {
+            var n = 0
+            this.mutex.lock()
+            try {
+                n = this.queue.getSize()
+            } finally {
+                this.mutex.unlock()
+            }
+            return n
+        }
+
+        /**
+         * True when the runner was never started, so shutdown does not wait on a thread that will never
+         * set `finished`.
+         * @return Whether a worker thread exists
+         */
+        fun wasStarted(): Bool {
+            return this.thread != null
         }
 
         /**

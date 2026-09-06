@@ -468,6 +468,14 @@ function_result Am_Lang_Process_captureStdoutInDir_0(aobject * command, aobject 
 		cs_cmd[p] = 0;
 	}
 
+	// NOTE: SYS_Input/SYS_Output are deliberately NOT passed. System() then
+	// inherits the calling process's streams, which is what makes this work
+	// -- handing it NIL: handles instead wedges the capture on the first
+	// call, main process included (measured on the amiberry rig, both with
+	// and without a matching Close). The cost of the inheritance is that
+	// this function only works on a task that HAS console streams: called
+	// from a TaskScheduler.IO worker it blocks forever and freezes the
+	// machine, so callers must stay on the main process.
 	struct TagItem cs_tags[] = {
 		{ SYS_Asynch,    FALSE },
 		{ SYS_UserShell, TRUE },

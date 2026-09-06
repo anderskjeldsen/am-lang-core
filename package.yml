@@ -184,10 +184,11 @@ platforms:
       - -noixemul
   - id: aros-arm64
     extends: aros
-    # The real GNU aarch64-aros-gcc 6.5.0, from the published
-    # midwan/aros-compiler:aarch64-aros image (recipe:
-    # github.com/BlitterStudio/aros-compiler-docker). Its baked sysroot is the
-    # raspi-aarch64 SDK - AROS on a Raspberry Pi.
+    # The real GNU aarch64-aros-gcc 6.5.0, targeting the raspi-aarch64 SDK -
+    # AROS on a Raspberry Pi. Built in aros-arm64-native:latest, which runs the
+    # toolchain NATIVELY on arm64. (It previously used the published
+    # midwan/aros-compiler:aarch64-aros, which is amd64-only and therefore
+    # emulated on Apple Silicon - about 2.6x slower, measured.)
     gccCommand: aarch64-aros-gcc -O2
     gccAdditionalOptions:
       # NOTE: gccAdditionalOptions REPLACES the parent platform's list, it does
@@ -207,8 +208,8 @@ platforms:
       # it changes no calling convention (x18 carries no argument or return
       # value), so it stays link-compatible with the raspi-aarch64 SDK.
       #
-      # The SDK is NOT x18-free, so this flag only covers our own code. In
-      # midwan/aros-compiler:aarch64-aros (the image this target builds in),
+      # The SDK is NOT x18-free, so this flag only covers our own code. In the
+      # raspi-aarch64 SDK this target builds against,
       # 19 archives under .../raspi-aarch64/AROS/Developer/lib use x18 - mostly
       # bundled third-party codecs we never link (libaom 2709, libzstd 1647,
       # libfreetype2 198, liblzma 197), but also libposixc.a (2) and
@@ -296,14 +297,12 @@ buildTargets:
   # The image is amd64-only, hence the explicit platform - Docker would
   # otherwise refuse it on an arm64 host, or run it emulated with a warning
   # on every invocation. Pull once:
-  #   docker pull --platform linux/amd64 midwan/aros-compiler:aarch64-aros
   - id: aros-arm64-docker
     platform: aros-arm64
     features: ["floatingPoint"]
     dockerBuild:
-      image: midwan/aros-compiler:aarch64-aros
+      image: aros-arm64-native:latest
       buildPath: /host
-      platform: linux/amd64
   - id: aros-m68k
     platform: aros-m68k
     features: ["floatingPoint"]

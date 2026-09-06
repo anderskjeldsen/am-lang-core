@@ -118,6 +118,35 @@ namespace Tests {
             Assert.assertEquals(9, sum)
         }
         
+        static test eachOverArray() {
+            // Arrays are each-able via Array.iterator() (added 2026-08-31);
+            // continue must advance like it does for collections.
+            var arr: Int[] = new Int[5]
+            arr[0] = 1
+            arr[1] = -2
+            arr[2] = 3
+            arr[3] = -4
+            arr[4] = 5
+            var sum = 0
+            var visits = 0
+            each(item in arr) {
+                visits++
+                if (item < 0) {
+                    continue
+                }
+                sum = sum + item
+            }
+            Assert.assertEquals(9, sum)
+            Assert.assertEquals(5, visits)
+
+            var empty: String[] = new String[0]
+            var hits = 0
+            each(s in empty) {
+                hits++
+            }
+            Assert.assertEquals(0, hits)
+        }
+
         static test preIncrement() {
             var i = 0
             var j = ++i

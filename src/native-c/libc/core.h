@@ -71,18 +71,14 @@
 
 #ifndef AMLC_ARC_STRATEGY
     #if defined(__MORPHOS__)
-        // MorphOS PPC: uniprocessor. PPC has no single-instruction memory RMW, so
-        // an atomic retain IS a real lwarx/stwcx. pair (~4 inline instructions) —
-        // but the bias costs MORE here than it saves, because the owner test needs
-        // a thread identity and MorphOS's ExecBase is OPAQUE: `__current_thread()`
-        // has to go through the FindTask(NULL) library vector (disassembles to 9
-        // instructions ending in `bctr`), and in a multithreaded program that call
-        // runs on EVERY retain and EVERY release. That is the opposite trade from
-        // m68k, where `SysBase->ThisTask` is one cheap load and the bias is nearly
-        // free. So: ATOMIC — one shared counter, no owner test, no thread-identity
-        // call. (The destroy decision still takes the shared lock; see the note at
-        // the top of this block.)
-        #define AMLC_ARC_STRATEGY AMLC_ARC_STRATEGY_ATOMIC
+        // MorphOS PPC: BIASED. ATOMIC was tried on real hardware (block-quest) and
+        // was a large net LOSS: with one shared counter every retain/release is a
+        // lwarx/stwcx. pair even in the long SINGLE-threaded phases (world preload,
+        // geometry build, am-js script load), where BIASED is a plain ++/-- gated
+        // off by __amlc_multithreaded. The theoretical win — dropping the
+        // FindTask() owner test on the multithreaded path — did not outweigh that;
+        // startup went from seconds to over a minute. Keep BIASED.
+        #define AMLC_ARC_STRATEGY AMLC_ARC_STRATEGY_BIASED
     #elif defined(PLATFORM_AMIGAOS)
         // AmigaOS 68k: ONE counter for all threads. `addq.l #1,(rc,a0)` is
         // simultaneously the plain increment and the atomic one, so the bias

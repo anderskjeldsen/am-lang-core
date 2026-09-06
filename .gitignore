@@ -1,4 +1,6 @@
 builds*/*
+test-builds/*
+docs/*
 *.generated.c
 *.o
 .DS_Store

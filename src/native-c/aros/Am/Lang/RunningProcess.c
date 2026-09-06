@@ -1571,6 +1571,15 @@ function_result Am_Lang_RunningProcess_exitCode_0(aobject * const this) {
     return __result;
 }
 
+function_result Am_Lang_RunningProcess_setStackSize_0(aobject * const this, int var_bytes) {
+    // Not yet honoured here — the spawn path on this platform still uses its
+    // built-in stack size. Accepted silently so callers can set it
+    // unconditionally; see the amigaos backend for the implemented version.
+    function_result __result = { .has_return_value = false };
+    (void) this; (void) var_bytes;
+    return __result;
+}
+
 function_result Am_Lang_RunningProcess_setReportedSize_0(aobject * const this, int var_rows, int var_cols) {
     function_result __result = { .has_return_value = false };
     running_process_data * d = rp_data(this);

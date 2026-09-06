@@ -532,6 +532,15 @@ static void rp_handler_entry(void) {
                         st->child_exited = TRUE;
                         st->in.writer_closed = TRUE;
                         rp_fulfil_deferred(st);
+                        // Wake the main loop on exit, not only on output.
+                        // The drain loop reschedules while the child is
+                        // alive and detects the exit on the NEXT wake; a
+                        // child that exits right after its last output gave
+                        // no further wake, so CliView.running stayed set,
+                        // keystrokes went to the dead child and the panel
+                        // froze until reopened. Mirrors the AmigaOS fix in
+                        // rp_child_exit.
+                        rp_signal_main_wake();
                     }
                     rp_pkt_reply(pkt, DOSTRUE, 0);
                     break;
@@ -1499,6 +1508,15 @@ function_result Am_Lang_RunningProcess_exitCode_0(aobject * const this) {
     function_result __result = { .has_return_value = true };
     (void) this;
     __result.return_value.value.int_value = 0;
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_setStackSize_0(aobject * const this, int var_bytes) {
+    // Not yet honoured here — the spawn path on this platform still uses its
+    // built-in stack size. Accepted silently so callers can set it
+    // unconditionally; see the amigaos backend for the implemented version.
+    function_result __result = { .has_return_value = false };
+    (void) this; (void) var_bytes;
     return __result;
 }
 

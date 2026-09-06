@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/resource.h>   // setrlimit(RLIMIT_STACK) for the child stack floor
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -43,8 +44,16 @@
   #include <pty.h>                 // forkpty on Linux (link with -lutil)
 #endif
 
+// Requested child stack in bytes (RunningProcess.setStackSize), 0 = leave
+// the inherited limit alone. Unlike AmigaOS, where this is the actual
+// allocation, here it is a FLOOR: the child's stack grows on demand up to
+// RLIMIT_STACK, so we only ever raise that limit, never lower it. Lowering
+// would turn a portable "give it room" setting into a way to break every
+// deeply-recursive program on the desktop.
 typedef struct _running_process_data running_process_data;
 struct _running_process_data {
+    // Requested child stack in bytes; 0 = leave the inherited limit alone.
+    long pending_stack;
     int  stdin_writer_fd;   // parent writes -> child stdin
     int  stdout_reader_fd;  // parent reads  <- child stdout
     pid_t child_pid;
@@ -203,6 +212,10 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     slave_win.ws_col = 80;
 
     int master_fd = -1;
+    // Read before the fork: keep the child's pre-exec path free of any
+    // allocation or shared-state access.
+    long child_stack_req = (d != NULL) ? d->pending_stack : 0;
+
     pid_t pid = forkpty(&master_fd, NULL, NULL, &slave_win);
     if (pid < 0) {
         __throw_simple_exception("RunningProcess: forkpty failed", "in Am_Lang_RunningProcess_startNative_0", &__result);
@@ -229,6 +242,24 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         // xterm-256color is the closest match to what amStudio's
         // grid actually understands.
         setenv("TERM", "xterm-256color", 1);
+        // Raise RLIMIT_STACK if the caller asked for more than we have.
+        // Inherited across exec, and only ever upward — see the note on
+        // pending_stack. Best-effort: a refused setrlimit just leaves the
+        // child with the default limit.
+        if (child_stack_req > 0) {
+            struct rlimit rl;
+            if (getrlimit(RLIMIT_STACK, &rl) == 0) {
+                rlim_t want = (rlim_t) child_stack_req;
+                if (rl.rlim_cur != RLIM_INFINITY && rl.rlim_cur < want) {
+                    if (rl.rlim_max == RLIM_INFINITY || want <= rl.rlim_max) {
+                        rl.rlim_cur = want;
+                    } else {
+                        rl.rlim_cur = rl.rlim_max;
+                    }
+                    setrlimit(RLIMIT_STACK, &rl);
+                }
+            }
+        }
         execl("/bin/sh", "sh", "-c", cmd_str, (char *) NULL);
         // execl returns only on failure.
         _exit(127);
@@ -499,6 +530,15 @@ function_result Am_Lang_RunningProcess_isRawMode_0(aobject * const this) {
         }
     }
     __result.return_value = (nullable_value){ .flags = PRIMITIVE_BOOL, .value.bool_value = raw };
+    return __result;
+}
+
+function_result Am_Lang_RunningProcess_setStackSize_0(aobject * const this, int var_bytes) {
+    function_result __result = { .has_return_value = false };
+    running_process_data * d = rp_data(this);
+    if (d != NULL) {
+        d->pending_stack = (long) var_bytes;
+    }
     return __result;
 }
 

@@ -558,11 +558,122 @@ __exit: ;
 	return __result;
 }
 
-/* captureStdoutInDir: MorphOS port. Runs `command` in `workingDir` and returns
- * its captured output. We reuse runAndCaptureOutputInDir (stdout+stderr) — good
- * enough on MorphOS, and this keeps the symbol defined so the dispatch table
- * links even when the app never calls it. */
+/* captureStdoutInDir: capture ONLY stdout, run through the DOS shell with
+ * `> tempfile` redirection -- a real port of the AmigaOS recipe, which this
+ * used to forward past by simply calling runAndCaptureOutputInDir.
+ *
+ * That forwarder inherited two faults from the hand-rolled LoadSeg +
+ * CreateNewProc capture:
+ *
+ *   1. NO PATH SEARCH. LoadSeg is a file loader; it knows the literal name
+ *      and one "C:" retry, and nothing about the shell's path list. So a
+ *      toolchain command on the path -- `make`, `ppc-morphos-gcc` -- was
+ *      "not found" unless spelled absolutely.
+ *   2. The CreateNewProc recipe is tuned for ixemul children and mishandles
+ *      others: output that never fills the child's stdio buffer can be lost
+ *      entirely when the child exits abnormally, which surfaces as an empty
+ *      capture rather than an error. am-ide read that as "clean".
+ *
+ * SystemTagList with SYS_UserShell is synchronous, resolves the command the
+ * way a typed shell line does (path list included), and manages the child's
+ * lifecycle the standard DOS way. stderr goes wherever the shell sends it
+ * and is not captured -- the deliberate trade for a capture that works. */
 function_result Am_Lang_Process_captureStdoutInDir_0(aobject * command, aobject * workingDir)
 {
-	return Am_Lang_Process_runAndCaptureOutputInDir_0(command, workingDir);
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+
+	string_holder *cmd_holder = (string_holder *) (command + 1);
+	const char *cmd_str = (const char *) cmd_holder->string_value;
+
+	string_holder *dir_holder2 = (workingDir != NULL) ? (string_holder *) (workingDir + 1) : NULL;
+	const char *dir_str2 = (dir_holder2 != NULL && dir_holder2->length > 0) ? dir_holder2->string_value : NULL;
+
+	/* Swap cwd so the command runs in workingDir. Restore the previous
+	   lock on the way out, and UnLock only the one created here. */
+	BPTR cs_new_lock = (BPTR) NULL;
+	BPTR cs_old_lock = (BPTR) NULL;
+	bool cs_swapped = false;
+	if (dir_str2 != NULL) {
+		cs_new_lock = Lock((CONST_STRPTR) dir_str2, ACCESS_READ);
+		if (cs_new_lock == (BPTR) NULL) {
+			__throw_simple_exception("Failed to lock working directory", "in Am_Lang_Process_captureStdoutInDir_0", &__result);
+			goto __exit;
+		}
+		cs_old_lock = CurrentDir(cs_new_lock);
+		cs_swapped = true;
+	}
+
+	/* Temp file as a RELATIVE name in the (swapped) cwd, so no dependency
+	   on a T:/RAM: assign. Inside .git/ when the cwd is a repo, so a
+	   `git status` run through here does not report its own temp file as
+	   untracked. Named from the task address so concurrent captures in
+	   different threads cannot collide. */
+	UBYTE temp_path[48];
+	{
+		ULONG i = 0;
+		BPTR git_lock = Lock((CONST_STRPTR) ".git", ACCESS_READ);
+		if (git_lock != (BPTR) NULL) {
+			UnLock(git_lock);
+			const char *g = ".git/";
+			ULONG j = 0;
+			while (g[j] != 0) { temp_path[i++] = g[j++]; }
+		}
+		const char *pfx = "am_cap_";
+		ULONG k = 0;
+		while (pfx[k] != 0) { temp_path[i++] = pfx[k++]; }
+		ULONG addr = (ULONG) FindTask(NULL);
+		for (LONG nibble = 7; nibble >= 0; nibble--) {
+			ULONG v = (addr >> (nibble * 4)) & 0xF;
+			temp_path[i++] = (UBYTE) (v < 10 ? ('0' + v) : ('a' + (v - 10)));
+		}
+		temp_path[i] = 0;
+	}
+
+	/* "<command> >am_cap_xxxx" -- the user shell performs the redirect. */
+	static char cs_cmd[1024];
+	{
+		int p = 0;
+		const char *s = cmd_str;
+		while (*s != 0 && p < (int)(sizeof(cs_cmd) - 80)) { cs_cmd[p++] = *s++; }
+		cs_cmd[p++] = ' ';
+		cs_cmd[p++] = '>';
+		const char *t = (const char *) temp_path;
+		while (*t != 0 && p < (int)(sizeof(cs_cmd) - 1)) { cs_cmd[p++] = *t++; }
+		cs_cmd[p] = 0;
+	}
+
+	// NOTE: SYS_Input/SYS_Output are deliberately NOT passed. System() then
+	// inherits the calling process's streams, which is what makes this work
+	// -- handing it NIL: handles instead wedges the capture on the first
+	// call, main process included (measured on the amiberry rig, both with
+	// and without a matching Close). The cost of the inheritance is that
+	// this function only works on a task that HAS console streams: called
+	// from a TaskScheduler.IO worker it blocks forever and freezes the
+	// machine, so callers must stay on the main process.
+	struct TagItem cs_tags[] = {
+		{ SYS_Asynch,    FALSE },
+		{ SYS_UserShell, TRUE },
+		{ TAG_DONE,      0 },
+	};
+	SystemTagList((STRPTR) cs_cmd, cs_tags);
+
+	/* Read the relative temp file while cwd is still the working dir. */
+	UBYTE *cs_buf = NULL;
+	LONG cs_size = am_proc_read_and_delete_temp(temp_path, &cs_buf);
+	if (cs_size < 0) cs_size = 0;
+
+	if (cs_swapped) {
+		CurrentDir(cs_old_lock);
+		UnLock(cs_new_lock);
+	}
+	if (cs_buf != NULL) {
+		__result.return_value.value.object_value = __create_string((const char *) cs_buf, &Am_Lang_String);
+		FreeVec(cs_buf);
+	} else {
+		__result.return_value.value.object_value = __create_string("", &Am_Lang_String);
+	}
+
+__exit: ;
+	return __result;
 }

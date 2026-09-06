@@ -121,7 +121,27 @@ namespace Am.Lang
         static fun startWithReportedSize(
             command: String, workingDir: String,
             rows: Int, cols: Int): RunningProcess {
+            return Process.startWithReportedSizeAndStack(command, workingDir, rows, cols, 0)
+        }
+
+        /**
+         * As startWithReportedSize(), but also fixes the child's stack. Pass 0 for the platform
+         * default. See RunningProcess.setStackSize for why this matters on AmigaOS.
+         * @param command The command line to execute
+         * @param workingDir Directory to run in, or an empty string for the current one
+         * @param rows Terminal height in character rows
+         * @param cols Terminal width in character columns
+         * @param stackBytes Child stack in bytes, or 0 for the platform default
+         * @return A handle to the running child
+         */
+        static fun startWithReportedSizeAndStack(
+            command: String, workingDir: String,
+            rows: Int, cols: Int, stackBytes: Int): RunningProcess {
             var p = new RunningProcess()
+            if (stackBytes > 0) {
+                // Before startNative — the stack is fixed at creation.
+                p.setStackSize(stackBytes)
+            }
             // First setReportedSize stashes the dims on the per-
             // process data (amiga backend uses these to seed the
             // freshly-allocated rp_state, which is what bebbossh's

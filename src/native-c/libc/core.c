@@ -55,27 +55,31 @@ void __arc_shared_mutex_init(void) {
     InitSemaphore(&__arc_shared_sem);
     __arc_shared_sem_initialised = true;
 }
-// NEVER gate these on __amlc_multithreaded: that flag flips false->true when the
-// FIRST thread starts, so a lock/unlock pair straddling that moment would SKIP the
-// Obtain but still run the Release — releasing a semaphore this task does not own,
-// which corrupts its wait queue and makes every later ObtainSemaphore block forever
-// (observed as: main/render thread wedges while the loader thread keeps iterating).
-// Obtain/Release must be perfectly symmetric; an uncontended ObtainSemaphore is cheap.
-// Defensive init: ObtainSemaphore on a zeroed (never-InitSemaphore'd) SignalSemaphore
-// is invalid. main() calls __arc_shared_mutex_init() first, but if any allocation
-// somehow runs earlier we self-init here. Safe: that can only happen before the first
-// thread exists, so there is no race on the flag.
-void __arc_shared_lock(void)   {
-    if (!__arc_shared_sem_initialised) { __arc_shared_mutex_init(); }
-    ObtainSemaphore(&__arc_shared_sem);
-}
-void __arc_shared_unlock(void) { ReleaseSemaphore(&__arc_shared_sem); }
-// MorphOS: ExecBase is OPAQUE here — `SysBase->ThisTask` does not compile
-// ("invalid use of undefined type 'struct ExecBase'"), which is the same reason
-// the raw-TDNestCnt trick is unavailable on this platform. So thread identity must
-// go through the FindTask(NULL) library call. (The m68k/AmigaOS branch below CAN
-// read SysBase->ThisTask directly, because its ExecBase is a complete type.)
-void * __current_thread(void)  { return (void *) FindTask(NULL); }
+// EXPERIMENT step 2 (bisecting the MorphOS freeze with block-quest2 = known-good
+// old game code): ARC lock fully DISABLED — no Forbid/Permit, no semaphore. This is
+// the literal old-days regime ("refcounts adjusted from any thread with no safety"),
+// under which the old binary ran endlessly. Foreign-counter RMWs stay atomic
+// (lwarx/stwcx.); the multi-field free decisions and wrapper-list edits run
+// unprotected, racy-in-theory on preemption but statistically almost never bitten
+// on a uniprocessor.
+//   * runs clean with NO lock -> the locking layer (Forbid or semaphore) is itself
+//     implicated in the freeze, or the protected races simply never fire here.
+//   * still freezes with NO lock -> locking fully exonerated; the freeze is in the
+//     BRC logic/codegen/atomics, independent of any lock primitive.
+void __arc_shared_lock(void)   { }
+void __arc_shared_unlock(void) { }
+// EXPERIMENT step 3 (block-quest2 bisect): CONSTANT thread identity. Every object's
+// owner test now passes on every thread, so ALL refcounting takes the owner fast
+// path — a plain ++/-- on the single shared reference_count from any thread, the
+// foreign counter and its lwarx/stwcx. atomics never engage, and no FindTask call
+// per op. Combined with the no-op lock above and __wrap_if_foreign already being a
+// passthrough, ARC semantics on MorphOS are now byte-for-byte the OLD regime
+// ("refcounts adjusted from any thread with no safety") under which the original
+// binary ran endlessly.
+//   * still freezes -> ARC fully exonerated; suspects shrink to codegen or other
+//     core natives; bisect am-lang-core history with block-quest2 as harness.
+//   * runs clean    -> the freeze needs the BRC owner/foreign machinery to fire.
+void * __current_thread(void)  { return (void *) 1; }
 #else
 // AmigaOS: single-core, so mutual exclusion for the ARC critical sections
 // (the multi-field free decisions, propref mutations) is an inline
