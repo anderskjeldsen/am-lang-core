@@ -75,6 +75,22 @@ namespace Am.Lang
         static native fun getCwd(): String
 
         /**
+         * Sets the directories that spawned child processes search for bare command names, in
+         * addition to whatever this process already searches. Pass a newline-separated list; an
+         * empty string clears it. Each call REPLACES the previous list, so callers keep their own
+         * array and pass the whole thing again rather than adding entries one at a time.
+         *
+         * On the libc platforms the OS mechanism is the PATH environment variable, which children
+         * inherit on their own, so this is a no-op there -- set PATH with Environment instead. On
+         * AmigaOS and MorphOS the Shell does not consult PATH at all (measured: a PATH variable is
+         * ignored in both local and global scope), so the directories are handed to each child as
+         * a real path list at spawn time, and the child's own children inherit it.
+         * @param dirs Newline-separated directories, or an empty string to clear
+         * @return True when the list was stored
+         */
+        static native fun setSpawnSearchPath(dirs: String): Bool
+
+        /**
          * Spawns a command asynchronously with a raw, untranslated bidirectional pipe — no
          * terminal emulation and no character translation — for streaming binary protocol bytes,
          * such as an ssh git transport. Drive the returned handle with tryReadOutputBytes() and

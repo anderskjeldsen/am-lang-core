@@ -89,6 +89,17 @@ namespace Am.Threading {
          * @param milliseconds How long to sleep, in milliseconds
          */
         native static fun sleep(milliseconds: Long)
+
+        /**
+         * Scheduling priority, applied when the native task is created; set it before start().
+         * Only AmigaOS honours it today: Exec's scheduler is strictly priority-based, so a worker at
+         * -1 runs only while every priority-0 task (the UI) is waiting, and the UI takes the CPU back
+         * the moment it has work. Range -128..127 on AmigaOS; 0 is the default and matches the main
+         * process. Ignored on the other platforms.
+         *
+         * Declared last on purpose: the native backends address the fields above by slot index.
+         */
+        var priority: Int = 0
     }
 
     /**

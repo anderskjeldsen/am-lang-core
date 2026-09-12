@@ -45,8 +45,11 @@
 #include <morphos-ppc/morphos.h>
 
 #include <exec/types.h>
+#include <exec/execbase.h>
 #include <exec/memory.h>
 #include <exec/ports.h>
+#include <exec/io.h>
+#include <devices/timer.h>
 #include <dos/dos.h>
 #include <dos/dosextens.h>
 #include <dos/dostags.h>
@@ -184,11 +187,42 @@ struct rp_state {
     struct MsgPort * handler_port;
 
     struct DosPacket * deferred_read_pkt;
+    // ACTION_WAIT_CHAR parked on an empty ring, with a timer.device request
+    // for its timeout. Input arriving replies it DOSTRUE early (from
+    // rp_fulfil_deferred, main task); the timer firing replies DOSFALSE
+    // (handler loop). A timer that outlives its packet just expires unused.
+    // Without this, WaitForChar(fh, 250000) came back at once and a child
+    // that paces itself on it (a player's tick loop) spun through its whole
+    // song before the next command could arrive.
+    struct DosPacket * deferred_waitchar_pkt;
+    struct MsgPort * timer_port;
+    struct timerequest * timer_req;
+    BOOL timer_pending;
     int  open_count;
     BOOL any_open;
 
     volatile BOOL child_exited;
     volatile BOOL shutdown_requested;
+
+    // The child's task, for the liveness poll in isAlive(). MorphOS has no
+    // NP_ExitCode, so ACTION_END is the only exit signal the handler gets --
+    // and an ixemul program (GNU make, the SDK's Unix tools) can exit WITHOUT
+    // closing the console handles it inherited, so the handler never sees
+    // that ACTION_END and the child looked alive forever ("make never
+    // returns" in the IDE's CLI). isAlive() therefore also checks that this
+    // task is still on Exec's lists.
+    struct Task * child_task;
+
+    // Pre-DupLock'd copies of the cwd, handed out one per
+    // ACTION_COPY_DIR_FH / ACTION_PARENT_FH. ixemul's fdopen() of the
+    // three inherited stdio FHs sends one of these per fd and treats the
+    // reply as a lock it later UnLock()s -- and the generic "unknown
+    // packet -> DOSTRUE" reply is -1, which UnLock() then dereferenced
+    // (NULL store inside DoPkt, GNU make dead right after its banner).
+    // Filled on the main task at spawn (the handler task must not call
+    // DupLock: recursive packet wait); ownership transfers to the child
+    // on hand-out; leftovers are UnLock'd on release.
+    BPTR cached_locks[6];
 
     // ACTION_SCREEN_MODE arg — TRUE = child put stdin into raw mode
     // (SetMode(fh, 1) on AmigaOS, equivalent to terminal raw mode
@@ -333,7 +367,16 @@ struct _running_process_data {
     BOOL  child_owns_seg;   // TRUE when NP_FreeSeglist=TRUE → child unloads
     BPTR  old_cwd_lock;
     BOOL  has_old_cwd;
+    // Child stack requested via setStackSize before startNative (0 = default).
+    LONG  pending_stack;
 };
+
+// Child stack. Never grown by the OS, so too small is a memory-corrupting
+// crash rather than a clean failure. 256K matches the amigaos backend and is
+// what ixemul programs (GNU make, the SDK's Unix tools) need.
+#define RP_DEFAULT_CHILD_STACK 262144
+#define RP_MIN_CHILD_STACK      8192
+#define RP_LOCK_POOL_SIZE 6
 
 // =================================================================
 // State refcount + cleanup
@@ -392,6 +435,20 @@ static void rp_pkt_reply(struct DosPacket * pkt, LONG res1, LONG res2) {
 
 // Must be called with Forbid() held.
 static void rp_fulfil_deferred(rp_state * st) {
+    if (st->deferred_waitchar_pkt != NULL
+            && (st->in.count > 0 || st->in.writer_closed || st->shutdown_requested)) {
+        struct DosPacket * wp = st->deferred_waitchar_pkt;
+        st->deferred_waitchar_pkt = NULL;
+        rp_pkt_reply(wp, DOSTRUE, 0);
+        // Cancel its timer right away (AbortIO is safe from any task; the
+        // reply lands on the handler's timer port and is reclaimed there or
+        // by the next WAIT_CHAR). Left running, every WAIT_CHAR until it
+        // expired got the immediate answer -- a tick loop spun ~700 times
+        // in that window.
+        if (st->timer_pending && st->timer_req != NULL) {
+            AbortIO((struct IORequest *) st->timer_req);
+        }
+    }
     if (st->deferred_read_pkt == NULL) return;
     if (st->in.count == 0 && !st->in.writer_closed && !st->shutdown_requested) return;
     struct DosPacket * pkt = st->deferred_read_pkt;
@@ -427,9 +484,40 @@ static void rp_handler_entry(void) {
 
     g_handler_entered_count++;
 
+    // timer.device for parked WAIT_CHARs. Opened here so the port's signal
+    // belongs to this task. If anything fails the handler just keeps
+    // answering WAIT_CHAR immediately.
+    st->timer_port = CreateMsgPort();
+    if (st->timer_port != NULL) {
+        st->timer_req = (struct timerequest *) CreateIORequest(st->timer_port, sizeof(struct timerequest));
+        if (st->timer_req != NULL) {
+            if (OpenDevice((CONST_STRPTR) "timer.device", UNIT_MICROHZ, (struct IORequest *) st->timer_req, 0) != 0) {
+                DeleteIORequest((struct IORequest *) st->timer_req);
+                st->timer_req = NULL;
+            }
+        }
+        if (st->timer_req == NULL) {
+            DeleteMsgPort(st->timer_port);
+            st->timer_port = NULL;
+        }
+    }
+    ULONG timer_sig = (st->timer_port != NULL) ? (1UL << st->timer_port->mp_SigBit) : 0;
     BOOL running = TRUE;
     while (running) {
-        WaitPort(port);
+        Wait((1UL << port->mp_SigBit) | timer_sig);
+        if (st->timer_port != NULL) {
+            struct Message * tm;
+            while ((tm = GetMsg(st->timer_port)) != NULL) {
+                st->timer_pending = FALSE;
+                Forbid();
+                if (st->deferred_waitchar_pkt != NULL) {
+                    struct DosPacket * wp = st->deferred_waitchar_pkt;
+                    st->deferred_waitchar_pkt = NULL;
+                    rp_pkt_reply(wp, DOSFALSE, 0);
+                }
+                Permit();
+            }
+        }
         struct Message * msg;
         while ((msg = GetMsg(port)) != NULL) {
             // Skip replies to our own messages. The fire-and-forget
@@ -518,6 +606,28 @@ static void rp_handler_entry(void) {
                     st->open_count++;
                     st->any_open = TRUE;
                     rp_pkt_reply(pkt, DOSTRUE, 0);
+                    break;
+                }
+                case 1030:                  /* ACTION_COPY_DIR_FH */
+                case 1031: {                /* ACTION_PARENT_FH */
+                    BPTR popped = 0;
+                    if (!st->child_exited) {
+                        int li;
+                        for (li = 0; li < RP_LOCK_POOL_SIZE; li++) {
+                            if (st->cached_locks[li] != 0) {
+                                popped = st->cached_locks[li];
+                                st->cached_locks[li] = 0;
+                                break;
+                            }
+                        }
+                    }
+                    if (popped != 0) {
+                        rp_log_event("[rp] lockpool: pop type=", (LONG) type);
+                        rp_pkt_reply(pkt, popped, 0);
+                    } else {
+                        rp_log_event("[rp] lockpool: EMPTY type=", (LONG) type);
+                        rp_pkt_reply(pkt, 0, ERROR_ACTION_NOT_KNOWN);
+                    }
                     break;
                 }
                 case ACTION_END:
@@ -675,8 +785,27 @@ static void rp_handler_entry(void) {
                     // packet with a timer fulfilment, but for the
                     // bebbossh shell loop the immediate honest
                     // answer is exactly what dos.library expects.
+                    // Reclaim a finished (expired or aborted) timer request
+                    // without blocking so this packet can be parked.
+                    if (st->timer_pending && st->timer_req != NULL
+                            && CheckIO((struct IORequest *) st->timer_req) != NULL) {
+                        WaitIO((struct IORequest *) st->timer_req);
+                        st->timer_pending = FALSE;
+                    }
                     if (st->in.count > 0 || st->in.writer_closed) {
                         rp_pkt_reply(pkt, DOSTRUE, 0);
+                    } else if (st->timer_req != NULL && !st->timer_pending
+                               && st->deferred_waitchar_pkt == NULL
+                               && pkt->dp_Arg1 >= 2000) {
+                        // Real timeout (>= 2ms): park it. Polls of a few
+                        // microseconds (bebbossh's 1us) stay immediate.
+                        LONG micros = pkt->dp_Arg1;
+                        st->deferred_waitchar_pkt = pkt;
+                        st->timer_req->tr_node.io_Command = TR_ADDREQUEST;
+                        st->timer_req->tr_time.tv_secs  = (ULONG) (micros / 1000000);
+                        st->timer_req->tr_time.tv_micro = (ULONG) (micros % 1000000);
+                        st->timer_pending = TRUE;
+                        SendIO((struct IORequest *) st->timer_req);
                     } else {
                         rp_pkt_reply(pkt, DOSFALSE, 0);
                     }
@@ -719,7 +848,12 @@ static void rp_handler_entry(void) {
                     // an unmounted error. Block counts stay zero;
                     // they're meaningless for a console stream and
                     // no AmigaOS code we care about reads them.
-                    struct InfoData * id = (struct InfoData *) BADDR(pkt->dp_Arg2);
+                    // ACTION_DISK_INFO carries the InfoData BPTR in dp_Arg1 (it is
+                    // ACTION_INFO that puts it in Arg2). Reading Arg2 here took
+                    // whatever the caller left in it: on MorphOS ixemul's
+                    // isatty() left 8, BADDR(8) is 0x20, and zeroing 36 bytes
+                    // from there faulted the handler once per probe.
+                    struct InfoData * id = (struct InfoData *) BADDR(pkt->dp_Arg1);
                     if (id != NULL) {
                         UBYTE * z = (UBYTE *) id;
                         ULONG i;
@@ -801,7 +935,26 @@ static void rp_handler_entry(void) {
         }
     }
 
+    // Timer teardown before the Forbid below: AbortIO/WaitIO may wait.
+    if (st->timer_req != NULL) {
+        if (st->timer_pending) {
+            AbortIO((struct IORequest *) st->timer_req);
+            WaitIO((struct IORequest *) st->timer_req);
+            st->timer_pending = FALSE;
+        }
+        CloseDevice((struct IORequest *) st->timer_req);
+        DeleteIORequest((struct IORequest *) st->timer_req);
+        st->timer_req = NULL;
+    }
+    if (st->timer_port != NULL) {
+        DeleteMsgPort(st->timer_port);
+        st->timer_port = NULL;
+    }
     Forbid();
+    if (st->deferred_waitchar_pkt != NULL) {
+        rp_pkt_reply(st->deferred_waitchar_pkt, DOSFALSE, 0);
+        st->deferred_waitchar_pkt = NULL;
+    }
     if (st->deferred_read_pkt != NULL) {
         rp_pkt_reply(st->deferred_read_pkt, 0, 0);
         st->deferred_read_pkt = NULL;
@@ -912,6 +1065,16 @@ function_result Am_Lang_RunningProcess__native_release_0(aobject * const this) {
     running_process_data * d = rp_data(this);
     if (d != NULL) {
         if (d->state != NULL) {
+            // Return unused pool locks here, on the main task, before the
+            // DIE: a DOS call must never run from inside the handler.
+            int li;
+            for (li = 0; li < RP_LOCK_POOL_SIZE; li++) {
+                BPTR lock = d->state->cached_locks[li];
+                if (lock != 0) {
+                    d->state->cached_locks[li] = 0;
+                    UnLock(lock);
+                }
+            }
             rp_handler_die(d->state);
             rp_state_release(d->state);
             d->state = NULL;
@@ -1009,11 +1172,53 @@ struct rp_path_node {
 //
 // Returns 0 if all attempts failed; the caller logs IoErr() of the
 // LAST attempt for diagnostics.
+// The full path rp_loadseg_with_path() actually resolved the command to.
+// The child's NP_HomeDir (its PROGDIR:) has to name the drawer the BINARY
+// lives in, and only the resolver knows which of its candidates won.
+static char g_resolved_cmd_path[260];
+
+static void rp_record_resolved(const char * p) {
+    int i = 0;
+    if (p == NULL) { g_resolved_cmd_path[0] = 0; return; }
+    while (p[i] != 0 && i < (int) sizeof(g_resolved_cmd_path) - 1) {
+        g_resolved_cmd_path[i] = p[i];
+        i++;
+    }
+    g_resolved_cmd_path[i] = 0;
+}
+
+// Lock the drawer holding the resolved binary — the child's PROGDIR:.
+// Returns 0 when the resolved name carries no directory part (a bare name
+// LoadSeg found in the current dir); the caller then falls back to the cwd,
+// which in exactly that case IS the binary's drawer.
+static BPTR rp_lock_binary_dir(void) {
+    const char * p = g_resolved_cmd_path;
+    char dbuf[260];
+    int cut = -1;
+    int i = 0;
+    int n = 0;
+    int k = 0;
+    if (p[0] == 0) return 0;
+    while (p[i] != 0) {
+        if (p[i] == '/' || p[i] == ':') cut = i;
+        i++;
+    }
+    if (cut < 0) return 0;
+    // Keep the ':' of a volume/assign root ("C:" -> "C:"), drop a '/'.
+    n = (p[cut] == ':') ? cut + 1 : cut;
+    if (n <= 0) return 0;
+    if (n > (int) sizeof(dbuf) - 1) n = (int) sizeof(dbuf) - 1;
+    while (k < n) { dbuf[k] = p[k]; k++; }
+    dbuf[n] = 0;
+    return Lock((CONST_STRPTR) dbuf, ACCESS_READ);
+}
+
 static BPTR rp_loadseg_with_path(const char * name) {
     if (name == NULL || name[0] == 0) return 0;
 
     // 1. Verbatim. Also catches the case where the caller already
     //    passed a fully-qualified name.
+    rp_record_resolved(name);
     BPTR seg = LoadSeg((CONST_STRPTR) name);
     if (seg != 0) return seg;
 
@@ -1021,9 +1226,52 @@ static BPTR rp_loadseg_with_path(const char * name) {
     // caller meant exactly that path; failing was the answer.
     if (rp_name_has_path(name)) return 0;
 
-    // 2. Walk pr_CLI->cli_CommandDir.
-    struct Process * self = (struct Process *) FindTask(NULL);
-    struct CommandLineInterface * cli = (struct CommandLineInterface *) BADDR(self->pr_CLI);
+    // 2a. The extension drawers. LoadSeg walks neither PATH nor our
+    //     configured dirs, so a direct child would otherwise be unspawnable
+    //     by bare name even though the path list we hand the child would
+    //     have found it. (Mirrors the amigaos implementation.)
+    {
+        BPTR sp = __build_spawn_path();
+        if (sp != 0) {
+            struct rp_path_node * spn = (struct rp_path_node *) BADDR(sp);
+            char sbuf[260];
+            while (spn != NULL) {
+                if (spn->path_Lock != 0
+                        && NameFromLock(spn->path_Lock, (STRPTR) sbuf,
+                                        (LONG) sizeof(sbuf) - 1) != DOSFALSE) {
+                    int len = 0;
+                    while (sbuf[len] != 0 && len < (int) sizeof(sbuf) - 2) len++;
+                    if (len > 0 && sbuf[len - 1] != '/' && sbuf[len - 1] != ':'
+                            && len < (int) sizeof(sbuf) - 2) {
+                        sbuf[len++] = '/';
+                        sbuf[len] = 0;
+                    }
+                    {
+                        int n2 = 0;
+                        while (name[n2] != 0 && len + n2 < (int) sizeof(sbuf) - 1) {
+                            sbuf[len + n2] = name[n2];
+                            n2++;
+                        }
+                        sbuf[len + n2] = 0;
+                    }
+                    rp_record_resolved(sbuf);
+                    seg = LoadSeg((CONST_STRPTR) sbuf);
+                    if (seg != 0) {
+                        __free_spawn_path(sp);
+                        return seg;
+                    }
+                }
+                spn = (struct rp_path_node *) BADDR(spn->path_Next);
+            }
+            /* Nothing matched: never handed to a child, so we free it. */
+            __free_spawn_path(sp);
+        }
+    }
+
+    // 2b. Walk pr_CLI->cli_CommandDir.
+    // Own CLI's path, or -- started from an icon, where pr_CLI is 0 -- the
+    // Workbench/Ambient process's (see __effective_path_cli).
+    struct CommandLineInterface * cli = __effective_path_cli();
     if (cli != NULL) {
         struct rp_path_node * node = (struct rp_path_node *) BADDR(cli->cli_CommandDir);
         char buf[260];
@@ -1048,6 +1296,7 @@ static BPTR rp_loadseg_with_path(const char * name) {
                         n++;
                     }
                     buf[len + n] = 0;
+                    rp_record_resolved(buf);
                     seg = LoadSeg((CONST_STRPTR) buf);
                     if (seg != 0) return seg;
                 }
@@ -1066,6 +1315,7 @@ static BPTR rp_loadseg_with_path(const char * name) {
         n++;
     }
     buf[2 + n] = 0;
+    rp_record_resolved(buf);
     seg = LoadSeg((CONST_STRPTR) buf);
     return seg;  // 0 on failure
 }
@@ -1186,21 +1436,10 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     st->open_count = 3;
     st->any_open   = TRUE;
 
-    // Banner — lands in the panel as the first thing the user sees.
-    {
-        char banner[160]; int p = 0;
-        const char * pre = "[amStudio] tty ready, log=";
-        while (*pre) banner[p++] = *pre++;
-        if (g_log_path[0] != 0) {
-            for (int i = 0; g_log_path[i] != 0; i++) banner[p++] = g_log_path[i];
-        } else {
-            const char * np = "(none)"; while (*np) banner[p++] = *np++;
-        }
-        banner[p++] = '\n';
-        Forbid();
-        rp_push(&st->out, (const UBYTE *) banner, (ULONG) p);
-        Permit();
-    }
+    // No ready banner. It was the first thing in every captured command's
+    // output and in the CLI panel, which made it look like program output;
+    // callers had to strip it back off again. The log path it announced is
+    // developer state, not something the user asked to see.
 
     // CWD swap (LoadSeg honours current dir).
     if (workingDir != NULL) {
@@ -1215,6 +1454,18 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         }
     }
 
+    // Fill the lock pool (see rp_state.cached_locks). DupLock failures
+    // leave slots 0 and the handler replies "not known" when it runs dry.
+    {
+        struct Process * self_proc = (struct Process *) FindTask(NULL);
+        BPTR src_lock = (self_proc != NULL) ? self_proc->pr_CurrentDir : 0;
+        if (src_lock != 0) {
+            int li;
+            for (li = 0; li < RP_LOCK_POOL_SIZE; li++) {
+                st->cached_locks[li] = DupLock(src_lock);
+            }
+        }
+    }
     // Parse "binary args..." and LoadSeg.
     string_holder * cmd_holder = (string_holder *) (command + 1);
     const char * cmd_str = (cmd_holder != NULL) ? cmd_holder->string_value : NULL;
@@ -1249,6 +1500,44 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     // Spawn the child. NP_FreeSeglist=TRUE so the child unloads its
     // own seg on exit.
     Forbid();
+    // Command-search path for the child and everything IT spawns.
+    // Fresh per spawn: NP_Path transfers ownership and the child frees the
+    // chain on exit. 0 means "no extra dirs" and the tag is omitted so the
+    // child keeps its default inherited path.
+    BPTR sp_chain = __build_spawn_path();
+    // Ported from the amigaos backend, where each of these was added for
+    // ixemul children (GNU make, gcc, coreutils): ixemul reads pr_HomeDir
+    // at libc init to find its config and the program's own location, and
+    // NP_CurrentDir is what makes a relative path handed to the child land
+    // in the directory the terminal shows. Two separate locks -- DOS frees
+    // them independently on exit.
+    //
+    // HomeDir IS the child's PROGDIR:, so it must name the drawer the BINARY
+    // was loaded from, NOT our current directory. Passing NP_HomeDir at all
+    // overrides the loader's default, so duplicating pr_CurrentDir here (what
+    // this used to do) silently pointed PROGDIR: at whatever folder the CLI
+    // was showing -- `amlc`, launched by the studio with the workspace as cwd,
+    // looked for PROGDIR:config.json and PROGDIR:templates/package.yml inside
+    // the NEW PROJECT instead of its own extension drawer and quietly fell
+    // back to the built-in cross-compiling scaffold.
+    BPTR child_home_lock = 0;
+    BPTR child_cwd_lock = 0;
+    {
+        struct Process * self_proc = (struct Process *) FindTask(NULL);
+        BPTR src_lock = (self_proc != NULL) ? self_proc->pr_CurrentDir : 0;
+        child_home_lock = rp_lock_binary_dir();
+        if (child_home_lock == 0 && src_lock != 0) {
+            // Bare name resolved out of the cwd, or the drawer would not
+            // lock: the cwd is the best answer available.
+            child_home_lock = DupLock(src_lock);
+        }
+        if (src_lock != 0) {
+            child_cwd_lock = DupLock(src_lock);
+        }
+    }
+    LONG child_stack = (d->pending_stack > 0) ? d->pending_stack : RP_DEFAULT_CHILD_STACK;
+    if (child_stack < RP_MIN_CHILD_STACK) child_stack = RP_MIN_CHILD_STACK;
+    rp_log_event("[rp] child stack =", child_stack);
     struct Process * child = CreateNewProcTags(
         NP_Seglist,     (ULONG) seg,
         NP_FreeSeglist, TRUE,
@@ -1259,7 +1548,11 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         NP_ConsoleTask, (ULONG) st->handler_port,
         NP_Arguments,   (ULONG) g_arg_buf,
         NP_Name,        (ULONG) "amStudioChild",
-        NP_StackSize,   32768,
+        NP_StackSize,   (ULONG) child_stack,
+        (child_home_lock != 0 ? NP_HomeDir : TAG_IGNORE), (ULONG) child_home_lock,
+        (child_cwd_lock != 0 ? NP_CurrentDir : TAG_IGNORE), (ULONG) child_cwd_lock,
+        NP_CopyVars,    TRUE,
+        (sp_chain != 0 ? NP_Path : TAG_IGNORE), (ULONG) sp_chain,
         // No NP_ExitCode on MorphOS — ACTION_END flips child_exited.
         TAG_DONE);
     // NDK note in dostags.h: "V40 DID NOT, unlike claimed, support
@@ -1270,7 +1563,12 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     // so we never see it in the panel and the user gets a popup
     // CON: window instead. Manually set pr_CES while Forbid is
     // held so the child hasn't run yet.
+    if (child == NULL) {
+        if (child_home_lock != 0) UnLock(child_home_lock);
+        if (child_cwd_lock != 0) UnLock(child_cwd_lock);
+    }
     if (child != NULL) {
+        st->child_task = (struct Task *) child;
         // V40 fix: NP_Error silently dropped, set pr_CES manually.
         child->pr_CES = d->fh_err_bptr;
 
@@ -1287,6 +1585,21 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
             cli->cli_CurrentInput   = d->fh_in_bptr;
             cli->cli_StandardOutput = d->fh_out_bptr;
             cli->cli_CurrentOutput  = d->fh_out_bptr;
+            // As on amigaos: ixemul branches on cli_Interactive for stdio
+            // buffering (some versions abort with exit 161 when it reads
+            // 0), and reconstructs argv[0] from cli_CommandName -- a NULL
+            // BSTR there is the NULL store that crashed GNU make right
+            // after its banner. Mirror what a shell-spawned process gets.
+            cli->cli_Interactive    = 1;
+            cli->cli_Background     = 0;
+            static UBYTE s_cmd_name_bstr[36];
+            int slen = 0;
+            while (slen < 30 && g_cmd_buf[slen] != 0) {
+                s_cmd_name_bstr[slen + 1] = g_cmd_buf[slen];
+                slen++;
+            }
+            s_cmd_name_bstr[0] = (UBYTE) slen;
+            cli->cli_CommandName = MKBADDR(s_cmd_name_bstr);
             rp_log_event("[rp] CLI patched, cli=", (LONG) cli);
         } else {
             rp_log_event("[rp] no CLI on child (pr_CLI=", (LONG) child->pr_CLI);
@@ -1485,14 +1798,41 @@ __exit: ;
     return __result;
 }
 
+// TRUE when `task` is the running task or is queued on Exec's ready /
+// waiting lists. Must be called under Forbid(). A task that has RemTask'd
+// itself is on neither list. (The pointer could in theory be recycled by a
+// new task at the same address before we look; the only consequence is one
+// extra "still alive" poll.)
+static BOOL rp_task_exists(struct Task * task) {
+    if (task == NULL) return FALSE;
+    if (SysBase->ThisTask == task) return TRUE;
+    struct Node * n;
+    for (n = SysBase->TaskReady.lh_Head; n->ln_Succ != NULL; n = n->ln_Succ) {
+        if ((struct Task *) n == task) return TRUE;
+    }
+    for (n = SysBase->TaskWait.lh_Head; n->ln_Succ != NULL; n = n->ln_Succ) {
+        if ((struct Task *) n == task) return TRUE;
+    }
+    return FALSE;
+}
+
 function_result Am_Lang_RunningProcess_isAlive_0(aobject * const this) {
     function_result __result = { .has_return_value = true };
     running_process_data * d = rp_data(this);
     BOOL alive = FALSE;
     if (d != NULL && d->state != NULL) {
         Forbid();
-        BOOL exited = d->state->child_exited;
-        ULONG queued = d->state->out.count;
+        struct rp_state * stp = d->state;
+        if (!stp->child_exited && stp->child_task != NULL
+                && !rp_task_exists(stp->child_task)) {
+            // Gone without an ACTION_END (ixemul exit path): mark it
+            // exited the same way the packet handler would.
+            stp->child_exited = TRUE;
+            stp->in.writer_closed = TRUE;
+            stp->child_task = NULL;
+        }
+        BOOL exited = stp->child_exited;
+        ULONG queued = stp->out.count;
         Permit();
         if (!exited || queued > 0) alive = TRUE;
     }
@@ -1512,11 +1852,14 @@ function_result Am_Lang_RunningProcess_exitCode_0(aobject * const this) {
 }
 
 function_result Am_Lang_RunningProcess_setStackSize_0(aobject * const this, int var_bytes) {
-    // Not yet honoured here — the spawn path on this platform still uses its
-    // built-in stack size. Accepted silently so callers can set it
-    // unconditionally; see the amigaos backend for the implemented version.
     function_result __result = { .has_return_value = false };
-    (void) this; (void) var_bytes;
+    running_process_data * d = rp_data(this);
+    if (d != NULL) {
+        LONG b = (LONG) var_bytes;
+        if (b > 0 && b < RP_MIN_CHILD_STACK) b = RP_MIN_CHILD_STACK;
+        d->pending_stack = b;
+        rp_log_event("[rp] setStackSize =", b);
+    }
     return __result;
 }
 

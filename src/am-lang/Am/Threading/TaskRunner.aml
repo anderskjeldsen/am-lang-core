@@ -22,6 +22,11 @@ namespace Am.Threading {
         var name: String = "task-runner"
 
         /**
+         * Priority handed to the worker Thread (see Thread.priority). Set before start().
+         */
+        var priority: Int = 0
+
+        /**
          * Pending tasks, oldest first. Only touched while holding the mutex.
          */
         private var queue: List<Task> = new List<Task>()
@@ -86,6 +91,7 @@ namespace Am.Threading {
                 n = "task-runner"
             }
             t.name = n
+            t.priority = this.priority
             this.thread = t
             t.start()
         }

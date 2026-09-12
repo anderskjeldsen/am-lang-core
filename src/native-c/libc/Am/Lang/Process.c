@@ -254,3 +254,13 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 __exit: ;
 	return __result;
 }
+
+
+// PATH is the OS mechanism on the libc hosts and children inherit it without
+// help, so there is nothing to store here. Callers set PATH via Environment.
+function_result Am_Lang_Process_setSpawnSearchPath_0(aobject * dirs)
+{
+	function_result __result = { .has_return_value = true };
+	__result.return_value.value.bool_value = true;
+	return __result;
+}

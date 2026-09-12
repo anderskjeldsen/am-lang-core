@@ -122,7 +122,12 @@
     #define __amlc_atomic_store(p, v)      __atomic_store_n((p), (v), __ATOMIC_RELAXED)
     #define __amlc_atomic_fetch_add(p, v)  __atomic_fetch_add((p), (v), __ATOMIC_RELAXED)
     #define __amlc_atomic_fetch_sub(p, v)  __atomic_fetch_sub((p), (v), __ATOMIC_RELEASE)
-#elif defined(PLATFORM_AMIGAOS)
+#elif defined(PLATFORM_AMIGAOS) && defined(__GNUC__)
+    // (__GNUC__ because the inline asm below is gcc syntax: am-cc compiles
+    // this same file when building ON the Amiga with the bundled toolchain
+    // and has no inline asm — it takes the plain fallback branch. Same
+    // uniprocessor, wider RMW window; acceptable until am-cc grows an
+    // atomic-add intrinsic.)
     // AmigaOS 68k: the toolchain has no usable inline atomic RMW — GCC 6.5 m68k
     // lowers C11 atomics / __sync builtins to ___atomic_*_4 libcalls even at
     // -mcpu=68020 (verified), and TAS is byte-only + unreliable on chip RAM.
@@ -160,9 +165,17 @@
     // serialised to one execution context. (NOT MorphOS — it has its own verified
     // real-atomics branch above; this comment used to name it, which was stale.)
     typedef int __amlc_atomic_int;
+    // A function, not a comma-expression macro: am-cc — which compiles this
+    // header when building ON the Amiga with the bundled toolchain — does
+    // not parse the comma operator, and callers do use the returned old
+    // value (root_handoff, the foreign-count decrement). A REAL function
+    // defined once in core.c, not `static inline` here: am-cc emits calls
+    // to a static inline but no body, and the link fails on every unit.
+    #define AMLC_PLAIN_ATOMIC_FN 1
+    int __amlc_plain_fetch_add(int *__amlc_p, int __amlc_v);
     #define __amlc_atomic_load(p)          (*(p))
-    #define __amlc_atomic_fetch_add(p, v)  ( ((*(p)) += (v)), ((*(p)) - (v)) )
-    #define __amlc_atomic_fetch_sub(p, v)  ( ((*(p)) -= (v)), ((*(p)) + (v)) )
+    #define __amlc_atomic_fetch_add(p, v)  __amlc_plain_fetch_add((p), (v))
+    #define __amlc_atomic_fetch_sub(p, v)  __amlc_plain_fetch_add((p), -(v))
     #define __amlc_atomic_store(p, v)      ( (*(p)) = (v) )
 #endif
 
@@ -181,7 +194,8 @@
 // aros-x86-64) out of this `addq.l`/`subq.l` assembly — see the note at the top
 // of this file.
 // Only bites once a platform actually uses these (ATOMIC strategy).
-#if defined(PLATFORM_AMIGAOS)
+// (__GNUC__ for the same reason as above: am-cc has no inline asm.)
+#if defined(PLATFORM_AMIGAOS) && defined(__GNUC__)
     #define __amlc_arc_inc(p) \
         __asm__ __volatile__("addq.l #1,%0" : "+m"(*(p)) : : "cc", "memory")
     #define __amlc_arc_dec_is_zero(p) ({ unsigned char __amlc_z; \

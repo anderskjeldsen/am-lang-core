@@ -184,6 +184,12 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 
 	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) this_r->object_properties.class_object_properties.object_data.value.custom_value;
 
+	// Thread.priority (declared last in Thread.aml: slot 3, after
+	// runnable / name / finalizers). Exec priorities are a signed byte.
+	int priority = this_r->object_properties.class_object_properties.properties[3].nullable_value.value.int_value;
+	if (priority < -128) priority = -128;
+	if (priority > 127) priority = 127;
+
 //	printf("stack_size: %d\n", data->stack_size);
 //	printf("thread name: %s\n", name_holder->string_value);
 
@@ -204,6 +210,7 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 		NP_Entry, (ULONG) fptr,
 		NP_StackSize, data->stack_size,
 		NP_Name, (ULONG) name_strptr,
+		NP_Priority, (ULONG) priority,
 		NP_Output, (ULONG) parent_out,
 		NP_Input, (ULONG) parent_in,
 		NP_Error, (ULONG) parent_err,
@@ -297,8 +304,18 @@ function_result Am_Threading_Thread_sleep_0(long long milliseconds)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 
-	int ticks = (int) (milliseconds / 20);
-//	printf("Sleep %d ticks\n", ticks);
+	// Delay() is 50 Hz (1 tick = 20ms). A plain integer divide FLOORED any
+	// sub-20ms sleep to 0 ticks, and Delay(0) returns immediately -- so a
+	// loop like TaskScheduler.stopAll's 5ms poll never yielded the CPU.
+	// Harmless while every task shared priority 0 (Exec round-robins
+	// equals), fatal once the workers run at -1: a priority-0 task that
+	// spins never lets a -1 task run, so the worker could not see
+	// stopRequested and quitting the IDE froze. Round UP: any positive
+	// sleep gives at least one tick, which is a real Wait().
+	int ticks = (int) ((milliseconds + 19) / 20);
+	if (milliseconds > 0 && ticks < 1) {
+		ticks = 1;
+	}
 	Delay(ticks); // Ticks (50 per second)
 
 __exit: ;

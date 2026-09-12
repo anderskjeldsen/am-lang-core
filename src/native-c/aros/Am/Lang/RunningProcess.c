@@ -1238,21 +1238,10 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     st->open_count = 3;
     st->any_open   = TRUE;
 
-    // Banner — lands in the panel as the first thing the user sees.
-    {
-        char banner[160]; int p = 0;
-        const char * pre = "[amStudio] tty ready, log=";
-        while (*pre) banner[p++] = *pre++;
-        if (g_log_path[0] != 0) {
-            for (int i = 0; g_log_path[i] != 0; i++) banner[p++] = g_log_path[i];
-        } else {
-            const char * np = "(none)"; while (*np) banner[p++] = *np++;
-        }
-        banner[p++] = '\n';
-        Forbid();
-        rp_push(&st->out, (const UBYTE *) banner, (ULONG) p);
-        Permit();
-    }
+    // No ready banner. It was the first thing in every captured command's
+    // output and in the CLI panel, which made it look like program output;
+    // callers had to strip it back off again. The log path it announced is
+    // developer state, not something the user asked to see.
 
     // CWD swap (LoadSeg honours current dir).
     if (workingDir != NULL) {

@@ -1,5 +1,16 @@
 // #include <stdlib.h>
 #include <libc/core.h>
+
+// The plain-fallback atomic helper the header declares when neither real
+// atomics nor the gcc inline-asm branch is available (notably am-cc on the
+// Amiga). One definition for the whole program.
+#ifdef AMLC_PLAIN_ATOMIC_FN
+int __amlc_plain_fetch_add(int *__amlc_p, int __amlc_v) {
+    int __amlc_old = *__amlc_p;
+    *__amlc_p = __amlc_old + __amlc_v;
+    return __amlc_old;
+}
+#endif
 #include <string.h>
 #include <stdarg.h>
 #if defined(__linux__)

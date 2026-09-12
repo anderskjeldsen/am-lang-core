@@ -68,12 +68,20 @@ function_result Am_Lang_Process_run_0(aobject * command)
 	// shell worked: the shell's `Stack` setting only applies to ITS children,
 	// not to a process we create here. The capture variants below already pass
 	// this tag; the plain run path did not.
+	// Extension drawers etc. reach the child as a real path list. Built
+	// fresh per spawn because NP_Path hands ownership to the child, which
+	// frees it on exit -- reusing one chain hands over dead memory.
+	// TAG_IGNORE when there is nothing to add, so the child keeps its
+	// default inheritance. Not freed on a failed spawn: whether ownership
+	// transfers in that case is unmeasured, and leaking beats a double free.
+	BPTR __sp_chain = __build_spawn_path();
 	struct TagItem tags[] = {
 		{ SYS_Asynch,    FALSE },
 		{ SYS_UserShell, TRUE },
 		// 256 KB, not 100 KB: the child may be a full AmLang binary
 		// (aminet-cli) doing an OpenSSL handshake on its main stack.
 		{ NP_StackSize,  (ULONG) 262144 },
+		{ __sp_chain != 0 ? NP_Path : TAG_IGNORE, (ULONG) __sp_chain },
 		{ TAG_DONE,      0 },
 	};
 
@@ -149,6 +157,156 @@ static void am_proc_build_temp_path(UBYTE *temp_path, struct Task *self, const c
 	temp_path[i] = 0;
 }
 
+// Where a capture spawn's LoadSeg actually found the binary, plus a lock on
+// the drawer holding it. A child created from a pre-loaded NP_Seglist gives
+// DOS no file to derive pr_HomeDir from, so without NP_HomeDir the child has
+// NO PROGDIR: at all — and PROGDIR: is how a bundled tool finds the files
+// shipped beside it (amlc's config.json / templates/package.yml, for one:
+// without this it silently scaffolded the built-in cross-compiling
+// package.yml instead of the packager's native one).
+// Returns 0 when the resolved name has no directory part; the tag is then
+// omitted and behaviour is exactly what it was before.
+static char g_cap_resolved[192];
+
+static void am_proc_record_resolved(const char * p) {
+	int i = 0;
+	if (p == NULL) { g_cap_resolved[0] = 0; return; }
+	while (p[i] != 0 && i < (int) sizeof(g_cap_resolved) - 1) {
+		g_cap_resolved[i] = p[i];
+		i++;
+	}
+	g_cap_resolved[i] = 0;
+}
+
+static BPTR am_proc_lock_binary_dir(void) {
+	const char * p = g_cap_resolved;
+	char dbuf[192];
+	int cut = -1;
+	int i = 0;
+	int n = 0;
+	int k = 0;
+	if (p[0] == 0) return 0;
+	while (p[i] != 0) {
+		if (p[i] == '/' || p[i] == ':') cut = i;
+		i++;
+	}
+	if (cut < 0) return 0;
+	n = (p[cut] == ':') ? cut + 1 : cut;   /* keep "C:", drop a trailing '/' */
+	if (n <= 0) return 0;
+	if (n > (int) sizeof(dbuf) - 1) n = (int) sizeof(dbuf) - 1;
+	while (k < n) { dbuf[k] = p[k]; k++; }
+	dbuf[n] = 0;
+	return Lock((CONST_STRPTR) dbuf, ACCESS_READ);
+}
+
+/* AmigaDOS path-list node: a chain of (next, lock) pairs. */
+struct am_proc_path_node {
+	BPTR path_Next;
+	BPTR path_Lock;
+};
+
+/* "<dir named by lock>/<name>" into out. 0 when the lock has no name.
+ * A volume/assign root already ends in ':' and takes no separator. */
+static int am_proc_join_lock(BPTR lock, const char * name, char * out, int outsz) {
+	int len = 0;
+	int n = 0;
+	if (lock == 0) return 0;
+	if (NameFromLock(lock, (STRPTR) out, (LONG) outsz - 1) == DOSFALSE) return 0;
+	while (out[len] != 0 && len < outsz - 2) len++;
+	if (len > 0 && out[len - 1] != '/' && out[len - 1] != ':' && len < outsz - 2) {
+		out[len++] = '/';
+		out[len] = 0;
+	}
+	while (name[n] != 0 && len + n < outsz - 1) {
+		out[len + n] = name[n];
+		n++;
+	}
+	out[len + n] = 0;
+	return 1;
+}
+
+/* Resolve `name` the way the CLI's spawner does, then LoadSeg it.
+ *
+ * This capture path used to try ONLY the name verbatim and then a "C:"
+ * prefix, while RunningProcess -- what the CLI panel spawns through -- also
+ * walks the installed extension drawers and the Shell's own path list
+ * (cli_CommandDir). The two disagreed, so a command the user can run by hand
+ * in the CLI was "not found" when the AI agent ran the very same string
+ * through run_command: the MorphOS SDK's `make` lives on the shell path
+ * (GG:bin), not in C:. Same order as rp_loadseg_with_path so both entry
+ * points agree.
+ *
+ * Records every attempt through am_proc_record_resolved so the child's
+ * NP_HomeDir (its PROGDIR:) still names the drawer the binary came from. */
+static BPTR am_proc_loadseg_with_path(const char * name) {
+	BPTR seg;
+	BPTR sp;
+	struct CommandLineInterface * cli;
+	char buf[260];
+	int i;
+
+	if (name == NULL || name[0] == 0) return 0;
+
+	/* 1. Verbatim: absolute paths, volume-prefixed names, current dir. */
+	am_proc_record_resolved(name);
+	seg = LoadSeg((CONST_STRPTR) name);
+	if (seg != 0) return seg;
+
+	/* A path was spelled out, so failing WAS the answer. Don't go hunting
+	 * for a same-named file somewhere else on the path. */
+	i = 0;
+	while (name[i] != 0) {
+		if (name[i] == '/' || name[i] == ':') return 0;
+		i++;
+	}
+
+	/* 2a. Installed extension drawers (am-git, the compiler, ...). */
+	sp = __build_spawn_path();
+	if (sp != 0) {
+		struct am_proc_path_node * spn = (struct am_proc_path_node *) BADDR(sp);
+		while (spn != NULL) {
+			if (am_proc_join_lock(spn->path_Lock, name, buf, (int) sizeof(buf))) {
+				am_proc_record_resolved(buf);
+				seg = LoadSeg((CONST_STRPTR) buf);
+				if (seg != 0) {
+					__free_spawn_path(sp);
+					return seg;
+				}
+			}
+			spn = (struct am_proc_path_node *) BADDR(spn->path_Next);
+		}
+		/* Nothing matched: never handed to a child, so we free it. */
+		__free_spawn_path(sp);
+	}
+
+	/* 2b. The Shell's path list -- our own CLI's, or the Workbench /
+	 * Ambient process's when the studio was started from an icon. */
+	cli = __effective_path_cli();
+	if (cli != NULL) {
+		struct am_proc_path_node * node =
+			(struct am_proc_path_node *) BADDR(cli->cli_CommandDir);
+		while (node != NULL) {
+			if (am_proc_join_lock(node->path_Lock, name, buf, (int) sizeof(buf))) {
+				am_proc_record_resolved(buf);
+				seg = LoadSeg((CONST_STRPTR) buf);
+				if (seg != 0) return seg;
+			}
+			node = (struct am_proc_path_node *) BADDR(node->path_Next);
+		}
+	}
+
+	/* 3. C: -- every install has it assigned. */
+	buf[0] = 'C'; buf[1] = ':';
+	i = 0;
+	while (name[i] != 0 && i < (int) sizeof(buf) - 3) {
+		buf[2 + i] = name[i];
+		i++;
+	}
+	buf[2 + i] = 0;
+	am_proc_record_resolved(buf);
+	return LoadSeg((CONST_STRPTR) buf);   /* 0 on failure */
+}
+
 function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 {
 	function_result __result = { .has_return_value = true };
@@ -198,22 +356,9 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 		g_arg_buf2[a]   = 0;
 	}
 
-	BPTR seg = LoadSeg((CONST_STRPTR) g_bin_buf2);
-	if (seg == 0) {
-		int has_path = 0;
-		for (int i = 0; g_bin_buf2[i] != 0; i++) {
-			if (g_bin_buf2[i] == '/' || g_bin_buf2[i] == ':') { has_path = 1; break; }
-		}
-		if (!has_path) {
-			char with_c[160];
-			int p = 0;
-			with_c[p++] = 'C'; with_c[p++] = ':';
-			int k = 0;
-			while (g_bin_buf2[k] != 0 && p < (int)(sizeof(with_c)-1)) with_c[p++] = g_bin_buf2[k++];
-			with_c[p] = 0;
-			seg = LoadSeg((CONST_STRPTR) with_c);
-		}
-	}
+	/* Same search the CLI uses: verbatim, extension drawers, the Shell's
+	 * path list, then C:. */
+	BPTR seg = am_proc_loadseg_with_path(g_bin_buf2);
 	if (seg == 0) {
 		Close(out_file); Close(err_file); Close(nil_in);
 		DeleteFile((CONST_STRPTR) temp_path);
@@ -222,7 +367,10 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 		goto __exit;
 	}
 
+	// PROGDIR: for the child. Taken BEFORE Forbid() — Lock() is a DOS call.
+	BPTR child_home = am_proc_lock_binary_dir();
 	Forbid();
+	BPTR sp_chain = __build_spawn_path();
 	struct Process *child = CreateNewProcTags(
 		NP_Seglist,     (ULONG) seg,
 		NP_FreeSeglist, (ULONG) TRUE,
@@ -234,6 +382,8 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 		NP_Arguments,   (ULONG) g_arg_buf2,
 		NP_Name,        (ULONG) "amProcessCapture",
 		NP_StackSize,   (ULONG) 65536,
+		(child_home != 0 ? NP_HomeDir : TAG_IGNORE), (ULONG) child_home,
+		(sp_chain != 0 ? NP_Path : TAG_IGNORE), (ULONG) sp_chain,
 		TAG_DONE);
 	if (child != NULL) {
 		child->pr_CIS = nil_in;
@@ -264,6 +414,8 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 
 	if (child == NULL) {
 		UnLoadSeg(seg);
+		// DOS only takes ownership of the HomeDir lock on success.
+		if (child_home != 0) UnLock(child_home);
 		Close(out_file); Close(err_file); Close(nil_in);
 		DeleteFile((CONST_STRPTR) temp_path);
 		DeleteFile((CONST_STRPTR) temp_path_err);
@@ -433,22 +585,11 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 		g_arg_buf[a]   = 0;
 	}
 
-	BPTR seg = LoadSeg((CONST_STRPTR) g_bin_buf);
-	if (seg == 0) {
-		int has_path = 0;
-		for (int i = 0; g_bin_buf[i] != 0; i++) {
-			if (g_bin_buf[i] == '/' || g_bin_buf[i] == ':') { has_path = 1; break; }
-		}
-		if (!has_path) {
-			char with_c[160];
-			int p = 0;
-			with_c[p++] = 'C'; with_c[p++] = ':';
-			int k = 0;
-			while (g_bin_buf[k] != 0 && p < (int)(sizeof(with_c)-1)) with_c[p++] = g_bin_buf[k++];
-			with_c[p] = 0;
-			seg = LoadSeg((CONST_STRPTR) with_c);
-		}
-	}
+	/* Same search the CLI uses: verbatim, extension drawers, the Shell's
+	 * path list, then C:. Previously this tried only the name and "C:", so
+	 * the AI agent's run_command could not find commands the user could run
+	 * by hand in the CLI panel -- SDK `make` being the obvious one. */
+	BPTR seg = am_proc_loadseg_with_path(g_bin_buf);
 	if (seg == 0) {
 		Close(out_file); Close(err_file); Close(nil_in);
 		DeleteFile((CONST_STRPTR) temp_path);
@@ -458,7 +599,10 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 		goto __exit;
 	}
 
+	// PROGDIR: for the child. Taken BEFORE Forbid() — Lock() is a DOS call.
+	BPTR child_home = am_proc_lock_binary_dir();
 	Forbid();
+	BPTR sp_chain = __build_spawn_path();
 	struct Process *child = CreateNewProcTags(
 		NP_Seglist,     (ULONG) seg,
 		NP_FreeSeglist, (ULONG) TRUE,
@@ -470,6 +614,8 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 		NP_Arguments,   (ULONG) g_arg_buf,
 		NP_Name,        (ULONG) "amProcessCapture",
 		NP_StackSize,   (ULONG) 65536,
+		(child_home != 0 ? NP_HomeDir : TAG_IGNORE), (ULONG) child_home,
+		(sp_chain != 0 ? NP_Path : TAG_IGNORE), (ULONG) sp_chain,
 		TAG_DONE);
 	if (child != NULL) {
 		child->pr_CIS = nil_in;
@@ -496,6 +642,8 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 
 	if (child == NULL) {
 		UnLoadSeg(seg);
+		// DOS only takes ownership of the HomeDir lock on success.
+		if (child_home != 0) UnLock(child_home);
 		Close(out_file); Close(err_file); Close(nil_in);
 		DeleteFile((CONST_STRPTR) temp_path);
 		DeleteFile((CONST_STRPTR) temp_path_err);
@@ -675,5 +823,18 @@ function_result Am_Lang_Process_captureStdoutInDir_0(aobject * command, aobject 
 	}
 
 __exit: ;
+	return __result;
+}
+
+
+// Store the search dirs for every later spawn. The chain itself is built
+// fresh at each spawn site (see __build_spawn_path in morphos.c) because
+// NP_Path hands ownership to the child.
+function_result Am_Lang_Process_setSpawnSearchPath_0(aobject * dirs)
+{
+	function_result __result = { .has_return_value = true };
+	string_holder *h = (string_holder *) (dirs + 1);
+	__set_spawn_search_path((const char *) h->string_value);
+	__result.return_value.value.bool_value = true;
 	return __result;
 }
