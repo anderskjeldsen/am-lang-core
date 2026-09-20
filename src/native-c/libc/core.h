@@ -352,9 +352,31 @@ union _value {
 
 struct _string_holder {
     bool is_string_constant;
-    unsigned int length; // length of characters, not "char"/bytes
+    // BYTES of UTF-8, not characters -- the comment here used to claim the
+    // opposite, which is where a long line of mojibake bugs started. This is
+    // what every native passes to fwrite/Text/strstr, and what String.length()
+    // reports today.
+    unsigned int length;
     char * string_value;
     unsigned int hash;
+    // UTF-16 code units, the count Java and JavaScript call a string's length.
+    // Computed once at construction in the same pass as the hash, so reading it
+    // is free. `char_length == length` is exactly the test for "pure ASCII",
+    // which is what lets the indexed operations keep their O(1) byte paths.
+    unsigned int char_length;
+    // Lazily built UTF-16 view, `char_length` units long, or NULL.
+    //
+    // Only ever allocated for a NON-ASCII string: when `char_length == length`
+    // the byte index IS the unit index, so indexed access is already O(1) off
+    // string_value and a cache would be pure waste. That is the overwhelming
+    // majority of strings here -- paths, identifiers, HashMap keys, C source --
+    // so most strings never allocate it at all.
+    //
+    // This is the ONLY heap a String owns: `string_value` and this holder are
+    // allocated inline with the aobject and die with it, which is why the
+    // release hook used to be empty. It is not any more -- see
+    // Am_Lang_String__native_release_0.
+    unsigned short * wide;
 };
 
 struct _array_holder {
@@ -442,11 +464,12 @@ struct _class_object_properties {
 };
 
 struct _object_wrapper {
-    aobject * wrapped_object;
-    // Diagnostics only (AMLC_WRAP_TRACE): creation call-site PC used to
-    // attribute leaked wrappers to their minting site. Fits in the union's
-    // slack (class_object_properties is larger), so no extra bytes. NULL
-    // when tracing is off.
+    // wrapped_object moved OUT of this union to a dedicated `aobject.wrapped_object`
+    // field: __unwrap read it on every property access, and a cross-member union
+    // read (wrapped_object vs class_object_properties.properties, both via a
+    // pointer to the union) is what -O2+ strict aliasing miscompiled. Only the
+    // cold diagnostic trace_site remains here, touched exclusively on the
+    // wrapper create/free path (never on a property access).
     void * trace_site;
 };
 
@@ -480,6 +503,13 @@ struct _aobject {
     // cross-thread wrapper-object protocol.
     __amlc_atomic_int foreign_reference_count;
     object_properties object_properties;
+    // Cross-thread wrapper target. A dedicated field, NOT a view of the
+    // object_properties union: __unwrap reads this on every property access,
+    // and reading it as `object_properties.object_wrapper.wrapped_object`
+    // (offset 0, aliasing object_data) let -O2+ strict aliasing miscompile
+    // the property-store diamond (a store landed on the wrong object). NULL
+    // on every non-wrapper object (class_ptr != NULL short-circuits the read).
+    aobject * wrapped_object;
     void * owner_thread;
     object_wrapper_entry * first_object_wrapper; // lock a app shared mutext to read/write
     bool marked;
@@ -624,6 +654,28 @@ extern bool __amlc_any_wrappers_alive;
 extern bool __amlc_multithreaded;
 #endif
 
+// Gated forms of the shared lock for critical sections that ALSO run in
+// single-threaded programs: property refcount mutations (the global
+// __first_object list), property-slot writes, and the object end-of-life
+// protocol. With one thread there is nobody to exclude, so these skip the
+// lock while `__amlc_multithreaded` is false — before this gate, every
+// property write and every object death in EVERY program paid a recursive
+// pthread-mutex round trip (profiled at a double-digit percentage of
+// am-git's status/clone wall time on macOS, single-threaded).
+//
+// Safe across the single→multi flip: the flag only turns true inside
+// Thread.start, and while it is false exactly one thread exists — a thread
+// cannot be inside one of these critical sections and inside Thread.start
+// at the same time, so a lock/unlock pair can never straddle the
+// transition. After the flip, every section entered takes the real lock.
+// Under AM_SINGLE_THREADED the flag is literal 0 and the calls compile out.
+//
+// NOT for the wrapper paths (__create_wrapper / __deallocate_wrapper):
+// wrappers only exist in multithreaded programs, and those sections must
+// hold the real lock unconditionally.
+#define __arc_shared_lock_mt()   do { if (__amlc_multithreaded) __arc_shared_lock(); } while (0)
+#define __arc_shared_unlock_mt() do { if (__amlc_multithreaded) __arc_shared_unlock(); } while (0)
+
 // Allocate a wrapper aobject in the current thread, pointing at the
 // real aobject (which is owned by some other thread). Subscribes the
 // wrapper into `real->first_object_wrapper` under the shared mutex
@@ -683,6 +735,30 @@ static inline void __increase_property_reference_count(aobject * const __obj);
 static inline void __decrease_property_reference_count_nullable_value(nullable_value __value);
 static inline void __increase_property_reference_count_nullable_value(nullable_value __value);
 void __deallocate_object(aobject * const __obj);
+
+// ── Slot watch (temporary debug aid) ──────────────────────────────────
+// Arm a 12-byte watch on one property slot's raw bytes, then report the
+// first time those bytes change without the watch being re-armed. Exists
+// because primitive property writes are emitted as raw inline struct
+// stores (see __get_property_nv's rationale) -- there is no hook on the
+// write itself, so the only way to catch a stray one is to notice the
+// damage from a path that runs constantly and allocates nothing.
+// Armed from Am.Lang.ObjectHelper.watchProperty.
+extern void * __amlc_watch_addr;
+extern int __amlc_watch_armed;
+void __amlc_watch_arm(void * addr);
+void __amlc_watch_check(const char * where, const char * cls, void * site);
+
+// The probe sites (allocator, deallocator, __set_property) are compiled out
+// unless -DAMLC_WATCH: they sit on hot paths, and an always-on watch costs a
+// call plus two loads per object allocation and per object-typed property
+// write. Arming still works in an AMLC_WATCH build via
+// Am.Lang.ObjectHelper.watchProperty.
+#ifdef AMLC_WATCH
+#define __amlc_watch_probe(where, cls, site) __amlc_watch_check((where), (cls), (site))
+#else
+#define __amlc_watch_probe(where, cls, site) ((void) 0)
+#endif
 void __detach_object(aobject * const __obj);
 
 aobject * __allocate_iface_object(aclass * const __class, aobject * const implementation_object);
@@ -748,6 +824,33 @@ void print_allocated_objects();
 bool is_descendant_of(aclass const * const cls, aclass const * const base);
 bool implements_interface(aclass const * const iface, aclass const * const cls);
 unsigned int __string_hash(const char * const str);
+// Decodes the UTF-8 sequence starting at byte `i`, writing the code point to
+// *out_cp (U+FFFD for anything malformed) and returning how many bytes it
+// consumed -- always at least 1, so a caller's walk cannot stall. This is the
+// ONE decoder: the unit count, String.getChars() and the indexed operations all
+// go through it, so they cannot drift apart.
+unsigned int __utf8_decode(const char * const s, unsigned int const len, unsigned int const i, unsigned int * const out_cp);
+// Number of UTF-16 code units `len` bytes of UTF-8 decode to. Astral characters
+// count as 2 (a surrogate pair), matching what getChars() produces.
+unsigned int __utf8_utf16_length(const char * const s, unsigned int const len);
+// Hash and UTF-16 unit count in ONE pass over the string. The hash is bit-for-bit
+// what __string_hash returns -- construction already walked every byte, so the
+// unit count rides along for free rather than costing a second pass.
+unsigned int __string_hash_and_units(const char * const str, unsigned int const byte_len, unsigned int * const out_units);
+// Returns the holder's UTF-16 view, building it on first use. NULL when the
+// string is pure ASCII (the caller should index string_value directly) or when
+// the allocation failed -- callers must handle NULL by falling back to a scan
+// rather than failing, so a low-memory machine gets slow, not broken.
+unsigned short * __string_wide(string_holder * const holder);
+// Frees a holder's UTF-16 view. Safe on a holder that never built one.
+void __string_wide_free(string_holder * const holder);
+// Byte offset of UTF-16 unit `unit_index`. Sets *out_split when the index lands
+// on the low half of a surrogate pair -- i.e. inside a character, which UTF-8
+// cannot represent as a boundary. O(1) for ASCII, a walk otherwise.
+unsigned int __string_unit_to_byte(string_holder * const holder, unsigned int const unit_index, int * const out_split);
+// UTF-16 unit index of byte offset `byte_offset`. The inverse of the above,
+// used to report indexOf results in the same units the caller indexes in.
+unsigned int __string_byte_to_unit(string_holder * const holder, unsigned int const byte_offset);
 void deallocate_annotations(class_static * const __class_static);
 array_holder * get_array_holder(aobject * const array_obj);
 char * get_array_data(array_holder * holder);

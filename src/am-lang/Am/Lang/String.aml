@@ -27,9 +27,14 @@ namespace Am.Lang
         override fun toString(): String {
             return this
         }
-        // TODO: change to length
         /**
-         * Returns the length of the string in characters.
+         * Returns the length of the string in characters — UTF-16 code units, the same count Java
+         * and JavaScript report. This is the index space characterAt(), substring() and indexOf()
+         * work in, so it is the length to pair with them.
+         *
+         * Pre-calculated when the string is built, so it is a field read and safe as a loop bound.
+         * Use byteLength() when you need the storage size — for a buffer, a file offset or a
+         * protocol field. The two agree for ASCII and diverge the moment they do not.
          * @return The character count
          */
         #noThrow
@@ -42,6 +47,23 @@ namespace Am.Lang
         fun length(): Int {
             return this.getLength()
         }
+        /**
+         * Returns the length of the string in bytes of UTF-8. The explicit name for what
+         * getLength() and length() report, for code that wants to be unambiguous about the unit.
+         * @return The byte count
+         */
+        #noThrow
+        native fun byteLength(): Int
+        /**
+         * Returns the number of UTF-16 code units — the explicit name for what getLength() and
+         * length() report, for code that wants to be unambiguous about the unit.
+         *
+         * Characters outside the Basic Multilingual Plane count as two, because they take a
+         * surrogate pair.
+         * @return The character count
+         */
+        #noThrow
+        native fun charLength(): Int
         /**
          * Tests whether the string has no characters. Note this is a length test only — a string
          * of spaces is not empty.
@@ -106,9 +128,13 @@ namespace Am.Lang
         native fun lastIndexOf(s: String): Int
         /**
          * Extracts a range of characters. The second argument is a LENGTH, not an end index —
-         * passing an end index reads past the string and hangs or faults. Use substringToEnd when
-         * you want everything from a position onwards.
-         * @param start Zero-based index of the first character to take
+         * passing an end index throws. Use substringToEnd when you want everything from a
+         * position onwards.
+         *
+         * Both arguments count CHARACTERS, matching getLength() and characterAt(), so a range can
+         * never split a multi-byte character. Splitting a surrogate pair — only reachable with
+         * astral text and a hand-computed index — throws rather than producing a broken sequence.
+         * @param start Zero-based character index of the first character to take
          * @param length Number of characters to take
          * @return The extracted substring
          */
@@ -173,10 +199,19 @@ namespace Am.Lang
         #nativeEntry
         native private fun characterAtNative(index: UInt): UShort
         /**
-         * Returns the character code at a position, for example 65US for 'A'. Compare the result
-         * against character-code literals such as 32US.
+         * Returns the character at a position as a UTF-16 code unit, for example 65US for 'A'.
+         * Compare the result against character-code literals such as 32US.
+         *
+         * The index counts CHARACTERS, not bytes, so it pairs with getLength(). For ASCII the two
+         * are the same number and this is a single load; for anything else the string decodes once
+         * into a cached UTF-16 view and indexes that, so a loop over characterAt() stays linear
+         * rather than going quadratic.
+         *
+         * A character outside the Basic Multilingual Plane occupies two positions — a surrogate
+         * pair — exactly as in Java and JavaScript. Use getChars() when you want the whole string
+         * as an array.
          * @param index Zero-based character index
-         * @return The character code at that index
+         * @return The UTF-16 code unit at that index
          * @throws IndexOutOfBoundsException if the index is at or past the end of the string
          */
         fun characterAt(index: UInt): UShort {
@@ -186,7 +221,37 @@ namespace Am.Lang
             return this.characterAtNative(index)
         }
 
+        /**
+         * Decodes the string into UTF-16 code units — what Java and JavaScript call chars.
+         *
+         * This is the counterpart to characterAt(), which indexes BYTES and so only agrees with a
+         * character index for ASCII. Decode once with getChars() and index the array in O(1)
+         * afterwards; that is the efficient way to walk text by character, and the only correct
+         * way once the text is not ASCII.
+         *
+         * Characters outside the Basic Multilingual Plane occupy two units (a surrogate pair), so
+         * the array length equals charLength() rather than the number of characters. Malformed
+         * UTF-8 decodes to U+FFFD instead of throwing, so this never fails on bytes that arrived
+         * from a file or a socket.
+         *
+         *     var chars = text.getChars()
+         *     var i = 0
+         *     while (i < chars.length().toInt()) { ... chars[i] ... i++ }
+         *
+         * @return The string as UTF-16 code units
+         */
+        native fun getChars(): UShort[]
 
+        /**
+         * Returns the character at a position as a UTF-16 code unit — the JavaScript name for
+         * characterAt(), which it simply forwards to.
+         * @param index Zero-based character index
+         * @return The UTF-16 code unit at that index
+         * @throws IndexOutOfBoundsException if the index is at or past the end of the string
+         */
+        fun codeUnitAt(index: UInt): UShort {
+            return this.characterAt(index)
+        }
 
         /**
          * Tests whether the string ends with a suffix. An empty suffix always matches, and a

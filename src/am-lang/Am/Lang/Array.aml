@@ -35,16 +35,45 @@ namespace Am.Lang
          */
         fun subArray(offset: UInt, length: UInt): T[] {
             var newArray = this.createEmptyArrayOfSameType(length)
-            var i = offset
-            var j = 0
-            var end = offset + length
-            while(i < end) {
-                newArray[j] = this[i]
-                j++
-                i++
-            }
+            this.copyTo(newArray, 0UI, offset, length)
             return newArray
         }
+
+        /**
+         * Copies `length` elements from this array, starting at `srcOffset`, into `dest`,
+         * starting at `destOffset`. Both ranges must lie fully inside their arrays or the call
+         * throws IndexOutOfBoundsException before copying anything. `dest` may be this same
+         * array with overlapping ranges - the copy behaves as if it went through a temporary
+         * (like C's memmove), so shifting elements up or down within one array is safe.
+         *
+         * This is the bulk-copy primitive: for primitive element types (UByte, Int, ...) it is
+         * a single native memory move instead of a per-element loop with a bounds check and a
+         * function call per element - byte-heavy code (network buffers, hashing, file I/O)
+         * should build on it. Object elements keep correct reference counts: every copied
+         * reference is retained and every overwritten destination reference is released,
+         * exactly as per-element assignment would have done.
+         * @param dest The array to copy into (may be this array)
+         * @param destOffset Zero-based index in dest of the first element written
+         * @param srcOffset Zero-based index in this array of the first element read
+         * @param length Number of elements to copy
+         * @throws IndexOutOfBoundsException if either range reaches outside its array
+         */
+        fun copyTo(dest: T[], destOffset: UInt, srcOffset: UInt, length: UInt) {
+            if (length == 0UI) {
+                return
+            }
+            var srcLen = this.length()
+            if (length > srcLen || srcOffset > srcLen - length) {
+                throw new IndexOutOfBoundsException((srcOffset + length).toInt(), srcLen)
+            }
+            var dstLen = dest.length()
+            if (length > dstLen || destOffset > dstLen - length) {
+                throw new IndexOutOfBoundsException((destOffset + length).toInt(), dstLen)
+            }
+            this.copyToNative(dest, destOffset, srcOffset, length)
+        }
+
+        private native fun copyToNative(dest: T[], destOffset: UInt, srcOffset: UInt, length: UInt)
 
         /**
          * Allocates an uninitialised array with this array's element type, used by subArray to

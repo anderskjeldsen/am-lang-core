@@ -41,7 +41,7 @@ function_result Am_Lang_Process_run_0(aobject * command)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	string_holder *cmd_holder = (string_holder *) (command + 1);
+	string_holder *cmd_holder = (string_holder *) ((char *) command + sizeof(aobject));
 	int status = system(cmd_holder->string_value);
 
 	if (status == -1) {
@@ -63,7 +63,7 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	string_holder *cmd_holder = (string_holder *) (command + 1);
+	string_holder *cmd_holder = (string_holder *) ((char *) command + sizeof(aobject));
 
 	FILE *pipe = popen(cmd_holder->string_value, "r");
 	if (!pipe) {
@@ -122,7 +122,7 @@ function_result Am_Lang_Process_canonicalPath_0(aobject * path)
 	// absolute form. On failure (path missing, permission denied)
 	// just hand back the original so the caller still has something
 	// to work with.
-	string_holder *in_holder = (string_holder *) (path + 1);
+	string_holder *in_holder = (string_holder *) ((char *) path + sizeof(aobject));
 	const char *in_str = in_holder->string_value;
 
 	char resolved[4096];
@@ -170,8 +170,8 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	string_holder *cmd_holder = (string_holder *) (command + 1);
-	string_holder *dir_holder = (workingDir != NULL) ? (string_holder *) (workingDir + 1) : NULL;
+	string_holder *cmd_holder = (string_holder *) ((char *) command + sizeof(aobject));
+	string_holder *dir_holder = (workingDir != NULL) ? (string_holder *) ((char *) workingDir + sizeof(aobject)) : NULL;
 	const char *dir_str = (dir_holder != NULL && dir_holder->length > 0) ? dir_holder->string_value : NULL;
 
 	// The working dir is applied INSIDE the spawned shell — `cd '<dir>'

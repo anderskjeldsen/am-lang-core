@@ -14,6 +14,10 @@ int __amlc_plain_fetch_add(int *__amlc_p, int __amlc_v) {
 #include <string.h>
 #include <stdarg.h>
 #if defined(__linux__)
+#include <features.h>   // defines __GLIBC__ on glibc; musl has neither it nor execinfo.h
+#endif
+#if defined(__linux__) && defined(__GLIBC__)
+#define AMLC_HAVE_BACKTRACE 1
 #include <execinfo.h>   // backtrace() for the AMLC_WRAP_TRACE diagnostics
 #endif
 
@@ -422,6 +426,158 @@ aobject * __allocate_iface_object(aclass * const __class, aobject * const implem
     return iface_object;
 }
 
+unsigned int __utf8_decode(const char * const s, unsigned int const len, unsigned int const i, unsigned int * const out_cp) {
+    unsigned int b0, b1, b2, b3, cp;
+    if (i >= len) { *out_cp = 0xfffd; return 1; }
+    b0 = (unsigned char) s[i];
+    if (b0 < 0x80) { *out_cp = b0; return 1; }
+    // 0xc0/0xc1 are excluded: they can only encode an overlong form of an ASCII
+    // character, which a decoder must reject rather than fold back to ASCII.
+    if (b0 >= 0xc2 && b0 <= 0xdf && i + 1 < len) {
+        b1 = (unsigned char) s[i + 1];
+        if (b1 >= 0x80 && b1 <= 0xbf) {
+            *out_cp = ((b0 & 0x1f) << 6) | (b1 & 0x3f);
+            return 2;
+        }
+    } else if (b0 >= 0xe0 && b0 <= 0xef && i + 2 < len) {
+        b1 = (unsigned char) s[i + 1];
+        b2 = (unsigned char) s[i + 2];
+        if (b1 >= 0x80 && b1 <= 0xbf && b2 >= 0x80 && b2 <= 0xbf) {
+            cp = ((b0 & 0x0f) << 12) | ((b1 & 0x3f) << 6) | (b2 & 0x3f);
+            // Reject overlongs and the surrogate block. Surrogates are not
+            // valid UTF-8 however they were produced; accepting them would let
+            // a decode/encode round trip manufacture text no other decoder agrees with.
+            if (cp >= 0x800 && (cp < 0xd800 || cp > 0xdfff)) { *out_cp = cp; return 3; }
+        }
+    } else if (b0 >= 0xf0 && b0 <= 0xf4 && i + 3 < len) {
+        b1 = (unsigned char) s[i + 1];
+        b2 = (unsigned char) s[i + 2];
+        b3 = (unsigned char) s[i + 3];
+        if (b1 >= 0x80 && b1 <= 0xbf && b2 >= 0x80 && b2 <= 0xbf && b3 >= 0x80 && b3 <= 0xbf) {
+            cp = ((b0 & 0x07) << 18) | ((b1 & 0x3f) << 12) | ((b2 & 0x3f) << 6) | (b3 & 0x3f);
+            if (cp >= 0x10000 && cp <= 0x10ffff) { *out_cp = cp; return 4; }
+        }
+    }
+    // Malformed: one replacement character, one byte consumed. Never zero, or
+    // every caller's loop would spin.
+    *out_cp = 0xfffd;
+    return 1;
+}
+
+unsigned int __utf8_utf16_length(const char * const s, unsigned int const len) {
+    unsigned int i = 0, units = 0, cp = 0;
+    while (i < len) {
+        i += __utf8_decode(s, len, i, &cp);
+        units += (cp >= 0x10000) ? 2 : 1;   // astral = surrogate pair
+    }
+    return units;
+}
+
+unsigned short * __string_wide(string_holder * const holder) {
+    unsigned int i, o, cp, units;
+    unsigned short * buf;
+    if (holder == NULL) return NULL;
+    // Pure ASCII needs no view: byte index == unit index, so the caller's
+    // direct string_value read is already correct AND O(1).
+    if (holder->char_length == holder->length) return NULL;
+    if (holder->wide != NULL) return holder->wide;
+
+    units = holder->char_length;
+    if (units == 0) return NULL;
+    buf = (unsigned short *) malloc((size_t) units * sizeof(unsigned short));
+    // Deliberately NOT an OOM throw: charAt getting slow on a full machine is
+    // far better than charAt failing. Callers fall back to a scan on NULL.
+    if (buf == NULL) return NULL;
+
+    i = 0; o = 0; cp = 0;
+    while (i < holder->length && o < units) {
+        i += __utf8_decode(holder->string_value, holder->length, i, &cp);
+        if (cp < 0x10000) {
+            buf[o++] = (unsigned short) cp;
+        } else {
+            unsigned int v = cp - 0x10000;
+            buf[o++] = (unsigned short) (0xd800 + (v >> 10));
+            if (o < units) buf[o++] = (unsigned short) (0xdc00 + (v & 0x3ff));
+        }
+    }
+
+    // Publish last. Strings are immutable and shared, so two threads can both
+    // find NULL here and both build an identical view; whoever stores second
+    // wins and the loser's buffer leaks. A plain aligned pointer store is
+    // atomic on every target we build for, so a reader never sees a torn or
+    // half-filled pointer -- and taking the shared ARC lock on every charAt
+    // would cost far more than the rare leak. Under AM_SINGLE_THREADED the
+    // race cannot arise at all.
+    holder->wide = buf;
+    return buf;
+}
+
+unsigned int __string_unit_to_byte(string_holder * const holder, unsigned int const unit_index, int * const out_split) {
+    unsigned int i = 0, o = 0, cp = 0, step;
+    if (out_split != NULL) *out_split = 0;
+    if (holder == NULL) return 0;
+    // ASCII: one byte per unit, so the two index spaces are the same number.
+    if (holder->char_length == holder->length) {
+        return (unit_index < holder->length) ? unit_index : holder->length;
+    }
+    while (i < holder->length && o < unit_index) {
+        step = __utf8_decode(holder->string_value, holder->length, i, &cp);
+        if (cp >= 0x10000) {
+            // Astral: two units for one 4-byte character. Asking for the second
+            // of them is asking for a boundary inside a character.
+            if (o + 1 == unit_index) {
+                if (out_split != NULL) *out_split = 1;
+                return i;
+            }
+            o += 2;
+        } else {
+            o += 1;
+        }
+        i += step;
+    }
+    return i;
+}
+
+unsigned int __string_byte_to_unit(string_holder * const holder, unsigned int const byte_offset) {
+    unsigned int i = 0, o = 0, cp = 0;
+    if (holder == NULL) return 0;
+    if (holder->char_length == holder->length) {
+        return (byte_offset < holder->length) ? byte_offset : holder->char_length;
+    }
+    while (i < holder->length && i < byte_offset) {
+        i += __utf8_decode(holder->string_value, holder->length, i, &cp);
+        o += (cp >= 0x10000) ? 2 : 1;
+    }
+    return o;
+}
+
+void __string_wide_free(string_holder * const holder) {
+    if (holder != NULL && holder->wide != NULL) {
+        free(holder->wide);
+        holder->wide = NULL;
+    }
+}
+
+unsigned int __string_hash_and_units(const char * const str, unsigned int const byte_len, unsigned int * const out_units) {
+    // The hash must stay bit-for-bit identical to __string_hash: it is compared
+    // directly in String.equals and keys every HashMap in the runtime. Note the
+    // signed `char` read is deliberate and load-bearing for that -- do not
+    // "fix" it to unsigned here without rehashing everything.
+    unsigned int hash = 0;
+    unsigned int bit = 0;
+    const char *str2 = str;
+    while (*str2 != 0) {
+        unsigned int c = (unsigned int) *str2++;
+        hash += (c << bit);
+        bit += 5;
+        bit &= 0x1f;
+    }
+    if (out_units != NULL) {
+        *out_units = __utf8_utf16_length(str, byte_len);
+    }
+    return hash;
+}
+
 unsigned int __string_hash(const char * const str) {
     unsigned int hash = 0;
     unsigned int bit = 0;
@@ -515,7 +671,86 @@ static void __obj_trace_bump(aclass * cls, int delta) {
 }
 #endif
 
+// ── Slot watch (temporary debug aid) ──────────────────────────────────
+// See core.h. Snapshots 12 raw bytes at `__amlc_watch_addr` when armed and
+// reports the first divergence, with the call site that was running. Costs
+// one load + branch when disarmed, and allocates nothing, so it can be
+// called from the allocator without shifting the heap layout it is trying
+// to observe.
+void * __amlc_watch_addr = NULL;
+int __amlc_watch_armed = 0;
+static unsigned char __amlc_watch_expect[12];
+static int __amlc_watch_reported = 0;
+
+void __amlc_watch_arm(void * addr) {
+    int i = 0;
+    __amlc_watch_addr = addr;
+    if (addr == NULL) {
+        __amlc_watch_armed = 0;
+        return;
+    }
+    while (i < 12) {
+        __amlc_watch_expect[i] = ((const unsigned char *) addr)[i];
+        i = i + 1;
+    }
+    __amlc_watch_armed = 1;
+    __amlc_watch_reported = 0;
+    // Relocation anchor: AmigaOS hunks load at an arbitrary base, so the
+    // site pointer in a report means nothing on its own. Printing a known
+    // symbol's runtime address gives the slide to subtract before looking
+    // the site up in the link map.
+    printf("[watch] anchor __amlc_watch_check=%p\n", (void *) &__amlc_watch_check);
+    printf("[watch] armed on %p bytes=", addr);
+    i = 0;
+    while (i < 12) {
+        printf("%02x", (unsigned int) __amlc_watch_expect[i]);
+        i = i + 1;
+    }
+    printf("\n");
+    fflush(stdout);
+}
+
+void __amlc_watch_check(const char * where, const char * cls, void * site) {
+    const unsigned char * now;
+    int i = 0;
+    int differs = 0;
+    if (__amlc_watch_armed == 0 || __amlc_watch_addr == NULL) {
+        return;
+    }
+    now = (const unsigned char *) __amlc_watch_addr;
+    while (i < 12) {
+        if (now[i] != __amlc_watch_expect[i]) {
+            differs = 1;
+            break;
+        }
+        i = i + 1;
+    }
+    if (differs == 0) {
+        return;
+    }
+    if (__amlc_watch_reported == 0) {
+        __amlc_watch_reported = 1;
+        printf("[watch] *** CHANGED at %p during %s (class=%s, site=%p)\n",
+            __amlc_watch_addr, where != NULL ? where : "?",
+            cls != NULL ? cls : "?", site);
+        printf("[watch]   was=");
+        i = 0;
+        while (i < 12) { printf("%02x", (unsigned int) __amlc_watch_expect[i]); i = i + 1; }
+        printf("\n[watch]   now=");
+        i = 0;
+        while (i < 12) { printf("%02x", (unsigned int) now[i]); i = i + 1; }
+        printf("\n");
+        fflush(stdout);
+    }
+    // Re-sync so a single stray write is reported once rather than at every
+    // later call site, while a SECOND stray write still gets caught.
+    i = 0;
+    while (i < 12) { __amlc_watch_expect[i] = now[i]; i = i + 1; }
+    __amlc_watch_reported = 0;
+}
+
 aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra_size) {
+    __amlc_watch_probe("allocate", __class != NULL ? __class->name : NULL, __builtin_return_address(0));
     __amlc_atomic_fetch_add(&__allocation_count, 1);
     #if defined(__linux__)
     if (__obj_trace_on == -1) {
@@ -565,7 +800,7 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
         #endif
 
         if (__class->statics->type == class && __class->properties_count > 0) {
-            __obj->object_properties.class_object_properties.properties = (property *) (__obj + 1);;
+            __obj->object_properties.class_object_properties.properties = (property *) ((char *) __obj + sizeof(aobject));
         }
 
             __obj->class_ptr = __class;
@@ -772,6 +1007,9 @@ void __deallocate_detached_object(aobject * const __obj) {
 }
 
 void __deallocate_object(aobject * const __obj) {
+    __amlc_watch_probe("deallocate",
+        (__obj != NULL && __obj->class_ptr != NULL) ? __obj->class_ptr->name : NULL,
+        __builtin_return_address(0));
     #ifdef WRAPLOG
     fprintf(stderr, "[real.dealloc] real=%p class=%s rc=%d propref=%d owner_gone=%d wrappers=%p\n",
         __obj,
@@ -888,8 +1126,10 @@ void __decrease_property_reference_count(aobject * const __obj) {
         // mutation must be atomic w.r.t. concurrent increases on other
         // threads. Recursive mutex → nested set_property calls (which
         // also take the lock) are fine. The deallocate path below is
-        // outside the lock — see comment near the call.
-        __arc_shared_lock();
+        // outside the lock — see comment near the call. Gated: with one
+        // thread (see __arc_shared_lock_mt in core.h) the lock guards
+        // nothing and this runs on every property release.
+        __arc_shared_lock_mt();
         __obj->property_reference_count--;
         #if defined(DEBUG) && defined(ARCLOG)
         #ifdef CONDLOG
@@ -942,7 +1182,7 @@ void __decrease_property_reference_count(aobject * const __obj) {
                 }
             }
         }
-        __arc_shared_unlock();
+        __arc_shared_unlock_mt();
 
         // Run the destructor outside the global ARC lock — release
         // callbacks call back into the ARC machinery (dec'ing children),
@@ -1175,7 +1415,7 @@ void clear_allocated_objects() {
 // A wrapper aobject is a lean handle in some thread B's realm pointing
 // at a real aobject owned by thread A. The wrapper distinguishes
 // itself by `class_ptr == NULL` and stores the real in
-// `object_properties.object_wrapper.wrapped_object`. The real's
+// the dedicated `aobject.wrapped_object` field. The real's
 // `first_object_wrapper` linked list records every live wrapper so we
 // can refuse to destroy the real while any wrapper still references
 // it.
@@ -1214,7 +1454,7 @@ void clear_allocated_objects() {
 // propref=0, no wrappers" signature). Reports the mutating call site as
 // a module-relative PC (addr2line -e app), rate-limited.
 int __amlc_xthread_rc_on = 0;
-#if defined(__linux__)
+#if defined(AMLC_HAVE_BACKTRACE)
 void __report_xthread_rc(aobject * const __obj, const char * const op) {
     static long __xthread_rc_reports = 0;
     if (__xthread_rc_reports >= 200) return;
@@ -1358,11 +1598,13 @@ aobject * __create_wrapper(aobject * const __realobj) {
             const char *e = getenv("AMLC_WRAP_TRACE");
             __wrap_trace_on = (e && atoi(e) != 0) ? 1 : 0;
         }
+        #if defined(AMLC_HAVE_BACKTRACE)
         if (__wrap_trace_on == 1) {
             void *bt[3];
             int n = backtrace(bt, 3);
             __wrap_trace_current_site = (n >= 3) ? bt[2] : (n >= 2 ? bt[1] : NULL);
         }
+        #endif
     }
     #endif
     #ifdef WRAPLOG
@@ -1390,7 +1632,7 @@ aobject * __create_wrapper(aobject * const __realobj) {
     __wrapper->reference_count = 1;
     __wrapper->property_reference_count = 0;
     __wrapper->owner_thread = __current_thread();
-    __wrapper->object_properties.object_wrapper.wrapped_object = __realobj;
+    __wrapper->wrapped_object = __realobj;
     #if defined(__linux__)
     __wrapper->object_properties.object_wrapper.trace_site =
         (__wrap_trace_on == 1) ? __wrap_trace_current_site : NULL;
@@ -1434,7 +1676,7 @@ aobject * __create_wrapper(aobject * const __realobj) {
 
 void __deallocate_wrapper(aobject * const __wrapper) {
     aobject * const __realobj =
-        __wrapper->object_properties.object_wrapper.wrapped_object;
+        __wrapper->wrapped_object;
     #ifdef WRAPLOG
     fprintf(stderr, "[wrap.dealloc] wrapper=%p real=%p real_class=%s real_rc=%d real_propref=%d real_owner_gone=%d\n",
         __wrapper, __realobj,
@@ -1707,13 +1949,15 @@ aobject * __create_string_constant(char const * const str, aclass * const string
     // better than reading random bytes past a bogus allocation.
     if (str_obj == NULL) return NULL;
 
-    string_holder * const holder = (string_holder *) (str_obj + 1);
+    string_holder * const holder = (string_holder *) ((char *) str_obj + sizeof(aobject));
     str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
-    int hash = __string_hash(str);
+    unsigned int units = 0;
+    unsigned int hash = __string_hash_and_units(str, (unsigned int) len, &units);
     holder->is_string_constant = true;
     holder->length = len;
     holder->string_value = (char *) str;
     holder->hash = hash;
+    holder->char_length = units;
     return str_obj;
 }
 
@@ -1725,15 +1969,17 @@ aobject * __create_string(char const * const str, aclass * const string_class) {
     // treating a NULL as "the runtime is out of memory" and routing
     // through `__throw_out_of_memory_exception` if they can.
     if (str_obj == NULL) return NULL;
-    string_holder * const holder = (string_holder *) (str_obj + 1);
+    string_holder * const holder = (string_holder *) ((char *) str_obj + sizeof(aobject));
     str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
     char * const newStr = (char * const) (holder + 1);
     strcpy(newStr, str);
-    int hash = __string_hash(str);
+    unsigned int units = 0;
+    unsigned int hash = __string_hash_and_units(str, (unsigned int) len, &units);
     holder->is_string_constant = false;
     holder->length = len;
     holder->string_value = newStr;
     holder->hash = hash;
+    holder->char_length = units;
     return str_obj;
 }
 
@@ -1791,8 +2037,8 @@ aobject * __create_array(unsigned int const size, unsigned char const item_size,
     if (array_obj == NULL) {
         return NULL;
     }
-    array_holder * const holder = (array_holder *) &array_obj[1];
-    void *array_data = (void *) (holder + 1);
+    array_holder * const holder = (array_holder *) ((char *) array_obj + sizeof(aobject));
+    void *array_data = (void *) ((char *) holder + sizeof(array_holder));
     array_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
     holder->array_data = array_data;
     holder->ctype = ctype;
@@ -1808,11 +2054,11 @@ aobject * __create_array(unsigned int const size, unsigned char const item_size,
 }
 
 array_holder * get_array_holder(aobject * const array_obj) {
-    return (array_holder *) &array_obj[1];
+    return (array_holder *) ((char *) array_obj + sizeof(aobject));
 }
 
 char * get_array_data(array_holder * holder) {
-    return (char *) &holder[1];
+    return (char *) ((char *) holder + sizeof(array_holder));
 }
 
 // Preallocated OutOfMemoryException singleton. Held immortal — every OOM
@@ -1916,7 +2162,7 @@ void __init_oom_singleton(void) {
         abort();
     }
     if (__out_of_memory_exception_class_alias.properties_count > 0) {
-        ex->object_properties.class_object_properties.properties = (property *) (ex + 1);
+        ex->object_properties.class_object_properties.properties = (property *) ((char *) ex + sizeof(aobject));
     }
     ex->class_ptr = &__out_of_memory_exception_class_alias;
     ex->reference_count = 1;
@@ -1967,16 +2213,16 @@ void __throw_out_of_memory_exception(function_result * const result, const char 
         stit = calloc(1, sizeof(aobject) + (sizeof(property) * __string_class_alias.properties_count) + sizeof(string_holder) + 1);
         if (stit != NULL) {
             if (__string_class_alias.properties_count > 0) {
-                stit->object_properties.class_object_properties.properties = (property *) (stit + 1);
+                stit->object_properties.class_object_properties.properties = (property *) ((char *) stit + sizeof(aobject));
             }
             stit->class_ptr = &__string_class_alias;
             stit->reference_count = 1;
             stit->owner_thread = __current_thread();
             stit->first_object_wrapper = NULL;
             // The string holder lives after properties[].
-            string_holder * sh = (string_holder *) ((property *) (stit + 1) + __string_class_alias.properties_count);
+            string_holder * sh = (string_holder *) ((property *) ((char *) stit + sizeof(aobject)) + __string_class_alias.properties_count);
             stit->object_properties.class_object_properties.object_data.value.custom_value = sh;
-            sh->string_value = (char *)(sh + 1);
+            sh->string_value = (char *)((char *) sh + sizeof(string_holder));
             // Bounded copy — cap at 255 bytes so a runaway string
             // doesn't chew through what little memory we have left.
             size_t n = 0;
@@ -2040,7 +2286,7 @@ bool implements_interface(aclass const * const iface, aclass const * const cls) 
 
 void create_property_info(const unsigned char index, char * const name, aobject ** property_infos, aclass *cls) {
     aobject * property_info = __allocate_object_with_extra_size(&__property_info_class_alias, sizeof(cls));
-    property *properties = (property *) (property_info + 1);
+    property *properties = (property *) ((char *) property_info + sizeof(aobject));
     aclass ** class_holder_ptr = (aclass **) (properties + 2); // given that PropertyInfo has exactly 2 properties
     *class_holder_ptr = cls;
 
@@ -2163,8 +2409,8 @@ aobject * __concatenate_strings(int count, ...) {
     }
     
     /* Set up the string holder */
-    result_holder = (string_holder*)(result_obj + 1);
-    result_str = (char*)(result_holder + 1);
+    result_holder = (string_holder*)((char *) result_obj + sizeof(aobject));
+    result_str = (char*)((char *) result_holder + sizeof(string_holder));
     result_obj->object_properties.class_object_properties.object_data.value.custom_value = result_holder;
     
     /* Initialize the result string buffer */
@@ -2186,7 +2432,8 @@ aobject * __concatenate_strings(int count, ...) {
     result_holder->is_string_constant = 0; /* false */
     result_holder->length = total_length;
     result_holder->string_value = result_str;
-    result_holder->hash = __string_hash(result_str);
+    result_holder->hash = __string_hash_and_units(result_str, (unsigned int) total_length,
+                                                  &result_holder->char_length);
     
     return result_obj;
 }

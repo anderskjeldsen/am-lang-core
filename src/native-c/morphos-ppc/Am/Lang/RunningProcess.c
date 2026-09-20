@@ -1193,24 +1193,35 @@ static void rp_record_resolved(const char * p) {
 // which in exactly that case IS the binary's drawer.
 static BPTR rp_lock_binary_dir(void) {
     const char * p = g_resolved_cmd_path;
-    char dbuf[260];
-    int cut = -1;
-    int i = 0;
-    int n = 0;
-    int k = 0;
-    if (p[0] == 0) return 0;
-    while (p[i] != 0) {
-        if (p[i] == '/' || p[i] == ':') cut = i;
-        i++;
+    BPTR fl;
+    BPTR dir;
+    struct Process * me;
+
+    // Ask DOS where the binary actually IS, rather than string-splitting the
+    // name we handed to LoadSeg. A bare "amlc" resolved through the current
+    // directory, an assign or the shell path has no directory part to split
+    // off -- that case used to return 0, the NP_HomeDir tag was dropped, and
+    // the child got NO PROGDIR: at all.
+    if (p[0] != 0) {
+        fl = Lock((CONST_STRPTR) p, ACCESS_READ);
+        if (fl != 0) {
+            dir = ParentDir(fl);
+            UnLock(fl);
+            if (dir != 0) return dir;
+        }
     }
-    if (cut < 0) return 0;
-    // Keep the ':' of a volume/assign root ("C:" -> "C:"), drop a '/'.
-    n = (p[cut] == ':') ? cut + 1 : cut;
-    if (n <= 0) return 0;
-    if (n > (int) sizeof(dbuf) - 1) n = (int) sizeof(dbuf) - 1;
-    while (k < n) { dbuf[k] = p[k]; k++; }
-    dbuf[n] = 0;
-    return Lock((CONST_STRPTR) dbuf, ACCESS_READ);
+    // Last resort: hand the child OUR PROGDIR:. A child with no home dir has
+    // no PROGDIR: at all, and DOS answers any PROGDIR: path with a modal
+    // "Please insert volume PROGDIR: in any drive" requester -- which wedges
+    // the machine. A home dir that merely points elsewhere is strictly
+    // better: a bundled tool probing for an optional file beside itself
+    // (amlc's config.json / templates/package.yml) simply misses and carries
+    // on with its defaults.
+    me = (struct Process *) FindTask(NULL);
+    if (me != NULL && me->pr_Task.tc_Node.ln_Type == NT_PROCESS && me->pr_HomeDir != 0) {
+        return DupLock(me->pr_HomeDir);
+    }
+    return 0;
 }
 
 static BPTR rp_loadseg_with_path(const char * name) {
@@ -1443,7 +1454,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
 
     // CWD swap (LoadSeg honours current dir).
     if (workingDir != NULL) {
-        string_holder * wd_holder = (string_holder *) (workingDir + 1);
+        string_holder * wd_holder = (string_holder *) ((char *) workingDir + sizeof(aobject));
         const char * wd_str = wd_holder->string_value;
         if (wd_str != NULL && wd_str[0] != 0) {
             BPTR new_lock = Lock((CONST_STRPTR) wd_str, ACCESS_READ);
@@ -1467,7 +1478,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         }
     }
     // Parse "binary args..." and LoadSeg.
-    string_holder * cmd_holder = (string_holder *) (command + 1);
+    string_holder * cmd_holder = (string_holder *) ((char *) command + sizeof(aobject));
     const char * cmd_str = (cmd_holder != NULL) ? cmd_holder->string_value : NULL;
     if (cmd_str == NULL || cmd_str[0] == 0) {
         if (d->has_old_cwd) {
@@ -1547,6 +1558,13 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         NP_Error,       (ULONG) d->fh_err_bptr,    /* ignored on V40, see below */
         NP_ConsoleTask, (ULONG) st->handler_port,
         NP_Arguments,   (ULONG) g_arg_buf,
+        // Explicit: a child inherits the CREATING task's priority, and the
+        // application's UI task may run above 0 (am-ide raises itself to
+        // +1 so it preempts its workers). A compiler at +1 would then sit
+        // above the priority-0 IO worker and freeze every network request
+        // for the whole build. Children -- and everything they spawn --
+        // stay at the conventional 0.
+        NP_Priority,    (ULONG) 0,
         NP_Name,        (ULONG) "amStudioChild",
         NP_StackSize,   (ULONG) child_stack,
         (child_home_lock != 0 ? NP_HomeDir : TAG_IGNORE), (ULONG) child_home_lock,
@@ -1700,7 +1718,7 @@ function_result Am_Lang_RunningProcess_tryReadOutputBytes_0(aobject * const this
     }
     aobject * arr = __create_array((unsigned int) n, 1, &Am_Lang_Array_ta_Am_Lang_UByte, uchar_type);
     if (n > 0) {
-        array_holder * ah = (array_holder *) &arr[1];
+        array_holder * ah = (array_holder *) ((char *) arr + sizeof(aobject));
         memcpy(ah->array_data, buf, (size_t) n);
     }
     __result.return_value.value.object_value = arr;
@@ -1713,7 +1731,7 @@ function_result Am_Lang_RunningProcess_writeInputBytes_0(aobject * const this, a
     unsigned int wrote = 0;
     running_process_data * d = rp_data(this);
     if (d != NULL && d->state != NULL && data != NULL && !d->state->child_exited) {
-        array_holder * ah = (array_holder *) &data[1];
+        array_holder * ah = (array_holder *) ((char *) data + sizeof(aobject));
         if ((unsigned long long) offset + length <= ah->size) {
             Forbid();
             wrote = (unsigned int) rp_push(&d->state->in,
@@ -1743,7 +1761,7 @@ function_result Am_Lang_RunningProcess_writeInput_0(aobject * const this, aobjec
     rp_state * st = d->state;
     if (st->child_exited) goto __exit;
 
-    string_holder * h = (string_holder *) (text + 1);
+    string_holder * h = (string_holder *) ((char *) text + sizeof(aobject));
     if (h == NULL || h->string_value == NULL) goto __exit;
     // AmLang strings are NOT necessarily \0-terminated — use the
     // explicit `length` field. Using strlen here previously made

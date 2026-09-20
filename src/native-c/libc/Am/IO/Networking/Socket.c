@@ -104,7 +104,7 @@ function_result Am_IO_Networking_Socket_send_0(aobject * const this, aobject * b
 		goto __exit;
 	}
 
-	array_holder *a_holder = (array_holder *) &bytes[1]; // bytes->object_properties.class_object_properties.object_data.value.custom_value;
+	array_holder *a_holder = (array_holder *) ((char *) bytes + sizeof(aobject)); // bytes->object_properties.class_object_properties.object_data.value.custom_value;
 
 	if (length > a_holder->size) {
 		__throw_simple_exception("Send length is bigger than array", "in Am_IO_Networking_Socket_send_0", &__result);
@@ -139,7 +139,7 @@ function_result Am_IO_Networking_Socket_receive_0(aobject * const this, aobject 
 		goto __exit;
 	}
 
-	array_holder *a_holder = (array_holder *) &bytes[1]; // bytes->object_properties.class_object_properties.object_data.value.custom_value;
+	array_holder *a_holder = (array_holder *) ((char *) bytes + sizeof(aobject)); // bytes->object_properties.class_object_properties.object_data.value.custom_value;
 
 	if (length > a_holder->size) {
 		__throw_simple_exception("Receive length is bigger than array", "in Am_IO_Networking_Socket_send_0", &__result);

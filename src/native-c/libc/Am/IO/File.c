@@ -10,6 +10,58 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <string.h>
+
+// ── AmigaOS-family: probing a path must never ask the user for a disk ──
+//
+// stat() on "PROGDIR:config.json" in a process with no pr_HomeDir makes DOS
+// treat PROGDIR: as an unmounted VOLUME and put up a modal "Please insert
+// volume PROGDIR: in any drive" requester. An exists() probe has to be able
+// to answer "no" — every caller that probes an OPTIONAL path (amlc's
+// ToolConfig looking for a bundled config.json next to itself is the one
+// that surfaced this) would otherwise hang the machine on a requester.
+//
+// The DOS idiom is pr_WindowPtr = -1 for the duration: requesters are
+// suppressed and the call just fails. Scoped to the probe, so genuine
+// requesters elsewhere in the program are untouched.
+#if defined(PLATFORM_AMIGAOS) || defined(PLATFORM_MORPHOS_PPC) || defined(PLATFORM_AROS)
+#include <exec/types.h>
+#include <exec/tasks.h>
+#include <exec/nodes.h>
+#include <dos/dosextens.h>
+#include <proto/exec.h>
+
+static void * am_file_quiet_begin(void)
+{
+	struct Process * p = (struct Process *) FindTask(NULL);
+	void * old;
+	// Only a Process has pr_WindowPtr; a bare Task must not be written to.
+	if (p == NULL || p->pr_Task.tc_Node.ln_Type != NT_PROCESS) {
+		return (void *) -2;
+	}
+	old = (void *) p->pr_WindowPtr;
+	p->pr_WindowPtr = (APTR) -1;
+	return old;
+}
+
+static void am_file_quiet_end(void * old)
+{
+	struct Process * p;
+	if (old == (void *) -2) {
+		return;
+	}
+	p = (struct Process *) FindTask(NULL);
+	if (p == NULL || p->pr_Task.tc_Node.ln_Type != NT_PROCESS) {
+		return;
+	}
+	p->pr_WindowPtr = (APTR) old;
+}
+
+#define AM_FILE_QUIET_BEGIN void * __am_quiet = am_file_quiet_begin()
+#define AM_FILE_QUIET_END   am_file_quiet_end(__am_quiet)
+#else
+#define AM_FILE_QUIET_BEGIN ((void) 0)
+#define AM_FILE_QUIET_END   ((void) 0)
+#endif
 #include <stdlib.h>
 #include <time.h>
 #include <libc/core_inline_functions.h>
@@ -89,7 +141,7 @@ function_result Am_IO_File_listNative_0(aobject * const this, aobject * folderFi
 	bool __returning = false;
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
-	string_holder *filename_string_holder = (string_holder *) (filename + 1);
+	string_holder *filename_string_holder = (string_holder *) ((char *) filename + sizeof(aobject));
 
 	DIR *d;
 	struct dirent *dir;
@@ -133,7 +185,7 @@ function_result Am_IO_File_listDirsNative_0(aobject * const this, aobject * fold
 	bool __returning = false;
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
-	string_holder *filename_string_holder = (string_holder *) (filename + 1);
+	string_holder *filename_string_holder = (string_holder *) ((char *) filename + sizeof(aobject));
 	const char *dir_path = filename_string_holder->string_value;
 
 #ifdef __amigaos__
@@ -234,11 +286,13 @@ function_result Am_IO_File_isSymbolicLink_0(aobject * const this)
 	__result.return_value.value.bool_value = false;
 #else
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
-	string_holder *filename_string_holder = (string_holder *) (filename + 1);
+	string_holder *filename_string_holder = (string_holder *) ((char *) filename + sizeof(aobject));
 
 	struct stat s;
+	AM_FILE_QUIET_BEGIN;
 	__result.return_value.value.bool_value =
 		(lstat(filename_string_holder->string_value, &s) == 0 && S_ISLNK(s.st_mode));
+	AM_FILE_QUIET_END;
 #endif
 
 __exit: ;
@@ -257,7 +311,7 @@ function_result Am_IO_File_readLinkNative_0(aobject * const this)
 	__result.return_value.value.object_value = NULL;
 #else
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
-	string_holder *filename_string_holder = (string_holder *) (filename + 1);
+	string_holder *filename_string_holder = (string_holder *) ((char *) filename + sizeof(aobject));
 
 	char buffer[PATH_MAX + 1];
 	ssize_t len = readlink(filename_string_holder->string_value, buffer, PATH_MAX);
@@ -284,8 +338,8 @@ function_result Am_IO_File_createSymbolicLink_0(aobject * linkPath, aobject * ta
 #ifdef AM_NO_SYMLINKS
 	__result.return_value.value.bool_value = false;
 #else
-	string_holder *link_string_holder = (string_holder *) (linkPath + 1);
-	string_holder *target_string_holder = (string_holder *) (target + 1);
+	string_holder *link_string_holder = (string_holder *) ((char *) linkPath + sizeof(aobject));
+	string_holder *target_string_holder = (string_holder *) ((char *) target + sizeof(aobject));
 
 	__result.return_value.value.bool_value =
 		(symlink(target_string_holder->string_value, link_string_holder->string_value) == 0);
@@ -301,11 +355,15 @@ function_result Am_IO_File_isDirectory_0(aobject * const this)
 	bool __returning = false;
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
-	string_holder *filename_string_holder = (string_holder *) (filename + 1);
+	string_holder *filename_string_holder = (string_holder *) ((char *) filename + sizeof(aobject));
 	
 	struct stat s;
+	int __stat_ok;
 
-	if (stat(filename_string_holder->string_value, &s) == 0) {
+	AM_FILE_QUIET_BEGIN;
+	__stat_ok = (stat(filename_string_holder->string_value, &s) == 0);
+	AM_FILE_QUIET_END;
+	if (__stat_ok) {
 		__result.return_value.value.bool_value = S_ISDIR(s.st_mode);		
     } else {
 		__throw_simple_exception("Failed to check if file is directory", "in Am_IO_File_isDirectory_0", &__result);
@@ -322,10 +380,12 @@ function_result Am_IO_File_exists_0(aobject * const this)
 	bool __returning = false;
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
-	string_holder *filename_string_holder = (string_holder *) (filename + 1);
+	string_holder *filename_string_holder = (string_holder *) ((char *) filename + sizeof(aobject));
 	
 	struct stat s;
+	AM_FILE_QUIET_BEGIN;
 	__result.return_value.value.bool_value = (stat(filename_string_holder->string_value, &s) == 0);
+	AM_FILE_QUIET_END;
 
 __exit: ;
 	return __result;
@@ -337,10 +397,14 @@ function_result Am_IO_File_getSize_0(aobject * const this)
 	bool __returning = false;
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
-	string_holder *filename_string_holder = (string_holder *) (filename + 1);
+	string_holder *filename_string_holder = (string_holder *) ((char *) filename + sizeof(aobject));
 	
 	struct stat s;
-	if (stat(filename_string_holder->string_value, &s) == 0) {
+	int __stat_ok;
+	AM_FILE_QUIET_BEGIN;
+	__stat_ok = (stat(filename_string_holder->string_value, &s) == 0);
+	AM_FILE_QUIET_END;
+	if (__stat_ok) {
 		__result.return_value.value.long_value = (long long)s.st_size;
 	} else {
 		__result.return_value.value.long_value = -1LL;
@@ -356,10 +420,14 @@ function_result Am_IO_File_getLastModified_0(aobject * const this)
 	bool __returning = false;
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
-	string_holder *filename_string_holder = (string_holder *) (filename + 1);
+	string_holder *filename_string_holder = (string_holder *) ((char *) filename + sizeof(aobject));
 	
 	struct stat s;
-	if (stat(filename_string_holder->string_value, &s) == 0) {
+	int __stat_ok;
+	AM_FILE_QUIET_BEGIN;
+	__stat_ok = (stat(filename_string_holder->string_value, &s) == 0);
+	AM_FILE_QUIET_END;
+	if (__stat_ok) {
 		// Convert time_t to milliseconds since epoch
 		__result.return_value.value.long_value = (long long)s.st_mtime * 1000LL;
 	} else {
@@ -376,7 +444,7 @@ function_result Am_IO_File_canRead_0(aobject * const this)
 	bool __returning = false;
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
-	string_holder *filename_string_holder = (string_holder *) (filename + 1);
+	string_holder *filename_string_holder = (string_holder *) ((char *) filename + sizeof(aobject));
 	
 	__result.return_value.value.bool_value = (access(filename_string_holder->string_value, R_OK) == 0);
 
@@ -390,7 +458,7 @@ function_result Am_IO_File_canWrite_0(aobject * const this)
 	bool __returning = false;
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
-	string_holder *filename_string_holder = (string_holder *) (filename + 1);
+	string_holder *filename_string_holder = (string_holder *) ((char *) filename + sizeof(aobject));
 	
 	__result.return_value.value.bool_value = (access(filename_string_holder->string_value, W_OK) == 0);
 
@@ -405,7 +473,7 @@ function_result Am_IO_File_delete_0(aobject * const this)
 	bool __returning = false;
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
-	string_holder *filename_string_holder = (string_holder *) (filename + 1);
+	string_holder *filename_string_holder = (string_holder *) ((char *) filename + sizeof(aobject));
 	
 	struct stat s;
 	int result;
@@ -452,7 +520,7 @@ function_result Am_IO_File_createDirectory_0(aobject * path)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	string_holder *path_string_holder = (string_holder *) (path + 1);
+	string_holder *path_string_holder = (string_holder *) ((char *) path + sizeof(aobject));
 	
 #ifdef _WIN32
 	int result = _mkdir(path_string_holder->string_value);
@@ -472,8 +540,8 @@ function_result Am_IO_File_copy_0(aobject * const this, aobject * destination)
 	bool __returning = false;
 
 	aobject *source_filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
-	string_holder *source_string_holder = (string_holder *) (source_filename + 1);
-	string_holder *dest_string_holder = (string_holder *) (destination + 1);
+	string_holder *source_string_holder = (string_holder *) ((char *) source_filename + sizeof(aobject));
+	string_holder *dest_string_holder = (string_holder *) ((char *) destination + sizeof(aobject));
 	
 	FILE *src = fopen(source_string_holder->string_value, "rb");
 	if (!src) {
@@ -514,8 +582,8 @@ function_result Am_IO_File_move_0(aobject * const this, aobject * destination)
 	bool __returning = false;
 
 	aobject *source_filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
-	string_holder *source_string_holder = (string_holder *) (source_filename + 1);
-	string_holder *dest_string_holder = (string_holder *) (destination + 1);
+	string_holder *source_string_holder = (string_holder *) ((char *) source_filename + sizeof(aobject));
+	string_holder *dest_string_holder = (string_holder *) ((char *) destination + sizeof(aobject));
 	
 	int result = rename(source_string_holder->string_value, dest_string_holder->string_value);
 	__result.return_value.value.bool_value = (result == 0);
@@ -529,8 +597,8 @@ function_result Am_IO_File_createTempFileInternal_0(aobject * pathPrefix, aobjec
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	string_holder *prefix_string_holder = (string_holder *) (pathPrefix + 1);
-	string_holder *suffix_string_holder = (string_holder *) (suffix + 1);
+	string_holder *prefix_string_holder = (string_holder *) ((char *) pathPrefix + sizeof(aobject));
+	string_holder *suffix_string_holder = (string_holder *) ((char *) suffix + sizeof(aobject));
 
 	// The path arrives already joined. File.createTempFile() resolved the
 	// directory -- falling back to FileNativeHelper.getSystemTempFolder(),

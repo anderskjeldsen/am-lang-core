@@ -6,6 +6,8 @@ namespace Am.Async {
      * It travels up through the suspend chain like any other exception, so the code that suspended
      * can catch it. The runtime raises it; do not throw it yourself.
      */
+    // Constructed from native C (Continuation.c) when a continuation is dropped, invisible to the tree-shaker.
+    #compileAlways
     class ContinuationCancelledException() : Exception("Continuation cancelled — dropped without resume()") {
         import Am.Lang
     }

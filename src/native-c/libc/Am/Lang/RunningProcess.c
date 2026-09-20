@@ -144,7 +144,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         __throw_simple_exception("RunningProcess: object_data missing", "in Am_Lang_RunningProcess_startNative_0", &__result);
         goto __exit;
     }
-    string_holder * cmd_holder = (string_holder *) (command + 1);
+    string_holder * cmd_holder = (string_holder *) ((char *) command + sizeof(aobject));
     const char * cmd_str = cmd_holder->string_value;
 
     // Binary mode: give the child a raw socketpair (no pty, no termios
@@ -168,7 +168,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
             if (sv[0] > 2) close(sv[0]);
             if (sv[1] > 2) close(sv[1]);
             if (workingDir != NULL) {
-                string_holder * wd = (string_holder *) (workingDir + 1);
+                string_holder * wd = (string_holder *) ((char *) workingDir + sizeof(aobject));
                 if (wd != NULL && wd->string_value != NULL && wd->string_value[0] != 0) {
                     if (chdir(wd->string_value) != 0) { /* best-effort */ }
                 }
@@ -228,7 +228,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         // so shell features (quoting, &&, etc.) work the same as
         // runAndCaptureOutput.
         if (workingDir != NULL) {
-            string_holder * wd_holder = (string_holder *) (workingDir + 1);
+            string_holder * wd_holder = (string_holder *) ((char *) workingDir + sizeof(aobject));
             const char * wd_str = wd_holder->string_value;
             if (wd_str != NULL && wd_str[0] != 0) {
                 if (chdir(wd_str) != 0) {
@@ -332,7 +332,7 @@ function_result Am_Lang_RunningProcess_writeInput_0(aobject * const this, aobjec
     if (d == NULL || d->stdin_writer_fd < 0 || text == NULL) {
         goto __exit;
     }
-    string_holder * h = (string_holder *) (text + 1);
+    string_holder * h = (string_holder *) ((char *) text + sizeof(aobject));
     if (h == NULL || h->string_value == NULL) {
         goto __exit;
     }
@@ -371,7 +371,7 @@ function_result Am_Lang_RunningProcess_tryReadOutputBytes_0(aobject * const this
     }
     aobject * arr = __create_array((unsigned int) n, 1, &Am_Lang_Array_ta_Am_Lang_UByte, uchar_type);
     if (n > 0) {
-        array_holder * ah = (array_holder *) &arr[1];
+        array_holder * ah = (array_holder *) ((char *) arr + sizeof(aobject));
         memcpy(ah->array_data, buf, (size_t) n);
     }
     __result.return_value.value.object_value = arr;
@@ -383,7 +383,7 @@ function_result Am_Lang_RunningProcess_writeInputBytes_0(aobject * const this, a
     running_process_data * d = rp_data(this);
     unsigned int wrote = 0;
     if (d != NULL && d->stdin_writer_fd >= 0 && data != NULL && !d->child_exited) {
-        array_holder * ah = (array_holder *) &data[1];
+        array_holder * ah = (array_holder *) ((char *) data + sizeof(aobject));
         if ((unsigned long long) offset + length <= ah->size) {
             ssize_t w = write(d->stdin_writer_fd, (unsigned char *) ah->array_data + offset, length);
             if (w > 0) wrote = (unsigned int) w;

@@ -52,7 +52,7 @@ function_result Am_Lang_Environment_get_0(aobject * name)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	string_holder *name_holder = (string_holder *) (name + 1);
+	string_holder *name_holder = (string_holder *) ((char *) name + sizeof(aobject));
 	STRPTR name_strptr = (STRPTR) name_holder->string_value;
 
 	// Probe at 4KB; grow once if the value is larger than that. GetVar returns
@@ -105,8 +105,8 @@ function_result Am_Lang_Environment_set_0(aobject * name, aobject * value)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	string_holder *name_holder = (string_holder *) (name + 1);
-	string_holder *value_holder = (string_holder *) (value + 1);
+	string_holder *name_holder = (string_holder *) ((char *) name + sizeof(aobject));
+	string_holder *value_holder = (string_holder *) ((char *) value + sizeof(aobject));
 	STRPTR name_strptr = (STRPTR) name_holder->string_value;
 	STRPTR value_strptr = (STRPTR) value_holder->string_value;
 
@@ -123,7 +123,7 @@ function_result Am_Lang_Environment_unset_0(aobject * name)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	string_holder *name_holder = (string_holder *) (name + 1);
+	string_holder *name_holder = (string_holder *) ((char *) name + sizeof(aobject));
 	STRPTR name_strptr = (STRPTR) name_holder->string_value;
 
 	BOOL ok = DeleteVar(name_strptr, 0);

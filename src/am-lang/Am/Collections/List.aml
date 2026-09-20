@@ -66,11 +66,10 @@ namespace Am.Collections {
                     var newCapacity = this.capacity * 150
                     newCapacity = newCapacity / 100
                     var newItems = new T[newCapacity]
-                    var x = 0
-                    while(x < this.size) {
-                        newItems[x] = this.items[x]                    
-                        x++
-                    }
+                    // Bulk move (memmove for primitive T, refcount-correct
+                    // for objects) - growing a big List<UByte> was a per-
+                    // element loop before, quadratic-ish on byte streams.
+                    this.items.copyTo(newItems, 0UI, 0UI, this.size.toUInt())
                     this.capacity = newCapacity // bla
                     this.items = newItems
                 }
@@ -230,11 +229,7 @@ namespace Am.Collections {
          */
         fun toArray(): T[] {
             var arr = new T[this.size]
-            var i = 0
-            while(i < this.size) {
-                arr[i] = this.get(i)
-                i++
-            }
+            this.items.copyTo(arr, 0UI, 0UI, this.size.toUInt())
             return arr
         }
 

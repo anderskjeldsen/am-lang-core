@@ -34,7 +34,7 @@ function_result Am_Lang_PropertyInfo_getPropertyClassRef_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
-	property * properties = (property *) &this[1];
+	property * properties = (property *) ((char *) this + sizeof(aobject));
 	aclass ** class_holder_ptr = (aclass **) &properties[3];
 	aclass * cls = class_holder_ptr[0];
 	aobject * class_ref = cls->class_ref_singleton;

@@ -46,6 +46,7 @@
 
 #include <exec/types.h>
 #include <exec/memory.h>
+#include <exec/execbase.h>
 #include <exec/ports.h>
 #include <exec/io.h>
 #include <devices/timer.h>
@@ -68,7 +69,12 @@
 // overrunning it corrupts memory rather than failing. Callers override via
 // RunningProcess.setStackSize; the floor stops a bad value from being worse
 // than the default.
-#define RP_DEFAULT_CHILD_STACK 32768
+//
+// 256 KB, the same as Process.run's fixed value and MorphOS's default here.
+// The git sidebar starts am-git through this path with no override, and
+// `am-git status` on a large tree (a recursive walk) blew the 32 KB in a
+// privilege violation (#80000008) inside the child.
+#define RP_DEFAULT_CHILD_STACK 262144
 #define RP_MIN_CHILD_STACK      8192
 
 // =================================================================
@@ -231,6 +237,23 @@ struct rp_state {
     // by rp_child_exit so late callers to terminateChild don't
     // Signal a freed task struct. Read under Forbid.
     struct Task * volatile child_task;
+    // The same pointer, never cleared: rp_child_exit nulls child_task (so
+    // nobody Signals a task that is going away), but the handler still has
+    // to know whether the child's DOS exit is complete -- see the shutdown
+    // branch. Only ever compared against Exec's task lists, never used.
+    struct Task * child_task_ever;
+    // Set by close() once it has given the child its grace period and the
+    // task is STILL there: the handler then leaves on the next DIE even
+    // though the child exists (it is orphaned -- nothing better is
+    // possible). Without this flag a DIE never ends a handler whose child
+    // is still alive, so the dying child's handle closes are answered.
+    volatile BOOL force_die;
+    // TEMP DIAGNOSTIC: in-memory event trace. Written by any task under
+    // Forbid (no DOS calls), dumped to T:rp-trace.log by the MAIN task in
+    // close(). See rp_tr / rp_trace_dump.
+    ULONG tr_code[96];
+    ULONG tr_arg[96];
+    volatile int tr_n;
 
     // ACTION_SCREEN_MODE arg — TRUE = child put stdin into raw mode
     // (SetMode(fh, 1) on AmigaOS, equivalent to terminal raw mode
@@ -455,6 +478,8 @@ struct _running_process_data {
 // below — calls into it, so the compiler needs to know its shape
 // first. Same for rp_stdout_line used by rp_handler_die.
 static void rp_handler_die(rp_state * st);
+static void rp_tr(rp_state * st, ULONG code, ULONG arg);
+static void rp_trace_dump(rp_state * st, const char * tag);
 
 // =================================================================
 // State refcount + cleanup
@@ -530,6 +555,7 @@ static void rp_startnative_teardown(running_process_data * d) {
         // is the FIRST decrement (2 → 1, no free), and ours here is
         // the second (1 → 0 → rp_state_free on the safe main task).
         ULONG exited_before = g_handler_exited_count;
+        rp_tr(st, 10, 0);
         rp_handler_die(st);
         int waited = 0;
         while (waited < 25) {   // 25 ticks × ~20 ms = ~500 ms cap
@@ -537,6 +563,8 @@ static void rp_startnative_teardown(running_process_data * d) {
             Delay(1);
             waited++;
         }
+        rp_tr(st, 11, (ULONG) waited);
+        rp_trace_dump(st, "after handler exit wait");
         rp_log_event("[rp]   handler exit waited ticks=", (LONG) waited);
         rp_state_release(st);
         d->state = NULL;
@@ -593,6 +621,20 @@ static void rp_pkt_reply_ex(struct DosPacket * pkt, LONG res1, LONG res2, BOOL d
     pkt->dp_Res2 = res2;
     struct MsgPort * reply_port = pkt->dp_Port;
     struct Process * self = (struct Process *) FindTask(NULL);
+    // A packet addressed to OUR OWN port is the ACTION_DIE that
+    // rp_handler_die sent us (no client ever sets dp_Port to a handler's
+    // port). "Replying" to it means PutMsg back onto our own port -- and
+    // exec's PutMsg overwrites ln_Type with NT_MESSAGE, so the NT_REPLYMSG
+    // tag below never survived: the reply came back as a fresh DIE, was
+    // replied to again, and so on until the drain's 64-iteration cap
+    // gave up with the packet STILL QUEUED. A process that exits with a
+    // message on its port is what dos.library's #87000004 (AN_AsyncPkt,
+    // "unexpected packet received") reports on OS 3.2 -- on every child
+    // exit, since every close() ends in a DIE. Free it instead.
+    if (reply_port == &self->pr_MsgPort) {
+        FreeMem(msg, msg->mn_Length);
+        return;
+    }
     pkt->dp_Port = &self->pr_MsgPort;
     // Tag the reply so the receiving handler can distinguish "fresh
     // packet" from "reply to one of mine". Matters specifically for
@@ -614,16 +656,107 @@ static void rp_pkt_reply(struct DosPacket * pkt, LONG res1, LONG res2) {
 // any inbound packet from the child's libc / dos cleanup chain
 // carries a dangling dp_Port. The only safe target left is our
 // own handler port — that's how rp_handler_die's self-DIE works.
+// Is `t` a task Exec still knows about? Walks the ready and waiting
+// lists (plus the running task) under Forbid. Reading a freed Process
+// struct to get here is harmless on the Amiga (no memory protection) --
+// it only yields a pointer that this then fails to find.
+static BOOL rp_task_exists(struct Task * t) {
+    if (t == NULL) return FALSE;
+    BOOL found = FALSE;
+    Forbid();
+    if (t == SysBase->ThisTask) {
+        found = TRUE;
+    } else {
+        struct Node * n;
+        for (n = SysBase->TaskReady.lh_Head; n->ln_Succ != NULL; n = n->ln_Succ) {
+            if ((struct Task *) n == t) { found = TRUE; break; }
+        }
+        if (!found) {
+            for (n = SysBase->TaskWait.lh_Head; n->ln_Succ != NULL; n = n->ln_Succ) {
+                if ((struct Task *) n == t) { found = TRUE; break; }
+            }
+        }
+    }
+    Permit();
+    return found;
+}
+
+// TEMP DIAGNOSTIC trace (see rp_state.tr_*).
+//   1 RX type          2 reply(type, ok)      3 shutdown-branch reply(type)
+//   4 shutdown: child alive, continue        5 drain count
+//   6 handler exit (1=DIE/drain path, 2=END open_count==0 path)
+//   7 child_exit callback (arg=status)       8 close: alive-wait ticks
+//   9 close: task-gone wait ticks (+1000 if forced)   10 close: DIE sent
+//  11 close: handler-exit wait ticks         12 END: open_count after
+static void rp_tr(rp_state * st, ULONG code, ULONG arg) {
+    if (st == NULL) return;
+    Forbid();
+    if (st->tr_n < 96) {
+        st->tr_code[st->tr_n] = code;
+        st->tr_arg[st->tr_n] = arg;
+        st->tr_n++;
+    }
+    Permit();
+}
+
+// MAIN TASK ONLY (DOS calls). Appends the trace to T:rp-trace.log.
+static void rp_trace_dump(rp_state * st, const char * tag) {
+    if (st == NULL) return;
+    BPTR fh = Open((CONST_STRPTR) "T:rp-trace.log", MODE_READWRITE);
+    if (fh == 0) return;
+    Seek(fh, 0, OFFSET_END);
+    char line[96];
+    int n;
+    n = 0;
+    { const char * t = "== "; while (*t) line[n++] = *t++; t = tag; while (*t && n < 80) line[n++] = *t++; line[n++] = '\n'; }
+    Write(fh, line, n);
+    int i;
+    for (i = 0; i < st->tr_n; i++) {
+        ULONG c = st->tr_code[i];
+        LONG a = (LONG) st->tr_arg[i];
+        n = 0;
+        // "code arg\n" in decimal, hand-rolled (no printf).
+        char tmp[16]; int t = 0; ULONG v = c;
+        if (v == 0) tmp[t++] = '0';
+        while (v > 0) { tmp[t++] = (char) ('0' + (v % 10)); v /= 10; }
+        while (t > 0) line[n++] = tmp[--t];
+        line[n++] = ' ';
+        BOOL neg = a < 0; if (neg) a = -a;
+        v = (ULONG) a; t = 0;
+        if (v == 0) tmp[t++] = '0';
+        while (v > 0) { tmp[t++] = (char) ('0' + (v % 10)); v /= 10; }
+        if (neg) line[n++] = '-';
+        while (t > 0) line[n++] = tmp[--t];
+        line[n++] = '\n';
+        Write(fh, line, n);
+    }
+    Close(fh);
+}
+
+// May this packet be replied to -- i.e. is its sender still around to
+// receive the reply? PutMsg into a dead process's port corrupts memory
+// and crashed the handler (#87000004), so the answer used to be "not once
+// the child has exited". That gate was too coarse: it also dropped the
+// packets a DYING child sends while DOS closes its handles (after
+// NP_ExitCode has already set child_exited) and everything a still-alive
+// GRANDCHILD sends through the inherited handles. The dying child then
+// waited forever for an ACTION_END reply that never came, and a compiler's
+// sub-tools lost their console. Decide per packet instead: the reply port
+// of a DOS packet is its sender's process port, whose mp_SigTask is the
+// sender -- reply exactly when that task still exists.
 static BOOL rp_can_reply(rp_state * st, struct DosPacket * pkt) {
+    if (pkt == NULL) return FALSE;
+    struct MsgPort * port = pkt->dp_Port;
+    if (port == NULL) return FALSE;
+    // Self-reply (e.g. the DIE we sent ourselves) is fine -- our own
+    // port is alive as long as this handler task is running.
+    if (port == st->handler_port) {
+        return TRUE;
+    }
     if (!st->child_exited) {
         return TRUE;
     }
-    // Self-reply (e.g. the DIE we sent ourselves) is fine — our
-    // own port is alive as long as this handler task is running.
-    if (pkt->dp_Port == st->handler_port) {
-        return TRUE;
-    }
-    return FALSE;
+    return rp_task_exists(port->mp_SigTask);
 }
 
 // Must be called with Forbid() held.
@@ -727,6 +860,7 @@ static void rp_handler_entry(void) {
             struct DosPacket * pkt = (struct DosPacket *) msg->mn_Node.ln_Name;
             if (pkt == NULL) continue;
             LONG type = pkt->dp_Type;
+            rp_tr(st, 1, (ULONG) type);
             // Per-packet histogram for child-exit diagnostics. See
             // pkt_*_count fields in rp_state for why these matter
             // for ixemul/GeekGadgets `ls`/`make`/`gcc` output gap.
@@ -787,6 +921,7 @@ static void rp_handler_entry(void) {
                 // shutdown branch — but only if its sender is
                 // still alive (rp_can_reply gates this).
                 BOOL reply_ok = rp_can_reply(st, pkt);
+                rp_tr(st, 3, ((ULONG) type & 0xffff) | (reply_ok ? 0x10000 : 0));
                 switch (type) {
                     case ACTION_READ:       rp_pkt_reply_ex(pkt, 0, 0, reply_ok); break;
                     case ACTION_WRITE:      rp_pkt_reply_ex(pkt, pkt->dp_Arg3, 0, reply_ok); break;
@@ -823,7 +958,29 @@ static void rp_handler_entry(void) {
                 // #87000004. Leaving the messages in the queue
                 // is fine: exec reclaims them along with the
                 // dying sender's task memory list.
-                int drain_left = st->child_exited ? 0 : 64;
+                // -- Except that this is exactly where the #87000004 came
+                // from in the end: a process that EXITS with messages still
+                // queued on its port is what dos.library's AN_AsyncPkt
+                // ("unexpected packet received") reports. NP_ExitCode runs
+                // BEFORE DOS closes the child's stdin/stdout/stderr, so
+                // after the packet answered above the child still sends an
+                // ACTION_END per handle -- each one waiting for a reply --
+                // and they landed on this port after the handler had gone.
+                // So: while the child's task still exists, keep answering
+                // (every reply gated on the sender being alive) and come
+                // back for the next packet; only once the child is really
+                // gone (or this was a DIE from close()) drain and leave.
+                // The old worry about a dead child's packets living in
+                // freed memory does not apply to a child that exits
+                // normally: it is blocked in WaitPkt on each of them, so
+                // nothing of it is freed until they are answered.
+                if (!st->force_die && st->child_task_ever != NULL
+                        && rp_task_exists(st->child_task_ever)) {
+                    rp_tr(st, 4, 0);
+                    Permit();
+                    continue;
+                }
+                int drain_left = 64;
                 struct Message * drain_msg;
                 while (drain_left > 0 && (drain_msg = GetMsg(port)) != NULL) {
                     drain_left--;
@@ -842,6 +999,8 @@ static void rp_handler_entry(void) {
                         default:                rp_pkt_reply_ex(dp, DOSTRUE, 0, drain_reply_ok); break;
                     }
                 }
+                rp_tr(st, 5, (ULONG) (64 - drain_left));
+                rp_tr(st, 6, 1);
                 running = FALSE;
                 Permit();
                 break;
@@ -854,6 +1013,7 @@ static void rp_handler_entry(void) {
             // returns FALSE in that case; rp_pkt_reply_ex then
             // fills the result fields but skips the actual PutMsg.
             BOOL reply_ok = rp_can_reply(st, pkt);
+            rp_tr(st, 2, ((ULONG) type & 0xffff) | (reply_ok ? 0x10000 : 0));
             switch (type) {
                 case ACTION_FINDINPUT:
                 case ACTION_FINDOUTPUT: {
@@ -892,8 +1052,10 @@ static void rp_handler_entry(void) {
                     // ACTION_DIE after this — handler_port is nulled
                     // in the teardown so the next rp_handler_die
                     // sees NULL and skips the PutMsg.
+                    rp_tr(st, 12, (ULONG) st->open_count);
                     if (st->child_exited && st->open_count == 0
                         && st->any_open) {
+                        rp_tr(st, 6, 2);
                         st->shutdown_requested = TRUE;
                         running = FALSE;
                     }
@@ -1428,6 +1590,7 @@ static void __saveds rp_child_exit(
     rp_log_event("rp_child_exit data=",   data);
     rp_state * st = (rp_state *) data;
     if (st == NULL) return;
+    rp_tr(st, 7, (ULONG) status);
     // Packet histogram. If pkt_write_count == 0 for a child that
     // clearly produced output (ls / make / gcc), ixemul opened a
     // different stdout (CONSOLE: fallback or its own NIL: wrapper)
@@ -1550,9 +1713,8 @@ static void rp_handler_die(rp_state * st) {
     sp->sp_Pkt.dp_Port         = st->handler_port;
     sp->sp_Pkt.dp_Type         = ACTION_DIE;
     PutMsg(st->handler_port, &sp->sp_Msg);
-    /* sp leaks; handler exits before it could free its own. Bounded
-     * by handler count = number of CLI commands run in this amStudio
-     * session — small. */
+    /* Freed by the handler when it takes the DIE (rp_pkt_reply_ex sees the
+     * self-addressed packet and FreeMem's it rather than replying). */
 }
 
 function_result Am_Lang_RunningProcess__native_release_0(aobject * const this) {
@@ -1678,24 +1840,35 @@ static void rp_record_resolved(const char * p) {
 // which in exactly that case IS the binary's drawer.
 static BPTR rp_lock_binary_dir(void) {
     const char * p = g_resolved_cmd_path;
-    char dbuf[260];
-    int cut = -1;
-    int i = 0;
-    int n = 0;
-    int k = 0;
-    if (p[0] == 0) return 0;
-    while (p[i] != 0) {
-        if (p[i] == '/' || p[i] == ':') cut = i;
-        i++;
+    BPTR fl;
+    BPTR dir;
+    struct Process * me;
+
+    // Ask DOS where the binary actually IS, rather than string-splitting the
+    // name we handed to LoadSeg. A bare "amlc" resolved through the current
+    // directory, an assign or the shell path has no directory part to split
+    // off -- that case used to return 0, the NP_HomeDir tag was dropped, and
+    // the child got NO PROGDIR: at all.
+    if (p[0] != 0) {
+        fl = Lock((CONST_STRPTR) p, ACCESS_READ);
+        if (fl != 0) {
+            dir = ParentDir(fl);
+            UnLock(fl);
+            if (dir != 0) return dir;
+        }
     }
-    if (cut < 0) return 0;
-    // Keep the ':' of a volume/assign root ("C:" -> "C:"), drop a '/'.
-    n = (p[cut] == ':') ? cut + 1 : cut;
-    if (n <= 0) return 0;
-    if (n > (int) sizeof(dbuf) - 1) n = (int) sizeof(dbuf) - 1;
-    while (k < n) { dbuf[k] = p[k]; k++; }
-    dbuf[n] = 0;
-    return Lock((CONST_STRPTR) dbuf, ACCESS_READ);
+    // Last resort: hand the child OUR PROGDIR:. A child with no home dir has
+    // no PROGDIR: at all, and DOS answers any PROGDIR: path with a modal
+    // "Please insert volume PROGDIR: in any drive" requester -- which wedges
+    // the machine. A home dir that merely points elsewhere is strictly
+    // better: a bundled tool probing for an optional file beside itself
+    // (amlc's config.json / templates/package.yml) simply misses and carries
+    // on with its defaults.
+    me = (struct Process *) FindTask(NULL);
+    if (me != NULL && me->pr_Task.tc_Node.ln_Type == NT_PROCESS && me->pr_HomeDir != 0) {
+        return DupLock(me->pr_HomeDir);
+    }
+    return 0;
 }
 
 static BPTR rp_loadseg_with_path(const char * name) {
@@ -1836,7 +2009,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     // LoadSeg for a binary the OS just resolved is dominated by
     // memory-alloc + relocation, both of which the seg-cache hits.
     {
-        string_holder * cmd_holder = (command != NULL) ? (string_holder *) (command + 1) : NULL;
+        string_holder * cmd_holder = (command != NULL) ? (string_holder *) ((char *) command + sizeof(aobject)) : NULL;
         const char * cmd_str = (cmd_holder != NULL) ? cmd_holder->string_value : NULL;
         if (cmd_str == NULL || cmd_str[0] == 0) {
             __throw_simple_exception("RunningProcess: empty command", "in startNative", &__result);
@@ -1848,7 +2021,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         BPTR preflight_old_cwd = 0;
         BOOL preflight_had_cwd = FALSE;
         if (workingDir != NULL) {
-            string_holder * wd_holder = (string_holder *) (workingDir + 1);
+            string_holder * wd_holder = (string_holder *) ((char *) workingDir + sizeof(aobject));
             const char * wd_str = (wd_holder != NULL) ? wd_holder->string_value : NULL;
             if (wd_str != NULL && wd_str[0] != 0) {
                 BPTR new_lock = Lock((CONST_STRPTR) wd_str, ACCESS_READ);
@@ -2016,7 +2189,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
 
     // CWD swap (LoadSeg honours current dir).
     if (workingDir != NULL) {
-        string_holder * wd_holder = (string_holder *) (workingDir + 1);
+        string_holder * wd_holder = (string_holder *) ((char *) workingDir + sizeof(aobject));
         const char * wd_str = wd_holder->string_value;
         if (wd_str != NULL && wd_str[0] != 0) {
             BPTR new_lock = Lock((CONST_STRPTR) wd_str, ACCESS_READ);
@@ -2056,7 +2229,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     }
 
     // Parse "binary args..." and LoadSeg.
-    string_holder * cmd_holder = (string_holder *) (command + 1);
+    string_holder * cmd_holder = (string_holder *) ((char *) command + sizeof(aobject));
     const char * cmd_str = (cmd_holder != NULL) ? cmd_holder->string_value : NULL;
     if (cmd_str == NULL || cmd_str[0] == 0) {
         if (d->has_old_cwd) {
@@ -2162,6 +2335,13 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         NP_Error,       (ULONG) d->fh_err_bptr,    /* ignored on V40, see below */
         NP_ConsoleTask, (ULONG) st->handler_port,
         NP_Arguments,   (ULONG) g_arg_buf,
+        // Explicit: a child inherits the CREATING task's priority, and the
+        // application's UI task may run above 0 (am-ide raises itself to
+        // +1 so it preempts its workers). A compiler at +1 would then sit
+        // above the priority-0 IO worker and freeze every network request
+        // for the whole build. Children -- and everything they spawn --
+        // stay at the conventional 0.
+        NP_Priority,    (ULONG) 0,
         NP_Name,        (ULONG) "amStudioChild",
         NP_StackSize,   (ULONG) child_stack,
         NP_HomeDir,     (ULONG) child_home_lock,
@@ -2252,6 +2432,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     // rp_child_exit when the child dies.
     Forbid();
     st->child_task = &child->pr_Task;
+    st->child_task_ever = &child->pr_Task;
     Permit();
     // Confirm the new process actually got our FH wiring + handler
     // port. If any of these don't match what we passed in NP_*, the
@@ -2331,7 +2512,7 @@ function_result Am_Lang_RunningProcess_tryReadOutputBytes_0(aobject * const this
     }
     aobject * arr = __create_array((unsigned int) n, 1, &Am_Lang_Array_ta_Am_Lang_UByte, uchar_type);
     if (n > 0) {
-        array_holder * ah = (array_holder *) &arr[1];
+        array_holder * ah = (array_holder *) ((char *) arr + sizeof(aobject));
         memcpy(ah->array_data, buf, (size_t) n);
     }
     __result.return_value.value.object_value = arr;
@@ -2344,7 +2525,7 @@ function_result Am_Lang_RunningProcess_writeInputBytes_0(aobject * const this, a
     unsigned int wrote = 0;
     running_process_data * d = rp_data(this);
     if (d != NULL && d->state != NULL && data != NULL && !d->state->child_exited) {
-        array_holder * ah = (array_holder *) &data[1];
+        array_holder * ah = (array_holder *) ((char *) data + sizeof(aobject));
         if ((unsigned long long) offset + length <= ah->size) {
             Forbid();
             wrote = (unsigned int) rp_push(&d->state->in,
@@ -2374,7 +2555,7 @@ function_result Am_Lang_RunningProcess_writeInput_0(aobject * const this, aobjec
     rp_state * st = d->state;
     if (st->child_exited) goto __exit;
 
-    string_holder * h = (string_holder *) (text + 1);
+    string_holder * h = (string_holder *) ((char *) text + sizeof(aobject));
     if (h == NULL || h->string_value == NULL) goto __exit;
     // AmLang strings are NOT necessarily \0-terminated — use the
     // explicit `length` field. Using strlen here previously made
@@ -2586,10 +2767,71 @@ function_result Am_Lang_RunningProcess_close_0(aobject * const this) {
         // drainProcess calls close() then reads exitCode() after, so
         // we have to preserve the value across the state free. Read
         // under Forbid for the same reason exitCode_0 did.
+        // A child that is still running would lose its console under it
+        // here -- its next write lands in a dead handler and crashes it
+        // (#80000008 in am-git when a capture gave up on a slow `status`).
+        // Ask it to stop the way Ctrl-C does and give it up to two seconds
+        // to leave; one that ignores that is orphaned, which is the least
+        // bad option from here.
+        {
+            BOOL alive;
+            struct Task * ct;
+            Forbid();
+            alive = (!d->state->child_exited && d->state->child_task != NULL);
+            ct = d->state->child_task;
+            Permit();
+            if (alive) {
+                Signal(ct, SIGBREAKF_CTRL_C);
+                int w = 0;
+                while (w < 100) {
+                    Forbid();
+                    alive = !d->state->child_exited;
+                    Permit();
+                    if (!alive) break;
+                    Delay(1);
+                    w++;
+                }
+                rp_tr(d->state, 8, (ULONG) w);
+            }
+            // child_exited is set by NP_ExitCode, which runs BEFORE DOS
+            // closes the child's handles through our handler. Wait for the
+            // child's TASK to be gone (its last packet answered) before the
+            // DIE, so the handler can serve those closes; a child that
+            // will not finish is cut loose after the grace period.
+            {
+                int w2 = 0;
+                while (w2 < 150 && d->state->child_task_ever != NULL
+                        && rp_task_exists(d->state->child_task_ever)) {
+                    Delay(1);
+                    w2++;
+                }
+                if (d->state->child_task_ever != NULL
+                        && rp_task_exists(d->state->child_task_ever)) {
+                    Forbid(); d->state->force_die = TRUE; Permit();
+                    w2 += 1000;
+                }
+                rp_tr(d->state, 9, (ULONG) w2);
+            }
+        }
+        rp_trace_dump(d->state, "close: before DIE");
+        {
+        }
         Forbid();
         d->cached_exit_code = d->state->exit_code;
         Permit();
-        rp_handler_die(d->state);
+        {
+            ULONG exited_before2 = g_handler_exited_count;
+            rp_tr(d->state, 10, 0);
+            rp_handler_die(d->state);
+            int waited2 = 0;
+            while (waited2 < 25) {
+                if (g_handler_exited_count > exited_before2) break;
+                Delay(1);
+                waited2++;
+            }
+            rp_tr(d->state, 11, (ULONG) waited2);
+            rp_trace_dump(d->state, "close: after DIE");
+        }
         rp_state_release(d->state);
         d->state = NULL;
         rp_log_event("[rp] close: done, live=", g_live_handler_count);

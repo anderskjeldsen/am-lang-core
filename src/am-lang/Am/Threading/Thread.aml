@@ -91,11 +91,20 @@ namespace Am.Threading {
         native static fun sleep(milliseconds: Long)
 
         /**
+         * Sets the scheduling priority of the CALLING task. Only the Amiga family honours it (Exec
+         * SetTaskPri); a no-op elsewhere. An application raises its UI task with this so that it
+         * preempts its own workers and child processes, which can then all stay at the conventional 0.
+         * @param priority The new priority, -128..127 on AmigaOS
+         */
+        native static fun setCurrentPriority(priority: Int)
+
+        /**
          * Scheduling priority, applied when the native task is created; set it before start().
-         * Only AmigaOS honours it today: Exec's scheduler is strictly priority-based, so a worker at
-         * -1 runs only while every priority-0 task (the UI) is waiting, and the UI takes the CPU back
-         * the moment it has work. Range -128..127 on AmigaOS; 0 is the default and matches the main
-         * process. Ignored on the other platforms.
+         * Only AmigaOS honours it today: Exec's scheduler is strictly priority-based -- a task runs
+         * only while nothing of higher priority is ready, and equals share the CPU round-robin. Range
+         * -128..127 on AmigaOS; 0 is the default and matches the main process. Ignored on the other
+         * platforms. (Rather than lowering workers, an application raises its UI task with
+         * setCurrentPriority so the workers and its child processes can all stay at 0.)
          *
          * Declared last on purpose: the native backends address the fields above by slot index.
          */

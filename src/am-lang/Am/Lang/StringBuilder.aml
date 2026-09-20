@@ -6,8 +6,9 @@ namespace Am.Lang
      * String concatenation. Append with add(), the + operator or addChar(), then call
      * toString() to decode the buffer with the builder's encoding (UTF-8 by default). Reuse a
      * single builder inside a loop and call clear() between rounds rather than allocating a
-     * new one. Note that the buffer stores bytes, not characters: getLength() is a byte count
-     * and addChar() currently keeps only the low 8 bits of the character it is given.
+     * new one. Note that the buffer stores bytes, not characters: getLength() is a byte count,
+     * while addChar() takes a UTF-16 code unit and encodes it, so one call may append up to
+     * three bytes (four across a surrogate pair).
      */
     class StringBuilder {
 
@@ -21,6 +22,12 @@ namespace Am.Lang
          * The accumulated bytes, in append order.
          */
         private var buffer: List<UByte> = List<UByte>.newList<UByte>()
+        /**
+         * A high surrogate that arrived without its partner yet. UTF-8 has no encoding for half a
+         * character, so addChar() holds one here until the low surrogate follows and the pair can
+         * be encoded as one 4-byte sequence. 0 means nothing is pending.
+         */
+        private var pendingHigh: Int = 0
 
         /**
          * Decodes everything appended so far into a String. The builder is left untouched, so you
@@ -29,6 +36,14 @@ namespace Am.Lang
          */
         override fun toString(): String {
             try {
+                // A high surrogate still waiting for its partner is an incomplete character, and
+                // this is the end of the input as far as it is concerned -- so finalise it as
+                // U+FFFD instead of dropping it silently. This is the one case where toString()
+                // changes the buffer.
+                if (this.pendingHigh != 0) {
+                    this.pendingHigh = 0
+                    this.appendUtf8CodePoint(0xfffd)
+                }
                 var byteArray = this.buffer.toArray()
                 return String.fromBytes(byteArray, this.encoding)
             } catch (e: Exception) {
@@ -81,16 +96,91 @@ namespace Am.Lang
         }
 
         /**
-         * Appends a single character given as a code point, for example 10US for a line feed. Only
-         * the low 8 bits are stored today, so this is safe for ASCII and Latin-1 but will truncate
-         * characters above 255.
-         * @param c The character code to append
+         * Appends a single UTF-16 code unit, for example 10US for a line feed, encoded with the
+         * builder's encoding. A character above 127 therefore appends more than one byte.
+         *
+         * Surrogates are handled as a pair: a high surrogate is held back until the matching low
+         * one arrives, so feeding a builder the output of String.getChars() reproduces the original
+         * text exactly, astral characters included. A surrogate that never finds its partner is
+         * finalised as U+FFFD, since UTF-8 has no encoding for half a character.
+         * @param c The UTF-16 code unit to append
          * @return This builder, for chaining
          */
         fun addChar(c: UShort) : StringBuilder {
-            // TODO: convert to UTF-8
-            this.buffer.add(c.toUByte()) // ditching the upper 8 bits for now.
+            var unit = c.toInt() & 0xffff
+            var high = this.pendingHigh
+            if (high != 0) {
+                this.pendingHigh = 0
+                if (unit >= 0xdc00 && unit <= 0xdfff) {
+                    // The pair is complete: one character, one 4-byte sequence.
+                    var paired = 0x10000 + ((high - 0xd800) << 10) + (unit - 0xdc00)
+                    this.appendUtf8CodePoint(paired)
+                    return this
+                }
+                // The held surrogate never found its partner. Finalise it, then deal with the
+                // unit we were actually given.
+                this.appendUtf8CodePoint(0xfffd)
+            }
+            if (unit >= 0xd800 && unit <= 0xdbff) {
+                this.pendingHigh = unit
+                return this
+            }
+            if (unit >= 0xdc00 && unit <= 0xdfff) {
+                // A low surrogate with nothing before it is not a character.
+                this.appendUtf8CodePoint(0xfffd)
+                return this
+            }
+            this.appendUtf8CodePoint(unit)
             return this
+        }
+
+        /**
+         * Appends one Unicode code point, 0 to 0x10ffff, encoded with the builder's encoding. Use
+         * this rather than two addChar() calls when you already hold a full character — a JSON
+         * \uXXXX pair that you have combined yourself, for instance. Values outside the range, and
+         * unpaired surrogates, append U+FFFD.
+         * @param cp The code point to append
+         * @return This builder, for chaining
+         */
+        fun addCodePoint(cp: Int) : StringBuilder {
+            if (this.pendingHigh != 0) {
+                this.pendingHigh = 0
+                this.appendUtf8CodePoint(0xfffd)
+            }
+            var v = cp
+            if (v >= 0xd800 && v <= 0xdfff) {
+                v = 0xfffd
+            }
+            this.appendUtf8CodePoint(v)
+            return this
+        }
+
+        /**
+         * Writes one code point to the buffer as UTF-8. Anything outside 0..0x10ffff is replaced
+         * with U+FFFD so the buffer can never hold a sequence a decoder would reject.
+         * @param cp The code point to encode
+         */
+        private fun appendUtf8CodePoint(cp: Int) {
+            var v = cp
+            if (v < 0 || v > 0x10ffff) {
+                v = 0xfffd
+            }
+            var buf = this.buffer
+            if (v < 0x80) {
+                buf.add(v.toUByte())
+            } else if (v < 0x800) {
+                buf.add((0xc0 | (v >> 6)).toUByte())
+                buf.add((0x80 | (v & 0x3f)).toUByte())
+            } else if (v < 0x10000) {
+                buf.add((0xe0 | (v >> 12)).toUByte())
+                buf.add((0x80 | ((v >> 6) & 0x3f)).toUByte())
+                buf.add((0x80 | (v & 0x3f)).toUByte())
+            } else {
+                buf.add((0xf0 | (v >> 18)).toUByte())
+                buf.add((0x80 | ((v >> 12) & 0x3f)).toUByte())
+                buf.add((0x80 | ((v >> 6) & 0x3f)).toUByte())
+                buf.add((0x80 | (v & 0x3f)).toUByte())
+            }
         }
 
         /**
@@ -106,8 +196,15 @@ namespace Am.Lang
                 // If index is at or beyond end, just append
                 this.addChar(c)
             } else {
-                // Use List's insertAt for efficient insertion
-                this.buffer.insertAt(index.toInt(), c.toUByte()) // TODO: proper UTF-8 conversion
+                // Mid-buffer insertion still writes ONE byte, because the index is a byte
+                // position and shifting in a multi-byte sequence would split whatever sequence
+                // already straddles it. Safe for ASCII, which is all this is used for; anything
+                // above 127 is refused rather than written as a byte that would corrupt the
+                // buffer's encoding.
+                if (c.toInt() > 0x7f) {
+                    throw new Exception("addCharAt can only insert ASCII; use addChar to append")
+                }
+                this.buffer.insertAt(index.toInt(), c.toUByte())
             }
             return this
         }
@@ -117,6 +214,7 @@ namespace Am.Lang
          */
         fun clear() {
             this.buffer.clear()
+            this.pendingHigh = 0
         }
 
     }

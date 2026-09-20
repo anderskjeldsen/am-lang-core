@@ -322,3 +322,12 @@ function_result Am_Threading_Thread_sleep_0(long long milliseconds)
 __exit: ;
 	return __result;
 };
+
+function_result Am_Threading_Thread_setCurrentPriority_0(int priority)
+{
+	function_result __result = { .has_return_value = false };
+	if (priority < -128) priority = -128;
+	if (priority > 127) priority = 127;
+	SetTaskPri(FindTask(NULL), (LONG) priority);
+	return __result;
+}

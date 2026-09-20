@@ -44,5 +44,194 @@ namespace Tests {
             
             Assert.assertEquals("hello world", result)
         }
+
+        // --- UTF-16 code units (getChars / addChar) -------------------------------
+        // The literals below are real UTF-8 in this source file: "ø" is U+00F8 (two bytes)
+        // and "𝄞" is U+1D11E, a musical G clef, which is astral and therefore two
+        // UTF-16 code units.
+
+        test getCharsAscii() {
+            var chars = "abc".getChars()
+            Assert.assertEquals(3, chars.length().toInt())
+            Assert.assertEquals(97, chars[0].toInt())
+            Assert.assertEquals(98, chars[1].toInt())
+            Assert.assertEquals(99, chars[2].toInt())
+        }
+
+        test getCharsEmpty() {
+            Assert.assertEquals(0, "".getChars().length().toInt())
+            Assert.assertEquals(0, "".charLength())
+        }
+
+        test getCharsDecodesTwoByteSequence() {
+            var text = "ø"
+            // getLength() counts CHARACTERS: one here, even though UTF-8 spends two bytes on it.
+            Assert.assertEquals(1, text.getLength())
+            Assert.assertEquals(1, text.charLength())
+            // byteLength() is the storage size, and is where the 2 went.
+            Assert.assertEquals(2, text.byteLength())
+            Assert.assertEquals(248, text.getChars()[0].toInt())
+        }
+
+        test getCharsSplitsAstralIntoSurrogatePair() {
+            var text = "𝄞"
+            Assert.assertEquals(4, text.byteLength())  // four UTF-8 bytes
+            Assert.assertEquals(2, text.getLength())   // but two UTF-16 units, as JS reports
+            var chars = text.getChars()
+            Assert.assertEquals(2, chars.length().toInt())
+            Assert.assertEquals(55348, chars[0].toInt())   // 0xd834, high surrogate
+            Assert.assertEquals(56606, chars[1].toInt())   // 0xdd1e, low surrogate
+        }
+
+        test addCharEncodesAboveAscii() {
+            var sb = new StringBuilder()
+            sb.addChar(248US)
+            // Before this encoded properly, addChar kept the low 8 bits and produced a lone 0xf8,
+            // which is not valid UTF-8 and read back as garbage.
+            Assert.assertEquals("ø", sb.toString())
+        }
+
+        test addCharRoundTripsThroughGetChars() {
+            var original = "aøb𝄞c"
+            var chars = original.getChars()
+            var sb = new StringBuilder()
+            var i = 0
+            while (i < chars.length().toInt()) {
+                sb.addChar(chars[i])
+                i++
+            }
+            // Surrogate pairs survive because addChar holds the high half until the low one lands.
+            Assert.assertEquals(original, sb.toString())
+        }
+
+        test addCodePointEncodesAstral() {
+            var sb = new StringBuilder()
+            sb.addCodePoint(0x1d11e)
+            Assert.assertEquals("𝄞", sb.toString())
+        }
+
+        test addCharOrphanedSurrogateBecomesReplacement() {
+            var sb = new StringBuilder()
+            sb.addChar(55348US)      // high surrogate, never completed
+            sb.addChar(65US)         // 'A' arrives instead of the low half
+            var result = sb.toString()
+            // U+FFFD for the orphan, then the 'A'. Two characters, four bytes.
+            Assert.assertEquals(2, result.charLength())
+            Assert.assertEquals(65533, result.getChars()[0].toInt())
+            Assert.assertEquals(65, result.getChars()[1].toInt())
+        }
+
+
+        test codeUnitAtMatchesGetChars() {
+            var text = "aøb𝄞cæøå"
+            var chars = text.getChars()
+            var i = 0
+            while (i < chars.length().toInt()) {
+                // Second read of the same index goes through the cached view rather than a
+                // fresh decode -- both must agree with the bulk accessor.
+                Assert.assertEquals(chars[i].toInt(), text.codeUnitAt(i.toUInt()).toInt())
+                Assert.assertEquals(chars[i].toInt(), text.codeUnitAt(i.toUInt()).toInt())
+                i++
+            }
+            Assert.assertEquals(chars.length().toInt(), text.charLength())
+        }
+
+        test codeUnitAtAsciiNeedsNoCache() {
+            var text = "hello"
+            Assert.assertEquals(104, text.codeUnitAt(0UI).toInt())
+            Assert.assertEquals(111, text.codeUnitAt(4UI).toInt())
+            // byteLength == charLength is exactly the "pure ASCII" test the runtime uses.
+            Assert.assertEquals(text.byteLength(), text.charLength())
+        }
+
+        test codeUnitAtOutOfBoundsThrows() {
+            var text = "ø"
+            var threw = false
+            try {
+                text.codeUnitAt(1UI)   // one character, so index 1 is past the end
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+
+        test cachedViewSurvivesManyStrings() {
+            // Each non-ASCII string builds its own view on first codeUnitAt and must release it
+            // when the string dies -- the view is the only heap a String owns.
+            var i = 0
+            var total = 0
+            while (i < 2000) {
+                var s = "ø" + i.toString() + "æ"
+                total = total + s.codeUnitAt(0UI).toInt()
+                i++
+            }
+            Assert.assertEquals(248 * 2000, total)
+        }
+
+
+        test indexedOpsUseCharacterIndices() {
+            var text = "aøbæc"
+            // 5 characters, 7 bytes (the two non-ASCII ones cost two bytes each).
+            Assert.assertEquals(5, text.getLength())
+            Assert.assertEquals(7, text.byteLength())
+
+            // indexOf reports a CHARACTER index, so it feeds substring directly.
+            Assert.assertEquals(2, text.indexOf("b"))
+            Assert.assertEquals(4, text.indexOf("c"))
+            Assert.assertEquals(4, text.lastIndexOf("c"))
+
+            Assert.assertEquals("b", text.substring(2UI, 1UI))
+            Assert.assertEquals("ø", text.substring(1UI, 1UI))
+            Assert.assertEquals("æc", text.substring(3UI, 2UI))
+
+            // characterAt agrees with getChars at every position.
+            var chars = text.getChars()
+            var i = 0
+            while (i < chars.length().toInt()) {
+                Assert.assertEquals(chars[i].toInt(), text.characterAt(i.toUInt()).toInt())
+                i++
+            }
+        }
+
+        test substringRoundTripsNonAscii() {
+            var text = "æøåABCæøå"
+            Assert.assertEquals(9, text.getLength())
+            Assert.assertEquals("ABC", text.substring(3UI, 3UI))
+            Assert.assertEquals(text, text.substring(0UI, text.getLength().toUInt()))
+        }
+
+        test trimAndSplitSurviveNonAscii() {
+            Assert.assertEquals("øæ", ("  øæ  ").trim())
+            var parts = "ø,æ,å".split(44US)
+            Assert.assertEquals(3, parts.length().toInt())
+            Assert.assertEquals("ø", parts[0])
+            Assert.assertEquals("æ", parts[1])
+            Assert.assertEquals("å", parts[2])
+        }
+
+        test caseFoldingLeavesNonAsciiIntact() {
+            // toUpperCase walks characterAt + addChar. Now that both speak code units, a
+            // non-ASCII character passes through whole instead of being rebuilt byte by byte.
+            Assert.assertEquals("ABøCD", ("abøcd").toUpperCase())
+            Assert.assertEquals("abøcd", ("ABøCD").toLowerCase())
+        }
+
+
+        test lastIndexOfFindsOverlappingMatch() {
+            // The old scan advanced to last_index + 2 (it set i = last_index + 1 and then the
+            // for-loop's i++ ran too), so it stepped over an overlapping match: "aaa" reported 0.
+            Assert.assertEquals(1, "aaa".lastIndexOf("aa"))
+            Assert.assertEquals(0, "aa".lastIndexOf("aa"))
+            Assert.assertEquals(-1, "abc".lastIndexOf("zz"))
+            Assert.assertEquals(3, "\u00f8\u00f8ab".lastIndexOf("b"))
+        }
+
+        test addCharStillExactForAscii() {
+            // The path Base64 and every existing caller take must be byte-for-byte unchanged.
+            var sb = new StringBuilder()
+            sb.addChar(72US).addChar(105US)
+            Assert.assertEquals("Hi", sb.toString())
+            Assert.assertEquals(2, sb.getLength().toInt())
+        }
     }
 }

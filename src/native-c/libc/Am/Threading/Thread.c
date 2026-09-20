@@ -286,3 +286,11 @@ function_result Am_Threading_Thread_sleep_0(long long milliseconds)
 __exit: ;
     return __result;
 }
+
+function_result Am_Threading_Thread_setCurrentPriority_0(int priority)
+{
+	// Scheduling priorities are an Amiga-family concept; no-op here.
+	function_result __result = { .has_return_value = false };
+	(void) priority;
+	return __result;
+}

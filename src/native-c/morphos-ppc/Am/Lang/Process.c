@@ -54,7 +54,7 @@ function_result Am_Lang_Process_run_0(aobject * command)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	string_holder *cmd_holder = (string_holder *) (command + 1);
+	string_holder *cmd_holder = (string_holder *) ((char *) command + sizeof(aobject));
 	STRPTR cmd_strptr = (STRPTR) cmd_holder->string_value;
 
 	// SYS_Input/SYS_Output omitted on purpose: SystemTagList then inherits the
@@ -180,23 +180,35 @@ static void am_proc_record_resolved(const char * p) {
 
 static BPTR am_proc_lock_binary_dir(void) {
 	const char * p = g_cap_resolved;
-	char dbuf[192];
-	int cut = -1;
-	int i = 0;
-	int n = 0;
-	int k = 0;
-	if (p[0] == 0) return 0;
-	while (p[i] != 0) {
-		if (p[i] == '/' || p[i] == ':') cut = i;
-		i++;
+	BPTR fl;
+	BPTR dir;
+	struct Process * me;
+
+	// Ask DOS where the binary actually IS, rather than string-splitting the
+	// name we handed to LoadSeg. A bare "amlc" resolved through the current
+	// directory, an assign or the shell path has no directory part to split
+	// off -- that case used to return 0, the NP_HomeDir tag was dropped, and
+	// the child got NO PROGDIR: at all.
+	if (p[0] != 0) {
+		fl = Lock((CONST_STRPTR) p, ACCESS_READ);
+		if (fl != 0) {
+			dir = ParentDir(fl);
+			UnLock(fl);
+			if (dir != 0) return dir;
+		}
 	}
-	if (cut < 0) return 0;
-	n = (p[cut] == ':') ? cut + 1 : cut;   /* keep "C:", drop a trailing '/' */
-	if (n <= 0) return 0;
-	if (n > (int) sizeof(dbuf) - 1) n = (int) sizeof(dbuf) - 1;
-	while (k < n) { dbuf[k] = p[k]; k++; }
-	dbuf[n] = 0;
-	return Lock((CONST_STRPTR) dbuf, ACCESS_READ);
+	// Last resort: hand the child OUR PROGDIR:. A child with no home dir has
+	// no PROGDIR: at all, and DOS answers any PROGDIR: path with a modal
+	// "Please insert volume PROGDIR: in any drive" requester -- which wedges
+	// the machine. A home dir that merely points elsewhere is strictly
+	// better: a bundled tool probing for an optional file beside itself
+	// (amlc's config.json / templates/package.yml) simply misses and carries
+	// on with its defaults.
+	me = (struct Process *) FindTask(NULL);
+	if (me != NULL && me->pr_Task.tc_Node.ln_Type == NT_PROCESS && me->pr_HomeDir != 0) {
+		return DupLock(me->pr_HomeDir);
+	}
+	return 0;
 }
 
 /* AmigaDOS path-list node: a chain of (next, lock) pairs. */
@@ -312,7 +324,7 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	string_holder *cmd_holder = (string_holder *) (command + 1);
+	string_holder *cmd_holder = (string_holder *) ((char *) command + sizeof(aobject));
 	STRPTR cmd_strptr = (STRPTR) cmd_holder->string_value;
 
 	// Build a unique temp filename in T: (the conventional temp dir,
@@ -375,6 +387,7 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 		NP_Seglist,     (ULONG) seg,
 		NP_FreeSeglist, (ULONG) TRUE,
 		NP_Cli,         (ULONG) TRUE,
+		NP_Priority,    (ULONG) 0,   /* not the caller's (the UI task may run at +1) */
 		NP_Input,       (ULONG) nil_in,
 		NP_Output,      (ULONG) out_file,
 		NP_Error,       (ULONG) err_file,
@@ -480,7 +493,7 @@ function_result Am_Lang_Process_canonicalPath_0(aobject * path)
 		__increase_reference_count(path);
 	}
 
-	string_holder *in_holder = (string_holder *) (path + 1);
+	string_holder *in_holder = (string_holder *) ((char *) path + sizeof(aobject));
 	const char *in_str = in_holder->string_value;
 
 	BPTR lock = Lock((CONST_STRPTR) in_str, ACCESS_READ);
@@ -530,7 +543,7 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	string_holder *dir_holder = (workingDir != NULL) ? (string_holder *) (workingDir + 1) : NULL;
+	string_holder *dir_holder = (workingDir != NULL) ? (string_holder *) ((char *) workingDir + sizeof(aobject)) : NULL;
 	const char *dir_str = (dir_holder != NULL && dir_holder->length > 0) ? dir_holder->string_value : NULL;
 
 	BPTR new_lock = (BPTR) NULL;
@@ -546,7 +559,7 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 		did_swap = true;
 	}
 
-	string_holder *cmd_holder = (string_holder *) (command + 1);
+	string_holder *cmd_holder = (string_holder *) ((char *) command + sizeof(aobject));
 	STRPTR cmd_strptr = (STRPTR) cmd_holder->string_value;
 
 	UBYTE temp_path[64];
@@ -607,6 +620,7 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 		NP_Seglist,     (ULONG) seg,
 		NP_FreeSeglist, (ULONG) TRUE,
 		NP_Cli,         (ULONG) TRUE,
+		NP_Priority,    (ULONG) 0,   /* not the caller's (the UI task may run at +1) */
 		NP_Input,       (ULONG) nil_in,
 		NP_Output,      (ULONG) out_file,
 		NP_Error,       (ULONG) err_file,
@@ -731,10 +745,10 @@ function_result Am_Lang_Process_captureStdoutInDir_0(aobject * command, aobject 
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	string_holder *cmd_holder = (string_holder *) (command + 1);
+	string_holder *cmd_holder = (string_holder *) ((char *) command + sizeof(aobject));
 	const char *cmd_str = (const char *) cmd_holder->string_value;
 
-	string_holder *dir_holder2 = (workingDir != NULL) ? (string_holder *) (workingDir + 1) : NULL;
+	string_holder *dir_holder2 = (workingDir != NULL) ? (string_holder *) ((char *) workingDir + sizeof(aobject)) : NULL;
 	const char *dir_str2 = (dir_holder2 != NULL && dir_holder2->length > 0) ? dir_holder2->string_value : NULL;
 
 	/* Swap cwd so the command runs in workingDir. Restore the previous
@@ -833,7 +847,7 @@ __exit: ;
 function_result Am_Lang_Process_setSpawnSearchPath_0(aobject * dirs)
 {
 	function_result __result = { .has_return_value = true };
-	string_holder *h = (string_holder *) (dirs + 1);
+	string_holder *h = (string_holder *) ((char *) dirs + sizeof(aobject));
 	__set_spawn_search_path((const char *) h->string_value);
 	__result.return_value.value.bool_value = true;
 	return __result;

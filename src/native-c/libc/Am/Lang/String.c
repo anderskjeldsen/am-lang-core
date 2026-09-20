@@ -20,16 +20,18 @@ function_result Am_Lang_String__native_release_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
 
-//	bool __returning = false;
+	// The holder and string_value are allocated INLINE with the aobject
+	// (__allocate_object_with_extra_size), so they are freed with it and must
+	// never be freed here -- which is why this hook was empty for years. The
+	// lazily built UTF-16 view is the one exception: it is a separate malloc,
+	// so it is the only thing a String owns and the only thing to release.
+	//
+	// This runs for constants too. That is correct and necessary: a constant's
+	// string_value points into rodata and is untouched, but a view built on one
+	// is ordinary heap and would otherwise leak.
+	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+	__string_wide_free(holder);
 
-//	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
-//	if ( !holder->is_string_constant ) {
-//		free(holder->string_value);
-//	}
-//	free(holder);
-//	this->object_properties.class_object_properties.object_data.value.custom_value = NULL;
-
-//__exit: ;
 	return __result;
 };
 
@@ -79,9 +81,12 @@ function_result Am_Lang_String_getLength_0(aobject * const this)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 	// TODO: implement native function Am_Lang_String_getLength_0
+	// CHARACTERS (UTF-16 code units), not bytes. characterAt(), substring() and
+	// indexOf() all index in these units, so this is the length that pairs with
+	// them. byteLength() reports the storage size.
 	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	if ( holder != NULL ) {
-		__result.return_value.value.int_value = holder->length;
+		__result.return_value.value.int_value = holder->char_length;
 	} else {
 		__result.return_value.value.int_value = 0;
 	}
@@ -96,9 +101,20 @@ function_result Am_Lang_String_print_0(aobject * const this)
 	bool __returning = false;
 	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	if ( holder != NULL ) {
-		printf("%s", holder->string_value);
+		// fwrite of the known length, not printf("%s"): libnix (the
+		// AmigaOS -noixemul libc) caps a %s conversion at 32767 bytes,
+		// so a long string -- a JSON reply a tool prints for its caller
+		// -- came out truncated at exactly that size. (holder->length
+		// counts characters, not bytes, so measure the NUL-terminated
+		// buffer.) Also never trips over a '%' in the text.
+		if (holder->string_value != NULL) {
+			size_t n = strlen(holder->string_value);
+			if (n > 0) {
+				fwrite(holder->string_value, 1, n, stdout);
+			}
+		}
 	} else {
-		printf("null");
+		fputs("null", stdout);
 	}
 	// When stdout is redirected to a file on AmigaOS (Startup-Sequence
 	// `app >output.log` pattern), libnix's stdio defaults to full
@@ -163,13 +179,18 @@ function_result Am_Lang_String__op__plus_0(aobject * const this, aobject * s)
 	}
 
 	aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + holder1->length + holder2->length + 1);
-	string_holder *holder = (string_holder *) (str_obj + 1);
+	string_holder *holder = (string_holder *) ((char *) str_obj + sizeof(aobject));
 	str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
-	char * new_str = (char *) (holder + 1);
+	char * new_str = (char *) ((char *) holder + sizeof(string_holder));
 	strcpy(new_str, holder1->string_value);
 	strcat(new_str, holder2->string_value);
-	unsigned int hash = __string_hash(new_str);
-	*holder = (string_holder) { .is_string_constant = false, .length = holder1->length + holder2->length, .string_value = new_str, .hash = hash };
+	unsigned int units = 0;
+	unsigned int total = holder1->length + holder2->length;
+	// Recount rather than adding the two counts: if one operand ends in a
+	// malformed tail and the other starts with continuation bytes, the join
+	// decodes differently than either side did alone.
+	unsigned int hash = __string_hash_and_units(new_str, total, &units);
+	*holder = (string_holder) { .is_string_constant = false, .length = total, .string_value = new_str, .hash = hash, .char_length = units };
 
 	__result.return_value.value.object_value = str_obj;
 
@@ -184,13 +205,13 @@ function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
 
 
 
-	array_holder *a_holder = (array_holder *) &bytes[1]; // bytes->object_properties.class_object_properties.object_data.value.custom_value;
+	array_holder *a_holder = (array_holder *) ((char *) bytes + sizeof(aobject)); // bytes->object_properties.class_object_properties.object_data.value.custom_value;
 
     int const len = a_holder->size; // TODO: support different character sizes
 	aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + len + 1);
-	string_holder *holder = (string_holder *) (str_obj + 1);
+	string_holder *holder = (string_holder *) ((char *) str_obj + sizeof(aobject));
 	str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
-	char * new_str = (char *) (holder + 1);
+	char * new_str = (char *) ((char *) holder + sizeof(string_holder));
 
     // aobject * const str_obj = __allocate_object(&Am_Lang_String);
     // string_holder * const holder = calloc(1, sizeof(string_holder));
@@ -198,8 +219,9 @@ function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
     // char * const new_str = malloc(len + 1);
     strncpy(new_str, a_holder->array_data, len);
 	new_str[len] = 0;
-	unsigned int hash = __string_hash(new_str);
-    *holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = new_str, .hash = hash };
+	unsigned int units = 0;
+	unsigned int hash = __string_hash_and_units(new_str, (unsigned int) len, &units);
+    *holder = (string_holder) { .is_string_constant = false, .length = len, .string_value = new_str, .hash = hash, .char_length = units };
 
 //	aobject * new_string = __create_string(array_holder->array_data, &Am_Lang_String);
 
@@ -217,7 +239,7 @@ function_result Am_Lang_String_toBytes_0(aobject * const this, aobject * encodin
 	string_holder *string_holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 	aobject *array = __create_array(string_holder->length, 1, &Am_Lang_Array_ta_Am_Lang_UByte, uchar_type);
 
-	array_holder *a_holder = (array_holder *) &array[1]; // array->object_properties.class_object_properties.object_data.value.custom_value;
+	array_holder *a_holder = (array_holder *) ((char *) array + sizeof(aobject)); // array->object_properties.class_object_properties.object_data.value.custom_value;
 	memcpy(a_holder->array_data, string_holder->string_value, string_holder->length);
 	__result.return_value.flags = 0;
 	__result.return_value.value.object_value = array;
@@ -231,21 +253,48 @@ function_result Am_Lang_String_characterAtNative_0(aobject * const this, unsigne
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-
-	string_holder *string_holder = this->object_properties.class_object_properties.object_data.value.custom_value;
-	if ( index >= string_holder->length ) {
+	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+	if ( holder == NULL || index >= holder->char_length ) {
 		__throw_simple_exception("Index out of bounds", "in Am_Lang_String_characterAt_0", &__result);
 		goto __exit;
 	}
-	// Cast through unsigned char: plain `char` is SIGNED on most of our
-	// targets (Apple arm64, x86, m68k gcc), so a byte >= 0x80 would
-	// sign-extend into the UShort -- 0xEF read back as 0xFFEF. Callers
-	// that then write the value out as a codepoint (JSON's \uXXXX
-	// escape) emit garbage in the 0xFFxx range, and on the next parse
-	// that garbage becomes three bytes of UTF-8, which the next save
-	// escapes as three more codepoints. A single Norwegian 'o-slash'
-	// grew to ~100 characters over a handful of chat round trips.
-	__result.return_value.value.ushort_value = (unsigned char) string_holder->string_value[index];
+
+	// ASCII: the character index IS the byte index, so this stays the single
+	// load it always was -- no cache, no scan, no allocation. Cast through
+	// unsigned char so a byte >= 0x80 cannot sign-extend into the UShort.
+	if (holder->char_length == holder->length) {
+		__result.return_value.value.ushort_value = (unsigned char) holder->string_value[index];
+		goto __exit;
+	}
+
+	{
+		// Non-ASCII: decode once into the cached UTF-16 view, O(1) thereafter.
+		unsigned short *view = __string_wide(holder);
+		if (view != NULL) {
+			__result.return_value.value.ushort_value = view[index];
+			goto __exit;
+		}
+	}
+
+	// No view (out of memory): walk to the index rather than failing.
+	{
+		unsigned int i = 0, o = 0, cp = 0;
+		unsigned short unit = 0;
+		while (i < holder->length && o <= index) {
+			i += __utf8_decode(holder->string_value, holder->length, i, &cp);
+			if (cp < 0x10000) {
+				if (o == index) { unit = (unsigned short) cp; }
+				o++;
+			} else {
+				unsigned int v = cp - 0x10000;
+				if (o == index) { unit = (unsigned short) (0xd800 + (v >> 10)); }
+				o++;
+				if (o == index) { unit = (unsigned short) (0xdc00 + (v & 0x3ff)); }
+				o++;
+			}
+		}
+		__result.return_value.value.ushort_value = unit;
+	}
 
 __exit: ;
 	return __result;
@@ -259,9 +308,13 @@ function_result Am_Lang_String_indexOf_0(aobject * const this, aobject * s)
 	string_holder *sh1 = this->object_properties.class_object_properties.object_data.value.custom_value;
 	string_holder *sh2 = s->object_properties.class_object_properties.object_data.value.custom_value;
 
+	// strstr is still the right search: UTF-8 is self-synchronizing, so a valid
+	// needle can only ever match at a character boundary. Only the RESULT needs
+	// converting -- callers index in characters now.
 	char *strpos = strstr(sh1->string_value, sh2->string_value);
 	if (strpos != NULL) {
-		__result.return_value.value.int_value = strpos - sh1->string_value;
+		__result.return_value.value.int_value =
+			(int) __string_byte_to_unit(sh1, (unsigned int) (strpos - sh1->string_value));
 	} else {
 		__result.return_value.value.int_value = -1;
 	}
@@ -280,14 +333,19 @@ function_result Am_Lang_String_lastIndexOf_0(aobject * const this, aobject * s)
 	string_holder *sh1 = this->object_properties.class_object_properties.object_data.value.custom_value;
 	string_holder *sh2 = s->object_properties.class_object_properties.object_data.value.custom_value;
 
-	for(int i = 0; i < sh1->length; i++) {
+	// Scan in BYTES -- this walks the raw buffer -- then convert the winning
+	// offset to a character index on the way out.
+	for(unsigned int i = 0; i < sh1->length; i++) {
 		char *strpos = strstr(&sh1->string_value[i], sh2->string_value);
 		if (strpos != NULL) {
-			last_index = strpos - sh1->string_value;
-			i = last_index + 1;
+			last_index = (int) (strpos - sh1->string_value);
+			i = (unsigned int) last_index;
+		} else {
+			break;
 		}
 	}
-	__result.return_value.value.int_value = last_index;
+	__result.return_value.value.int_value =
+		(last_index < 0) ? -1 : (int) __string_byte_to_unit(sh1, (unsigned int) last_index);
 
 __exit: ;
 	return __result;
@@ -300,31 +358,127 @@ function_result Am_Lang_String_substring_0(aobject * const this, unsigned int st
 
 	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
 
-	if (length < 0) {
-		__throw_simple_exception("Length can't be lower than 0", "in Am_Lang_String_substring_0", &__result);
-		goto __exit;
-	}
-
-	unsigned int end = start + length;
-	if (end > holder->length) { // end char isn't included
+	// start and length are CHARACTER counts (UTF-16 code units), matching
+	// getLength() and characterAt().
+	unsigned int end_unit = start + length;
+	if (end_unit > holder->char_length || end_unit < start /* overflow */) {
 		__throw_simple_exception("End index can't be higher than string length", "in Am_Lang_String_substring_0", &__result);
 		goto __exit;
 	}
 
-	aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + length + 1);
-	if (str_obj == NULL) {
-		__throw_simple_exception("Out of memory", "in Am_Lang_String_substring_0", &__result);
-		goto __exit;
+	{
+		int split_start = 0, split_end = 0;
+		unsigned int byte_start = __string_unit_to_byte(holder, start, &split_start);
+		unsigned int byte_end   = __string_unit_to_byte(holder, end_unit, &split_end);
+		unsigned int byte_len;
+
+		if (split_start || split_end) {
+			// A boundary landed on the low half of a surrogate pair, i.e. inside
+			// a character. UTF-8 cannot encode half of one, so take the whole
+			// character rather than emitting a broken sequence. Only reachable
+			// with astral text and a hand-computed index.
+			__throw_simple_exception("Substring boundary falls inside a character", "in Am_Lang_String_substring_0", &__result);
+			goto __exit;
+		}
+
+		byte_len = byte_end - byte_start;
+		aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + byte_len + 1);
+		if (str_obj == NULL) {
+			__throw_simple_exception("Out of memory", "in Am_Lang_String_substring_0", &__result);
+			goto __exit;
+		}
+
+		string_holder *substr_holder = (string_holder *) ((char *) str_obj + sizeof(aobject));
+		str_obj->object_properties.class_object_properties.object_data.value.custom_value = substr_holder;
+		char * new_str = (char *) ((char *) substr_holder + sizeof(string_holder));
+		memcpy(new_str, &holder->string_value[byte_start], byte_len);
+		new_str[byte_len] = 0;
+		unsigned int units = 0;
+		unsigned int hash = __string_hash_and_units(new_str, byte_len, &units);
+		*substr_holder = (string_holder) { .is_string_constant = false, .length = byte_len, .string_value = new_str, .hash = hash, .char_length = units };
+		__result.return_value.value.object_value = str_obj;
 	}
 
-	string_holder *substr_holder = (string_holder *) (str_obj + 1);
-	str_obj->object_properties.class_object_properties.object_data.value.custom_value = substr_holder;
-	char * new_str = (char *) (substr_holder + 1);
-	strncpy(new_str, &holder->string_value[start], length);
-	new_str[length] = 0;
-	unsigned int hash = __string_hash(new_str);
-	*substr_holder = (string_holder) { .is_string_constant = false, .length = length, .string_value = new_str, .hash = hash };
-	__result.return_value.value.object_value = str_obj;
+__exit: ;
+	return __result;
+};
+
+function_result Am_Lang_String_byteLength_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+	__result.return_value.value.int_value = (holder != NULL) ? (int) holder->length : 0;
+
+__exit: ;
+	return __result;
+};
+
+function_result Am_Lang_String_charLength_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+	// Pre-calculated at construction, so this is a field read -- no scan, no
+	// allocation, safe to use as a loop bound.
+	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+	__result.return_value.value.int_value = (holder != NULL) ? (int) holder->char_length : 0;
+
+__exit: ;
+	return __result;
+};
+
+function_result Am_Lang_String_getChars_0(aobject * const this)
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+
+	string_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+	unsigned int units = (holder != NULL) ? holder->char_length : 0;
+
+	aobject *array = __create_array(units, 2, &Am_Lang_Array_ta_Am_Lang_UShort, ushort_type);
+	if (array == NULL) {
+		__throw_simple_exception("Out of memory", "in Am_Lang_String_getChars_0", &__result);
+		goto __exit;
+	}
+	if (holder != NULL && units > 0) {
+		array_holder *a_holder = (array_holder *) ((char *) array + sizeof(aobject));
+		unsigned short *out = (unsigned short *) a_holder->array_data;
+		unsigned int i = 0, o = 0, cp = 0;
+		if (holder->char_length == holder->length) {
+			// Pure ASCII: one byte per unit, so widen straight across without
+			// touching the decoder or the cache.
+			for (i = 0; i < units; i++) {
+				out[i] = (unsigned char) holder->string_value[i];
+			}
+			__result.return_value.flags = 0;
+			__result.return_value.value.object_value = array;
+			goto __exit;
+		}
+		{
+			unsigned short *view = __string_wide(holder);
+			if (view != NULL) {
+				memcpy(out, view, (size_t) units * sizeof(unsigned short));
+				__result.return_value.flags = 0;
+				__result.return_value.value.object_value = array;
+				goto __exit;
+			}
+		}
+		// View could not be built (out of memory): decode directly rather
+		// than failing the call.
+		while (i < holder->length && o < units) {
+			i += __utf8_decode(holder->string_value, holder->length, i, &cp);
+			if (cp < 0x10000) {
+				out[o++] = (unsigned short) cp;
+			} else {
+				// Astral: the surrogate pair JavaScript would report.
+				unsigned int v = cp - 0x10000;
+				out[o++] = (unsigned short) (0xd800 + (v >> 10));
+				if (o < units) out[o++] = (unsigned short) (0xdc00 + (v & 0x3ff));
+			}
+		}
+	}
+	__result.return_value.flags = 0;
+	__result.return_value.value.object_value = array;
 
 __exit: ;
 	return __result;

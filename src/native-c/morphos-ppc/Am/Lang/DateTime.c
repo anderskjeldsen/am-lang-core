@@ -301,7 +301,7 @@ function_result Am_Lang_DateTime_formatDateTime_0(unsigned long long epochMillis
 	broken_down_t bd;
 	decompose(epochMillis, timezoneOffsetMinutes, &bd);
 
-	string_holder *pat_holder = (string_holder *) (pattern + 1);
+	string_holder *pat_holder = (string_holder *) ((char *) pattern + sizeof(aobject));
 	const char *pat_str = pat_holder->string_value;
 
 	char formatted[256];
@@ -345,7 +345,7 @@ function_result Am_Lang_DateTime_parseDateTime_0(aobject *dateString, aobject *p
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	string_holder *date_holder = (string_holder *) (dateString + 1);
+	string_holder *date_holder = (string_holder *) ((char *) dateString + sizeof(aobject));
 	const char *date_str = date_holder->string_value;
 
 	int pos = 0;

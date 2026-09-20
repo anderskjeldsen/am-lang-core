@@ -119,13 +119,15 @@ namespace Am.Threading {
                 }
                 var runner = new TaskRunner()
                 runner.name = "task-runner-" + threadType.toString()
-                // Every worker category yields to the UI: on AmigaOS a task
-                // at -1 only runs while the priority-0 main task is waiting,
-                // so a long download or disk scan never steals frames from
-                // the window. No-op on platforms without task priorities.
-                if (threadType != TaskThreadType.Main) {
-                    runner.priority = 0 - 1
-                }
+                // Workers run at the default priority 0. They used to run at
+                // -1 "so a download never steals frames from the window" --
+                // but on AmigaOS a -1 task gets NO CPU while any priority-0
+                // task is busy, and a child process the application spawns
+                // (a compiler) runs at 0: every HTTP request then froze for
+                // the whole build. The UI is kept responsive the other way
+                // round: the application raises its own task to +1 with
+                // Thread.setCurrentPriority, and workers, children and other
+                // programs share the CPU at 0.
                 TaskScheduler.runners.set(threadType, runner)
                 TaskScheduler.allRunners.add(runner)
                 runner.start()

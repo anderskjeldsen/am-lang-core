@@ -37,7 +37,7 @@ function_result Am_Lang_Environment_get_0(aobject * name)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	string_holder *name_holder = (string_holder *) (name + 1);
+	string_holder *name_holder = (string_holder *) ((char *) name + sizeof(aobject));
 	const char *value = getenv(name_holder->string_value);
 
 	if (value == NULL) {
@@ -56,8 +56,8 @@ function_result Am_Lang_Environment_set_0(aobject * name, aobject * value)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	string_holder *name_holder = (string_holder *) (name + 1);
-	string_holder *value_holder = (string_holder *) (value + 1);
+	string_holder *name_holder = (string_holder *) ((char *) name + sizeof(aobject));
+	string_holder *value_holder = (string_holder *) ((char *) value + sizeof(aobject));
 
 	int rc = setenv(name_holder->string_value, value_holder->string_value, 1);
 	__result.return_value.value.bool_value = (rc == 0);
@@ -71,7 +71,7 @@ function_result Am_Lang_Environment_unset_0(aobject * name)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	string_holder *name_holder = (string_holder *) (name + 1);
+	string_holder *name_holder = (string_holder *) ((char *) name + sizeof(aobject));
 
 	bool existed = (getenv(name_holder->string_value) != NULL);
 	if (existed) {

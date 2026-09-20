@@ -1,0 +1,176 @@
+namespace Tests {
+
+    // Array.copyTo - the bulk-copy primitive. Primitive arrays go
+    // through a single native memmove; object arrays must keep
+    // property reference counts exact (retain each copied reference,
+    // release each overwritten occupant), which the suite's end-of-run
+    // leak tracker verifies globally. Overlap within one array must
+    // behave like memmove in both directions.
+    class ArrayCopyTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        test copyPrimitiveBytes() {
+            var src = new UByte[5UI]
+            var i = 0
+            while (i < 5) {
+                src[i.toUInt()] = (i + 1).toUByte()
+                i++
+            }
+            var dst = new UByte[8UI]
+            src.copyTo(dst, 2UI, 1UI, 3UI)   // dst[2..4] = src[1..3] = 2,3,4
+            Assert.assertEquals(0, dst[0UI].toInt())
+            Assert.assertEquals(0, dst[1UI].toInt())
+            Assert.assertEquals(2, dst[2UI].toInt())
+            Assert.assertEquals(3, dst[3UI].toInt())
+            Assert.assertEquals(4, dst[4UI].toInt())
+            Assert.assertEquals(0, dst[5UI].toInt())
+        }
+
+        test copyPrimitiveInts() {
+            var src = new Int[4UI]
+            src[0UI] = 10
+            src[1UI] = 20
+            src[2UI] = 30
+            src[3UI] = 40
+            var dst = new Int[4UI]
+            src.copyTo(dst, 0UI, 0UI, 4UI)
+            Assert.assertEquals(10, dst[0UI])
+            Assert.assertEquals(40, dst[3UI])
+        }
+
+        // Overlapping ranges in ONE array, shifting forward (dest after
+        // source) - the direction a naive ascending copy corrupts.
+        test overlapShiftForward() {
+            var a = new Int[6UI]
+            var i = 0
+            while (i < 6) {
+                a[i.toUInt()] = i + 1
+                i++
+            }
+            a.copyTo(a, 2UI, 0UI, 4UI)   // a[2..5] = old a[0..3]
+            Assert.assertEquals(1, a[0UI])
+            Assert.assertEquals(2, a[1UI])
+            Assert.assertEquals(1, a[2UI])
+            Assert.assertEquals(2, a[3UI])
+            Assert.assertEquals(3, a[4UI])
+            Assert.assertEquals(4, a[5UI])
+        }
+
+        // And shifting backward (dest before source) - List.removeAt's
+        // shape.
+        test overlapShiftBackward() {
+            var a = new Int[5UI]
+            var i = 0
+            while (i < 5) {
+                a[i.toUInt()] = i + 1
+                i++
+            }
+            a.copyTo(a, 0UI, 1UI, 4UI)   // a[0..3] = old a[1..4]
+            Assert.assertEquals(2, a[0UI])
+            Assert.assertEquals(3, a[1UI])
+            Assert.assertEquals(4, a[2UI])
+            Assert.assertEquals(5, a[3UI])
+            Assert.assertEquals(5, a[4UI])
+        }
+
+        // Object elements: contents correct, and the end-of-run leak
+        // tracker catches any refcount mistake (an over-release crashes
+        // or double-frees, an under-release shows as leaked objects).
+        test copyObjectArrayKeepsContents() {
+            var src = new String[3UI]
+            src[0UI] = "alpha"
+            src[1UI] = "beta"
+            src[2UI] = "gamma"
+            var dst = new String[3UI]
+            // Pre-fill dst so the copy also RELEASES overwritten
+            // occupants - the risky half of the refcount protocol.
+            dst[0UI] = "will-be-dropped-0"
+            dst[1UI] = "will-be-dropped-1"
+            dst[2UI] = "will-be-dropped-2"
+            src.copyTo(dst, 0UI, 0UI, 3UI)
+            Assert.assertEquals("alpha", dst[0UI])
+            Assert.assertEquals("beta", dst[1UI])
+            Assert.assertEquals("gamma", dst[2UI])
+            // Source still intact.
+            Assert.assertEquals("alpha", src[0UI])
+        }
+
+        // Object overlap in one array: occupants that are also sources
+        // must survive the release phase (retain-before-release order).
+        test copyObjectArrayOverlap() {
+            var a = new String[4UI]
+            a[0UI] = "one"
+            a[1UI] = "two"
+            a[2UI] = "three"
+            a[3UI] = "four"
+            a.copyTo(a, 1UI, 0UI, 3UI)   // a[1..3] = old a[0..2]
+            Assert.assertEquals("one", a[0UI])
+            Assert.assertEquals("one", a[1UI])
+            Assert.assertEquals("two", a[2UI])
+            Assert.assertEquals("three", a[3UI])
+        }
+
+        test zeroLengthIsNoOp() {
+            var src = new UByte[2UI]
+            var dst = new UByte[2UI]
+            src.copyTo(dst, 0UI, 0UI, 0UI)
+            Assert.assertEquals(0, dst[0UI].toInt())
+        }
+
+        test outOfRangeThrowsBeforeCopying() {
+            var src = new UByte[4UI]
+            src[0UI] = 9UB
+            var dst = new UByte[4UI]
+            var caught = false
+            try {
+                src.copyTo(dst, 2UI, 0UI, 3UI)   // dst range 2..4 overflows
+            } catch (ex: Exception) {
+                caught = true
+            }
+            Assert.assertTrue(caught)
+            // Nothing was written.
+            Assert.assertEquals(0, dst[2UI].toInt())
+
+            caught = false
+            try {
+                src.copyTo(dst, 0UI, 3UI, 2UI)   // src range 3..4 overflows
+            } catch (ex: Exception) {
+                caught = true
+            }
+            Assert.assertTrue(caught)
+        }
+
+        // subArray now routes through copyTo - keep its contract pinned.
+        test subArrayStillWorks() {
+            var src = new UByte[5UI]
+            var i = 0
+            while (i < 5) {
+                src[i.toUInt()] = (10 + i).toUByte()
+                i++
+            }
+            var sub = src.subArray(1UI, 3UI)
+            Assert.assertEquals(3, sub.length().toInt())
+            Assert.assertEquals(11, sub[0UI].toInt())
+            Assert.assertEquals(13, sub[2UI].toInt())
+        }
+
+        // List growth + toArray now use copyTo (incl. object element
+        // type) - push a List<String> past several capacity doublings.
+        test listGrowthAndToArrayWithObjects() {
+            var list = List.newList<String>()
+            var i = 0
+            while (i < 100) {
+                list.add("item-" + i.toString())
+                i++
+            }
+            Assert.assertEquals(100, list.getSize())
+            Assert.assertEquals("item-0", list.get(0))
+            Assert.assertEquals("item-99", list.get(99))
+            var arr = list.toArray()
+            Assert.assertEquals(100, arr.length().toInt())
+            Assert.assertEquals("item-42", arr[42UI])
+        }
+    }
+}

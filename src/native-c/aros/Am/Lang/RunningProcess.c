@@ -1245,7 +1245,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
 
     // CWD swap (LoadSeg honours current dir).
     if (workingDir != NULL) {
-        string_holder * wd_holder = (string_holder *) (workingDir + 1);
+        string_holder * wd_holder = (string_holder *) ((char *) workingDir + sizeof(aobject));
         const char * wd_str = wd_holder->string_value;
         if (wd_str != NULL && wd_str[0] != 0) {
             BPTR new_lock = Lock((CONST_STRPTR) wd_str, ACCESS_READ);
@@ -1257,7 +1257,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     }
 
     // Parse "binary args..." and LoadSeg.
-    string_holder * cmd_holder = (string_holder *) (command + 1);
+    string_holder * cmd_holder = (string_holder *) ((char *) command + sizeof(aobject));
     const char * cmd_str = (cmd_holder != NULL) ? cmd_holder->string_value : NULL;
     if (cmd_str == NULL || cmd_str[0] == 0) {
         if (d->has_old_cwd) {
@@ -1432,7 +1432,7 @@ function_result Am_Lang_RunningProcess_tryReadOutputBytes_0(aobject * const this
     }
     aobject * arr = __create_array((unsigned int) n, 1, &Am_Lang_Array_ta_Am_Lang_UByte, uchar_type);
     if (n > 0) {
-        array_holder * ah = (array_holder *) &arr[1];
+        array_holder * ah = (array_holder *) ((char *) arr + sizeof(aobject));
         memcpy(ah->array_data, buf, (size_t) n);
     }
     __result.return_value.value.object_value = arr;
@@ -1445,7 +1445,7 @@ function_result Am_Lang_RunningProcess_writeInputBytes_0(aobject * const this, a
     unsigned int wrote = 0;
     running_process_data * d = rp_data(this);
     if (d != NULL && d->state != NULL && data != NULL && !d->state->child_exited) {
-        array_holder * ah = (array_holder *) &data[1];
+        array_holder * ah = (array_holder *) ((char *) data + sizeof(aobject));
         if ((unsigned long long) offset + length <= ah->size) {
             Forbid();
             wrote = (unsigned int) rp_push(&d->state->in,
@@ -1475,7 +1475,7 @@ function_result Am_Lang_RunningProcess_writeInput_0(aobject * const this, aobjec
     rp_state * st = d->state;
     if (st->child_exited) goto __exit;
 
-    string_holder * h = (string_holder *) (text + 1);
+    string_holder * h = (string_holder *) ((char *) text + sizeof(aobject));
     if (h == NULL || h->string_value == NULL) goto __exit;
     // AmLang strings are NOT necessarily \0-terminated — use the
     // explicit `length` field. Using strlen here previously made

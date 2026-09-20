@@ -3,6 +3,8 @@ namespace Am.Util {
      * Pseudo-random numbers from the platform's generator. Fine for games, jitter and sampling;
      * not suitable for anything security-sensitive such as keys, tokens or passwords.
      */
+    // randomInt is called from native C (am_crypto_amissl_init.c seeds AmiSSL with it), invisible to the tree-shaker.
+    #compileAlways
     native class Random {
         import Am.Lang
         /**

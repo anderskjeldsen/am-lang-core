@@ -130,7 +130,7 @@ static inline aobject * __allocate_object(aclass * const __class) {
         ? ((__obj) == NULL ? NULL \
             : ((__obj)->class_ptr != NULL \
                 ? (__obj) \
-                : (__obj)->object_properties.object_wrapper.wrapped_object)) \
+                : (__obj)->wrapped_object)) \
         : (__obj))
 
 // Read a property's stored nullable_value, transparently unwrapping if
@@ -226,7 +226,7 @@ static inline void __decrease_reference_count(aobject * const __obj) {
         if (__obj->class_ptr != NULL) {
             printf("decrease reference count of object of type %s (address: %p, object_id: %d), property reference count %d, new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->property_reference_count, __obj->reference_count);
         } else {
-            printf("decrease reference count of wrapper (address: %p, wrapped: %p), new reference count %d\n", __obj, __obj->object_properties.object_wrapper.wrapped_object, __obj->reference_count);
+            printf("decrease reference count of wrapper (address: %p, wrapped: %p), new reference count %d\n", __obj, __obj->wrapped_object, __obj->reference_count);
         }
         #ifdef CONDLOG
         }
@@ -279,7 +279,7 @@ static inline void __decrease_reference_count(aobject * const __obj) {
             //      owner_gone if propref grows back, so wrappers can
             //      safely consult owner_gone alone (without re-checking
             //      propref) on their own death path.
-            __arc_shared_lock();
+            __arc_shared_lock_mt();
             bool destroy_now = false;
             if (__obj->property_reference_count == 0) {
                 // BRC: "foreign holders remain?" is `foreign_reference_count != 0`
@@ -296,7 +296,7 @@ static inline void __decrease_reference_count(aobject * const __obj) {
                     __obj->owner_gone = true;
                 }
             }
-            __arc_shared_unlock();
+            __arc_shared_unlock_mt();
             if (destroy_now) {
                 __deallocate_object(__obj);
             }
@@ -358,7 +358,7 @@ static inline void __increase_reference_count(aobject * const __obj) {
     if (__obj->class_ptr != NULL) {
     printf("increase reference count of object of type %s (address: %p, object_id: %d), propert_reference_count: %d, new reference count: %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->property_reference_count, __obj->reference_count);
     } else {
-    printf("increase reference count of wrapper (address: %p, wrapped: %p), new reference count: %d\n", __obj, __obj->object_properties.object_wrapper.wrapped_object, __obj->reference_count);
+    printf("increase reference count of wrapper (address: %p, wrapped: %p), new reference count: %d\n", __obj, __obj->wrapped_object, __obj->reference_count);
     }
 /*
     printf("increase reference count (address: %p)\n", __obj);
@@ -554,7 +554,7 @@ static inline void __increase_property_reference_count(aobject * const __obj) {
     // are torn under concurrent property writes from multiple threads.
     // Lock the link/unlink + counter mutation together. Recursive mutex
     // → safe to call from inside __set_property which also takes it.
-    __arc_shared_lock();
+    __arc_shared_lock_mt();
     if (__obj->property_reference_count == 0) {
         __obj->next = __first_object;
 
@@ -572,7 +572,7 @@ static inline void __increase_property_reference_count(aobject * const __obj) {
         __obj->owner_gone = false;
     }
     __obj->property_reference_count++;
-    __arc_shared_unlock();
+    __arc_shared_unlock_mt();
     #if defined(DEBUG) && defined(ARCLOG)
     #ifdef CONDLOG
     if (__conditional_logging_on) {
@@ -585,6 +585,12 @@ static inline void __increase_property_reference_count(aobject * const __obj) {
 }
 
 static inline void __set_property(aobject * const __obj_in, int const __index, nullable_value __prop_value) {
+    // Slot watch: extra resolution between allocator calls. Object-typed
+    // property writes come through here, so a stray write is attributed to
+    // a much narrower window than allocate/deallocate alone can give.
+    __amlc_watch_probe("set_property",
+        (__obj_in != NULL && __obj_in->class_ptr != NULL) ? __obj_in->class_ptr->name : NULL,
+        __builtin_return_address(0));
     // Thread-safe ARC: unwrap both the receiver AND the stored value.
     //   - Receiver: a wrapper has no property array; writing direct
     //     would corrupt `wrapped_object`.
@@ -606,7 +612,7 @@ static inline void __set_property(aobject * const __obj_in, int const __index, n
     // of the new value need to be one critical section, else a reader
     // can see a torn old/new pair). Recursive mutex → nested inc/dec
     // re-entries are safe.
-    __arc_shared_lock();
+    __arc_shared_lock_mt();
     property * __prop = &__obj->object_properties.class_object_properties.properties[__index];
     if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
         __decrease_property_reference_count(__prop->nullable_value.value.object_value);
@@ -634,31 +640,31 @@ static inline void __set_property(aobject * const __obj_in, int const __index, n
     }
 
     __prop->nullable_value = __prop_value;
-    __arc_shared_unlock();
+    __arc_shared_unlock_mt();
 }
 
 static inline bool __set_property_safe(aobject * const __obj, int const __index, nullable_value __prop_value) {
     // Thread-safe ARC: same single-critical-section reasoning as
     // __set_property — the type-check + ref count adjust + slot write
     // must be one transaction. Recursive mutex lets inc/dec re-enter.
-    __arc_shared_lock();
+    __arc_shared_lock_mt();
     property * __prop = &__obj->object_properties.class_object_properties.properties[__index];
     ctype old_type = __value_flags_to_ctype(__prop->nullable_value.flags);
     ctype new_type = __value_flags_to_ctype(__prop_value.flags);
     if (old_type != new_type) {
-        __arc_shared_unlock();
+        __arc_shared_unlock_mt();
         return false;
     }
 
 
     if (new_type == object_type) {
         if (!is_descendant_of(__prop_value.value.object_value->class_ptr, __prop->nullable_value.value.object_value->class_ptr)) {
-            __arc_shared_unlock();
+            __arc_shared_unlock_mt();
             return false;
         }
     } else if (__is_primitive_nullable(__prop_value) && !__is_primitive_nullable(__prop->nullable_value)) {
         // If new value is a nullable primitive, check of the property supports that
-        __arc_shared_unlock();
+        __arc_shared_unlock_mt();
         return false;
     }
 
@@ -680,14 +686,14 @@ static inline bool __set_property_safe(aobject * const __obj, int const __index,
     }
 
     __prop->nullable_value = __prop_value;
-    __arc_shared_unlock();
+    __arc_shared_unlock_mt();
     return true;
 }
 
 static inline void __set_static_property(class_static * const __class_static, int const __index, nullable_value __prop_value) {
     // Thread-safe ARC: static slots are inherently shared across threads,
     // so a write must be atomic w.r.t. concurrent readers/writers.
-    __arc_shared_lock();
+    __arc_shared_lock_mt();
     property * __prop = &__class_static->static_properties[__index];
     if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
         __decrease_property_reference_count(__prop->nullable_value.value.object_value);
@@ -707,7 +713,7 @@ static inline void __set_static_property(class_static * const __class_static, in
         __increase_property_reference_count(__prop_value.value.object_value);
     }
     __prop->nullable_value = __prop_value;
-    __arc_shared_unlock();
+    __arc_shared_unlock_mt();
 }
 
 static inline void __decrease_reference_count_nullable_value(nullable_value __value) {

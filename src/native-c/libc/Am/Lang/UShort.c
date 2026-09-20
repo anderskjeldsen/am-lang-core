@@ -19,15 +19,17 @@ function_result Am_Lang_UShort_toString_0(nullable_value const this)
 	bool __returning = false;
 
 	aobject * str_obj = __allocate_object_with_extra_size(&Am_Lang_String, sizeof(string_holder) + 6);
-	string_holder *holder = (string_holder *) (str_obj + 1);
+	string_holder *holder = (string_holder *) ((char *) str_obj + sizeof(aobject));
 	str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
-	char * new_str = (char *) (holder + 1);
+	char * new_str = (char *) ((char *) holder + sizeof(string_holder));
 	int len = sprintf(new_str, "%u", this.value.ushort_value);
 
 	holder->string_value = new_str; // assume that string constants will never change
 	holder->length = len; // TODO: how many characters exactly?
 	holder->is_string_constant = false;
 	holder->hash = __string_hash(new_str);
+	// Always ASCII digits (and '-', '.', 'e'), so one byte per character.
+	holder->char_length = holder->length;
 
 	__result.return_value.value.object_value = str_obj;
 __exit: ;

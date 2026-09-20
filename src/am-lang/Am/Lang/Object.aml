@@ -27,6 +27,15 @@ namespace Am.Lang
          * @param o The object to inspect
          */
         static native fun printDebug(o: Object)
+        /**
+         * Arms the runtime's slot watch on one of an object's property slots: the raw bytes are
+         * snapshotted, and the first time they change the runtime prints the old and new bytes
+         * together with the call site that was running. Diagnostic only -- for tracking down a
+         * stray write to a property that nothing in the program should be touching.
+         * @param o The object holding the slot
+         * @param index The property index to watch
+         */
+        static native fun watchProperty(o: Object, index: Int)
     }
 
     /**
