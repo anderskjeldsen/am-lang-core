@@ -321,6 +321,26 @@ namespace Am.Collections {
         }
 
         /**
+         * Returns the value stored under a key, or null when the key is not in the map: one lookup
+         * where containsKey() followed by get() would hash and walk the bucket twice.
+         * @param key The key to look up
+         * @return The value stored under that key, or null
+         */
+        fun getOrNull(key: K): V? {
+            if (this.keyIndexes.length() == 0) {
+                return null
+            }
+            var hash = key.hash()
+            var index = (hash & (this.bucketSize - 1).toUInt()) as Int
+            var keyIndex = this.keyIndexes[index] - 1
+            var entryIndex = this.findEntry(keyIndex, key)
+            if (entryIndex >= 0) {
+                return this.values[entryIndex]
+            }
+            return null
+        }
+
+        /**
          * Tests whether a key is present. This is the guard to put in front of get().
          * @param key The key to look for
          * @return True if the key is in the map

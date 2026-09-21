@@ -56,6 +56,24 @@ namespace Tests {
                 throw new Exception("File should be writable")
             }
             
+            // statEntry: one call reports the same size + mtime seconds + kind
+            var st = new Long[3UI]
+            if (!File.statEntry(".", testFile, st)) {
+                throw new Exception("statEntry should succeed for an existing file")
+            }
+            if (st[0UI] != size) {
+                throw new Exception("statEntry size mismatch: " + st[0UI].toString() + " vs " + size.toString())
+            }
+            if (st[1UI] != lastModified / 1000L) {
+                throw new Exception("statEntry mtime mismatch: " + st[1UI].toString() + " vs " + (lastModified / 1000L).toString())
+            }
+            if (st[2UI] != 1L) {
+                throw new Exception("statEntry kind should be KindFile, got " + st[2UI].toString())
+            }
+            if (File.statEntry(".", "no_such_file_here.txt", st)) {
+                throw new Exception("statEntry should fail for a missing entry")
+            }
+
             // Clean up
             file.delete()
         }

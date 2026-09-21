@@ -234,6 +234,21 @@ namespace Am.IO
         static native fun createSymbolicLink(linkPath: String, target: String): Bool
 
         /**
+         * Reads the size and modification time of the entry `name` inside directory `dirPath` with a
+         * single stat call, without allocating a File or a joined path: for a walk that checks every
+         * entry of a big tree against cached stat data (a version control status), this is the
+         * cheapest way to ask. The results land in `out`, which must hold at least 3 elements:
+         * out[0] = size in bytes, out[1] = modification time in whole seconds since the epoch,
+         * out[2] = the entry kind as in DirEntry (KindFile, KindDir, KindLink, or KindUnknown). A
+         * symbolic link is described itself, not what it points at, where the platform can tell.
+         * @param dirPath The directory containing the entry
+         * @param name The entry's name inside that directory
+         * @param out Receives size, mtime seconds and kind
+         * @return True when the entry could be examined; false (and `out` untouched) otherwise
+         */
+        static native fun statEntry(dirPath: String, name: String, out: Long[]): Bool
+
+        /**
          * Tests whether this path exists. Follows symbolic links, so a dangling link reports false.
          * @return True if the path exists
          */

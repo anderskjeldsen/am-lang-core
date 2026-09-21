@@ -20,6 +20,14 @@ namespace Tests {
             Assert.assertTrue(exceptionThrown)
         }
 
+        test testGetOrNull() {
+            var map = new HashMap<String, String>()
+            map.set("exists", "value")
+            Assert.assertEquals("value", map.getOrNull("exists"))
+            Assert.assertTrue(map.getOrNull("nonexistent") == null)
+            Assert.assertTrue(new HashMap<String, String>().getOrNull("x") == null)
+        }
+
         test testGetAfterSetWorks() {
             var map = new HashMap<String, String>()
             map.set("key1", "value1")

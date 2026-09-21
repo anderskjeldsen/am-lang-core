@@ -407,6 +407,50 @@ __exit: ;
 
 // Creates `linkPath` as a symbolic link pointing at `target`. False on
 // platforms without symlinks, and false if linkPath already exists.
+// One lstat (stat where there are no symlinks) for dirPath/name, joined in a
+// stack buffer: no File object and no path String per entry. Only the fields
+// a stat-cache comparison needs are reported.
+function_result Am_IO_File_statEntry_0(aobject * dirPath, aobject * name, aobject * out)
+{
+	function_result __result = { .has_return_value = true };
+	string_holder *dir_string_holder = (string_holder *) ((char *) dirPath + sizeof(aobject));
+	string_holder *name_string_holder = (string_holder *) ((char *) name + sizeof(aobject));
+	array_holder *oah = (array_holder *) ((char *) out + sizeof(aobject));
+	__result.return_value.value.bool_value = false;
+	if (oah->size < 3 || oah->item_size != sizeof(long long)) {
+		return __result;
+	}
+	char path[4096];
+	int n = snprintf(path, sizeof(path), "%s/%s", dir_string_holder->string_value, name_string_holder->string_value);
+	if (n < 0 || n >= (int) sizeof(path)) {
+		return __result;
+	}
+	struct stat s;
+	int ok;
+	AM_FILE_QUIET_BEGIN;
+#ifdef AM_NO_SYMLINKS
+	ok = (stat(path, &s) == 0);
+#else
+	ok = (lstat(path, &s) == 0);
+#endif
+	AM_FILE_QUIET_END;
+	if (!ok) {
+		return __result;
+	}
+	long long *o = (long long *) oah->array_data;
+	o[0] = (long long) s.st_size;
+	o[1] = (long long) s.st_mtime;
+	long long kind = 0;
+	if (S_ISDIR(s.st_mode)) kind = 2;
+	else if (S_ISREG(s.st_mode)) kind = 1;
+#ifndef AM_NO_SYMLINKS
+	else if (S_ISLNK(s.st_mode)) kind = 3;
+#endif
+	o[2] = kind;
+	__result.return_value.value.bool_value = true;
+	return __result;
+}
+
 function_result Am_IO_File_createSymbolicLink_0(aobject * linkPath, aobject * target)
 {
 	function_result __result = { .has_return_value = true };
