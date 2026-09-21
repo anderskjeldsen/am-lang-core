@@ -452,39 +452,37 @@ void __string_wide_free(string_holder * const holder) {
     }
 }
 
-unsigned int __string_hash_and_units(const char * const str, unsigned int const byte_len, unsigned int * const out_units) {
-    // The hash must stay bit-for-bit identical to __string_hash: it is compared
-    // directly in String.equals and keys every HashMap in the runtime. Note the
-    // signed `char` read is deliberate and load-bearing for that -- do not
-    // "fix" it to unsigned here without rehashing everything.
-    unsigned int hash = 0;
-    unsigned int bit = 0;
-    const char *str2 = str;
-    while (*str2 != 0) {
-        unsigned int c = (unsigned int) *str2++;
-        hash += (c << bit);
-        bit += 5;
-        bit &= 0x1f;
+// The ONE string hash: FNV-1a over the bytes, then a final avalanche
+// (murmur3's fmix32) so the LOW bits depend on every byte — HashMap/HashSet
+// index buckets by masking the hash. The previous additive
+// `hash += c << (5*i mod 32)` left paths differing in a digit or two in the
+// same handful of buckets (10 of 32768 used for 20k paths, 2000-long chains).
+// Both entry points below must stay bit-for-bit identical: the hash is
+// compared directly in String.equals and keys every HashMap in the runtime.
+static inline unsigned int __amlc_hash_bytes(const char * const str) {
+    unsigned int hash = 2166136261u;
+    const unsigned char *p = (const unsigned char *) str;
+    while (*p != 0) {
+        hash ^= (unsigned int) *p++;
+        hash *= 16777619u;
     }
-    if (out_units != NULL) {
-        *out_units = __utf8_utf16_length(str, byte_len);
-    }
+    hash ^= hash >> 16;
+    hash *= 0x85ebca6bu;
+    hash ^= hash >> 13;
+    hash *= 0xc2b2ae35u;
+    hash ^= hash >> 16;
     return hash;
 }
 
-unsigned int __string_hash(const char * const str) {
-    unsigned int hash = 0;
-    unsigned int bit = 0;
-    const char *str2 = str;
-    bool x = 0; //strlen(str2) < 2;
-    while(*str2 != 0) {
-        unsigned int c = (unsigned int) *str2++;
-        hash += (c << bit);
-        bit += 5;
-        bit &= 0x1f;
-//        str2++;
+unsigned int __string_hash_and_units(const char * const str, unsigned int const byte_len, unsigned int * const out_units) {
+    if (out_units != NULL) {
+        *out_units = __utf8_utf16_length(str, byte_len);
     }
-    return hash;
+    return __amlc_hash_bytes(str);
+}
+
+unsigned int __string_hash(const char * const str) {
+    return __amlc_hash_bytes(str);
 }
 
 // ── Slot watch (temporary debug aid) ──────────────────────────────────
