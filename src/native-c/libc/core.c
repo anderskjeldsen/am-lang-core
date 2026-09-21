@@ -1,120 +1,29 @@
-// #include <stdlib.h>
 #include <libc/core.h>
-
-// The plain-fallback atomic helper the header declares when neither real
-// atomics nor the gcc inline-asm branch is available (notably am-cc on the
-// Amiga). One definition for the whole program.
-#ifdef AMLC_PLAIN_ATOMIC_FN
-int __amlc_plain_fetch_add(int *__amlc_p, int __amlc_v) {
-    int __amlc_old = *__amlc_p;
-    *__amlc_p = __amlc_old + __amlc_v;
-    return __amlc_old;
-}
-#endif
 #include <string.h>
 #include <stdarg.h>
-#if defined(__linux__)
-#include <features.h>   // defines __GLIBC__ on glibc; musl has neither it nor execinfo.h
-#endif
-#if defined(__linux__) && defined(__GLIBC__)
-#define AMLC_HAVE_BACKTRACE 1
-#include <execinfo.h>   // backtrace() for the AMLC_WRAP_TRACE diagnostics
-#endif
 
-// Thread-safe ARC platform layer. Linux/macOS use a recursive
-// pthread_mutex (recursive so a single thread can take the lock more
-// than once while nested inside ARC machinery — destructors that
-// recursively dec refs would otherwise self-deadlock). AmigaOS is
-// single-core, so the lock is an inline Forbid/Permit (raw TDNestCnt
-// bump) — that IS mutual exclusion against other tasks there, and it
-// nests naturally (matching the recursive mutex) since TDNestCnt is a
-// counter. See the atomic-macro block in core.h for the rationale.
-#ifndef __AMIGA__
-#include <pthread.h>
-static pthread_mutex_t __arc_shared_mutex;
-static bool __arc_shared_mutex_initialised = false;
-void __arc_shared_mutex_init(void) {
-    if (__arc_shared_mutex_initialised) return;
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-    pthread_mutex_init(&__arc_shared_mutex, &attr);
-    pthread_mutexattr_destroy(&attr);
-    __arc_shared_mutex_initialised = true;
-    {
-        const char *e = getenv("AMLC_XTHREAD_RC");
-        __amlc_xthread_rc_on = (e && atoi(e) != 0) ? 1 : 0;
-    }
-}
-void __arc_shared_lock(void)   { pthread_mutex_lock(&__arc_shared_mutex); }
-void __arc_shared_unlock(void) { pthread_mutex_unlock(&__arc_shared_mutex); }
-void * __current_thread(void)  { return (void *) pthread_self(); }
-#elif defined(__MORPHOS__)
-// MorphOS PPC: the ARC cross-thread critical sections need a REAL mutual-exclusion
-// lock, not Forbid()/Permit(). Confirmed on HW: with Forbid the game hard-freezes in
-// the first NPC's am-js rt.run (the thread-safe biased-refcount "foreign" path racing
-// the chunk-worker threads); switching to a SignalSemaphore gets past it. MorphOS
-// treats Forbid as unreliable for mutual exclusion, and a SignalSemaphore is the
-// recommended primitive — it NESTS for the same task (ObtainSemaphore is recursive
-// per owner), matching the recursive lock the ARC needs. Gated on __amlc_multithreaded
-// so single-threaded programs keep a zero-cost path. Thread id is FindTask(NULL).
-// (NB: the SEPARATE "runs a few seconds then CPU-locks" bug was Thread.sleep flooring
-// sub-20ms sleeps to Delay(0) -> chunk-worker hot-spin; fixed in Thread.c. Both fixes
-// are needed.)
-#include <proto/exec.h>
-#include <exec/semaphores.h>
-static struct SignalSemaphore __arc_shared_sem;
-static bool __arc_shared_sem_initialised = false;
-void __arc_shared_mutex_init(void) {
-    if (__arc_shared_sem_initialised) return;
-    InitSemaphore(&__arc_shared_sem);
-    __arc_shared_sem_initialised = true;
-}
-// EXPERIMENT step 2 (bisecting the MorphOS freeze with block-quest2 = known-good
-// old game code): ARC lock fully DISABLED — no Forbid/Permit, no semaphore. This is
-// the literal old-days regime ("refcounts adjusted from any thread with no safety"),
-// under which the old binary ran endlessly. Foreign-counter RMWs stay atomic
-// (lwarx/stwcx.); the multi-field free decisions and wrapper-list edits run
-// unprotected, racy-in-theory on preemption but statistically almost never bitten
-// on a uniprocessor.
-//   * runs clean with NO lock -> the locking layer (Forbid or semaphore) is itself
-//     implicated in the freeze, or the protected races simply never fire here.
-//   * still freezes with NO lock -> locking fully exonerated; the freeze is in the
-//     BRC logic/codegen/atomics, independent of any lock primitive.
-void __arc_shared_lock(void)   { }
-void __arc_shared_unlock(void) { }
-// EXPERIMENT step 3 (block-quest2 bisect): CONSTANT thread identity. Every object's
-// owner test now passes on every thread, so ALL refcounting takes the owner fast
-// path — a plain ++/-- on the single shared reference_count from any thread, the
-// foreign counter and its lwarx/stwcx. atomics never engage, and no FindTask call
-// per op. Combined with the no-op lock above and __wrap_if_foreign already being a
-// passthrough, ARC semantics on MorphOS are now byte-for-byte the OLD regime
-// ("refcounts adjusted from any thread with no safety") under which the original
-// binary ran endlessly.
-//   * still freezes -> ARC fully exonerated; suspects shrink to codegen or other
-//     core natives; bisect am-lang-core history with block-quest2 as harness.
-//   * runs clean    -> the freeze needs the BRC owner/foreign machinery to fire.
-void * __current_thread(void)  { return (void *) 1; }
+// ---------------------------------------------------------------------------
+// Isolate platform layer: the global lock, the current-isolate binding and
+// the mailbox signalling primitive. Two backends:
+//   * Amiga family (AmigaOS m68k, MorphOS): Forbid/Permit for the lock,
+//     tc_UserData for the binding, an Exec signal per isolate to wake a
+//     mailbox reader. Exec's own primitives, no pthreads.
+//   * everything else (linux, macOS, AROS hosted): a pthread mutex, TLS
+//     (a pthread key on AROS, whose pthreads own tc_UserData), and a
+//     mutex+condvar per mailbox.
+// The object hot paths never come here — only Thread.send/receive/start
+// and isolate handle counting do.
+// ---------------------------------------------------------------------------
+#if defined(__AROS__)
+    #include <pthread.h>
+#elif defined(__MORPHOS__) || defined(__AMIGA__) || defined(AMIGA) || defined(PLATFORM_AMIGAOS)
+    #define AMLC_AMIGA_FAMILY 1
+    #include <exec/types.h>
+    #include <exec/execbase.h>
+    #include <exec/tasks.h>
+    #include <proto/exec.h>
 #else
-// AmigaOS: single-core, so mutual exclusion for the ARC critical sections
-// (the multi-field free decisions, propref mutations) is an inline
-// Forbid/Permit — raw increment/decrement of Exec's task-switch nesting
-// counter, exactly what Forbid()/Permit() do minus the library-vector call.
-// Balanced ++/-- so nesting returns TDNestCnt to baseline; the destructor
-// itself always runs AFTER unlock (see the dec paths), so Forbid is not held
-// across arbitrary release callbacks — except the __set_property → propref-dec
-// nesting, where a triggered destructor still runs under the outer lock (same
-// as the pthread build holds the mutex there; documented follow-up to defer).
-// The thread identity is FindTask(NULL) (stable for the task's lifetime).
-#include <proto/exec.h>
-void __arc_shared_mutex_init(void) {}
-void __arc_shared_lock(void)   { SysBase->TDNestCnt++; }  // inline Forbid()
-void __arc_shared_unlock(void) { SysBase->TDNestCnt--; }  // inline raw Permit()
-// SysBase->ThisTask IS what FindTask(NULL) returns, minus the library-vector
-// call. This runs on EVERY retain/release in a multithreaded program (the
-// biased-refcount owner test), so a jsr through ExecBase here costs more than
-// the atomic it exists to avoid.
-void * __current_thread(void)  { return (void *) SysBase->ThisTask; }
+    #include <pthread.h>
 #endif
 #include <Am/Lang/Exception.h>
 #include <Am/Lang/Object.h>
@@ -137,25 +46,6 @@ void * __current_thread(void)  { return (void *) SysBase->ThisTask; }
 
 #include <libc/core_inline_functions.h>
 
-bool __conditional_logging_on = false;
-
-// Thread-safe ARC runtime flag — see core.h for the contract. Starts
-// false; flipped on by `__create_wrapper`. Never flips back: even if
-// every wrapper later dies, the flag stays on because we don't want
-// to track the live-wrapper count across the codebase. The cost is
-// that long-running programs which briefly share an object once pay
-// the unwrap branch forever after — fine in practice.
-#ifndef AM_SINGLE_THREADED
-bool __amlc_any_wrappers_alive = false;
-#endif
-
-// Thread-safe ARC (BRC) — see core.h. Flipped on the first time a thread is
-// spawned (Am_Threading_Thread_start_0). Gates the owner-vs-foreign branch in
-// the refcount helpers so single-threaded programs never call
-// __current_thread() on the hot path. One-way.
-#ifndef AM_SINGLE_THREADED
-bool __amlc_multithreaded = false;
-#endif
 
 // Always-defined so callers compiled with DEBUG can link even when
 // core.c itself was compiled without DEBUG. Body only does anything
@@ -175,13 +65,10 @@ void __print_memory_header(aobject * const obj, const char * prefix) {
 #endif
 }
 
-// Atomic: allocation/deallocation happen concurrently on several threads
-// under BRC; a plain int loses updates (test-diagnostic accuracy only).
-__amlc_atomic_int __allocation_count = 0;
-// Cross-thread wrapper diagnostics (always on, cheap). Live wrappers =
-// created - deallocated; if it climbs without bound, wrappers are leaking.
-long __wrapper_create_count = 0;
-long __wrapper_dealloc_count = 0;
+bool __conditional_logging_on = false;
+
+// Live-object count of the CALLING isolate (each isolate keeps its own).
+#define __allocation_count (__amlc_isolate()->allocation_count)
 #define MAX_ALLOCATIONS 1024 * 50
 #if defined(DEBUG) || defined(TRACKOBJECTS)
 int __last_object_id = 0;
@@ -189,11 +76,10 @@ aobject * allocations[MAX_ALLOCATIONS];
 int allocation_index = 0;
 #endif
 
-aobject * __bla = NULL;
-aobject * __first_object = NULL;
-aobject * __first_detached_object = NULL;
-//aclass * __first_class = NULL;
 class_static *__first_class_static = NULL;
+unsigned int __amlc_static_slot_count = 0;
+__amlc_static_init_fn * __amlc_static_init_table = NULL;
+unsigned int __amlc_static_init_count = 0;
 
 // Defined under TRACKOBJECTS too (not just DEBUG): print_allocated_objects()
 // is compiled for both and calls this, so a TRACKOBJECTS-only build (e.g. the
@@ -215,6 +101,7 @@ void __debug_print_string_if_string(aobject * const obj, const char * prefix) {
 
 
 void __mark_root_objects() {
+    // Roots are the calling isolate's static properties.
     class_static *current = __first_class_static;
     while(current != NULL) {
         if (current->type == class) {
@@ -252,11 +139,12 @@ void __mark_object(aobject * const obj) {
         #endif        
         #endif
 
-        for(int i = 0; i < obj->class_ptr->properties_count; i++) {
-            property * const __prop = &obj->object_properties.class_object_properties.properties[i];
-            if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
-                aobject *o = __prop->nullable_value.value.object_value;
-                __mark_object(__prop->nullable_value.value.object_value);
+        if (obj->class_ptr->object_property_count > 0) {
+            for(int i = 0; i < obj->class_ptr->properties_count; i++) {
+                property * const __prop = &obj->object_properties.class_object_properties.properties[i];
+                if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
+                    __mark_object(__prop->nullable_value.value.object_value);
+                }
             }
         }
 
@@ -291,7 +179,7 @@ void __sweep_unmarked_objects() {
     while(old_count != new_count) {
         old_count = new_count;
         new_count = 0;
-        current = __first_object;
+        current = __amlc_isolate()->first_object;
         while(current != NULL) {
             sweep_result result = __sweep_object(current);
             if (result.is_swept) {
@@ -301,13 +189,14 @@ void __sweep_unmarked_objects() {
         }
     }
 
-    current = __first_detached_object;
+    aisolate * const __iso = __amlc_isolate();
+    current = __iso->first_detached_object;
     while(current != NULL) {
         aobject *next = current->next;
         __deallocate_detached_object(current);
         current = next;
     }
-    __first_detached_object = NULL;
+    __iso->first_detached_object = NULL;
 
     __clear_marks();
 }
@@ -323,7 +212,7 @@ void __clear_marks() {
     #endif
     #endif
 
-    aobject * current = __first_object;
+    aobject * current = __amlc_isolate()->first_object;
     while(current != NULL) {
         if (current->marked) {
             current->marked = false;
@@ -385,6 +274,11 @@ void __register_class(class_static * const __class_static) {
     }
     #endif
     #endif
+    // Hand the class its range of static slots. Every isolate created from
+    // here on sizes its statics array by the running total; the main
+    // isolate is booted only after every class has registered.
+    __class_static->slot_base = __amlc_static_slot_count;
+    __amlc_static_slot_count += __class_static->static_properties_count;
     __class_static->next = __first_class_static;
     __first_class_static = __class_static;
 }
@@ -593,84 +487,6 @@ unsigned int __string_hash(const char * const str) {
     return hash;
 }
 
-#if defined(__linux__)
-// Opt-in object-leak forensics (AMLC_OBJ_TRACE=1): per-class NET live
-// aobject counts, dumped every ~50k allocations. Same idea as the
-// wrapper-site table — a climbing net names the leaking class directly.
-static int __obj_trace_on = -1;
-#define OBJ_TRACE_SLOTS 4096
-static struct { void * cls; const char * name; long net; } __obj_trace_tab[OBJ_TRACE_SLOTS];
-static long __obj_trace_alloc_total = 0;
-static pthread_mutex_t __obj_trace_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-static void __obj_trace_bump(aclass * cls, int delta) {
-    if (cls == NULL) return;
-    pthread_mutex_lock(&__obj_trace_mutex);
-    unsigned long h = ((unsigned long) cls >> 3) % OBJ_TRACE_SLOTS;
-    for (int i = 0; i < OBJ_TRACE_SLOTS; i++) {
-        unsigned long idx = (h + i) % OBJ_TRACE_SLOTS;
-        if (__obj_trace_tab[idx].cls == (void *) cls) {
-            __obj_trace_tab[idx].net += delta;
-            break;
-        }
-        if (__obj_trace_tab[idx].cls == NULL) {
-            if (delta > 0) {
-                __obj_trace_tab[idx].cls = (void *) cls;
-                __obj_trace_tab[idx].name = cls->name;
-                __obj_trace_tab[idx].net = delta;
-            }
-            break;
-        }
-    }
-    if (delta > 0 && (++__obj_trace_alloc_total % 50000) == 0) {
-        fprintf(stderr, "[objtrace] ---- top net-live classes (allocs: %ld, live: %d) ----\n",
-            __obj_trace_alloc_total, __allocation_count);
-        // Sample the propref'd-object list: any leaked object with
-        // property_reference_count > 0 is linked here. Print the first few
-        // whose class name matches AMLC_OBJ_TRACE_CLASS (if set) with their
-        // counters — tells us whether the pin is rc or propref.
-        {
-            const char *want = getenv("AMLC_OBJ_TRACE_CLASS");
-            if (want != NULL) {
-                __arc_shared_lock();
-                int shown = 0;
-                long matched = 0;
-                for (aobject *o = __first_object; o != NULL && matched < 100000; o = o->next) {
-                    if (o->class_ptr != NULL && strstr(o->class_ptr->name, want) != NULL) {
-                        matched++;
-                        if (shown < 5) {
-                            fprintf(stderr, "[objtrace]   sample %s rc=%d propref=%d owner_gone=%d wrappers=%p\n",
-                                o->class_ptr->name, o->reference_count,
-                                o->property_reference_count, o->owner_gone,
-                                (void *) o->first_object_wrapper);
-                            shown++;
-                        }
-                    }
-                }
-                fprintf(stderr, "[objtrace]   (%ld '%s' objects on the propref list)\n", matched, want);
-                __arc_shared_unlock();
-            }
-        }
-        for (int pass = 0; pass < 10; pass++) {
-            long best = 0; int bi = -1;
-            for (int i = 0; i < OBJ_TRACE_SLOTS; i++) {
-                if (__obj_trace_tab[i].cls != NULL && __obj_trace_tab[i].net > best) {
-                    best = __obj_trace_tab[i].net; bi = i;
-                }
-            }
-            if (bi < 0) break;
-            fprintf(stderr, "[objtrace]   net=%-8ld %s\n", __obj_trace_tab[bi].net, __obj_trace_tab[bi].name);
-            __obj_trace_tab[bi].net = -__obj_trace_tab[bi].net;
-        }
-        for (int i = 0; i < OBJ_TRACE_SLOTS; i++) {
-            if (__obj_trace_tab[i].net < 0) __obj_trace_tab[i].net = -__obj_trace_tab[i].net;
-        }
-        fflush(stderr);
-    }
-    pthread_mutex_unlock(&__obj_trace_mutex);
-}
-#endif
-
 // ── Slot watch (temporary debug aid) ──────────────────────────────────
 // See core.h. Snapshots 12 raw bytes at `__amlc_watch_addr` when armed and
 // reports the first divergence, with the call site that was running. Costs
@@ -751,14 +567,10 @@ void __amlc_watch_check(const char * where, const char * cls, void * site) {
 
 aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra_size) {
     __amlc_watch_probe("allocate", __class != NULL ? __class->name : NULL, __builtin_return_address(0));
-    __amlc_atomic_fetch_add(&__allocation_count, 1);
-    #if defined(__linux__)
-    if (__obj_trace_on == -1) {
-        const char *e = getenv("AMLC_OBJ_TRACE");
-        __obj_trace_on = (e && atoi(e) != 0) ? 1 : 0;
-    }
-    if (__obj_trace_on == 1) __obj_trace_bump(__class, 1);
-    #endif
+    // One thread-local lookup per allocation: on macOS __thread access is a
+    // call (_tlv_get_addr), and this path is the hottest in the runtime.
+    aisolate * const __iso = __amlc_isolate();
+    __iso->allocation_count++;
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     __last_object_id++;
@@ -766,7 +578,7 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
     #ifdef TRACKOBJECTS
     // Per-class live-instance counter feeding the `instances(Class)`
     // test intrinsic. Balanced by the decrement in __deallocate_object.
-    if (__class != NULL) __amlc_atomic_fetch_add(&__class->instance_count, 1);
+    if (__class != NULL) __class->instance_count++;
     #endif
     #ifdef DEBUG
     #ifdef CONDLOG 
@@ -778,16 +590,20 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
     #endif
     #endif
 
-
-
     size_t size_with_properties = sizeof(aobject) + (sizeof(property) * __class->properties_count) + extra_size;
 
     aobject * __obj = NULL;
-
-    __obj = (aobject *) calloc(1, size_with_properties);
+    bool chunked = false;
+    if (__iso->fast_depth > 0) {
+        __obj = __amlc_arena_allocate(__iso, size_with_properties);
+        chunked = (__obj != NULL);
+    }
+    if (__obj == NULL) {
+        __obj = (aobject *) calloc(1, size_with_properties);
+    }
 
     if (__obj != NULL) {
-
+        __obj->chunked = chunked;
         #ifdef DEBUG
         #ifdef CONDLOG 
         if (__conditional_logging_on) {
@@ -803,56 +619,42 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
             __obj->object_properties.class_object_properties.properties = (property *) ((char *) __obj + sizeof(aobject));
         }
 
-            __obj->class_ptr = __class;
-            __obj->reference_count = 1;
-            // Thread-safe ARC: every newly allocated object is owned
-            // by the thread that allocated it. This is the cheap fast
-            // path for refcount mutation later — owner-thread inc/dec
-            // skips locks; cross-thread access goes through wrapper
-            // machinery. `first_object_wrapper` stays NULL until
-            // someone actually shares this object across threads.
-            __obj->owner_thread = __current_thread();
-            __obj->first_object_wrapper = NULL;
+        __obj->class_ptr = __class;
+        __obj->reference_count = 1;
 
-            #if defined(DEBUG) || defined(TRACKOBJECTS)
-            // Debug registry is a FIXED array — saturate instead of writing
-            // past it. An unchecked `allocations[allocation_index++]` overflowed
-            // the global once a process allocated >MAX_ALLOCATIONS objects
-            // (e.g. the V2 compiler compiling a whole project in-process),
-            // corrupting the neighbouring globals and eventually the heap.
-            // Objects beyond capacity simply aren't tracked (shutdown dump
-            // misses them) — a debug-feature limitation, not a correctness one.
-            if (allocation_index < MAX_ALLOCATIONS) {
-                allocations[allocation_index] = __obj;
-            } else if (allocation_index == MAX_ALLOCATIONS) {
-                printf("TRACKOBJECTS: allocation registry full (%d) — further objects untracked\n", MAX_ALLOCATIONS);
-            }
-            allocation_index++;
-            if (allocation_index % 1000 == 0) {
-                printf("Another 1000 allocations: %d\n", allocation_index);
-            }
-
-            __obj->object_properties.class_object_properties.object_id = __last_object_id;
-            #endif
-        } else {
-            #ifdef DEBUG
-            #ifdef CONDLOG 
-            if (__conditional_logging_on) {
-            #endif
-            printf("Failed to allocate object of type %s\n", __class->name);
-            #ifdef CONDLOG 
-            }
-            #endif
-            #endif
+        #if defined(DEBUG) || defined(TRACKOBJECTS)
+        // Debug registry is a FIXED array — saturate instead of writing
+        // past it. An unchecked `allocations[allocation_index++]` overflowed
+        // the global once a process allocated >MAX_ALLOCATIONS objects
+        // (e.g. the V2 compiler compiling a whole project in-process),
+        // corrupting the neighbouring globals and eventually the heap.
+        // Objects beyond capacity simply aren't tracked (shutdown dump
+        // misses them) — a debug-feature limitation, not a correctness one.
+        // (The registry is process-global and unsynchronised: concurrent
+        // isolates may lose entries — again diagnostic only.)
+        if (allocation_index < MAX_ALLOCATIONS) {
+            allocations[allocation_index] = __obj;
+        } else if (allocation_index == MAX_ALLOCATIONS) {
+            printf("TRACKOBJECTS: allocation registry full (%d) — further objects untracked\n", MAX_ALLOCATIONS);
         }
- 
-    #ifdef DEBUG
-    if (__obj->object_properties.class_object_properties.object_id == 946) {
-        printf("Allocated File\n");
-        __print_memory_header(__obj, "Allocation");
-    }
-    #endif
+        allocation_index++;
+        if (allocation_index % 1000 == 0) {
+            printf("Another 1000 allocations: %d\n", allocation_index);
+        }
 
+        __obj->object_properties.class_object_properties.object_id = __last_object_id;
+        #endif
+    } else {
+        #ifdef DEBUG
+        #ifdef CONDLOG 
+        if (__conditional_logging_on) {
+        #endif
+        printf("Failed to allocate object of type %s\n", __class->name);
+        #ifdef CONDLOG 
+        }
+        #endif
+        #endif
+    }
 
     return __obj;
 }
@@ -878,35 +680,6 @@ sweep_result __detach_object_from_sweep(aobject * const __obj) {
         return (sweep_result) { .is_swept = false, .next = __obj->next };
     }
 
-    // Wrapper (class_ptr == NULL): it was linked into __first_object by its
-    // property_reference_count (a cross-thread object stored into a
-    // collection/property), so the cycle sweep can reach it. It must NOT go
-    // through the real-object path — __detach_object immediately derefs
-    // class_ptr->release, and __deallocate_detached_object would free it raw,
-    // leaving a dangling entry in the real's first_object_wrapper list.
-    // Unlink it here and hand it to __deallocate_wrapper, which unsubscribes
-    // from the real and frees the wrapper. This mirrors the class_ptr==NULL
-    // split already used in the dec-refcount paths. Safe to run mid-sweep:
-    // reals detached earlier this pass aren't freed until the second loop.
-    if (__obj->class_ptr == NULL) {
-        aobject *next_to_sweep = __obj->next;
-        if (__obj == __first_object) {
-            __set_first_object(__obj->next, "detach_wrapper_from_sweep");
-            if (__first_object != NULL) {
-                __first_object->prev = NULL;
-            }
-        } else {
-            __obj->prev->next = __obj->next;
-            if (__obj->next != NULL) {
-                __obj->next->prev = __obj->prev;
-            }
-        }
-        __obj->next = NULL;
-        __obj->prev = NULL;
-        __deallocate_wrapper(__obj);
-        return (sweep_result) { .is_swept = true, .next = next_to_sweep };
-    }
-
     #ifdef DEBUG
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
@@ -919,30 +692,13 @@ sweep_result __detach_object_from_sweep(aobject * const __obj) {
    
     __detach_object(__obj);
 
-    #ifdef DEBUG
-    #ifdef CONDLOG 
-    if (__conditional_logging_on) {
-    #endif
-    printf("Almost done Detaching (sweep) object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
-    #ifdef CONDLOG 
-    }
-    #endif
-    #endif
-
-    if (__obj == __first_object) {
-//        printf("Detaching first object\n");
+    aisolate * const __iso = __amlc_isolate();
+    if (__obj == __iso->first_object) {
         __set_first_object(__obj->next, "detach_object_from_sweep");
-        if (__first_object != NULL) {
-            __first_object->prev = NULL;
+        if (__iso->first_object != NULL) {
+            __iso->first_object->prev = NULL;
         }
     } else {
-//        printf("Detaching not first object\n");
-        if (__obj->prev == NULL) {
-//            printf("prev is null\n");
-        }
-        if (__obj->next == NULL) {
-//            printf("next is null\n");
-        }
         __obj->prev->next = __obj->next;
         if (__obj->next != NULL) {
             __obj->next->prev = __obj->prev;
@@ -951,32 +707,17 @@ sweep_result __detach_object_from_sweep(aobject * const __obj) {
 
     aobject *next_to_sweep = __obj->next;
 
-    if (__first_detached_object == NULL) {
-//        printf("set first detached object\n");
-
-        __first_detached_object = __obj;
+    if (__iso->first_detached_object == NULL) {
+        __iso->first_detached_object = __obj;
         __obj->next = NULL;
         __obj->prev = NULL;
     } else {
-//        printf("link to first detached object\n");
-
-        __obj->next = __first_detached_object;
-        __first_detached_object->prev = __obj;
-        __first_detached_object = __obj;
+        __obj->next = __iso->first_detached_object;
+        __iso->first_detached_object->prev = __obj;
+        __iso->first_detached_object = __obj;
     }
 
-    sweep_result result = { .next = next_to_sweep, .is_swept = true };
-    #ifdef DEBUG
-    #ifdef CONDLOG 
-    if (__conditional_logging_on) {
-    #endif
-    printf("Done Detaching (sweep) object of type %s (total object allocation count: %d)\n", __obj->class_ptr->name, __allocation_count);
-    #ifdef CONDLOG 
-    }
-    #endif
-    #endif
-
-    return result;
+    return (sweep_result) { .next = next_to_sweep, .is_swept = true };
 }
 
 void __deallocate_detached_object(aobject * const __obj) {
@@ -990,10 +731,7 @@ void __deallocate_detached_object(aobject * const __obj) {
     #endif
     #endif
 
-    __amlc_atomic_fetch_sub(&__allocation_count, 1);
-    #if defined(__linux__)
-    if (__obj_trace_on == 1) __obj_trace_bump(__obj->class_ptr, -1);
-    #endif
+    __allocation_count--;
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
@@ -1003,33 +741,21 @@ void __deallocate_detached_object(aobject * const __obj) {
     }
     #endif
 
-    free(__obj);
+    __amlc_free_object(__obj);
 }
 
 void __deallocate_object(aobject * const __obj) {
     __amlc_watch_probe("deallocate",
         (__obj != NULL && __obj->class_ptr != NULL) ? __obj->class_ptr->name : NULL,
         __builtin_return_address(0));
-    #ifdef WRAPLOG
-    fprintf(stderr, "[real.dealloc] real=%p class=%s rc=%d propref=%d owner_gone=%d wrappers=%p\n",
-        __obj,
-        __obj && __obj->class_ptr ? __obj->class_ptr->name : "(?)",
-        __obj ? __obj->reference_count : -1,
-        __obj ? __obj->property_reference_count : -1,
-        __obj ? __obj->owner_gone : -1,
-        __obj ? (void*)__obj->first_object_wrapper : NULL);
-    fflush(stderr);
-    #endif
-    bool it = false;
 
     #ifdef TRACKOBJECTS
     // Balance the increment in __allocate_object_with_extra_size so the
     // `instances(Class)` test intrinsic reflects the live count.
-    if (__obj != NULL && __obj->class_ptr != NULL) __amlc_atomic_fetch_sub(&__obj->class_ptr->instance_count, 1);
+    if (__obj != NULL && __obj->class_ptr != NULL) __obj->class_ptr->instance_count--;
     #endif
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
-    char *name = __obj->class_ptr->name;
     int object_id = __obj->object_properties.class_object_properties.object_id;
     char *type = __obj->class_ptr->name;
     #endif
@@ -1058,7 +784,14 @@ void __deallocate_object(aobject * const __obj) {
         return;
     }
 
-    __detach_object(__obj);
+    // A plain class with no release hook and no object-typed slot has
+    // nothing to detach: skip the call (and its class-metadata loads).
+    aclass * const __cls = __obj->class_ptr;
+    if (__cls->release == NULL && __cls->object_property_count == 0 && __cls->statics->type == class) {
+        __obj->pending_deallocation = true;
+    } else {
+        __detach_object(__obj);
+    }
 
     #ifdef DEBUG
     #ifdef CONDLOG 
@@ -1070,10 +803,8 @@ void __deallocate_object(aobject * const __obj) {
     #endif
     #endif
 
-    __amlc_atomic_fetch_sub(&__allocation_count, 1);
-    #if defined(__linux__)
-    if (__obj_trace_on == 1) __obj_trace_bump(__obj->class_ptr, -1);
-    #endif
+    aisolate * const __iso = __amlc_isolate();
+    __iso->allocation_count--;
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
@@ -1085,22 +816,10 @@ void __deallocate_object(aobject * const __obj) {
 
     #ifdef DEBUG
     printf("About to free object %s (address: %p)\n", __obj->class_ptr->name, __obj);
-    printf("Object validation - class_ptr: %p\n", __obj->class_ptr);
-    if (__obj->class_ptr != NULL) {
-        printf("Class name: %s\n", __obj->class_ptr->name);
-    }
     printf("Reference counts: ref=%d, prop_ref=%d\n", __obj->reference_count, __obj->property_reference_count);
     #endif
 
-    #ifdef DEBUG
-    if (__obj->object_properties.class_object_properties.object_id == 946) {
-        printf("Deallocating File, quitting\n");
-        __print_memory_header(__obj, "Before free()");
-//        exit(1);
-    }
-    #endif
-
-    free(__obj);
+    __amlc_free_object_in(__iso, __obj);
 
     #ifdef DEBUG
     #ifdef CONDLOG 
@@ -1116,20 +835,9 @@ void __deallocate_object(aobject * const __obj) {
 
 void __decrease_property_reference_count(aobject * const __obj) {
     if ( __obj != NULL) {
-        #ifdef WRAPLOG
-        if (__obj->class_ptr == NULL) {
-            fprintf(stderr, "[dec_pr] wrapper=%p propref %d->%d\n", __obj, __obj->property_reference_count, __obj->property_reference_count - 1);
-            fflush(stderr);
+        if (__obj->immortal) {
+            return;
         }
-        #endif
-        // Thread-safe ARC: unlinking from __first_object + the counter
-        // mutation must be atomic w.r.t. concurrent increases on other
-        // threads. Recursive mutex → nested set_property calls (which
-        // also take the lock) are fine. The deallocate path below is
-        // outside the lock — see comment near the call. Gated: with one
-        // thread (see __arc_shared_lock_mt in core.h) the lock guards
-        // nothing and this runs on every property release.
-        __arc_shared_lock_mt();
         __obj->property_reference_count--;
         #if defined(DEBUG) && defined(ARCLOG)
         #ifdef CONDLOG
@@ -1141,14 +849,13 @@ void __decrease_property_reference_count(aobject * const __obj) {
         #endif
         #endif
 
-        bool should_deallocate = false;
         if (__obj->property_reference_count == 0 && !__obj->pending_deallocation) {
-            if (__obj == __first_object) {
-
+            aisolate * const __iso = __amlc_isolate();
+            if (__obj == __iso->first_object) {
                 __set_first_object(__obj->next, "decrease_property_reference_count");
                 __obj->next = NULL;
-                if (__first_object != NULL) {
-                    __first_object->prev = NULL;
+                if (__iso->first_object != NULL) {
+                    __iso->first_object->prev = NULL;
                 }
             } else {
                 __obj->prev->next = __obj->next;
@@ -1159,46 +866,7 @@ void __decrease_property_reference_count(aobject * const __obj) {
                 __obj->next = NULL;
             }
 
-
             if (__obj->reference_count == 0) {
-                // Same end-of-life decision as the rc → 0 path. Under BRC the
-                // "foreign holders still exist?" test is `foreign_reference_count
-                // != 0` (the wrapper subscription list is always empty now, but
-                // the check is retained so stale wrapper state, if any, is still
-                // honoured). If foreign refs remain, set `owner_gone` and let the
-                // last foreign release finalise. Otherwise claim destruction now
-                // via `destruction_claimed` — NOT `pending_deallocation` (that's
-                // __detach_object's recursion guard). This whole block already
-                // runs under __arc_shared_lock, so the foreign-count read
-                // linearises with foreign decrements.
-                if (__obj->first_object_wrapper == NULL
-                        && __amlc_atomic_load(&__obj->foreign_reference_count) == 0) {
-                    if (!__obj->destruction_claimed) {
-                        __obj->destruction_claimed = true;
-                        should_deallocate = true;
-                    }
-                } else {
-                    __obj->owner_gone = true;
-                }
-            }
-        }
-        __arc_shared_unlock_mt();
-
-        // Run the destructor outside the global ARC lock — release
-        // callbacks call back into the ARC machinery (dec'ing children),
-        // which would re-enter the recursive mutex safely BUT might also
-        // call out to user code that takes its own locks. Keeping the
-        // destructor outside the global ARC lock minimises hold-time
-        // and avoids surprising lock-ordering inversions.
-        if (should_deallocate) {
-            // Wrappers go through __deallocate_wrapper, not the
-            // class_ptr->release path — calling __deallocate_object on
-            // a wrapper would deref a NULL class_ptr inside
-            // __detach_object's debug-print/release-dispatch. Same split
-            // we already do in __decrease_reference_count for rc=0.
-            if (__obj->class_ptr == NULL) {
-                __deallocate_wrapper(__obj);
-            } else {
                 __deallocate_object(__obj);
             }
         }
@@ -1258,7 +926,7 @@ void __detach_object(aobject * const __obj) {
     //     __obj->object_data.value.custom_value = NULL;
     // }
 
-    if (__obj->class_ptr->statics->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
+    if (__obj->class_ptr->statics->type == class && __obj->class_ptr->object_property_count > 0) {
         for(int i = 0; i < __obj->class_ptr->properties_count; i++) {
             property * const __prop = &__obj->object_properties.class_object_properties.properties[i];
             // TODO: use __decrease_reference_count_nullable_value
@@ -1291,6 +959,14 @@ void __detach_object(aobject * const __obj) {
 }
 
 void __dereference_static_properties() {
+    // Releases the CALLING isolate's roots: its cached Thread handle to
+    // itself (getCurrent) and its copy of every static property.
+    aisolate * const iso = __amlc_isolate();
+    if (iso->self_handle != NULL) {
+        aobject * h = iso->self_handle;
+        iso->self_handle = NULL;
+        __decrease_reference_count(h);
+    }
     class_static *c = __first_class_static;
     aclass *class_ref = &__class_ref_class_alias;
 
@@ -1319,9 +995,9 @@ void __dereference_static_properties_for_class(class_static * const __class_stat
     #endif
     #endif
 
-    if (__class_static->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
+    if (__class_static->type == class) {
         for(int i = 0; i < __class_static->static_properties_count; i++) {
-            property * const __prop = &__class_static->static_properties[i];
+            property * const __prop = &__static_slot(__class_static, i);
             #if defined(DEBUG) || defined(TRACKOBJECTS)
             char *name = "<null>";
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
@@ -1329,7 +1005,6 @@ void __dereference_static_properties_for_class(class_static * const __class_stat
             }
             printf("Dereference static property %d %s\n", i, name);
             #endif
-            // TODO: use __decrease_reference_count_nullable_value
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
                 __decrease_property_reference_count(__prop->nullable_value.value.object_value);
                 __prop->nullable_value.value.object_value = NULL;
@@ -1349,10 +1024,9 @@ void __mark_static_properties(class_static * const __class_static) {
     #endif
     #endif
     
-    if (__class_static->type == class) { // && __obj->object_properties.class_object_properties.properties != NULL ) {
+    if (__class_static->type == class) {
         for(int i = 0; i < __class_static->static_properties_count; i++) {
-            property * const __prop = &__class_static->static_properties[i];
-            // TODO: use __decrease_reference_count_nullable_value
+            property * const __prop = &__static_slot(__class_static, i);
             if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
                 __mark_object(__prop->nullable_value.value.object_value);
             }
@@ -1362,21 +1036,22 @@ void __mark_static_properties(class_static * const __class_static) {
 
 void print_allocated_objects() {
     #if defined(DEBUG) || defined(TRACKOBJECTS)
-    printf("Allocated objects %d\n", __allocation_count);
+    aisolate * const iso = __amlc_isolate();
+    printf("Allocated objects %d\n", iso->allocation_count);
 
-    if (__allocation_count > 0) {
-        if (__first_object != NULL) {
+    if (iso->allocation_count > 0) {
+        if (iso->first_object != NULL) {
             printf("Going through attached objects:\n");
-            aobject *c = __first_object;
+            aobject *c = iso->first_object;
             while(c != NULL) {
                 printf("Object alive, %s\n", c->class_ptr->name);
                 c = c->next;
             }    
         }
 
-        if (__first_detached_object != NULL) {
+        if (iso->first_detached_object != NULL) {
             printf("Going through detached objects:\n");
-            aobject *c = __first_detached_object;
+            aobject *c = iso->first_detached_object;
             while(c != NULL) {
                 printf("Object alive, %s\n", c->class_ptr->name);
                 c = c->next;
@@ -1397,11 +1072,6 @@ void print_allocated_objects() {
 }
 
 void clear_allocated_objects() {
-    // Generated `main()` calls this first; piggy-back to bring up the
-    // thread-safe ARC shared mutex before any allocation happens. The
-    // call is idempotent (`__arc_shared_mutex_initialised` guard) so
-    // repeat calls or test harnesses are fine.
-    __arc_shared_mutex_init();
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     for(int i = 0; i < MAX_ALLOCATIONS; i++) {
         allocations[i] = NULL;
@@ -1409,345 +1079,10 @@ void clear_allocated_objects() {
     #endif
 }
 
-// ------------------------------------------------------------------
-// Thread-safe ARC: wrapper lifecycle.
-//
-// A wrapper aobject is a lean handle in some thread B's realm pointing
-// at a real aobject owned by thread A. The wrapper distinguishes
-// itself by `class_ptr == NULL` and stores the real in
-// the dedicated `aobject.wrapped_object` field. The real's
-// `first_object_wrapper` linked list records every live wrapper so we
-// can refuse to destroy the real while any wrapper still references
-// it.
-//
-// `__create_wrapper(real)`:
-//   - allocates a wrapper aobject (raw calloc, no class)
-//   - takes the shared mutex
-//   - links a new object_wrapper_entry into real->first_object_wrapper
-//   - bumps real->reference_count by 1 (the wrapper holds a ref on the real)
-//   - releases mutex
-//   - wrapper starts at reference_count = 1, owner = current thread
-//
-// `__deallocate_wrapper(wrapper)`:
-//   - takes the shared mutex
-//   - finds and unlinks our entry from real->first_object_wrapper
-//   - decs real->reference_count by 1
-//   - if real hits 0 + 0, ALSO dispatches the real's destructor
-//   - releases mutex
-//   - frees the wrapper struct
-// ------------------------------------------------------------------
-
-// Codegen-facing helper. Fast path is "same-thread, return as-is";
-// slow path mints a wrapper. Same-thread is a single load + compare,
-// no allocation. At -O0 we still pay the function-call frame
-// overhead, but unlike inlined ternaries this doesn't blow the
-// 26 k-line JsBytecodeVm.run frame — function calls reserve a fixed
-// per-call stack chunk, not per-call-site stack.
-// __wrap_if_foreign is a macro in core.h now — see the comment there.
-
-
-// AMLC_XTHREAD_RC=1: report reference_count mutations performed by a
-// thread that does NOT own the object. reference_count is owner-thread-
-// local BY DESIGN (plain non-atomic ++/--); any cross-thread mutation is
-// a race that can lose updates and leave rc permanently pinned above
-// zero — the object then never destructs (the "chunks leak with rc>0,
-// propref=0, no wrappers" signature). Reports the mutating call site as
-// a module-relative PC (addr2line -e app), rate-limited.
-int __amlc_xthread_rc_on = 0;
-#if defined(AMLC_HAVE_BACKTRACE)
-void __report_xthread_rc(aobject * const __obj, const char * const op) {
-    static long __xthread_rc_reports = 0;
-    if (__xthread_rc_reports >= 200) return;
-    __xthread_rc_reports++;
-    extern char __executable_start;
-    void *bt[4];
-    int n = backtrace(bt, 4);
-    fprintf(stderr, "[xthread-rc] %s on %s owner=%p me=%p rc=%d propref=%d",
-        op,
-        __obj->class_ptr ? __obj->class_ptr->name : "(wrapper)",
-        __obj->owner_thread, __current_thread(),
-        __obj->reference_count, __obj->property_reference_count);
-    for (int i = 1; i < n; i++) {
-        fprintf(stderr, " pc=+0x%lx", (unsigned long) bt[i] - (unsigned long) &__executable_start);
-    }
-    fprintf(stderr, "\n");
-    fflush(stderr);
-}
-#else
-void __report_xthread_rc(aobject * const __obj, const char * const op) { (void)__obj; (void)op; }
-#endif
-
-#if defined(__linux__)
-// AMLC_WRAP_TRACE support: per-call-site NET live-wrapper accounting.
-// Fixed-size open-addressing table keyed by minting PC; mutated only
-// under __arc_shared_lock (both create and dealloc already hold it).
-int __wrap_trace_on = -1;                       // -1 unread, 0 off, 1 on
-static __thread void * __wrap_trace_current_site = NULL;
-// Generated code has thousands of distinct minting PCs — an undersized
-// table silently drops late-arriving sites (including the leaky ones),
-// making every visible site look balanced while the global live count
-// climbs. 64k slots covers any realistic program.
-#define WRAP_TRACE_SLOTS 65536
-static struct { void * site; long net; long created; } __wrap_trace_tab[WRAP_TRACE_SLOTS];
-static long __wrap_trace_created_total = 0;
-static long __wrap_trace_dropped = 0;           // sites lost to a full table
-// Companion histogram keyed by wrapped-real CLASS — tells us what TYPE of
-// object the leaked wrappers pin even when the PC table can't.
-#define WRAP_TRACE_CLASS_SLOTS 1024
-static struct { void * cls; const char * name; long net; } __wrap_trace_cls_tab[WRAP_TRACE_CLASS_SLOTS];
-
-static void __wrap_trace_bump_class(aobject * real, int delta) {
-    void * cls = real ? (void *) real->class_ptr : NULL;
-    if (cls == NULL) return;
-    unsigned long h = ((unsigned long) cls >> 3) % WRAP_TRACE_CLASS_SLOTS;
-    for (int i = 0; i < WRAP_TRACE_CLASS_SLOTS; i++) {
-        unsigned long idx = (h + i) % WRAP_TRACE_CLASS_SLOTS;
-        if (__wrap_trace_cls_tab[idx].cls == cls) {
-            __wrap_trace_cls_tab[idx].net += delta;
-            return;
-        }
-        if (__wrap_trace_cls_tab[idx].cls == NULL) {
-            if (delta > 0) {
-                __wrap_trace_cls_tab[idx].cls = cls;
-                __wrap_trace_cls_tab[idx].name = ((aclass *) cls)->name;
-                __wrap_trace_cls_tab[idx].net = delta;
-            }
-            return;
-        }
-    }
-}
-
-// Find/insert the slot for a site. Must be called under __arc_shared_lock.
-static void __wrap_trace_bump(void * site, int delta) {
-    if (site == NULL) return;
-    unsigned long h = ((unsigned long) site >> 2) % WRAP_TRACE_SLOTS;
-    for (int i = 0; i < WRAP_TRACE_SLOTS; i++) {
-        unsigned long idx = (h + i) % WRAP_TRACE_SLOTS;
-        if (__wrap_trace_tab[idx].site == site) {
-            __wrap_trace_tab[idx].net += delta;
-            if (delta > 0) __wrap_trace_tab[idx].created++;
-            return;
-        }
-        if (__wrap_trace_tab[idx].site == NULL) {
-            if (delta > 0) {
-                __wrap_trace_tab[idx].site = site;
-                __wrap_trace_tab[idx].net = delta;
-                __wrap_trace_tab[idx].created = 1;
-            }
-            return;
-        }
-    }
-    __wrap_trace_dropped++;    // table full — surfaced in the dump header
-}
-
-// Dump the sites with the highest net (still-alive) wrapper counts.
-// PCs are printed relative to the main module so `addr2line -e app`
-// resolves them despite PIE/ASLR.
-static void __wrap_trace_dump(void) {
-    extern char __executable_start;             // ld-provided module base
-    unsigned long base = (unsigned long) &__executable_start;
-    fprintf(stderr, "[wraptrace] ---- top net-live wrapper sites (total created: %ld, live now: %ld, dropped: %ld) ----\n",
-        __wrap_trace_created_total, __wrapper_create_count - __wrapper_dealloc_count, __wrap_trace_dropped);
-    for (int pass = 0; pass < 6; pass++) {      // top wrapped-real classes by net
-        long best = 0; int bi = -1;
-        for (int i = 0; i < WRAP_TRACE_CLASS_SLOTS; i++) {
-            if (__wrap_trace_cls_tab[i].cls != NULL && __wrap_trace_cls_tab[i].net > best) {
-                best = __wrap_trace_cls_tab[i].net; bi = i;
-            }
-        }
-        if (bi < 0) break;
-        fprintf(stderr, "[wraptrace]   class net=%-8ld %s\n",
-            __wrap_trace_cls_tab[bi].net, __wrap_trace_cls_tab[bi].name);
-        __wrap_trace_cls_tab[bi].net = -__wrap_trace_cls_tab[bi].net;
-    }
-    for (int i = 0; i < WRAP_TRACE_CLASS_SLOTS; i++) {
-        if (__wrap_trace_cls_tab[i].net < 0) __wrap_trace_cls_tab[i].net = -__wrap_trace_cls_tab[i].net;
-    }
-    for (int pass = 0; pass < 8; pass++) {
-        long best = 0; int bi = -1;
-        for (int i = 0; i < WRAP_TRACE_SLOTS; i++) {
-            if (__wrap_trace_tab[i].site != NULL && __wrap_trace_tab[i].net > best) {
-                best = __wrap_trace_tab[i].net; bi = i;
-            }
-        }
-        if (bi < 0) break;
-        fprintf(stderr, "[wraptrace]   net=%-8ld created=%-10ld pc=+0x%lx\n",
-            __wrap_trace_tab[bi].net, __wrap_trace_tab[bi].created,
-            (unsigned long) __wrap_trace_tab[bi].site - base);
-        __wrap_trace_tab[bi].net = -__wrap_trace_tab[bi].net;   // mark visited
-    }
-    for (int i = 0; i < WRAP_TRACE_SLOTS; i++) {                // restore marks
-        if (__wrap_trace_tab[i].net < 0) __wrap_trace_tab[i].net = -__wrap_trace_tab[i].net;
-    }
-    fflush(stderr);
-}
-#endif
-
-#ifndef AM_SINGLE_THREADED
-aobject * __create_wrapper(aobject * const __realobj) {
-    #if defined(__linux__)
-    // Opt-in wrapper-leak forensics (AMLC_WRAP_TRACE=1): records the minting
-    // call-site PC in each wrapper and keeps a per-site NET count
-    // (created - freed). Sites whose net keeps climbing are the leaks —
-    // creation-rate histograms can't tell leaked wrappers from the (many)
-    // properly released ones. Dumps the top sites every ~1M creations as
-    // "app-relative" PCs, resolvable with `addr2line -e app <pc-base>`.
-    // Costs one getenv on the first call and nothing when unset.
-    {
-        if (__wrap_trace_on == -1) {
-            const char *e = getenv("AMLC_WRAP_TRACE");
-            __wrap_trace_on = (e && atoi(e) != 0) ? 1 : 0;
-        }
-        #if defined(AMLC_HAVE_BACKTRACE)
-        if (__wrap_trace_on == 1) {
-            void *bt[3];
-            int n = backtrace(bt, 3);
-            __wrap_trace_current_site = (n >= 3) ? bt[2] : (n >= 2 ? bt[1] : NULL);
-        }
-        #endif
-    }
-    #endif
-    #ifdef WRAPLOG
-    fprintf(stderr, "[wrap.create] real=%p class=%s rc=%d propref=%d wrappers=%p\n",
-        __realobj,
-        __realobj && __realobj->class_ptr ? __realobj->class_ptr->name : "(?)",
-        __realobj ? __realobj->reference_count : -1,
-        __realobj ? __realobj->property_reference_count : -1,
-        __realobj ? (void*)__realobj->first_object_wrapper : NULL);
-    fflush(stderr);
-    #endif
-    // First wrapper ever? Flip the global so __unwrap stops being a
-    // free-zero-instruction identity. Set BEFORE the wrapper is
-    // visible to any other thread — the wrapper-list mutex below
-    // provides the release-side synchronisation that publishes both
-    // this flag and the new wrapper entry together.
-    __amlc_any_wrappers_alive = true;
-
-    // Allocate the wrapper aobject itself. It has no class (class_ptr
-    // stays NULL — that's the discriminator) and zero properties, so
-    // the base aobject struct alone is enough.
-    aobject * __wrapper = (aobject *) calloc(1, sizeof(aobject));
-    if (__wrapper == NULL) return NULL;
-    __wrapper->class_ptr = NULL;                         // wrapper sentinel
-    __wrapper->reference_count = 1;
-    __wrapper->property_reference_count = 0;
-    __wrapper->owner_thread = __current_thread();
-    __wrapper->wrapped_object = __realobj;
-    #if defined(__linux__)
-    __wrapper->object_properties.object_wrapper.trace_site =
-        (__wrap_trace_on == 1) ? __wrap_trace_current_site : NULL;
-    #endif
-
-    // Build the subscription entry the real will hold on to.
-    object_wrapper_entry * __entry =
-        (object_wrapper_entry *) calloc(1, sizeof(object_wrapper_entry));
-    if (__entry == NULL) { free(__wrapper); return NULL; }
-    __entry->subscriber = __wrapper;
-    __entry->next = NULL;
-
-    // Link into the real's wrapper list under the shared mutex.
-    //
-    // NOTE: we do NOT bump real->reference_count anymore — wrappers are
-    // tracked separately via `first_object_wrapper`. The owner's
-    // reference_count stays solely "owner-thread local refs". This
-    // splits ownership so owner-thread inc/dec on its own count doesn't
-    // need the lock, except on the 1→0 transition (see
-    // __decrease_reference_count). End-of-life coordination is via the
-    // `owner_gone` flag set by whoever drains rc+propref to zero first.
-    __arc_shared_lock();
-    __entry->next = __realobj->first_object_wrapper;
-    __realobj->first_object_wrapper = __entry;
-    __wrapper_create_count++;
-    #if defined(__linux__)
-    if (__wrap_trace_on == 1) {
-        __wrap_trace_bump(__wrapper->object_properties.object_wrapper.trace_site, 1);
-        __wrap_trace_bump_class(__realobj, 1);
-        __wrap_trace_created_total++;
-        if ((__wrap_trace_created_total % 1000000) == 0) {
-            __wrap_trace_dump();
-        }
-    }
-    #endif
-    __arc_shared_unlock();
-
-    return __wrapper;
-}
-#endif // AM_SINGLE_THREADED
-
-void __deallocate_wrapper(aobject * const __wrapper) {
-    aobject * const __realobj =
-        __wrapper->wrapped_object;
-    #ifdef WRAPLOG
-    fprintf(stderr, "[wrap.dealloc] wrapper=%p real=%p real_class=%s real_rc=%d real_propref=%d real_owner_gone=%d\n",
-        __wrapper, __realobj,
-        __realobj && __realobj->class_ptr ? __realobj->class_ptr->name : "(?)",
-        __realobj ? __realobj->reference_count : -1,
-        __realobj ? __realobj->property_reference_count : -1,
-        __realobj ? __realobj->owner_gone : -1);
-    fflush(stderr);
-    #endif
-
-    // Unlink self under the shared mutex. The unlink walks the
-    // singly-linked list looking for the entry whose `subscriber`
-    // matches `__wrapper`. The list is typically short (number of
-    // threads currently borrowing the object — usually 1-3) so the
-    // linear walk is fine.
-    __arc_shared_lock();
-    #if defined(__linux__)
-    if (__wrap_trace_on == 1) {
-        __wrap_trace_bump(__wrapper->object_properties.object_wrapper.trace_site, -1);
-        __wrap_trace_bump_class(__realobj, -1);
-    }
-    #endif
-    object_wrapper_entry * prev = NULL;
-    object_wrapper_entry * cur = __realobj->first_object_wrapper;
-    while (cur != NULL) {
-        if (cur->subscriber == __wrapper) {
-            if (prev == NULL) {
-                __realobj->first_object_wrapper = cur->next;
-            } else {
-                prev->next = cur->next;
-            }
-            free(cur);
-            break;
-        }
-        prev = cur;
-        cur = cur->next;
-    }
-
-    // Real-destruction protocol (new):
-    //   - Wrappers do NOT contribute to real->reference_count anymore.
-    //   - Whoever drains rc+propref to zero on the owner side sets
-    //     `owner_gone = true` UNDER THIS SAME LOCK if any wrappers
-    //     still subscribe; otherwise they destroy outright.
-    //   - On wrapper death (here), if we were the last subscriber AND
-    //     the owner has already flagged owner_gone, we finalize.
-    // This means a typical wrapper death only locks long enough to
-    // unsubscribe — no owner-side counter mutation, no decrement-then-
-    // check ping-pong.
-    bool destroy_real = (__realobj->first_object_wrapper == NULL
-                      && __realobj->owner_gone
-                      && !__realobj->destruction_claimed);
-    if (destroy_real) {
-        __realobj->destruction_claimed = true;
-    }
-    // Counter must be mutated under the lock like its create-side twin —
-    // wrappers die concurrently on several threads, and a non-atomic `++`
-    // outside the lock loses increments, making the live-wrapper metric
-    // (create - dealloc) climb even when every wrapper is properly freed.
-    __wrapper_dealloc_count++;
-    __arc_shared_unlock();
-
-    if (destroy_real) {
-        __deallocate_object(__realobj);
-    }
-
-    free(__wrapper);
-}
-
 void deallocate_annotations(class_static * const __class_static) {
     for(int i = 0; i < __class_static->annotations_count; i++) {
         aobject * const a = __class_static->annotations[i];
+        a->reference_count = 1;   // immortal while the program runs
         __decrease_reference_count(a);
         __class_static->annotations[i] = NULL;
     }
@@ -1818,7 +1153,9 @@ void __throw_simple_exception_site(const char * const message, void * const site
 
 
 int __suspend_root_rendezvous(suspend_state *st) {
-    return (int) __amlc_atomic_fetch_add(&st->root_handoff, 1);
+    // A continuation chain runs entirely inside one isolate, so the
+    // rendezvous is a plain counter.
+    return st->root_handoff++;
 }
 
 bool __any_null(const nullable_value a) {
@@ -2045,11 +1382,11 @@ aobject * __create_array(unsigned int const size, unsigned char const item_size,
     holder->item_class = array_class;
     holder->item_size = item_size;
     holder->size = size;
-    // Explicit zero-init of the data block. See the contract comment above
-    // `__create_array`. For `any_type` this materialises each slot as the
-    // "absent object" `nullable_value`; for other ctypes it's NULL pointers
-    // / zero primitives, which is what the AmLang language model expects.
-    memset(array_data, 0, (size_t) size * item_size);
+    // The data block is already zero: __allocate_object_with_extra_size
+    // callocs (or the fast-lane arena memsets) the whole allocation, so a
+    // second memset here only doubled the cost of every array — for large
+    // arrays it also touched every page that calloc had left lazily zeroed.
+    // The zero-init contract above still holds; it is just not paid twice.
     return array_obj;
 }
 
@@ -2166,8 +1503,6 @@ void __init_oom_singleton(void) {
     }
     ex->class_ptr = &__out_of_memory_exception_class_alias;
     ex->reference_count = 1;
-    ex->owner_thread = __current_thread();
-    ex->first_object_wrapper = NULL;
     __oom_singleton = ex;
 }
 
@@ -2217,8 +1552,6 @@ void __throw_out_of_memory_exception(function_result * const result, const char 
             }
             stit->class_ptr = &__string_class_alias;
             stit->reference_count = 1;
-            stit->owner_thread = __current_thread();
-            stit->first_object_wrapper = NULL;
             // The string holder lives after properties[].
             string_holder * sh = (string_holder *) ((property *) ((char *) stit + sizeof(aobject)) + __string_class_alias.properties_count);
             stit->object_properties.class_object_properties.object_data.value.custom_value = sh;
@@ -2436,4 +1769,614 @@ aobject * __concatenate_strings(int count, ...) {
                                                   &result_holder->char_length);
     
     return result_obj;
+}
+
+// ===========================================================================
+// Isolates — share-nothing threads. Platform layer first, then the
+// portable lifecycle, then messaging (deep copy + mailbox).
+// ===========================================================================
+
+// ---- global lock ----------------------------------------------------------
+#ifdef AMLC_AMIGA_FAMILY
+void __amlc_global_lock(void)   { Forbid(); }
+void __amlc_global_unlock(void) { Permit(); }
+#else
+static pthread_mutex_t __amlc_global_mutex = PTHREAD_MUTEX_INITIALIZER;
+void __amlc_global_lock(void)   { pthread_mutex_lock(&__amlc_global_mutex); }
+void __amlc_global_unlock(void) { pthread_mutex_unlock(&__amlc_global_mutex); }
+#endif
+
+// ---- current-isolate binding ----------------------------------------------
+#if defined(__AROS__)
+static pthread_key_t  __amlc_iso_key;
+static pthread_once_t __amlc_iso_key_once = PTHREAD_ONCE_INIT;
+static void __amlc_make_iso_key(void) { pthread_key_create(&__amlc_iso_key, NULL); }
+aisolate * __amlc_isolate_current(void) {
+    pthread_once(&__amlc_iso_key_once, __amlc_make_iso_key);
+    return (aisolate *) pthread_getspecific(__amlc_iso_key);
+}
+static void __amlc_bind_isolate(aisolate * const iso) {
+    pthread_once(&__amlc_iso_key_once, __amlc_make_iso_key);
+    pthread_setspecific(__amlc_iso_key, iso);
+}
+#elif defined(AMLC_AMIGA_FAMILY)
+aisolate * __amlc_isolate_current(void) { return (aisolate *) FindTask(NULL)->tc_UserData; }
+static void __amlc_bind_isolate(aisolate * const iso) { FindTask(NULL)->tc_UserData = (APTR) iso; }
+#else
+__thread aisolate * __amlc_tls_isolate = NULL;
+static void __amlc_bind_isolate(aisolate * const iso) { __amlc_tls_isolate = iso; }
+#endif
+aisolate * __amlc_main_isolate_ptr = NULL;
+int __amlc_isolate_count = 1;
+void __amlc_isolate_count_inc(void) { __amlc_global_lock(); __amlc_isolate_count++; __amlc_global_unlock(); }
+void __amlc_isolate_count_dec(void) { __amlc_global_lock(); __amlc_isolate_count--; __amlc_global_unlock(); }
+
+// ---- mailbox --------------------------------------------------------------
+// A FIFO of amessage owned by one isolate. Any isolate may post; only the
+// owner takes. Amiga: the queue is edited under Forbid and the owner sleeps
+// in Wait() on a signal it allocated when it entered — a post that lands
+// between the owner's empty-check and its Wait is not lost because Exec
+// signals are sticky. POSIX: mutex + condvar.
+struct _amailbox {
+    amessage * head;
+    amessage * tail;
+    bool closed;
+#ifdef AMLC_AMIGA_FAMILY
+    struct Task * owner;
+    ULONG sigmask;
+#else
+    pthread_mutex_t lock;
+    pthread_cond_t cond;
+#endif
+};
+
+static amailbox * __amlc_mailbox_create(void) {
+    amailbox * mb = (amailbox *) calloc(1, sizeof(amailbox));
+    if (mb == NULL) return NULL;
+#ifndef AMLC_AMIGA_FAMILY
+    pthread_mutex_init(&mb->lock, NULL);
+    pthread_cond_init(&mb->cond, NULL);
+#endif
+    return mb;
+}
+
+// Called by the owning thread once it runs as this isolate.
+static void __amlc_mailbox_bind(amailbox * const mb) {
+#ifdef AMLC_AMIGA_FAMILY
+    BYTE bit = AllocSignal(-1);
+    Forbid();
+    mb->owner = FindTask(NULL);
+    mb->sigmask = (bit >= 0) ? (1UL << bit) : 0;
+    Permit();
+#else
+    (void) mb;
+#endif
+}
+
+static bool __amlc_mailbox_post(amailbox * const mb, amessage * const msg) {
+    msg->next = NULL;
+#ifdef AMLC_AMIGA_FAMILY
+    Forbid();
+    if (mb->closed) { Permit(); return false; }
+    if (mb->tail != NULL) mb->tail->next = msg; else mb->head = msg;
+    mb->tail = msg;
+    struct Task * owner = mb->owner;
+    ULONG mask = mb->sigmask;
+    Permit();
+    if (owner != NULL && mask != 0) Signal(owner, mask);
+    return true;
+#else
+    pthread_mutex_lock(&mb->lock);
+    if (mb->closed) { pthread_mutex_unlock(&mb->lock); return false; }
+    if (mb->tail != NULL) mb->tail->next = msg; else mb->head = msg;
+    mb->tail = msg;
+    pthread_cond_signal(&mb->cond);
+    pthread_mutex_unlock(&mb->lock);
+    return true;
+#endif
+}
+
+static amessage * __amlc_mailbox_pop_locked(amailbox * const mb) {
+    amessage * m = mb->head;
+    if (m != NULL) {
+        mb->head = m->next;
+        if (mb->head == NULL) mb->tail = NULL;
+        m->next = NULL;
+    }
+    return m;
+}
+
+static amessage * __amlc_mailbox_take(amailbox * const mb, bool const wait) {
+#ifdef AMLC_AMIGA_FAMILY
+    for (;;) {
+        Forbid();
+        amessage * m = __amlc_mailbox_pop_locked(mb);
+        bool closed = mb->closed;
+        ULONG mask = mb->sigmask;
+        Permit();
+        if (m != NULL || !wait || closed || mask == 0) return m;
+        Wait(mask);
+    }
+#else
+    pthread_mutex_lock(&mb->lock);
+    while (wait && mb->head == NULL && !mb->closed) {
+        pthread_cond_wait(&mb->cond, &mb->lock);
+    }
+    amessage * m = __amlc_mailbox_pop_locked(mb);
+    pthread_mutex_unlock(&mb->lock);
+    return m;
+#endif
+}
+
+static void __amlc_mailbox_close(amailbox * const mb) {
+#ifdef AMLC_AMIGA_FAMILY
+    Forbid();
+    mb->closed = true;
+    ULONG mask = mb->sigmask;
+    mb->owner = NULL;
+    mb->sigmask = 0;
+    Permit();
+    if (mask != 0) {
+        // Free the signal bit from the owning task (we are it).
+        BYTE bit = 0;
+        while (((1UL << bit) & mask) == 0) bit++;
+        FreeSignal(bit);
+    }
+#else
+    pthread_mutex_lock(&mb->lock);
+    mb->closed = true;
+    pthread_cond_broadcast(&mb->cond);
+    pthread_mutex_unlock(&mb->lock);
+#endif
+}
+
+static void __amlc_mailbox_destroy(amailbox * const mb) {
+    if (mb == NULL) return;
+#ifndef AMLC_AMIGA_FAMILY
+    pthread_mutex_destroy(&mb->lock);
+    pthread_cond_destroy(&mb->cond);
+#endif
+    free(mb);
+}
+
+// ---- fast-lane arenas -----------------------------------------------------
+// A bump allocator for `fast { ... }` blocks. Each object carries a pointer
+// to its arena in the word just before the aobject; death decrements the
+// arena's live count and an arena at zero is reset in place. Arenas never
+// move objects, so every raw pointer a native holds stays valid.
+static aarena * __amlc_arena_new(aisolate * const iso) {
+    aarena * a = iso->free_arenas;
+    if (a != NULL) {
+        iso->free_arenas = a->next_free;
+        iso->free_arena_count--;
+        a->next_free = NULL;
+        a->used = 0;
+        return a;
+    }
+    a = (aarena *) malloc(sizeof(aarena) + AMLC_ARENA_SIZE + AMLC_ARENA_ALIGN);
+    if (a == NULL) return NULL;
+    a->data = (char *) AMLC_ARENA_ROUND((size_t) ((char *) a + sizeof(aarena)));
+    a->capacity = AMLC_ARENA_SIZE;
+    a->used = 0;
+    a->live = 0;
+    a->next_free = NULL;
+    a->next = iso->arenas;
+    iso->arenas = a;
+    return a;
+}
+
+aobject * __amlc_arena_allocate(aisolate * const iso, size_t const size) {
+    size_t const slot = AMLC_ARENA_ROUND(sizeof(aarena *)) + AMLC_ARENA_ROUND(size);
+    if (slot > AMLC_ARENA_SIZE) {
+        return NULL;    // too big for an arena: the caller callocs it
+    }
+    aarena * a = iso->arena;
+    if (a == NULL || a->used + slot > a->capacity) {
+        a = __amlc_arena_new(iso);
+        if (a == NULL) return NULL;
+        iso->arena = a;
+    }
+    char * base = a->data + a->used;
+    a->used += slot;
+    a->live++;
+    aobject * obj = (aobject *) (base + AMLC_ARENA_ROUND(sizeof(aarena *)));
+    ((aarena **) obj)[-1] = a;
+    memset(obj, 0, size);
+    return obj;
+}
+
+void __amlc_arena_recycle(aisolate * const iso, aarena * const a) {
+    a->used = 0;
+    if (a == iso->arena) {
+        return;                 // stays current, refills from the start
+    }
+    if (iso->free_arena_count < AMLC_ARENA_KEEP_FREE) {
+        a->next_free = iso->free_arenas;
+        iso->free_arenas = a;
+        iso->free_arena_count++;
+        return;
+    }
+    // Above the keep limit: hand it back. Unlink from the isolate's list.
+    aarena ** link = &iso->arenas;
+    while (*link != NULL && *link != a) link = &(*link)->next;
+    if (*link == a) *link = a->next;
+    free(a);
+}
+
+void __amlc_free_object_in(aisolate * const iso, aobject * const obj) {
+    if (!obj->chunked) {
+        free(obj);
+        return;
+    }
+    aarena * a = ((aarena **) obj)[-1];
+    if (--a->live == 0) {
+        __amlc_arena_recycle(iso, a);
+    }
+}
+
+void __amlc_free_object(aobject * const obj) {
+    __amlc_free_object_in(__amlc_isolate(), obj);
+}
+
+void __amlc_arenas_free_all(aisolate * const iso) {
+    aarena * a = iso->arenas;
+    while (a != NULL) {
+        aarena * next = a->next;
+        free(a);
+        a = next;
+    }
+    iso->arenas = NULL;
+    iso->arena = NULL;
+    iso->free_arenas = NULL;
+    iso->free_arena_count = 0;
+}
+
+// ---- isolate lifecycle ----------------------------------------------------
+static aisolate * __amlc_main_isolate = NULL;
+
+static void __amlc_isolate_alloc_statics(aisolate * const iso) {
+    free(iso->statics);
+    iso->statics_count = __amlc_static_slot_count;
+    iso->statics = (property *) calloc(iso->statics_count > 0 ? iso->statics_count : 1, sizeof(property));
+    if (iso->statics == NULL) {
+        fprintf(stderr, "AmLang: out of memory creating an isolate\n");
+        abort();
+    }
+}
+
+static aisolate * __amlc_isolate_alloc(void) {
+    aisolate * iso = (aisolate *) calloc(1, sizeof(aisolate));
+    if (iso == NULL) {
+        fprintf(stderr, "AmLang: out of memory creating an isolate\n");
+        abort();
+    }
+    iso->mailbox = __amlc_mailbox_create();
+    if (iso->mailbox == NULL) {
+        fprintf(stderr, "AmLang: out of memory creating an isolate\n");
+        abort();
+    }
+    iso->handle_count = 1;
+    iso->stack_size = 4000 * 1024;
+    return iso;
+}
+
+// The main isolate exists before any class has registered (string constants
+// and annotations allocate during startup), so its statics are sized here,
+// once the generated startup has run every __register_class.
+void __amlc_isolate_statics_ready(void) {
+    __amlc_isolate_alloc_statics(__amlc_isolate());
+}
+
+void __amlc_isolate_enter(aisolate * const iso) {
+    __amlc_bind_isolate(iso);
+    __amlc_mailbox_bind(iso->mailbox);
+    iso->started = true;
+}
+
+void __amlc_isolate_boot_main(void) {
+    aisolate * iso = __amlc_isolate_alloc();
+    __amlc_main_isolate = iso;
+    __amlc_main_isolate_ptr = iso;
+    __amlc_isolate_enter(iso);
+}
+
+aisolate * __amlc_isolate_create(void) {
+    aisolate * iso = __amlc_isolate_alloc();
+    __amlc_isolate_alloc_statics(iso);
+    iso->parent = __amlc_isolate();
+    if (iso->parent != NULL) {
+        __amlc_isolate_retain(iso->parent);
+    }
+    return iso;
+}
+
+void __amlc_isolate_run_static_inits(void) {
+    for (unsigned int i = 0; i < __amlc_static_init_count; i++) {
+        function_result r = __amlc_static_init_table[i]();
+        if (r.exception != NULL) {
+            printf("Exception in a static initializer\n");
+            __decrease_reference_count(r.exception);
+        }
+    }
+}
+
+void __amlc_isolate_retain(aisolate * const iso) {
+    __amlc_global_lock();
+    iso->handle_count++;
+    __amlc_global_unlock();
+}
+
+static void __amlc_isolate_free(aisolate * const iso) {
+    // No handle points here any more and the thread (if it ever ran) is
+    // done, so nothing can post or read: drain what is left into the
+    // calling isolate and release it there.
+    for (;;) {
+        amessage * m = __amlc_mailbox_take(iso->mailbox, false);
+        if (m == NULL) break;
+        __amlc_message_discard(m);
+    }
+    if (iso->boot != NULL) {
+        __amlc_message_discard(iso->boot);
+        iso->boot = NULL;
+    }
+    __amlc_mailbox_destroy(iso->mailbox);
+    free(iso->statics);
+    free(iso->name);
+    free(iso->native);
+    aisolate * parent = iso->parent;
+    free(iso);
+    if (parent != NULL) {
+        __amlc_isolate_release(parent);
+    }
+}
+
+void __amlc_isolate_release(aisolate * const iso) {
+    __amlc_global_lock();
+    int n = --iso->handle_count;
+    __amlc_global_unlock();
+    if (n == 0) {
+        __amlc_isolate_free(iso);
+    }
+}
+
+void __amlc_isolate_teardown(aisolate * const iso) {
+    // Runs on iso's own thread, after the runnable returned. Mirrors the
+    // main program's exit sequence for this isolate's heap.
+    __amlc_mailbox_close(iso->mailbox);
+    for (;;) {
+        amessage * m = __amlc_mailbox_take(iso->mailbox, false);
+        if (m == NULL) break;
+        __amlc_message_discard(m);
+    }
+    __dereference_static_properties();
+    __mark_root_objects();
+    __sweep_unmarked_objects();
+    #ifdef TRACKOBJECTS
+    if (iso->allocation_count != 0) {
+        printf("Thread '%s' exited with %d objects still allocated\n", iso->name != NULL ? iso->name : "thread", iso->allocation_count);
+    }
+    #endif
+    free(iso->statics);
+    iso->statics = NULL;
+    iso->statics_count = 0;
+    __amlc_arenas_free_all(iso);
+    __amlc_global_lock();
+    iso->done = true;
+    __amlc_global_unlock();
+}
+
+// ---- deep copy ------------------------------------------------------------
+// Copies an object graph into fresh objects of the calling isolate. Shared
+// sub-objects and cycles are preserved through a src→dst table. Every
+// object comes back with ONE owned reference for the caller to place.
+typedef struct { aobject * src; aobject * dst; } __amlc_copy_pair;
+typedef struct {
+    __amlc_copy_pair * tab;
+    unsigned int cap;      // power of two
+    unsigned int count;
+    const char * failed_class;
+} __amlc_copy_ctx;
+
+static aobject * __amlc_copy_lookup(__amlc_copy_ctx * const ctx, aobject * const src) {
+    if (ctx->tab == NULL) return NULL;
+    unsigned int h = (unsigned int) (((unsigned long) src) >> 4) & (ctx->cap - 1);
+    for (unsigned int i = 0; i < ctx->cap; i++) {
+        __amlc_copy_pair * p = &ctx->tab[(h + i) & (ctx->cap - 1)];
+        if (p->src == NULL) return NULL;
+        if (p->src == src) return p->dst;
+    }
+    return NULL;
+}
+
+static void __amlc_copy_insert_raw(__amlc_copy_pair * const tab, unsigned int const cap, aobject * const src, aobject * const dst) {
+    unsigned int h = (unsigned int) (((unsigned long) src) >> 4) & (cap - 1);
+    for (unsigned int i = 0; i < cap; i++) {
+        __amlc_copy_pair * p = &tab[(h + i) & (cap - 1)];
+        if (p->src == NULL) { p->src = src; p->dst = dst; return; }
+    }
+}
+
+static void __amlc_copy_record(__amlc_copy_ctx * const ctx, aobject * const src, aobject * const dst) {
+    if (ctx->tab == NULL || (ctx->count + 1) * 2 > ctx->cap) {
+        unsigned int ncap = ctx->cap == 0 ? 64 : ctx->cap * 2;
+        __amlc_copy_pair * ntab = (__amlc_copy_pair *) calloc(ncap, sizeof(__amlc_copy_pair));
+        if (ntab == NULL) { ctx->failed_class = "(out of memory)"; return; }
+        for (unsigned int i = 0; i < ctx->cap; i++) {
+            if (ctx->tab[i].src != NULL) __amlc_copy_insert_raw(ntab, ncap, ctx->tab[i].src, ctx->tab[i].dst);
+        }
+        free(ctx->tab);
+        ctx->tab = ntab;
+        ctx->cap = ncap;
+    }
+    __amlc_copy_insert_raw(ctx->tab, ctx->cap, src, dst);
+    ctx->count++;
+}
+
+static aobject * __amlc_copy_object(__amlc_copy_ctx * const ctx, aobject * const src) {
+    if (src == NULL || ctx->failed_class != NULL) return NULL;
+    aobject * found = __amlc_copy_lookup(ctx, src);
+    if (found != NULL) {
+        __increase_reference_count(found);
+        return found;
+    }
+    aclass * const cls = src->class_ptr;
+    aobject * dst = NULL;
+
+    if (cls->statics->type == interface) {
+        // Interface reference: copy the implementation, re-wrap it.
+        aobject * impl = __amlc_copy_object(ctx, src->object_properties.iface_reference.implementation_object);
+        if (impl == NULL) return NULL;
+        dst = __allocate_iface_object(cls, impl);   // takes its own reference on impl
+        __decrease_reference_count(impl);
+        if (dst == NULL) { ctx->failed_class = "(out of memory)"; return NULL; }
+        __amlc_copy_record(ctx, src, dst);
+        return dst;
+    }
+
+    if (cls->copy != NULL) {
+        // Sendable native class: its hook clones the native payload.
+        dst = ((__amlc_native_copy_T) cls->copy)(src, ctx);
+        if (dst == NULL) {
+            if (ctx->failed_class == NULL) ctx->failed_class = cls->name;
+            return NULL;
+        }
+        if (__amlc_copy_lookup(ctx, src) == NULL) __amlc_copy_record(ctx, src, dst);
+        return dst;
+    }
+
+    if (cls->release != NULL) {
+        // A native class that did not opt in: it owns handles the runtime
+        // cannot clone (files, sockets, ...).
+        ctx->failed_class = cls->name;
+        return NULL;
+    }
+
+    // Plain class: allocate, then copy the slots.
+    dst = __allocate_object_with_extra_size(cls, cls->extra_size);
+    if (dst == NULL) { ctx->failed_class = "(out of memory)"; return NULL; }
+    __amlc_copy_record(ctx, src, dst);
+    if (cls->extra_size > 0) {
+        size_t off = sizeof(aobject) + sizeof(property) * cls->properties_count;
+        memcpy((char *) dst + off, (char *) src + off, cls->extra_size);
+    }
+    if (__is_primitive(src->object_properties.class_object_properties.object_data)) {
+        dst->object_properties.class_object_properties.object_data = src->object_properties.class_object_properties.object_data;
+    }
+    for (unsigned int i = 0; i < cls->properties_count; i++) {
+        nullable_value const nv = src->object_properties.class_object_properties.properties[i].nullable_value;
+        property * const slot = &dst->object_properties.class_object_properties.properties[i];
+        if (__is_primitive(nv) || nv.value.object_value == NULL) {
+            slot->nullable_value = nv;
+            continue;
+        }
+        aobject * child = __amlc_copy_object(ctx, nv.value.object_value);
+        if (child == NULL) return NULL;   // failed (partial graph is released by the caller)
+        slot->nullable_value.flags = 0;
+        slot->nullable_value.value.object_value = child;
+        __increase_property_reference_count(child);
+        __decrease_reference_count(child);
+    }
+    return dst;
+}
+
+aobject * __amlc_copy_child(void * const copy_ctx, aobject * const src) {
+    return __amlc_copy_object((__amlc_copy_ctx *) copy_ctx, src);
+}
+
+// Splice `chain` (a detached first_object list) in front of the calling
+// isolate's list.
+static void __amlc_splice_chain(aobject * const chain) {
+    if (chain == NULL) return;
+    aisolate * const iso = __amlc_isolate();
+    aobject * tail = chain;
+    while (tail->next != NULL) tail = tail->next;
+    tail->next = iso->first_object;
+    if (iso->first_object != NULL) iso->first_object->prev = tail;
+    chain->prev = NULL;
+    iso->first_object = chain;
+}
+
+amessage * __amlc_message_create(aobject * const payload, function_result * const result) {
+    aisolate * const iso = __amlc_isolate();
+    // Stage: every property-referenced object the copy creates lands on an
+    // empty list that becomes the message's chain, so the receiver can
+    // adopt the whole graph in O(1) and the sender's own list is untouched.
+    aobject * const saved_first = iso->first_object;
+    int const saved_count = iso->allocation_count;
+    iso->first_object = NULL;
+    // The copies belong to another isolate: never bump-allocate them from
+    // this isolate's fast-lane arena, whatever block we are inside.
+    int const saved_fast_depth = iso->fast_depth;
+    iso->fast_depth = 0;
+
+    __amlc_copy_ctx ctx = { .tab = NULL, .cap = 0, .count = 0, .failed_class = NULL };
+    aobject * copy = __amlc_copy_object(&ctx, payload);
+    free(ctx.tab);
+    iso->fast_depth = saved_fast_depth;
+
+    if (ctx.failed_class != NULL || copy == NULL) {
+        // Undo: put the partial chain back where a release can reach it,
+        // drop the root, report.
+        aobject * chain = iso->first_object;
+        iso->first_object = saved_first;
+        __amlc_splice_chain(chain);
+        if (copy != NULL) __decrease_reference_count(copy);
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Object of type %s is not sendable between threads (native class without a copy hook)",
+                 ctx.failed_class != NULL ? ctx.failed_class : (payload != NULL ? payload->class_ptr->name : "null"));
+        __throw_simple_exception_copy(msg, "in Thread.send", result);
+        return NULL;
+    }
+
+    amessage * m = (amessage *) malloc(sizeof(amessage));
+    if (m == NULL) {
+        aobject * chain = iso->first_object;
+        iso->first_object = saved_first;
+        __amlc_splice_chain(chain);
+        __decrease_reference_count(copy);
+        __throw_simple_exception("Out of memory while sending a message", "in Thread.send", result);
+        return NULL;
+    }
+    m->next = NULL;
+    m->payload = copy;
+    m->chain = iso->first_object;
+    iso->first_object = saved_first;
+    // The copies now belong to the message, not to this isolate's count;
+    // the receiver adds them back when it opens the message.
+    m->count = iso->allocation_count - saved_count;
+    iso->allocation_count = saved_count;
+    return m;
+}
+
+aobject * __amlc_message_open(amessage * const msg) {
+    __amlc_splice_chain(msg->chain);
+    __amlc_isolate()->allocation_count += msg->count;
+    aobject * p = msg->payload;
+    free(msg);
+    return p;
+}
+
+void __amlc_message_discard(amessage * const msg) {
+    aobject * p = __amlc_message_open(msg);
+    __decrease_reference_count(p);
+}
+
+bool __amlc_send(aisolate * const target, aobject * const payload, function_result * const result) {
+    if (payload == NULL) {
+        __throw_simple_exception("Thread.send: the message is null", "in Thread.send", result);
+        return false;
+    }
+    amessage * m = __amlc_message_create(payload, result);
+    if (m == NULL) return false;
+    if (!__amlc_mailbox_post(target->mailbox, m)) {
+        // The receiver is gone: the message dies here, quietly.
+        __amlc_message_discard(m);
+    }
+    return true;
+}
+
+aobject * __amlc_receive(bool const wait) {
+    amessage * m = __amlc_mailbox_take(__amlc_isolate()->mailbox, wait);
+    if (m == NULL) return NULL;
+    return __amlc_message_open(m);
 }

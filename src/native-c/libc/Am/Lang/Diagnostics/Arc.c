@@ -9,10 +9,6 @@
 #include <unistd.h>
 #endif
 
-// Diagnostic counters defined in core.c.
-extern __amlc_atomic_int __allocation_count; // live objects (allocs - deallocs); atomic under BRC
-extern long __wrapper_create_count;   // cross-thread wrappers created
-extern long __wrapper_dealloc_count;  // cross-thread wrappers freed
 
 function_result Am_Lang_Diagnostics_Arc__native_init_0(aobject * const this)
 {
@@ -47,20 +43,20 @@ __exit: ;
 	return __result;
 };
 
-// Total number of objects ever allocated (monotonic; never decreases).
+// Live objects (allocations minus deallocations) of the calling isolate.
 function_result Am_Lang_Diagnostics_Arc_getAllocationCount_0()
 {
 	function_result __result = { .has_return_value = true };
-	__result.return_value.value.long_value = (long) __allocation_count;
+	__result.return_value.value.long_value = (long) __amlc_isolate()->allocation_count;
 	return __result;
 };
 
-// Number of cross-thread wrappers currently alive (created - freed). If this
-// keeps climbing, wrappers are leaking.
+// Cross-thread wrappers no longer exist (isolates share nothing); kept for
+// source compatibility and always 0.
 function_result Am_Lang_Diagnostics_Arc_getLiveWrapperCount_0()
 {
 	function_result __result = { .has_return_value = true };
-	__result.return_value.value.long_value = __wrapper_create_count - __wrapper_dealloc_count;
+	__result.return_value.value.long_value = 0;
 	return __result;
 };
 

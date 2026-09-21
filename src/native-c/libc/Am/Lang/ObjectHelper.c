@@ -79,18 +79,7 @@ static void __print_property_nv(unsigned int index, const nullable_value nv)
 			return;
 		}
 		printf(" object=%p", (void *) ov);
-		if (ov->class_ptr == NULL) {
-			// A cross-thread wrapper: class_ptr is NULL and the real sits
-			// in the dedicated `wrapped_object` field (deliberately NOT a
-			// view of the object_properties union -- see core.h).
-			aobject * real = ov->wrapped_object;
-			printf(" (wrapper -> %p", (void *) real);
-			if (real != NULL && real->class_ptr != NULL && real->class_ptr->name != NULL) {
-				printf(" %s", real->class_ptr->name);
-			}
-			printf(")");
-			ov = real;
-		} else if (ov->class_ptr->name != NULL) {
+		if (ov->class_ptr != NULL && ov->class_ptr->name != NULL) {
 			printf(" %s", ov->class_ptr->name);
 		}
 		if (ov != NULL && ov->class_ptr != NULL) {
@@ -153,7 +142,7 @@ function_result Am_Lang_ObjectHelper_printDebug_0(aobject * o)
 		__increase_reference_count(o);
 	}
 	{
-		aobject * subject = __unwrap(o);
+		aobject * subject = o;
 		printf("==========================\n");
 		printf("Object info\n");
 		printf("Ptr: %p\n", (void *) o);
@@ -207,7 +196,7 @@ function_result Am_Lang_ObjectHelper_watchProperty_0(aobject * o, int index)
 		__increase_reference_count(o);
 	}
 	{
-		aobject * subject = __unwrap(o);
+		aobject * subject = o;
 		if (subject == NULL || subject->class_ptr == NULL) {
 			printf("[watch] refusing to arm: no class\n");
 			goto __exit;

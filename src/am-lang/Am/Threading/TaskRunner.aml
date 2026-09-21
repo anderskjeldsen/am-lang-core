@@ -1,16 +1,25 @@
 namespace Am.Threading {
 
     /**
-     * A single worker thread that drains a queue of Tasks in submission order. TaskScheduler owns
-     * one per registered thread type; applications schedule work through TaskScheduler.schedule()
-     * rather than touching this class. The thread starts on the first start() call and runs until
-     * stop() is requested. Tasks are appended and popped under a mutex, but the lock is released
-     * before a task runs, so a slow task never blocks the code submitting new ones.
-     * While the queue is empty the worker sleeps briefly and checks again — AmLang has no
-     * condition-variable primitive yet — which caps the delay between scheduling a task and it
-     * starting at that poll interval, currently 20 ms.
+     * The message that tells a TaskRunner's worker to leave its loop. Sent by TaskRunner.stop().
      */
-    class TaskRunner : Runnable {
+    class TaskStop {
+        import Am.Lang
+    }
+
+    /**
+     * A single worker thread that runs Tasks in submission order. TaskScheduler owns one per
+     * registered thread type; applications schedule work through TaskScheduler.schedule() rather
+     * than touching this class. Under the share-nothing thread model the runner IS its mailbox:
+     * submit() sends the Task to the worker thread, which blocks in Thread.receive() until one
+     * arrives and runs it on its own heap. There is no queue or lock on this side — the mailbox is
+     * the queue — and no idle polling: an empty mailbox parks the worker until the next send.
+     * A Task travels as a deep copy, so everything the task's lambda captures must be sendable
+     * (plain objects, strings, collections, Thread handles); a lambda that captures a native
+     * handle makes submit() throw.
+     * @param mainThread The thread that tasks scheduled to TaskThreadType.Main go to
+     */
+    class TaskRunner(private var mainThread: Thread) : Runnable {
         import Am.Lang
         import Am.Collections
 
@@ -27,62 +36,22 @@ namespace Am.Threading {
         var priority: Int = 0
 
         /**
-         * Pending tasks, oldest first. Only touched while holding the mutex.
-         */
-        private var queue: List<Task> = new List<Task>()
-        /**
-         * Guards the queue against concurrent submission and polling.
-         */
-        private var mutex: Mutex = new Mutex()
-        /**
-         * Set by stop() and noticed by the worker loop on its next pass.
-         */
-        private var stopRequested: Bool
-        /**
-         * Set by the worker as the last thing it does before returning, so shutdown can distinguish a
-         * runner that has genuinely left its loop from one still inside `task.execute()`. Read without
-         * the mutex: a single Bool write the reader only ever polls for `true`.
-         */
-        private var finished: Bool = false
-        /**
-         * True while the worker is inside `task.execute()`. Shutdown reports this so a stuck exit
-         * names the runner AND says whether it is mid-task (the case that actually races teardown) or
-         * merely between polls.
-         */
-        private var busy: Bool = false
-        /**
          * The worker thread, created on start() and never recreated. Nullable so the "not started yet"
          * state is honest; getThread() assumes it is only called after start().
          */
         private var thread: Thread? = null
 
         /**
-         * How long the worker sleeps between polls while its queue is empty. 20 ms is short enough to
-         * feel immediate for UI-driven work without burning CPU on an idle worker.
-         */
-        private static var IDLE_SLEEP_MS: Long = 20L
-
-        init {
-            this.stopRequested = false
-        }
-
-        /**
-         * Appends a task to this runner's queue. Safe to call from any thread; the mutex serialises it
-         * against the worker.
-         * @param task The task to queue
+         * Sends a task to this runner's worker. Safe to call from any thread; the mailbox serialises
+         * delivery. Throws when the task captures something that is not sendable.
+         * @param task The task to run
          */
         fun submit(task: Task) {
-            this.mutex.lock()
-            try {
-                this.queue.add(task)
-            } finally {
-                this.mutex.unlock()
-            }
+            this.thread.send(task)
         }
 
         /**
-         * Spawns the worker thread. Call exactly once per runner and before any submit(); TaskScheduler
-         * guarantees this by creating and starting each runner inside a critical section.
+         * Spawns the worker thread. Call exactly once per runner and before any submit().
          */
         fun start() {
             var t = new Thread(this as Runnable)
@@ -97,12 +66,12 @@ namespace Am.Threading {
         }
 
         /**
-         * Asks the worker to stop. It finishes the task it is running, if any, abandons the rest of the
-         * queue, and leaves its loop within one poll interval. This does not wait for the thread —
-         * join it through getThread() when you need to be sure it has finished.
+         * Asks the worker to stop: it finishes the tasks already in its mailbox ahead of the stop
+         * message, then leaves its loop. This does not wait for the thread — join it through
+         * getThread() when you need to be sure it has finished.
          */
         fun stop() {
-            this.stopRequested = true
+            this.thread.send(new TaskStop())
         }
 
         /**
@@ -114,61 +83,8 @@ namespace Am.Threading {
         }
 
         /**
-         * The worker loop: take one task, run it, repeat, sleeping when the queue is empty. The mutex is
-         * not held while a task runs, which is the whole point of the queue — a slow task delays the
-         * tasks behind it but never the code submitting them.
-         */
-        override fun run() {
-            while (!this.stopRequested) {
-                var task = this.poll()
-                if (task != null) {
-                    this.busy = true
-                    task.execute()
-                    this.busy = false
-                } else {
-                    Thread.sleep(TaskRunner.IDLE_SLEEP_MS)
-                }
-            }
-            // Last act: tell shutdown this worker is out of the loop and will
-            // touch no more shared state. stopAll waits for this rather than
-            // sleeping a fixed 50 ms and hoping.
-            this.finished = true
-        }
-
-        /**
-         * True once the worker has left its loop for good.
-         * @return Whether this runner's thread has finished
-         */
-        fun hasFinished(): Bool {
-            return this.finished
-        }
-
-        /**
-         * True when the worker is currently running a task.
-         * @return Whether a task is executing right now
-         */
-        fun isBusy(): Bool {
-            return this.busy
-        }
-
-        /**
-         * How many tasks are still queued behind the running one.
-         * @return Queue depth
-         */
-        fun pendingCount(): Int {
-            var n = 0
-            this.mutex.lock()
-            try {
-                n = this.queue.getSize()
-            } finally {
-                this.mutex.unlock()
-            }
-            return n
-        }
-
-        /**
-         * True when the runner was never started, so shutdown does not wait on a thread that will never
-         * set `finished`.
+         * True when the runner was never started, so shutdown does not join a thread that does not
+         * exist.
          * @return Whether a worker thread exists
          */
         fun wasStarted(): Bool {
@@ -176,21 +92,23 @@ namespace Am.Threading {
         }
 
         /**
-         * Removes and returns the oldest queued task, under the mutex.
-         * @return The next task, or null when the queue is empty
+         * The worker loop, running on the worker's own copy of this runner: receive a message, run it
+         * if it is a Task, stop on a TaskStop. The first thing it does is tell this thread's own
+         * TaskScheduler where the main thread is, so tasks the worker schedules to
+         * TaskThreadType.Main reach it.
          */
-        private fun poll(): Task? {
-            var task: Task? = null
-            this.mutex.lock()
-            try {
-                if (this.queue.getSize() > 0) {
-                    task = this.queue.get(0)
-                    this.queue.removeAt(0)
+        override fun run() {
+            TaskScheduler.attachMain(this.mainThread)
+            var running = true
+            while (running) {
+                var m = Thread.receive()
+                if (m is TaskStop) {
+                    running = false
+                } else if (m is Task) {
+                    var task = m as Task
+                    task.execute()
                 }
-            } finally {
-                this.mutex.unlock()
             }
-            return task
         }
     }
 }

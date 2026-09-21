@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <string.h>
 // Generated class header: carries the __DIRECT_NOTHROW_ABI marker macros
 // that select vtable-dispatch consumption ABI below. Must be included
 // here (not relied on from the including TU) — startup.c includes this
@@ -46,19 +47,17 @@ static inline int __is_suspicious_object_ptr(aobject *v) {
     return 1;
 }
 
-// Instrumented setter for the global object-list head. Quiet on normal
-// writes — only logs when the new value matches the corruption
-// fingerprint we're hunting. The site label says which of the three
-// active __first_object writers (increase / decrease / detach) saw
-// the bad value, so the chain back to the caller is one greppable
-// hop away.
+// Instrumented setter for the calling isolate's object-list head. Quiet on
+// normal writes — only logs when the new value matches the corruption
+// fingerprint we're hunting. The site label says which writer (increase /
+// decrease / detach) saw the bad value.
 static inline void __set_first_object(aobject *v, const char *site) {
     if (__is_suspicious_object_ptr(v)) {
         printf("[firstobj.set] SUSPICIOUS site=%s value=%p\n", site, (void*)v);
         fflush(stdout);
         exit(0);
     }
-    __first_object = v;
+    __amlc_isolate()->first_object = v;
 }
 
 static inline void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null) {
@@ -84,7 +83,72 @@ static inline bool __any_has_flags(const nullable_value *nv, unsigned short flag
     return (nv->flags & flags) == flags;
 }
 
+// `new` of a class whose every property slot the generated code stores
+// itself (see the compiler's inline defaults): the fast lane hands out an
+// arena block with only the HEADER initialised — no memset, which at a
+// runtime-variable size is a library call and was the largest single cost
+// of an allocation-heavy loop. Outside the fast lane it is a plain calloc.
+static inline aobject * __allocate_object_prepared(aclass * const __class) {
+#if !defined(DEBUG) && !defined(TRACKOBJECTS) && !defined(AMLC_WATCH)
+    aisolate * const __iso = __amlc_isolate();
+    if (__iso->fast_depth > 0) {
+        aarena * const __a = __iso->arena;
+        size_t const __size = sizeof(aobject) + sizeof(property) * __class->properties_count;
+        size_t const __slot = AMLC_ARENA_ROUND(sizeof(aarena *)) + AMLC_ARENA_ROUND(__size);
+        if (__a != NULL && __a->used + __slot <= __a->capacity) {
+            char * const __base = __a->data + __a->used;
+            __a->used += __slot;
+            __a->live++;
+            aobject * const __obj = (aobject *) (__base + AMLC_ARENA_ROUND(sizeof(aarena *)));
+            ((aarena **) __obj)[-1] = __a;
+            __iso->allocation_count++;
+            __obj->class_ptr = __class;
+            __obj->reference_count = 1;
+            __obj->property_reference_count = 0;
+            __obj->object_properties.class_object_properties.object_data = (nullable_value) { .flags = 0, .value = (value) { .object_value = NULL } };
+            __obj->object_properties.class_object_properties.properties =
+                (__class->statics->type == class && __class->properties_count > 0) ? (property *) ((char *) __obj + sizeof(aobject)) : NULL;
+            __obj->marked = false;
+            __obj->pending_deallocation = false;
+            __obj->immortal = false;
+            __obj->chunked = true;
+            __obj->prev = NULL;
+            __obj->next = NULL;
+            return __obj;
+        }
+    }
+#endif
+    return __allocate_object_with_extra_size(__class, 0);
+}
+
 static inline aobject * __allocate_object(aclass * const __class) {
+#if !defined(DEBUG) && !defined(TRACKOBJECTS) && !defined(AMLC_WATCH)
+    // Fast lane, inline: bump the current arena without a call. Falls back
+    // to the full allocator when there is no room (which also starts the
+    // next arena) or outside a `fast { }` block.
+    aisolate * const __iso = __amlc_isolate();
+    if (__iso->fast_depth > 0) {
+        aarena * const __a = __iso->arena;
+        size_t const __size = sizeof(aobject) + sizeof(property) * __class->properties_count;
+        size_t const __slot = AMLC_ARENA_ROUND(sizeof(aarena *)) + AMLC_ARENA_ROUND(__size);
+        if (__a != NULL && __a->used + __slot <= __a->capacity) {
+            char * const __base = __a->data + __a->used;
+            __a->used += __slot;
+            __a->live++;
+            aobject * const __obj = (aobject *) (__base + AMLC_ARENA_ROUND(sizeof(aarena *)));
+            ((aarena **) __obj)[-1] = __a;
+            memset(__obj, 0, __size);
+            __iso->allocation_count++;
+            if (__class->statics->type == class && __class->properties_count > 0) {
+                __obj->object_properties.class_object_properties.properties = (property *) ((char *) __obj + sizeof(aobject));
+            }
+            __obj->class_ptr = __class;
+            __obj->reference_count = 1;
+            __obj->chunked = true;
+            return __obj;
+        }
+    }
+#endif
     return __allocate_object_with_extra_size(__class, 0);
 }
 
@@ -101,68 +165,20 @@ static inline aobject * __allocate_object(aclass * const __class) {
 #define __AMLC_ALWAYS_INLINE static inline
 #endif
 
-// Resolve an aobject* through a (possibly-)wrapper. A wrapper has
-// `class_ptr == NULL` and stores the real aobject in its
-// object_wrapper variant.
-//
-// Runtime flag `__amlc_any_wrappers_alive` gates the real ternary.
-// Programs that never mint wrappers pay one load + branch per
-// property read — and `-O3` is smart enough to hoist the load out of
-// inner loops so it's nearly free. Programs that do mint wrappers
-// take the wrapper-following branch only on the wrappers themselves.
-//
-// The flag is set in `__create_wrapper` (see core.c); never cleared.
-//
-// HISTORY: this used to be `#define __unwrap(__obj) (__obj)` at -O0
-// (gated on `__OPTIMIZE__`) out of concern for per-call-site stack
-// temps in huge generated functions. That made every cross-thread
-// program built without `-O` corrupt the heap: `__wrap_if_foreign`
-// still minted wrappers at -O0, but nothing followed them, so array
-// accesses computed `&wrapper[1]` and read/wrote past the end of the
-// wrapper allocation (SIGSEGV inside malloc a few hundred allocations
-// later). The macro is a pure pointer ternary — no compound literals,
-// no statement expressions — so it does not reserve per-call-site
-// stack even at -O0; the multi-MB-frame problem belonged to the old
-// `static inline` helpers, not to this macro. Keep wrap and unwrap
-// active in ALL builds so they can never disagree again.
-#define __unwrap(__obj) \
-    (__amlc_any_wrappers_alive \
-        ? ((__obj) == NULL ? NULL \
-            : ((__obj)->class_ptr != NULL \
-                ? (__obj) \
-                : (__obj)->wrapped_object)) \
-        : (__obj))
-
-// Read a property's stored nullable_value, transparently unwrapping if
-// `__obj` is a cross-thread wrapper. Centralised so the wrapper rule
-// lives in one place — the codegen emits this at property-read sites
-// instead of chasing `__obj->object_properties.class_object_properties.properties[…]`
-// directly, which would read garbage off a wrapper's union variant.
-//
-// Implemented as a macro rather than `static inline` because at gcc -O0
-// (the default for am-lang builds), even `always_inline` wraps the
-// return in a stack-allocated `nullable_value` temporary per call site.
-// In huge functions with thousands of property reads (e.g.
-// `JsBytecodeVm.run` — 83k lines, many reads per opcode) those 12-byte
-// temps accumulate into multi-MB frames and overflow the C stack on
-// the JS interpreter's recursive eval. A macro is pure text
-// substitution: same assembly as the original direct chain.
+// Read a property's stored nullable_value. A macro rather than
+// `static inline` because at gcc -O0 (the default for am-lang builds), even
+// `always_inline` wraps the return in a stack-allocated `nullable_value`
+// temporary per call site. In huge functions with thousands of property
+// reads (e.g. `JsBytecodeVm.run` — 83k lines, many reads per opcode) those
+// 12-byte temps accumulate into multi-MB frames and overflow the C stack on
+// the JS interpreter's recursive eval. A macro is pure text substitution.
 #define __get_property_nv(__obj, __index) \
-    (__unwrap(__obj)->object_properties.class_object_properties.properties[__index].nullable_value)
+    ((__obj)->object_properties.class_object_properties.properties[__index].nullable_value)
 
 // Pointer form — needed when codegen wants the slot's address rather
 // than its value. Same macro rationale as above.
 #define __get_property_nv_ptr(__obj, __index) \
-    (&__unwrap(__obj)->object_properties.class_object_properties.properties[__index].nullable_value)
-
-// Wrapper finalizer — invoked when a wrapper aobject's own
-// reference_count reaches zero. Unsubscribes the wrapper from the
-// real's `first_object_wrapper` list under the shared mutex, decs the
-// real's reference_count by 1 (this thread was holding one ref on the
-// real on behalf of the wrapper), and frees the wrapper struct. If
-// the real's count subsequently reaches zero, the standard deallocator
-// runs recursively.
-void __deallocate_wrapper(aobject * const __wrapper);
+    (&(__obj)->object_properties.class_object_properties.properties[__index].nullable_value)
 
 static inline void __decrease_reference_count(aobject * const __obj) {
     if ( __obj != NULL) {
@@ -170,151 +186,39 @@ static inline void __decrease_reference_count(aobject * const __obj) {
         __print_memory_header(__obj, "Decrease reference count");
         #endif
 
-        // Thread-safe ARC (BRC): a non-owner thread releases via the atomic
-        // foreign counter, never the owner-local `reference_count`. The
-        // decrement + free-decision run UNDER the shared lock so they linearise
-        // against the owner's rc==0 check — otherwise the owner could observe
-        // foreign_reference_count==0 and free the object in the window between a
-        // lock-free decrement and this coordination read (use-after-free).
-        // (Foreign *increments* stay lock-free: you can only retain through an
-        // already-live reference, which itself pins the object.) Gated on
-        // __amlc_multithreaded so single-threaded programs skip __current_thread().
-#if AMLC_ARC_STRATEGY != AMLC_ARC_STRATEGY_ATOMIC
-        if (__amlc_multithreaded && __obj->owner_thread != __current_thread()) {
-            __arc_shared_lock();
-            int __after = __amlc_atomic_fetch_sub(&__obj->foreign_reference_count, 1) - 1;
-            bool __destroy_foreign = false;
-            if (__after == 0
-                    && __obj->owner_gone
-                    && __obj->property_reference_count == 0
-                    && __obj->first_object_wrapper == NULL
-                    && !__obj->destruction_claimed) {
-                __obj->destruction_claimed = true;
-                __destroy_foreign = true;
-            }
-            __arc_shared_unlock();
-            if (__destroy_foreign) {
-                __deallocate_object(__obj);
-            }
-            return;
-        }
-#endif
-
-        // ATOMIC: every thread decrements the SAME counter, atomically, with
-        // no owner test — one instruction. Step one of the collapse keeps the
-        // existing end-of-life predicate below (propref / wrapper list), which
-        // is only consulted on the RARE zero transition; step two (making
-        // proprefs and wrappers hold ordinary counted references) is what lets
-        // the predicate — and the lock with it — disappear entirely.
-        // The zero transition must come from the DECREMENT ITSELF (the
-        // instruction's own Z flag), never from re-reading the counter
-        // afterwards: with one shared counter another thread can change it
-        // between the two, and then either nobody frees (leak) or two
-        // threads both believe they hit zero (double free).
-#if AMLC_ARC_STRATEGY == AMLC_ARC_STRATEGY_ATOMIC
-        bool __amlc_hit_zero = __amlc_arc_dec_is_zero(&__obj->reference_count);
-#else
         __obj->reference_count--;
-        bool __amlc_hit_zero = (__obj->reference_count == 0);
-#endif
         #if defined(DEBUG) && defined(ARCLOG)
         #ifdef CONDLOG
         if (__conditional_logging_on) {
         #endif
-        // Wrapper aobjects have NULL class_ptr — guard the debug print
-        // so it doesn't NPE when chasing class_ptr->name on a wrapper.
-        if (__obj->class_ptr != NULL) {
-            printf("decrease reference count of object of type %s (address: %p, object_id: %d), property reference count %d, new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->property_reference_count, __obj->reference_count);
-        } else {
-            printf("decrease reference count of wrapper (address: %p, wrapped: %p), new reference count %d\n", __obj, __obj->wrapped_object, __obj->reference_count);
-        }
+        printf("decrease reference count of object of type %s (address: %p, object_id: %d), property reference count %d, new reference count %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->property_reference_count, __obj->reference_count);
         #ifdef CONDLOG
         }
         #endif
         #endif
 
-        if (__amlc_hit_zero) {
-            // Owner reads its OWN reference_count above (own write,
-            // sequentially consistent — no lock needed). We do NOT
-            // touch property_reference_count until inside the lock —
-            // it's mutated by foreign threads, so an unlocked read
-            // can be stale and miss the destruction trigger.
-            if (__obj->class_ptr == NULL) {
-                // Wrappers go through their own finalizer — they don't
-                // have class_ptr->release, just a subscription entry to
-                // unlink. Wrapper's reference_count is purely per-thread,
-                // no other thread mutates it, so no lock needed here —
-                // BUT propref IS bumped by every cross-thread array/
-                // collection store (worker writes wrapper into main's
-                // mainQueue → propref=1; main wraps Task and stores in
-                // drained → propref=1). If we destroy on rc=0 alone the
-                // wrapper dies the moment its local goes out of scope
-                // and the now-stale items_a[i] becomes a UAF; the next
-                // List.get returns a freed pointer, which __wrap_if_foreign
-                // dereferences and either self-loops (memory zeroed) or
-                // segfaults (memory reused). Same rc==0 ∧ propref==0
-                // guard as the real-aobject path below, just no Stage 9
-                // wrapper-subscription dance — wrappers themselves are
-                // never subscribed to by other wrappers.
-                if (__obj->property_reference_count == 0) {
-                    __deallocate_wrapper(__obj);
+        // An object dies when nothing holds it: no local/return references
+        // and no property holder. If a property still holds it, the eventual
+        // property release (or the exit-time cycle sweep) finishes it.
+        if (__obj->reference_count == 0 && __obj->property_reference_count == 0) {
+#if !defined(DEBUG) && !defined(TRACKOBJECTS) && !defined(AMLC_WATCH)
+            // Inline death for the trivial case: a plain class with no
+            // release hook and no object slots that lives in a fast-lane
+            // arena needs no detach and no free — just the arena count.
+            aclass * const __cls = __obj->class_ptr;
+            if (__obj->chunked && !__obj->pending_deallocation
+                    && __cls->release == NULL && __cls->object_property_count == 0 && __cls->statics->type == class) {
+                aisolate * const __iso = __amlc_isolate();
+                __iso->allocation_count--;
+                aarena * const __a = ((aarena **) __obj)[-1];
+                if (--__a->live == 0) {
+                    __amlc_arena_recycle(__iso, __a);
                 }
                 return;
             }
-            // Real-aobject end-of-life protocol (Stage 9):
-            //   1. Take the shared lock — coordination point with
-            //      foreign-thread propref-dec and wrapper-death paths.
-            //   2. If property_reference_count > 0, the object is
-            //      still alive via property holders. Do nothing —
-            //      eventual propref-dec will trigger destruction.
-            //   3. If property_reference_count == 0 and there are no
-            //      foreign wrappers, claim destruction and run the
-            //      destructor outside the lock.
-            //   4. If property_reference_count == 0 but foreign
-            //      wrappers exist, set `owner_gone = true` and leave
-            //      the object alive — the last wrapper to die will
-            //      finalize. Invariant: owner_gone implies the
-            //      object's only liveness is via the wrapper list.
-            //      `__increase_property_reference_count` clears
-            //      owner_gone if propref grows back, so wrappers can
-            //      safely consult owner_gone alone (without re-checking
-            //      propref) on their own death path.
-            __arc_shared_lock_mt();
-            bool destroy_now = false;
-            if (__obj->property_reference_count == 0) {
-                // BRC: "foreign holders remain?" is `foreign_reference_count != 0`
-                // (read under the same lock foreign decrements take). No foreign
-                // holders and no propref → claim & destroy; otherwise set
-                // owner_gone and let the last foreign release finalise.
-                if (__obj->first_object_wrapper == NULL
-                        && __amlc_atomic_load(&__obj->foreign_reference_count) == 0) {
-                    if (!__obj->destruction_claimed) {
-                        __obj->destruction_claimed = true;
-                        destroy_now = true;
-                    }
-                } else {
-                    __obj->owner_gone = true;
-                }
-            }
-            __arc_shared_unlock_mt();
-            if (destroy_now) {
-                __deallocate_object(__obj);
-            }
+#endif
+            __deallocate_object(__obj);
         }
-    }
-}
-
-// DEPRECATED — no longer emitted by the compiler; kept only so stale
-// generated C from older compiler builds still links. It probed
-// `class_ptr` on a possibly-BORROWED pointer, which is a use-after-free
-// when the borrowed real died before scope exit (e.g. HashMap.set reads
-// `this.keys`, resize overwrites the property, old array freed — the
-// probe then read freed memory and could double-release whatever the
-// allocator had reused it for). Slot reads now take OWNED handles via
-// `__retain_slot_read` and release with a plain dec.
-static inline void __release_if_wrapper(aobject * const __obj) {
-    if (__obj != NULL && __obj->class_ptr == NULL) {
-        __decrease_reference_count(__obj);
     }
 }
 
@@ -322,95 +226,22 @@ static inline void __increase_reference_count(aobject * const __obj) {
     #ifdef DEBUG
     __print_memory_header(__obj, "Increase reference count");
     #endif
-
-    // Thread-safe ARC (BRC): a non-owner thread bumps the foreign counter
-    // instead of the owner-local `reference_count`, so the two never race.
-    // The bump runs UNDER the shared lock — the same lock every free decision
-    // and foreign release takes — so a foreign retain can never interleave
-    // with a concurrent "all counters zero → destroy" check (the retain either
-    // lands before the check, keeping the object alive, or after a claim that
-    // was only legal when no counted reference to retain FROM existed). On
-    // AmigaOS the lock is an inline Forbid/Permit. Gated on
-    // __amlc_multithreaded so single-threaded programs skip __current_thread().
-#if AMLC_ARC_STRATEGY == AMLC_ARC_STRATEGY_ATOMIC
-    // ATOMIC strategy (uniprocessor): ONE counter for every thread. The bias
-    // has nothing left to buy here — on 68k `addq.l #1,(rc,a0)` IS both the
-    // plain increment and the atomic one (a task switch lands on instruction
-    // boundaries, so a single-instruction memory RMW cannot be split), so the
-    // owner test was pure overhead: a `__amlc_multithreaded` load, a branch,
-    // an owner_thread compare and a thread-identity read to avoid ONE
-    // instruction. No lock, no foreign counter, no owner test.
-    __amlc_arc_inc(&__obj->reference_count);
-#else
-    if (__amlc_multithreaded && __obj->owner_thread != __current_thread()) {
-        __arc_shared_lock();
-        __amlc_atomic_fetch_add(&__obj->foreign_reference_count, 1);
-        __arc_shared_unlock();
-        return;
-    }
-
     __obj->reference_count++;
-#endif
     #if defined(DEBUG) && defined(ARCLOG)
     #ifdef CONDLOG
     if (__conditional_logging_on) {
     #endif
-    if (__obj->class_ptr != NULL) {
     printf("increase reference count of object of type %s (address: %p, object_id: %d), propert_reference_count: %d, new reference count: %d\n", __obj->class_ptr->name, __obj, __obj->object_properties.class_object_properties.object_id, __obj->property_reference_count, __obj->reference_count);
-    } else {
-    printf("increase reference count of wrapper (address: %p, wrapped: %p), new reference count: %d\n", __obj, __obj->wrapped_object, __obj->reference_count);
-    }
-/*
-    printf("increase reference count (address: %p)\n", __obj);
-    printf("increase reference count (address: %p)\n", __obj->class_ptr);
-    printf("increase reference count (address: %p)\n", __obj->class_ptr->name);
-    printf("increase reference count of object of type %s\n", __obj->class_ptr->name);
-    printf("increase reference count (object_id: %d)\n", __obj->object_properties.class_object_properties.object_id);
-    printf("increase reference count (new reference count %d)\n", __obj->reference_count);
-*/
     #ifdef CONDLOG
     }
     #endif
     #endif
 }
 
-// Retain a function's object return value on behalf of the caller.
-// Emitted by codegen at every `return <object>` site, replacing the old
-// unconditional `__increase_reference_count_nullable_value(__result.
-// return_value)`.
-//
-// Why the old form leaked: `reference_count` is owner-thread-local by
-// design. When the returned object is a REAL owned by another thread
-// (e.g. a chunk/block created on a generator thread, fetched by the
-// main thread through a getter), the +1 was (a) an unsynchronised
-// write to a foreign counter and (b) never released — the caller's
-// scope-exit dec lands on the WRAPPER that `__wrap_if_foreign` mints
-// around the result, not on the real. One pinned reference per
-// cross-thread call → objects that should die on release stay alive
-// forever (the "memory creeps up while chunks stream" leak).
-//
-// New protocol — the caller's ref always lives on a thread-local object:
-//   - primitive / NULL: nothing to do.
-//   - wrapper or same-thread real: plain rc+1 (thread-local, safe).
-//     Single-threaded programs take exactly this path → no change.
-//   - foreign real: mint a wrapper (born with rc=1 = the caller's ref,
-//     subscribed to the real so it can't be destroyed underneath us)
-//     and return THAT. The caller's `__wrap_if_foreign` passes wrappers
-//     through, and its scope-exit dec releases the wrapper, which
-//     finalizes the real iff the owner side already drained (owner_gone).
-// Take an OWNED, thread-safe handle on a value read out of a shared slot
-// (object-array element, collection backing store). Same contract as
-// __retain_function_return: wrappers and same-thread reals get a plain
-// thread-local +1; a foreign real gets a fresh owned wrapper instead —
-// mutating a foreign real's reference_count is a lost-update race that
-// can pin it above zero forever (it is owner-thread-local by design).
-// The caller releases with a plain __decrease_reference_count.
+// Take an OWNED handle on a value read out of a slot (property, static,
+// array element). Plain retain; the caller releases with
+// __decrease_reference_count.
 static inline aobject * __retain_slot_read(aobject * const __raw) {
-    // Thread-safe ARC (BRC): take an OWNED handle on a value read from a shared
-    // slot. No wrappers — the SAME real pointer is returned; the retain is
-    // routed to the owner-local `reference_count` or the atomic
-    // `foreign_reference_count` by __increase_reference_count based on the
-    // calling thread. The caller releases with a plain __decrease_reference_count.
     if (__raw == NULL) {
         return NULL;
     }
@@ -520,14 +351,8 @@ static inline void __decrease_property_reference_count(aobject * const __obj) {
 }
 */
 static inline void __increase_property_reference_count(aobject * const __obj) {
-    #ifdef WRAPLOG
-    if (__obj != NULL && __obj->class_ptr == NULL) {
-        fprintf(stderr, "[inc_pr] wrapper=%p propref %d->%d\n", __obj, __obj->property_reference_count, __obj->property_reference_count + 1);
-        fflush(stderr);
-    }
-    #endif
     // Bottleneck tripwire — every path that eventually mutates
-    // __first_object via increase comes through here, including the
+    // first_object via increase comes through here, including the
     // direct calls amlc emits in generated C (Array.c / File.c /
     // etc.) that skip the higher-level __set_property wrappers.
     // Dumps as much context as we can safely read off the bad ptr,
@@ -549,30 +374,22 @@ static inline void __increase_property_reference_count(aobject * const __obj) {
         fflush(stdout);
         exit(0);
     }
-    // Thread-safe ARC: __first_object is the global head of every live
-    // object's intrusive list. Both the head and each node's prev/next
-    // are torn under concurrent property writes from multiple threads.
-    // Lock the link/unlink + counter mutation together. Recursive mutex
-    // → safe to call from inside __set_property which also takes it.
-    __arc_shared_lock_mt();
+    // Immortal (process-global) objects stay off the per-isolate lists —
+    // see aobject.immortal.
+    if (__obj->immortal) {
+        return;
+    }
+    // The property-referenced list is per isolate, and only the owning
+    // isolate ever links into it, so no lock.
     if (__obj->property_reference_count == 0) {
-        __obj->next = __first_object;
-
-        if (__first_object != NULL) {
-            __first_object->prev = __obj;
+        aisolate * const __iso = __amlc_isolate();
+        __obj->next = __iso->first_object;
+        if (__iso->first_object != NULL) {
+            __iso->first_object->prev = __obj;
         }
         __set_first_object(__obj, "increase_property_reference_count");
-        // Stage 9 invariant: owner_gone means "rc, propref, wrappers
-        // were all observed at zero (owner-side) and the only thing
-        // keeping me alive is the wrapper list". If property_ref grows
-        // back to 1 (e.g. a foreign thread stores this object into
-        // another property), the object is now also alive via that
-        // property holder — owner_gone no longer holds. Clear it here
-        // under the same lock that wrapper-death uses to read it.
-        __obj->owner_gone = false;
     }
     __obj->property_reference_count++;
-    __arc_shared_unlock_mt();
     #if defined(DEBUG) && defined(ARCLOG)
     #ifdef CONDLOG
     if (__conditional_logging_on) {
@@ -584,35 +401,15 @@ static inline void __increase_property_reference_count(aobject * const __obj) {
     #endif
 }
 
-static inline void __set_property(aobject * const __obj_in, int const __index, nullable_value __prop_value) {
+static inline void __set_property(aobject * const __obj, int const __index, nullable_value __prop_value) {
     // Slot watch: extra resolution between allocator calls. Object-typed
     // property writes come through here, so a stray write is attributed to
     // a much narrower window than allocate/deallocate alone can give.
     __amlc_watch_probe("set_property",
-        (__obj_in != NULL && __obj_in->class_ptr != NULL) ? __obj_in->class_ptr->name : NULL,
+        (__obj != NULL && __obj->class_ptr != NULL) ? __obj->class_ptr->name : NULL,
         __builtin_return_address(0));
-    // Thread-safe ARC: unwrap both the receiver AND the stored value.
-    //   - Receiver: a wrapper has no property array; writing direct
-    //     would corrupt `wrapped_object`.
-    //   - Stored value: fields only ever hold REAL aobjects. If a
-    //     wrapper were stored, downstream threads reading the field
-    //     would chase wrapper-of-wrapper. By unwrapping at write
-    //     time, every property's stored aobject* is a real; the
-    //     reader decides whether to mint a fresh wrapper based on
-    //     its OWN thread identity.
-    aobject * const __obj = __unwrap(__obj_in);
-    if (!__is_primitive(__prop_value) && __prop_value.value.object_value != NULL) {
-        __prop_value.value.object_value = __unwrap(__prop_value.value.object_value);
-    }
-    // Thread-safe ARC: take the shared lock for the whole read-modify-
-    // write of `properties[__index].nullable_value`. Without it, two
-    // threads writing different properties on the SAME aobject race on
-    // the per-object property_reference_count chain (the inc/dec helpers
-    // also take the lock, but the read of the old value + the write
-    // of the new value need to be one critical section, else a reader
-    // can see a torn old/new pair). Recursive mutex → nested inc/dec
-    // re-entries are safe.
-    __arc_shared_lock_mt();
+    // Single-threaded by construction: an object is only ever written by the
+    // isolate that owns it, so the read-modify-write needs no lock.
     property * __prop = &__obj->object_properties.class_object_properties.properties[__index];
     if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
         __decrease_property_reference_count(__prop->nullable_value.value.object_value);
@@ -640,31 +437,22 @@ static inline void __set_property(aobject * const __obj_in, int const __index, n
     }
 
     __prop->nullable_value = __prop_value;
-    __arc_shared_unlock_mt();
 }
 
 static inline bool __set_property_safe(aobject * const __obj, int const __index, nullable_value __prop_value) {
-    // Thread-safe ARC: same single-critical-section reasoning as
-    // __set_property — the type-check + ref count adjust + slot write
-    // must be one transaction. Recursive mutex lets inc/dec re-enter.
-    __arc_shared_lock_mt();
     property * __prop = &__obj->object_properties.class_object_properties.properties[__index];
     ctype old_type = __value_flags_to_ctype(__prop->nullable_value.flags);
     ctype new_type = __value_flags_to_ctype(__prop_value.flags);
     if (old_type != new_type) {
-        __arc_shared_unlock_mt();
         return false;
     }
 
-
     if (new_type == object_type) {
         if (!is_descendant_of(__prop_value.value.object_value->class_ptr, __prop->nullable_value.value.object_value->class_ptr)) {
-            __arc_shared_unlock_mt();
             return false;
         }
     } else if (__is_primitive_nullable(__prop_value) && !__is_primitive_nullable(__prop->nullable_value)) {
         // If new value is a nullable primitive, check of the property supports that
-        __arc_shared_unlock_mt();
         return false;
     }
 
@@ -686,15 +474,13 @@ static inline bool __set_property_safe(aobject * const __obj, int const __index,
     }
 
     __prop->nullable_value = __prop_value;
-    __arc_shared_unlock_mt();
     return true;
 }
 
 static inline void __set_static_property(class_static * const __class_static, int const __index, nullable_value __prop_value) {
-    // Thread-safe ARC: static slots are inherently shared across threads,
-    // so a write must be atomic w.r.t. concurrent readers/writers.
-    __arc_shared_lock_mt();
-    property * __prop = &__class_static->static_properties[__index];
+    // Statics are per isolate (see __static_slot), so this is a plain
+    // single-threaded slot write.
+    property * __prop = &__static_slot(__class_static, __index);
     if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
         __decrease_property_reference_count(__prop->nullable_value.value.object_value);
     }
@@ -713,7 +499,6 @@ static inline void __set_static_property(class_static * const __class_static, in
         __increase_property_reference_count(__prop_value.value.object_value);
     }
     __prop->nullable_value = __prop_value;
-    __arc_shared_unlock_mt();
 }
 
 static inline void __decrease_reference_count_nullable_value(nullable_value __value) {

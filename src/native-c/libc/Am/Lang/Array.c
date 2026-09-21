@@ -164,3 +164,53 @@ function_result Am_Lang_Array_createEmptyArrayOfSameType_0(aobject * const this,
 __exit: ;
 	return __result;
 };
+
+// #sendable: an array in a message is cloned element by element. Primitive
+// data is copied raw; object and any-typed elements are copied through the
+// message copier so shared elements stay shared inside the copy.
+aobject * Am_Lang_Array__native_copy_0(aobject * const src, void * const copy_ctx)
+{
+	array_holder * const sh = get_array_holder(src);
+	aobject * const dst = __create_array(sh->size, sh->item_size, src->class_ptr, sh->ctype);
+	if (dst == NULL) {
+		return NULL;
+	}
+	array_holder * const dh = get_array_holder(dst);
+	unsigned int const size = sh->size;
+	if (sh->ctype == object_type) {
+		aobject ** const s = (aobject **) sh->array_data;
+		aobject ** const d = (aobject **) dh->array_data;
+		for (unsigned int i = 0; i < size; i++) {
+			if (s[i] == NULL) continue;
+			aobject * const c = __amlc_copy_child(copy_ctx, s[i]);
+			if (c == NULL) {
+				__decrease_reference_count(dst);
+				return NULL;
+			}
+			d[i] = c;
+			__increase_property_reference_count(c);
+			__decrease_reference_count(c);
+		}
+	} else if (sh->ctype == any_type) {
+		nullable_value * const s = (nullable_value *) sh->array_data;
+		nullable_value * const d = (nullable_value *) dh->array_data;
+		for (unsigned int i = 0; i < size; i++) {
+			if (__is_primitive(s[i]) || s[i].value.object_value == NULL) {
+				d[i] = s[i];
+				continue;
+			}
+			aobject * const c = __amlc_copy_child(copy_ctx, s[i].value.object_value);
+			if (c == NULL) {
+				__decrease_reference_count(dst);
+				return NULL;
+			}
+			d[i].flags = 0;
+			d[i].value.object_value = c;
+			__increase_property_reference_count(c);
+			__decrease_reference_count(c);
+		}
+	} else {
+		memcpy(dh->array_data, sh->array_data, (size_t) size * sh->item_size);
+	}
+	return dst;
+}

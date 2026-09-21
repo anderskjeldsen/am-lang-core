@@ -14,6 +14,7 @@ namespace Am.Lang
      * or shrink, and for an array when the size is known and you want the cheapest possible
      * access. Iterate with `each`, or with a while loop over length() in hot code.
      */
+    #sendable
     native class Array<T>()
     {
         import Am.Lang

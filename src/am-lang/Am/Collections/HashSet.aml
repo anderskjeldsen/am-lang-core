@@ -36,7 +36,7 @@ namespace Am.Collections {
          */
         private var values: T[] = new T[0]
         /**
-         * Number of buckets; a value's bucket is its hash modulo this.
+         * Number of buckets, always a power of two; a value's bucket is its hash masked by (bucketSize - 1).
          */
         private var bucketSize: Int
         /**
@@ -62,7 +62,7 @@ namespace Am.Collections {
                 return false
             }
             var hash = value.hash()
-            var index = hash % this.bucketSize
+            var index = (hash & (this.bucketSize - 1).toUInt()) as Int
             var valueIndex = this.valueIndexes[index] - 1
             var x = this.findEntry(valueIndex, value)
             if (x >= 0) {
@@ -135,7 +135,7 @@ namespace Am.Collections {
          */
         private fun privateSetValue(value: T) {
             var hash = value.hash()
-            var index = hash % this.bucketSize
+            var index = (hash & (this.bucketSize - 1).toUInt()) as Int
 
             var valueIndex = this.valueIndexes[index] - 1 // index of values and next arrays
             
@@ -195,7 +195,7 @@ namespace Am.Collections {
                 return false
             }
             var hash = value.hash()
-            var index = hash % this.bucketSize
+            var index = (hash & (this.bucketSize - 1).toUInt()) as Int
             var valueIndex = this.valueIndexes[index] - 1
             
             if (valueIndex < 0) {

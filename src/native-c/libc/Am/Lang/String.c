@@ -484,3 +484,35 @@ __exit: ;
 	return __result;
 };
 
+
+// #sendable: a String travelling in a message is re-created in the receiving
+// isolate. Constants keep pointing at the shared literal bytes (immutable, so
+// safe to share); everything else is copied byte for byte, embedded NULs
+// included, which is why this does not go through __create_string.
+aobject * Am_Lang_String__native_copy_0(aobject * const src, void * const copy_ctx)
+{
+	(void) copy_ctx;
+	string_holder * const h = (string_holder *) src->object_properties.class_object_properties.object_data.value.custom_value;
+	if (h == NULL) {
+		return NULL;
+	}
+	if (h->is_string_constant) {
+		return __create_string_constant(h->string_value, src->class_ptr);
+	}
+	aobject * const dst = __allocate_object_with_extra_size(src->class_ptr, sizeof(string_holder) + h->length + 1);
+	if (dst == NULL) {
+		return NULL;
+	}
+	string_holder * const dh = (string_holder *) ((char *) dst + sizeof(aobject));
+	dst->object_properties.class_object_properties.object_data.value.custom_value = dh;
+	char * const bytes = (char *) (dh + 1);
+	memcpy(bytes, h->string_value, h->length);
+	bytes[h->length] = '\0';
+	dh->is_string_constant = false;
+	dh->length = h->length;
+	dh->string_value = bytes;
+	dh->hash = h->hash;
+	dh->char_length = h->char_length;
+	dh->wide = NULL;
+	return dst;
+}

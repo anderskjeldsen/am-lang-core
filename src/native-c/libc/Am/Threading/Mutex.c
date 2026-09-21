@@ -31,7 +31,7 @@ function_result Am_Threading_Mutex__native_init_0(aobject * const this)
 	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
 	pthread_mutex_init(m, &attr);
 	pthread_mutexattr_destroy(&attr);
-	__unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value = m;
+	this->object_properties.class_object_properties.object_data.value.custom_value = m;
 
 __exit: ;
 	return __result;
@@ -42,7 +42,7 @@ function_result Am_Threading_Mutex__native_release_0(aobject * const this)
 	function_result __result = { .has_return_value = false };
 	bool __returning = false;
 
-	aobject * const real = __unwrap(this);
+	aobject * const real = this;
 	pthread_mutex_t *m = (pthread_mutex_t *) real->object_properties.class_object_properties.object_data.value.custom_value;
 	if (m != NULL) {
 		pthread_mutex_destroy(m);
@@ -73,7 +73,7 @@ function_result Am_Threading_Mutex_lock_0(aobject * const this)
 	// operate on the wrong memory and provide NO mutual exclusion (races,
 	// corruption). Mirrors Thread.c. `this` may legitimately be a wrapper
 	// here: a mutex owned by one thread is locked from another.
-	pthread_mutex_t *m = (pthread_mutex_t *) __unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value;
+	pthread_mutex_t *m = (pthread_mutex_t *) this->object_properties.class_object_properties.object_data.value.custom_value;
 	pthread_mutex_lock(m);
 
 __exit: ;
@@ -86,7 +86,7 @@ function_result Am_Threading_Mutex_unlock_0(aobject * const this)
 	bool __returning = false;
 
 	// See lock_0: unwrap so a cross-thread wrapper resolves to the real mutex.
-	pthread_mutex_t *m = (pthread_mutex_t *) __unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value;
+	pthread_mutex_t *m = (pthread_mutex_t *) this->object_properties.class_object_properties.object_data.value.custom_value;
 	pthread_mutex_unlock(m);
 
 __exit: ;
@@ -99,7 +99,7 @@ function_result Am_Threading_Mutex_tryLock_0(aobject * const this)
 	bool __returning = false;
 
 	// See lock_0: unwrap so a cross-thread wrapper resolves to the real mutex.
-	pthread_mutex_t *m = (pthread_mutex_t *) __unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value;
+	pthread_mutex_t *m = (pthread_mutex_t *) this->object_properties.class_object_properties.object_data.value.custom_value;
 	int rc = pthread_mutex_trylock(m);
 	__result.return_value.value.bool_value = (rc == 0);
 

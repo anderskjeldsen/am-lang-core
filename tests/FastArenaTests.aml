@@ -1,0 +1,133 @@
+namespace Tests {
+
+    // `fast { ... }` blocks: allocations inside come from the isolate's
+    // bump arena. These check the observable contract — objects behave like
+    // any other object, everything that dies inside the block is reclaimed,
+    // an object that escapes the block stays valid, and the depth counter is
+    // restored on every exit path (return, exception) so later allocations
+    // go back to the normal allocator.
+
+    class FaPoint(var x: Int, var y: Int) {
+        import Am.Lang
+    }
+
+    class FaBox {
+        import Am.Lang
+
+        var kept: FaPoint? = null
+    }
+
+    class FastArenaTests {
+        import Am.Lang
+        import Am.Lang.Diagnostics
+        import Am.Collections
+        import Am.Tests
+
+        // Objects allocated inside are ordinary objects.
+        test testValuesInsideFastBlock() {
+            var sum = 0
+            fast {
+                for (i = 0 to 1000) {
+                    var p = new FaPoint(i, i * 2)
+                    sum = sum + p.x + p.y
+                }
+            }
+            Assert.assertEquals(1498500, sum)
+        }
+
+        // Everything that died inside the block is gone afterwards.
+        test testFastBlockReclaimsGarbage() {
+            var before = Arc.getAllocationCount()
+            fast {
+                for (i = 0 to 5000) {
+                    var p = new FaPoint(i, i)
+                    var s = "point " + i.toString()
+                }
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        // An object created inside the block and kept outside it survives.
+        test testEscapingObjectSurvives() {
+            var box = new FaBox()
+            fast {
+                for (i = 0 to 100) {
+                    var p = new FaPoint(i, 7)
+                    if (i == 42) {
+                        box.kept = p
+                    }
+                }
+            }
+            Assert.assertEquals(42, box.kept.x)
+            Assert.assertEquals(7, box.kept.y)
+            box.kept = null
+        }
+
+        // Collections built inside the block work and are freed with it.
+        test testCollectionsInsideFastBlock() {
+            var before = Arc.getAllocationCount()
+            var total = 0
+            fast {
+                var list = List.newList<FaPoint>()
+                for (i = 0 to 200) {
+                    list.add(new FaPoint(i, 0))
+                }
+                var map = new HashMap<String, Int>()
+                map.set("a", 1)
+                map.set("b", 2)
+                total = list.getSize() + map.get("a") + map.get("b")
+            }
+            Assert.assertEquals(203, total)
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        // A `return` from inside the block restores the depth (the helper
+        // below returns from within `fast`); allocations afterwards must be
+        // normal ones that survive on their own.
+        test testReturnInsideFastRestoresDepth() {
+            var v = this.returnsFromFast(5)
+            Assert.assertEquals(10, v)
+            var p = new FaPoint(1, 2)
+            Assert.assertEquals(3, p.x + p.y)
+        }
+
+        private fun returnsFromFast(n: Int): Int {
+            fast {
+                var p = new FaPoint(n, n)
+                return p.x + p.y
+            }
+            return -1
+        }
+
+        // An exception thrown inside the block also restores the depth.
+        test testExceptionInsideFastRestoresDepth() {
+            var caught = false
+            try {
+                fast {
+                    var p = new FaPoint(1, 1)
+                    throw new Exception("from fast")
+                }
+            } catch (e: Exception) {
+                caught = true
+            }
+            Assert.assertTrue(caught)
+            var q = new FaPoint(2, 3)
+            Assert.assertEquals(5, q.x + q.y)
+        }
+
+        // Nested blocks and a large object (bigger than an arena) both work.
+        test testNestedAndLargeAllocations() {
+            var n = 0
+            fast {
+                var big = new Byte[100000]
+                fast {
+                    var p = new FaPoint(1, 1)
+                    n = n + p.x
+                }
+                big[99999] = 1B
+                n = n + big[99999]
+            }
+            Assert.assertEquals(2, n)
+        }
+    }
+}

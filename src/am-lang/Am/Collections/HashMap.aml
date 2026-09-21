@@ -67,6 +67,13 @@ namespace Am.Collections {
          */
         static fun createWithInitialSize<K, V>(initialSize: Int): HashMap<K, V> {
             var map = new HashMap<K, V>()
+            // Buckets are always a power of two so the bucket index is a
+            // mask, not a modulo: round the requested size up.
+            var pow2 = 128
+            while (pow2 < initialSize) {
+                pow2 = pow2 * 2
+            }
+            initialSize = pow2
             map.bucketSize = initialSize
             map.currentIndex = initialSize
             map.nextIndexes = new Int[initialSize]
@@ -96,7 +103,7 @@ namespace Am.Collections {
                 throw new KeyNotFoundException(key.toString())
             }
             var hash = key.hash()
-            var index = hash % this.bucketSize
+            var index = (hash & (this.bucketSize - 1).toUInt()) as Int
             var keyIndex = this.keyIndexes[index] - 1
             var entryIndex = this.findEntry(keyIndex, key)
             if (entryIndex >= 0) {
@@ -131,7 +138,7 @@ namespace Am.Collections {
          */
         fun set(key: K, value: V) {
             if (this.nextIndexes.length() == 0) {
-                this.bucketSize = 100
+                this.bucketSize = 128
                 this.nextIndexes = new Int[this.bucketSize]
                 this.keys = new K[this.bucketSize]
                 this.values = new V[this.bucketSize]
@@ -151,7 +158,7 @@ namespace Am.Collections {
                 var oldNextIndexes = this.nextIndexes
                 var oldBucketSize = this.bucketSize
 
-                var newBucketSize = this.bucketSize * 10
+                var newBucketSize = this.bucketSize * 8
                 this.bucketSize = newBucketSize
                 this.currentIndex = newBucketSize
                 this.currentEntryIndex = 0
@@ -188,7 +195,7 @@ namespace Am.Collections {
          */
         private fun privateSetKeyValue(key: K, value: V) {
             var hash = key.hash()
-            var index = hash % this.bucketSize
+            var index = (hash & (this.bucketSize - 1).toUInt()) as Int
 
             // Update existing value if the key is already present.
             var keyIndex = this.keyIndexes[index] - 1
@@ -233,7 +240,7 @@ namespace Am.Collections {
                 return false
             }
             var hash = key.hash()
-            var index = hash % this.bucketSize
+            var index = (hash & (this.bucketSize - 1).toUInt()) as Int
             var keyIndex = this.keyIndexes[index] - 1
 
             if (keyIndex < 0) {
@@ -323,7 +330,7 @@ namespace Am.Collections {
                 return false
             }
             var hash = key.hash()
-            var index = hash % this.bucketSize
+            var index = (hash & (this.bucketSize - 1).toUInt()) as Int
             var keyIndex = this.keyIndexes[index] - 1
             var entryIndex = this.findEntry(keyIndex, key)
             return entryIndex >= 0

@@ -9,6 +9,7 @@ namespace Am.Lang
      * references rather than text, so use equals() for comparisons and write your own loop if
      * you need lexicographic ordering.
      */
+    #sendable
     native class String {
         import Am.Collections
         import Am.IO

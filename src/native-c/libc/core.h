@@ -4,210 +4,22 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-// Thread-safe ARC — Biased Reference Counting (BRC) cross-thread counter.
-// The owner thread mutates `reference_count` non-atomically (fast path);
-// every OTHER thread mutates `foreign_reference_count` atomically, so the two
-// never race on the same word. The object is destroyed only when
-// reference_count, property_reference_count and foreign_reference_count are
-// all zero. This replaces the per-access cross-thread wrapper-object protocol.
-// See am-lang-compiler-code/docs/BIASED_REFCOUNT_DESIGN.md.
 // ---------------------------------------------------------------------------
-// ARC concurrency STRATEGY (per platform, overridable with -DAMLC_ARC_STRATEGY=)
+// Threading model: ISOLATES (share-nothing).
 //
-//   AMLC_ARC_STRATEGY_BIASED  Biased refcounting: the owner thread bumps a
-//                             plain, non-atomic `reference_count`; only the
-//                             rare cross-thread ops touch the atomic
-//                             `foreign_reference_count`. Right when an atomic
-//                             RMW is EXPENSIVE relative to a plain increment —
-//                             i.e. real SMP, where `lock xadd` / `ldaddal`
-//                             costs ~20-40 cycles against ~1 for `++`.
-//
-//   AMLC_ARC_STRATEGY_ATOMIC  One shared counter, every retain/release atomic
-//                             (the Rust `Arc` model). Right when an atomic RMW
-//                             is CHEAP — a uniprocessor, where a single
-//                             instruction memory RMW cannot be split by a task
-//                             switch. Then the bias is a net loss: deciding
-//                             "am I the owner?" costs more (a thread-identity
-//                             read + compare) than the atomic it avoids.
-//
-// NB switching a platform to ATOMIC is NOT just a counter change: the destroy
-// decision spans owner_gone / property_reference_count / first_object_wrapper /
-// destruction_claimed, so it still needs the shared lock (or those references
-// have to become ordinary counted references first). The strategy macro exists
-// so that work can land per platform instead of all at once.
-#define AMLC_ARC_STRATEGY_BIASED 1
-#define AMLC_ARC_STRATEGY_ATOMIC 2
-
+// Every AmLang thread is an isolate: it owns its objects, its own copy of
+// every mutable static property, and a mailbox. Nothing is shared between
+// isolates except immutable class metadata (aclass, vtables, string-constant
+// bytes), so reference counts are plain non-atomic ++/-- and the object hot
+// paths take no lock at all. The only cross-isolate operations are
+//   * Thread.send / Thread.receive — the payload graph is deep-copied by the
+//     sender into a staging list and spliced into the receiver's heap when
+//     received (__amlc_send / __amlc_receive), and
+//   * the isolate handle counts and the mailbox queues, guarded by the small
+//     global lock (__amlc_global_lock: a pthread mutex, or Forbid/Permit on
+//     the Amiga family).
+// See am-lang-compiler-code/docs/TASK_ISOLATE_THREADS.md.
 // ---------------------------------------------------------------------------
-// PLATFORM_AMIGAOS — the AmigaOS 68k ABI.
-//
-// The Amiga branches further down are m68k INLINE ASSEMBLY (`add.l`, `addq.l`,
-// register constraints), so what they need to know is the ARCHITECTURE. Asking
-// the toolchain was the bug: `AMIGA` / `__AMIGA__` name the OS family only.
-//
-//   * AROS predefines AMIGA on EVERY architecture it targets (verified:
-//     aarch64-aros-gcc and x86_64-aros-gcc both emit `#define AMIGA 1`), so on
-//     AROS aarch64 the guard selected the 68k assembly and the build died with
-//     "impossible constraint in 'asm'". The same trap was latent on AROS
-//     x86-64, where it silently picked a non-atomic `*(p)` for the CROSS-THREAD
-//     counter instead of failing loudly.
-//   * ppc-morphos-gcc predefines __AMIGA__, which is why the branches below
-//     each had to carry their own `!defined(__MORPHOS__)` exclusion.
-//
-// So ask the PLATFORM instead. amlc platform ids carry the architecture
-// whenever it is not implied by the OS — `morphos-ppc`, `aros-arm64`,
-// `aros-x86-64` — and `amigaos` is the 68k one by definition; a different CPU
-// would be a different platform, as MorphOS and AROS both already are (neither
-// extends `amigaos`; `aros-m68k` does, precisely because it IS this ABI).
-// MakefileRenderer emits -DPLATFORM_<ID> for the target platform and every
-// platform in its `extends` chain, so that inheritance carries the define.
-//
-// NOTE a translation unit compiled OUTSIDE an amlc-generated makefile (a
-// hand-built native, a one-off probe) gets no PLATFORM_ define and so takes the
-// generic path at the bottom of the atomics block, whatever its toolchain
-// predefines. Correct for single-threaded use and for probing, but NOT atomic
-// across threads — build through amlc for anything sharing objects between
-// threads.
-
-#ifndef AMLC_ARC_STRATEGY
-    #if defined(__MORPHOS__)
-        // MorphOS PPC: BIASED. ATOMIC was tried on real hardware (block-quest) and
-        // was a large net LOSS: with one shared counter every retain/release is a
-        // lwarx/stwcx. pair even in the long SINGLE-threaded phases (world preload,
-        // geometry build, am-js script load), where BIASED is a plain ++/-- gated
-        // off by __amlc_multithreaded. The theoretical win — dropping the
-        // FindTask() owner test on the multithreaded path — did not outweigh that;
-        // startup went from seconds to over a minute. Keep BIASED.
-        #define AMLC_ARC_STRATEGY AMLC_ARC_STRATEGY_BIASED
-    #elif defined(PLATFORM_AMIGAOS)
-        // AmigaOS 68k: ONE counter for all threads. `addq.l #1,(rc,a0)` is
-        // simultaneously the plain increment and the atomic one, so the bias
-        // costs more than it saves (see the codegen note on __amlc_arc_inc).
-        #define AMLC_ARC_STRATEGY AMLC_ARC_STRATEGY_ATOMIC
-    #else
-        // SMP desktop: the bias genuinely pays for itself.
-        #define AMLC_ARC_STRATEGY AMLC_ARC_STRATEGY_BIASED
-    #endif
-#endif
-
-#if !defined(__STDC_NO_ATOMICS__) && !defined(PLATFORM_AMIGAOS) && !defined(__MORPHOS__) && !defined(AMLC_NO_ATOMICS)
-    // Real C11 atomics (linux/macos/… and AROS on aarch64/x86-64): the fast,
-    // lock-free path.
-    #include <stdatomic.h>
-    typedef _Atomic int __amlc_atomic_int;
-    #define __amlc_atomic_load(p)          atomic_load_explicit((p), memory_order_acquire)
-    #define __amlc_atomic_fetch_add(p, v)  atomic_fetch_add_explicit((p), (v), memory_order_acq_rel)
-    #define __amlc_atomic_fetch_sub(p, v)  atomic_fetch_sub_explicit((p), (v), memory_order_acq_rel)
-    #define __amlc_atomic_store(p, v)      atomic_store_explicit((p), (v), memory_order_release)
-#elif defined(__MORPHOS__)
-    // MorphOS PPC: unlike the m68k/AmigaOS branch below (gcc 6.5, no usable inline
-    // atomics), the MorphOS toolchain is gcc 15.1 and emits REAL inline PPC
-    // load-reserved / store-conditional (lwarx/stwcx.) for the __atomic builtins —
-    // verified with `ppc-morphos-gcc -S`. So use genuine hardware atomics for the
-    // cross-thread foreign refcount instead of the old Forbid()/Permit() shim (which
-    // was copy-pasted from the m68k path and is unreliable for mutual exclusion on
-    // MorphOS). This matches the desktop path's real C11 atomics. MUST precede the
-    // AMIGA branch since __AMIGA__ is also defined on this toolchain.
-    // Memory ORDERING: MorphOS is uniprocessor-only, so cross-CPU barriers buy
-    // nothing — all tasks run on one core and a context switch is itself a full
-    // synchronisation point. On PPC, __ATOMIC_ACQ_REL emits `lwsync` BEFORE and
-    // `isync` AFTER every RMW; under the ATOMIC strategy that lands on EVERY
-    // retain/release, which would eat the win. So: RELAXED for the increment (the
-    // classic Arc rule — a retain needs no ordering), and RELEASE for the decrement
-    // so the compiler cannot sink a last-use store past the release that frees the
-    // object. The lwarx/stwcx. pair still provides the atomicity that matters here
-    // (indivisibility against preemption).
-    typedef int __amlc_atomic_int;
-    #define __amlc_atomic_load(p)          __atomic_load_n((p), __ATOMIC_RELAXED)
-    #define __amlc_atomic_store(p, v)      __atomic_store_n((p), (v), __ATOMIC_RELAXED)
-    #define __amlc_atomic_fetch_add(p, v)  __atomic_fetch_add((p), (v), __ATOMIC_RELAXED)
-    #define __amlc_atomic_fetch_sub(p, v)  __atomic_fetch_sub((p), (v), __ATOMIC_RELEASE)
-#elif defined(PLATFORM_AMIGAOS) && defined(__GNUC__)
-    // (__GNUC__ because the inline asm below is gcc syntax: am-cc compiles
-    // this same file when building ON the Amiga with the bundled toolchain
-    // and has no inline asm — it takes the plain fallback branch. Same
-    // uniprocessor, wider RMW window; acceptable until am-cc grows an
-    // atomic-add intrinsic.)
-    // AmigaOS 68k: the toolchain has no usable inline atomic RMW — GCC 6.5 m68k
-    // lowers C11 atomics / __sync builtins to ___atomic_*_4 libcalls even at
-    // -mcpu=68020 (verified), and TAS is byte-only + unreliable on chip RAM.
-    // Amiga is single-core, so the only concurrency is task preemption; an
-    // inline Forbid/Permit (raw TDNestCnt bump — exactly what Exec's Forbid()
-    // does, minus the library-vector call) gives true mutual exclusion against
-    // other tasks around the read-modify-write. The window is a couple of
-    // instructions, so multitasking is held off only microscopically. Only the
-    // rare cross-task foreign counter comes through here; owner-path refcount
-    // ops never do. Deferred-reschedule caveat: raw TDNestCnt-- (vs the library
-    // Permit) can delay a switch that became pending during the window to the
-    // next scheduling point — a latency trade, not a correctness one.
-    #include <proto/exec.h>
-    typedef int __amlc_atomic_int;
-    #define __amlc_atomic_load(p)          (*(p))
-    #define __amlc_atomic_store(p, v)      ( (*(p)) = (v) )
-    // Single-instruction memory RMW. A task switch arrives as an interrupt and
-    // is therefore taken on an INSTRUCTION BOUNDARY, so `add.l %1,%0` with a
-    // memory destination cannot be split — it is atomic against preemption on
-    // a uniprocessor without any Forbid at all (and without needing 68020's
-    // `cas`, so plain 68000 works too). Replaces the old TDNestCnt shim: same
-    // guarantee, ~4 instructions fewer, and no deferred-reschedule side effect.
-    // The returned OLD value is read separately, so it is only meaningful when
-    // the caller serialises against other writers — which the ARC foreign paths
-    // do via __arc_shared_lock. `__amlc_arc_dec_is_zero` below needs no such
-    // help: the decrement AND the zero test come from one instruction's flags.
-    #define __amlc_atomic_fetch_add(p, v)  ({ int __amlc_o = *(p); \
-        __asm__ __volatile__("add.l %1,%0" : "+m"(*(p)) : "d"((int)(v)) : "cc", "memory"); \
-        __amlc_o; })
-    #define __amlc_atomic_fetch_sub(p, v)  ({ int __amlc_o = *(p); \
-        __asm__ __volatile__("sub.l %1,%0" : "+m"(*(p)) : "d"((int)(v)) : "cc", "memory"); \
-        __amlc_o; })
-#else
-    // Other no-atomics targets: plain non-atomic fallback. Safe only where ARC is
-    // serialised to one execution context. (NOT MorphOS — it has its own verified
-    // real-atomics branch above; this comment used to name it, which was stale.)
-    typedef int __amlc_atomic_int;
-    // A function, not a comma-expression macro: am-cc — which compiles this
-    // header when building ON the Amiga with the bundled toolchain — does
-    // not parse the comma operator, and callers do use the returned old
-    // value (root_handoff, the foreign-count decrement). A REAL function
-    // defined once in core.c, not `static inline` here: am-cc emits calls
-    // to a static inline but no body, and the link fails on every unit.
-    #define AMLC_PLAIN_ATOMIC_FN 1
-    int __amlc_plain_fetch_add(int *__amlc_p, int __amlc_v);
-    #define __amlc_atomic_load(p)          (*(p))
-    #define __amlc_atomic_fetch_add(p, v)  __amlc_plain_fetch_add((p), (v))
-    #define __amlc_atomic_fetch_sub(p, v)  __amlc_plain_fetch_add((p), -(v))
-    #define __amlc_atomic_store(p, v)      ( (*(p)) = (v) )
-#endif
-
-// ---------------------------------------------------------------------------
-// Strategy-agnostic ARC primitives.
-//
-//   __amlc_arc_inc(p)          retain: atomic ++
-//   __amlc_arc_dec_is_zero(p)  release: atomic --, TRUE when it reached zero
-//
-// The dec-and-test is the operation refcounting actually needs, and it is
-// expressible as ONE instruction on m68k (`sub` sets Z on the NEW value), so
-// the AmigaOS form needs neither Forbid nor `cas`. CCR survives a task switch
-// (Exec saves the full context), so reading the flag after is safe.
-// Asking for PLATFORM_AMIGAOS rather than the toolchain's own `AMIGA`/`__AMIGA__`
-// is what keeps the non-68k Amiga-API toolchains (ppc-morphos, aros-arm64,
-// aros-x86-64) out of this `addq.l`/`subq.l` assembly — see the note at the top
-// of this file.
-// Only bites once a platform actually uses these (ATOMIC strategy).
-// (__GNUC__ for the same reason as above: am-cc has no inline asm.)
-#if defined(PLATFORM_AMIGAOS) && defined(__GNUC__)
-    #define __amlc_arc_inc(p) \
-        __asm__ __volatile__("addq.l #1,%0" : "+m"(*(p)) : : "cc", "memory")
-    #define __amlc_arc_dec_is_zero(p) ({ unsigned char __amlc_z; \
-        __asm__ __volatile__("subq.l #1,%1\n\tseq %0" \
-            : "=d"(__amlc_z), "+m"(*(p)) : : "cc", "memory"); \
-        __amlc_z != 0; })
-#else
-    // MorphOS (lwarx/stwcx.) and desktop (lock xadd / ldaddal) both get a real
-    // atomic here; the fetch_sub result carries the ordering the destroy needs.
-    #define __amlc_arc_inc(p)          ((void) __amlc_atomic_fetch_add((p), 1))
-    #define __amlc_arc_dec_is_zero(p)  (__amlc_atomic_fetch_sub((p), 1) == 1)
-#endif
 
 
 //#define CLASS_TYPE_PRIMITIVE 1
@@ -303,8 +115,7 @@ typedef void (*__suspend_function)(suspend_state *);
 typedef enum _ctype ctype;
 typedef enum _class_type class_type;
 typedef struct _class_object_properties class_object_properties;
-typedef struct _object_wrapper object_wrapper;
-typedef struct _object_wrapper_entry object_wrapper_entry;
+
 typedef union _object_properties object_properties;
 typedef struct _anonymous_class_state_data anonymous_class_state_data;
 typedef struct _sweep_result sweep_result;
@@ -408,7 +219,10 @@ struct _class_static {
     unsigned int static_properties_count;
     unsigned char annotations_count;
     aobject ** annotations;
-    property * static_properties;
+    // Index of this class's first static slot in every isolate's `statics`
+    // array, assigned by __register_class. Static property i lives at
+    // __amlc_isolate()->statics[slot_base + i]: one copy PER ISOLATE.
+    unsigned int slot_base;
     class_type type;
     class_static *next;
 };
@@ -419,29 +233,30 @@ struct _aclass {
     aclass * const base;
     __anonymous_function release;
     __anonymous_function mark_children;
+    // Deep-copy hook of a NATIVE class that opted into being sendable
+    // (`#sendable native class`), see __amlc_native_copy_T. NULL on plain
+    // classes (their property slots are copied generically) and on natives
+    // that are not sendable — sending one of those throws.
+    __anonymous_function copy;
     __anonymous_function * functions;
     aobject * class_ref_singleton;
     unsigned int iface_implementation_count;
     unsigned int functions_count;
     unsigned int properties_count;
+    // How many of the property slots can hold an object. 0 means the
+    // release and mark walks can skip the slot loop altogether.
+    unsigned int object_property_count;
+    // Bytes every instance carries past its property array. Only Struct<T>
+    // boxes set it (sizeof(struct T)) so the generic copier can clone the
+    // value tail; 0 otherwise.
+    unsigned int extra_size;
     iface_implementation * iface_implementations;
     aclass *next;
-    // Live-instance counter for the `instances(Class)` test intrinsic.
-    // Bumped in __allocate_object_with_extra_size / dropped in
-    // __deallocate_object, but ONLY when compiled with -DTRACKOBJECTS
-    // (the `-to` compiler flag; auto-enabled for `amlc test`). Always
-    // present in the struct so generated aclass literals stay valid via
-    // designated initializers (defaults to 0); it just stays 0 unless
-    // TRACKOBJECTS is defined.
     // TRACKOBJECTS live-instance counter feeding the `instances(Class)` test
-    // intrinsic. Atomic: with BRC, objects of the same class are allocated and
-    // freed from several threads concurrently, and a plain ++/-- loses updates
-    // (first seen as instances() going NEGATIVE in the BRC stress test —
-    // lost increments on 4 concurrently-allocating workers vs serialized
-    // decrements on main).
-    __amlc_atomic_int instance_count;
-// meta:
-//    aobject *properties;
+    // intrinsic. A per-class (shared) word touched from every isolate that
+    // allocates the class, so concurrent isolates can lose an update —
+    // diagnostic accuracy only. Always present so aclass literals stay valid.
+    int instance_count;
 };
 
 struct _iface_implementation {    
@@ -463,74 +278,30 @@ struct _class_object_properties {
     property * properties;
 };
 
-struct _object_wrapper {
-    // wrapped_object moved OUT of this union to a dedicated `aobject.wrapped_object`
-    // field: __unwrap read it on every property access, and a cross-member union
-    // read (wrapped_object vs class_object_properties.properties, both via a
-    // pointer to the union) is what -O2+ strict aliasing miscompiled. Only the
-    // cold diagnostic trace_site remains here, touched exclusively on the
-    // wrapper create/free path (never on a property access).
-    void * trace_site;
-};
-
 union _object_properties {
     class_object_properties class_object_properties;
     iface_reference iface_reference;
-    object_wrapper object_wrapper;
-};
-
-struct _object_wrapper_entry {
-    aobject * subscriber;
-    // Self-reference uses the struct-tag form rather than the typedef
-    // alias (`object_wrapper_entry`) — the typedef binding sits on the
-    // `typedef struct _object_wrapper_entry object_wrapper_entry;` line
-    // above, but `struct object_wrapper_entry` is a different name and
-    // would forward-declare an unrelated, never-defined type.
-    struct _object_wrapper_entry * next;
 };
 
 struct _aobject {
     aclass * class_ptr;
     // if class_ptr is an interface, object_properties will contain a iface_implementation
     // this object will also hold a reference to the implementation object, and will remove that once this has reached 0.
+    // Plain, non-atomic counts: an object belongs to exactly one isolate and
+    // is only ever touched by that isolate's thread.
     int reference_count;
     int property_reference_count;
-    // Thread-safe ARC (BRC): references held by threads OTHER than
-    // `owner_thread`. Mutated atomically by non-owner threads so it never
-    // races the owner's non-atomic `reference_count`. Foreign increments are
-    // lock-free; foreign decrements take `__arc_shared_mutex` so the free
-    // decision linearises against the owner's rc==0 check. Replaces the old
-    // cross-thread wrapper-object protocol.
-    __amlc_atomic_int foreign_reference_count;
     object_properties object_properties;
-    // Cross-thread wrapper target. A dedicated field, NOT a view of the
-    // object_properties union: __unwrap reads this on every property access,
-    // and reading it as `object_properties.object_wrapper.wrapped_object`
-    // (offset 0, aliasing object_data) let -O2+ strict aliasing miscompile
-    // the property-store diamond (a store landed on the wrong object). NULL
-    // on every non-wrapper object (class_ptr != NULL short-circuits the read).
-    aobject * wrapped_object;
-    void * owner_thread;
-    object_wrapper_entry * first_object_wrapper; // lock a app shared mutext to read/write
     bool marked;
     bool pending_deallocation;
-    // Thread-safe ARC: set under the shared mutex when this real's
-    // owner-side liveness (reference_count + property_reference_count
-    // + traversal-from-live-roots) has fully drained but foreign-thread
-    // wrappers still subscribe to it. Wrappers consult this on their
-    // own death — if `owner_gone == true` AND they were the last
-    // subscriber, they finalize the real. One-way: never cleared.
-    // Replaces the prior protocol where wrappers contributed +1 to
-    // `reference_count`, which forced every wrapper birth/death to
-    // mutate the owner's counter under the lock.
-    bool owner_gone;
-    // Thread-safe ARC: lock-protected "I will call __deallocate_object
-    // on this real" claim. Set by whichever of owner-dec / propref-dec
-    // / last-wrapper-death observes the all-zero condition first.
-    // Separate from `pending_deallocation` (which is the in-progress
-    // recursion guard set by __detach_object) so the destructor path
-    // still runs after we claim.
-    bool destruction_claimed;
+    // Process-global object read from every isolate (string constants,
+    // annotations): its reference_count is pinned huge and it is never
+    // linked into an isolate's property-referenced list, because those
+    // lists are per isolate and unsynchronised.
+    bool immortal;
+    // Allocated inside a fast-lane arena (see aisolate.fast_depth): freed by
+    // dropping the arena's live count, never by free().
+    bool chunked;
     aobject *prev;
     aobject *next;
 };
@@ -560,7 +331,7 @@ struct _suspend_state {
     // reads result.exception (propagating it) and frees, or — when the chain
     // completed detached, after a real suspension — the chain frees.
     // Exactly-once free with no use-after-free in either interleaving.
-    __amlc_atomic_int root_handoff;
+    int root_handoff;
 };
 
 // Returns the previous rendezvous count: 0 = arrived first (other party will
@@ -591,133 +362,184 @@ aclass Long = {
 */
 
 // variables
-extern aobject * __first_object;
+// variables
 extern aclass * __first_class;
 extern class_static * __first_class_static;
+// Total number of static-property slots registered so far (sum over every
+// __register_class'd class). Each isolate allocates this many slots.
+extern unsigned int __amlc_static_slot_count;
 
-// Thread-safe ARC infrastructure.
-// `owner_thread` on every aobject records the thread that allocated it
-// (set in __allocate_object_with_extra_size). When a thread other than
-// the owner wants to reference the object, a wrapper aobject is created
-// in the borrowing thread's realm pointing at the real via
-// object_properties.object_wrapper.wrapped_object — wrappers are
-// identified by `class_ptr == NULL`. Owner-thread inc/dec on the real's
-// reference_count happens lock-free (only one writer). Wrapper-list
-// mutations (subscribing/unsubscribing) and property_reference_count
-// writes happen under this shared mutex.
-//
-// Implemented as a function-call boundary so the core stays portable —
-// libc gets a pthread_mutex_t behind the scenes, AmigaOS will get a
-// SignalSemaphore.
-void __arc_shared_lock(void);
-void __arc_shared_unlock(void);
-void __arc_shared_mutex_init(void);
+// ---------------------------------------------------------------------------
+// Isolates (share-nothing threads) — see the model note at the top of this
+// file and am-lang-compiler-code/docs/TASK_ISOLATE_THREADS.md.
+// ---------------------------------------------------------------------------
+typedef struct _aisolate aisolate;
+typedef struct _amessage amessage;
+typedef struct _amailbox amailbox;
+typedef struct _aarena aarena;
+typedef function_result (*__amlc_static_init_fn)(void);
+// Native deep-copy hook (aclass.copy): returns a fresh object of src's class
+// holding a copy of src's native payload, allocated in the CURRENT isolate
+// with reference_count 1. Children are copied with __amlc_copy_child.
+typedef aobject * (*__amlc_native_copy_T)(aobject * const src, void * const copy_ctx);
 
-// Returns an opaque thread identifier. Owners are compared via
-// pointer-equality so the implementation just has to be unique per
-// thread and stable for that thread's lifetime. libc returns
-// (void*)pthread_self(), AmigaOS returns FindTask(NULL).
-void * __current_thread(void);
+// A message in flight: the deep-copied payload graph. `payload` carries one
+// owned reference; `chain` is the list of the graph's property-referenced
+// objects (what would have gone on the sender's first_object list), spliced
+// into the receiver's list when the message is opened.
+struct _amessage {
+    amessage * next;
+    aobject * payload;
+    aobject * chain;
+    int count;              // objects in the graph (allocation accounting)
+};
 
-// Set to `true` the first time a cross-thread wrapper is minted (in
-// `__create_wrapper`). `__unwrap` consults this flag to short-circuit
-// the wrapper-following ternary when no wrappers have ever existed —
-// the common case for single-threaded programs and even for
-// multi-threaded programs that don't share objects between threads.
-//
-// Stays `false` for the lifetime of programs that never share — `gcc
-// -O3` then constant-propagates and DCEs the wrapper-following branch
-// entirely. At `gcc -O0` (dev builds) we still pay one load + branch
-// per property read; that's manageable.
-#ifdef AM_SINGLE_THREADED
-// Single-threaded build: no thread can ever hold a foreign reference, so no
-// wrapper can exist. A literal 0 lets the compiler delete the wrapper-following
-// branch in __unwrap outright instead of testing a flag that never changes.
-#define __amlc_any_wrappers_alive 0
+struct _aisolate {
+    // This isolate's copy of every static property: static i of class C is
+    // statics[C.statics->slot_base + i]. Allocated at isolate creation, sized
+    // by __amlc_static_slot_count, initialised by the static-init table.
+    property * statics;
+    unsigned int statics_count;
+    // Per-isolate heap bookkeeping (was the process-global __first_object):
+    // objects held by a property, for the exit-time cycle sweep + leak report.
+    aobject * first_object;
+    aobject * first_detached_object;
+    int allocation_count;
+    amailbox * mailbox;
+    aisolate * parent;          // the spawning isolate (holds a handle on it); NULL for main
+    int handle_count;           // Thread handle objects + the running thread itself (global lock)
+    bool started;
+    bool done;                  // runnable returned, heap torn down
+    bool joined;
+    void * native;              // platform thread data (Thread.c)
+    amessage * boot;            // the copied Runnable, opened by the worker on entry
+    aobject * self_handle;      // cached Thread handle for getCurrent(), owned by this isolate
+    char * name;                // malloc'd copy for the platform task name
+    int priority;
+    unsigned int stack_size;
+    // Fast lane (`fast { ... }` blocks). While fast_depth > 0 every allocation
+    // is bump-allocated from `arena` instead of calloc'd; an object's death
+    // only drops its arena's live count, and an arena whose count reaches 0
+    // is reset and reused. Arenas are per isolate, so none of this locks.
+    int fast_depth;
+    aarena * arena;             // the arena new objects go into
+    aarena * arenas;            // every arena this isolate owns
+    aarena * free_arenas;       // empty arenas kept for reuse
+    unsigned int free_arena_count;
+};
+
+// Default arena size and how many empty arenas an isolate keeps around
+// before handing them back to the system.
+#ifndef AMLC_ARENA_SIZE
+    #if defined(PLATFORM_AMIGAOS)
+        #define AMLC_ARENA_SIZE (8 * 1024)
+    #else
+        #define AMLC_ARENA_SIZE (32 * 1024)
+    #endif
+#endif
+#ifndef AMLC_ARENA_KEEP_FREE
+    #define AMLC_ARENA_KEEP_FREE 4
+#endif
+
+// The calling thread's isolate — the base of every static-property access,
+// so it must be one or two loads. POSIX: a TLS variable. AmigaOS/MorphOS:
+// the running task's tc_UserData (SysBase->ThisTask is what FindTask(NULL)
+// returns without the library call). AROS and non-gcc Amiga builds go
+// through a function (AROS pthreads own tc_UserData; am-cc has no exec
+// headers on the hot path).
+#if defined(__AROS__)
+aisolate * __amlc_isolate_current(void);
+#define __amlc_isolate() (__amlc_isolate_current())
+#elif defined(__MORPHOS__) || defined(__AMIGA__) || defined(AMIGA) || defined(PLATFORM_AMIGAOS)
+    #if defined(__GNUC__)
+    #include <exec/execbase.h>
+    #include <proto/exec.h>
+    #define __amlc_isolate() ((aisolate *) SysBase->ThisTask->tc_UserData)
+    #else
+    aisolate * __amlc_isolate_current(void);
+    #define __amlc_isolate() (__amlc_isolate_current())
+    #endif
+#elif defined(__APPLE__)
+// Darwin: every __thread access is a call to _tlv_get_addr, which showed up
+// as a quarter of an allocation-heavy loop. While the process has a single
+// thread the current isolate IS the main isolate, so read a global instead.
+// __amlc_isolate_count is raised before a worker thread is created and
+// lowered as that thread's very last runtime action, so whenever it reads
+// 1 the calling thread is main.
+extern __thread aisolate * __amlc_tls_isolate;
+extern aisolate * __amlc_main_isolate_ptr;
+extern int __amlc_isolate_count;
+#define __amlc_isolate() (__amlc_isolate_count <= 1 ? __amlc_main_isolate_ptr : __amlc_tls_isolate)
 #else
-extern bool __amlc_any_wrappers_alive;
+extern __thread aisolate * __amlc_tls_isolate;
+#define __amlc_isolate() (__amlc_tls_isolate)
 #endif
+void __amlc_isolate_count_inc(void);   // before creating a worker thread
+void __amlc_isolate_count_dec(void);   // the worker's last runtime action
 
-// Thread-safe ARC (BRC): set to `true` the first time a thread is spawned
-// (in Am_Threading_Thread_start_0). Gates the owner-vs-foreign branch in the
-// refcount inc/dec helpers so purely single-threaded programs keep paying only
-// a predictable-branch load — never a __current_thread() call — on the
-// refcount hot path. One-way; never cleared.
-#ifdef AM_SINGLE_THREADED
-// Single-threaded build: every object is owned by the only thread there is, so
-// the owner-vs-foreign classification is statically decidable. As a literal 0
-// it folds the whole foreign path (atomic counter, shared lock, owner_gone /
-// destruction_claimed bookkeeping) out of every inlined refcount site.
-// Am_Threading_Thread_start_0 throws rather than letting a second thread exist.
-#define __amlc_multithreaded 0
-#else
-extern bool __amlc_multithreaded;
-#endif
+// Static property `i` of the class whose class_static is `cs`, in the
+// calling isolate. Yields the `property` slot (an lvalue).
+#define __static_slot(cs, i) (__amlc_isolate()->statics[(cs)->slot_base + (i)])
 
-// Gated forms of the shared lock for critical sections that ALSO run in
-// single-threaded programs: property refcount mutations (the global
-// __first_object list), property-slot writes, and the object end-of-life
-// protocol. With one thread there is nobody to exclude, so these skip the
-// lock while `__amlc_multithreaded` is false — before this gate, every
-// property write and every object death in EVERY program paid a recursive
-// pthread-mutex round trip (profiled at a double-digit percentage of
-// am-git's status/clone wall time on macOS, single-threaded).
-//
-// Safe across the single→multi flip: the flag only turns true inside
-// Thread.start, and while it is false exactly one thread exists — a thread
-// cannot be inside one of these critical sections and inside Thread.start
-// at the same time, so a lock/unlock pair can never straddle the
-// transition. After the flip, every section entered takes the real lock.
-// Under AM_SINGLE_THREADED the flag is literal 0 and the calls compile out.
-//
-// NOT for the wrapper paths (__create_wrapper / __deallocate_wrapper):
-// wrappers only exist in multithreaded programs, and those sections must
-// hold the real lock unconditionally.
-#define __arc_shared_lock_mt()   do { if (__amlc_multithreaded) __arc_shared_lock(); } while (0)
-#define __arc_shared_unlock_mt() do { if (__amlc_multithreaded) __arc_shared_unlock(); } while (0)
+// Every class's static initializer, in startup order. Filled in by the
+// generated startup before __amlc_isolate_boot_main; run once per isolate.
+extern __amlc_static_init_fn * __amlc_static_init_table;
+extern unsigned int __amlc_static_init_count;
 
-// Allocate a wrapper aobject in the current thread, pointing at the
-// real aobject (which is owned by some other thread). Subscribes the
-// wrapper into `real->first_object_wrapper` under the shared mutex
-// and bumps `real->reference_count`. The wrapper starts at
-// `reference_count = 1` and `class_ptr == NULL` (the wrapper sentinel).
-// `__realobj` is named with that suffix because gcc treats `__real`
-// as a reserved keyword (the `__real__`/`__imag__` complex-number
-// builtins) and rejects it as a parameter name.
-#ifndef AM_SINGLE_THREADED
-aobject * __create_wrapper(aobject * const __realobj);
-#endif
+// Fast-lane arena allocator (see aisolate.fast_depth). A bump allocator:
+// each object carries a pointer to its arena in the word just before the
+// aobject; death decrements the arena's live count and an arena at zero is
+// reset in place. Arenas never move objects.
+#define AMLC_ARENA_ALIGN 8
+#define AMLC_ARENA_ROUND(n) (((n) + (AMLC_ARENA_ALIGN - 1)) & ~((size_t) (AMLC_ARENA_ALIGN - 1)))
+struct _aarena {
+    aarena * next;          // isolate's list of every arena
+    aarena * next_free;     // free-list link while empty and kept
+    char * data;            // aligned start of the object area
+    size_t capacity;
+    size_t used;
+    unsigned int live;      // objects allocated here and not yet dead
+};
+aobject * __amlc_arena_allocate(aisolate * const iso, size_t const size);
+void __amlc_arena_recycle(aisolate * const iso, aarena * const a);
+void __amlc_free_object(aobject * const obj);
+void __amlc_free_object_in(aisolate * const iso, aobject * const obj);
+void __amlc_arenas_free_all(aisolate * const iso);
 
-// Called by codegen whenever an aobject reference is acquired from a
-// nullable_value source (property read, function return, etc.). If
-// the underlying object is owned by another thread, mints a wrapper
-// in the current thread's realm. Otherwise (the common single-thread
-// case), returns the original pointer unchanged — very cheap.
-//
-// NULL passes through. Already-wrapped pointers (class_ptr == NULL,
-// owner_thread == current) pass through. Wrappers from OTHER threads
-// shouldn't normally appear here because `__set_property` unwraps
-// before storing; if one does, we'd re-wrap (correct but wasteful).
-// Cross-thread BORROW site. Under the current biased-refcount design there is
-// nothing to do here in ANY build: cross-thread references use the same real
-// pointer, and foreign liveness is tracked on the owned retain paths
-// (__retain_slot_read / __increase_reference_count). Codegen emits no paired
-// release for this site, so it must not touch a counter either.
-//
-// It is a MACRO rather than a function in core.c because the generated C calls
-// it constantly — 13,030 sites in am-ide alone — and a non-inlined call that
-// returns its argument is pure overhead in every program, single-threaded or
-// not. The argument is evaluated exactly once and its address is never taken
-// (checked across v1's generated output and every package's natives), so the
-// macro is a drop-in for the old function.
+// Small global lock for the few cross-isolate words: isolate handle counts
+// and mailbox queues. pthread mutex on POSIX, Forbid/Permit on the Amiga family.
+void __amlc_global_lock(void);
+void __amlc_global_unlock(void);
+
+// Isolate lifecycle.
+void __amlc_isolate_boot_main(void);              // first thing in main(), before any allocation
+void __amlc_isolate_statics_ready(void);          // after every __register_class: sizes the main isolate's statics
+void __amlc_isolate_run_static_inits(void);       // runs the static-init table in the calling isolate
+aisolate * __amlc_isolate_create(void);           // new isolate (statics + mailbox), handle_count = 1, parent = caller
+void __amlc_isolate_retain(aisolate * const iso);
+void __amlc_isolate_release(aisolate * const iso); // frees once no handles remain and the isolate is done
+void __amlc_isolate_enter(aisolate * const iso);   // binds iso to the calling OS thread
+void __amlc_isolate_teardown(aisolate * const iso); // statics deref + sweep + mailbox close; call from iso's own thread
+
+// Messaging. A send deep-copies `payload` (Object graph → fresh objects) and
+// posts it; the receiver gets an owned reference into its own heap. Objects
+// of native classes without a copy hook are not sendable: send fails with
+// an exception in *result and returns false.
+bool __amlc_send(aisolate * const target, aobject * const payload, function_result * const result);
+aobject * __amlc_receive(bool const wait);        // NULL when empty and !wait
+amessage * __amlc_message_create(aobject * const payload, function_result * const result); // copy without posting
+aobject * __amlc_message_open(amessage * const msg);   // splice into the calling isolate; frees msg; owned payload
+void __amlc_message_discard(amessage * const msg);
+// For native copy hooks: copy a child of the object being copied. Returns the
+// copy with ONE owned reference (release it after storing it with
+// property-reference semantics); NULL for NULL or when the child is not
+// sendable (the whole copy then fails).
+aobject * __amlc_copy_child(void * const copy_ctx, aobject * const src);
+
+// Compatibility: cross-thread wrappers no longer exist, so unwrapping is the
+// identity. Still spelled at a few native call sites; remove as they are touched.
+#define __unwrap(__obj) (__obj)
 #define __wrap_if_foreign(__raw) (__raw)
-
-// AMLC_XTHREAD_RC=1 diagnostics: report rc mutations by non-owner threads
-// (races that can pin rc above zero forever). Zero-cost when off beyond a
-// global load + predictable branch in the inc/dec helpers.
-extern int __amlc_xthread_rc_on;
-void __report_xthread_rc(aobject * const __obj, const char * const op);
-
 // functions
 void __register_class(class_static * const __class_static);
 void __dereference_static_properties();

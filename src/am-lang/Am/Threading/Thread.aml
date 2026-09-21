@@ -1,18 +1,24 @@
 namespace Am.Threading {
 
     #implementationPlatforms "libc", "amigaos", "morphos-ppc"
+    #sendable
     /**
-     * A separate thread of execution. Construct one with the Runnable (or lambda) you want run,
-     * set its name, call start(), and call join() when you need to wait for it to finish. Always
-     * set the name before starting — a thread started without one is unreliable. Objects shared
-     * between threads are reference counted across the boundary, which costs more than a
-     * single-threaded access and can churn wrappers if two threads touch the same object
-     * constantly, so prefer handing each thread its own data and communicating through a queue or
-     * a Mutex-guarded structure. An exception that escapes run() does not reach the thread that
-     * started the work.
-     * Higher-level alternatives worth knowing about: TaskScheduler, for queueing small units of
-     * work onto shared workers, and the suspend/Continuation mechanism for asynchronous code that
-     * does not need a thread of its own.
+     * A separate thread of execution, run as an ISOLATE: the thread owns its objects, its own copy of
+     * every static property and a mailbox, and shares nothing with other threads. Construct one with
+     * the Runnable you want run, set its name, call start(), and call join() when you need to wait for
+     * it to finish. start() gives the new thread a deep COPY of the Runnable (and everything it
+     * references), so the original stays with the creating thread and mutations made by the worker are
+     * never visible to it. Threads communicate only through messages: send() copies an object graph
+     * into the target's mailbox, receive() takes the next message out of the calling thread's own
+     * mailbox. Only sendable objects can travel: plain classes (copied field by field), String, Array,
+     * collections built from them, and Thread handles; objects of native classes that own OS handles
+     * (files, sockets, mutexes) are not sendable and send() throws. Always set the name before
+     * starting. An exception that escapes run() is printed on the worker and does not reach the thread
+     * that started the work.
+     *
+     * A Thread object is a handle: copies of it (including the one a message carries) name the same
+     * underlying thread, so a worker can hand its parent a handle to itself, or reply through
+     * getParent().
      */
     native class Thread(var runnable: Runnable) {
         import Am.Lang
@@ -26,21 +32,21 @@ namespace Am.Threading {
 
         /**
          * Cleanup callbacks that run on this thread itself, in reverse registration order, after the
-         * runnable returns but before the native task is torn down. The motivating case is per-task
-         * AmigaOS library opens such as bsdsocket.library and amissl, which the library tracks per
-         * task and which leak unless they are closed from the same task that opened them. Each
-         * callback is boxed in a ThreadFinalizer because a bare list of function types trips the
-         * binder, and the list itself is only allocated on the first addFinalizer() call so threads
-         * that need no cleanup pay nothing.
+         * runnable returns but before the thread is torn down. Register them from INSIDE the thread on
+         * Thread.getCurrent(): the motivating case is per-task AmigaOS library opens such as
+         * bsdsocket.library and amissl, which the library tracks per task and which leak unless they
+         * are closed from the same task that opened them. Each callback is boxed in a ThreadFinalizer
+         * because a bare list of function types trips the binder, and the list itself is only
+         * allocated on the first addFinalizer() call so threads that need no cleanup pay nothing.
          */
         private var finalizers: List<ThreadFinalizer>? = null
 
         /**
          * Registers a callback to run on this thread when its work is finished, before the thread is
-         * torn down. Use it to release anything the platform binds to the task itself — an opened
-         * library, a per-task handle — since releasing it from another thread would leak or fault.
-         * Callbacks run in reverse registration order, so a later one may assume earlier ones are
-         * still valid.
+         * torn down. Call it on Thread.getCurrent() from within the thread. Use it to release anything
+         * the platform binds to the task itself — an opened library, a per-task handle — since
+         * releasing it from another thread would leak or fault. Callbacks run in reverse registration
+         * order, so a later one may assume earlier ones are still valid.
          * @param fn The cleanup callback to register
          */
         fun addFinalizer(fn: () => Bool) {
@@ -68,21 +74,53 @@ namespace Am.Threading {
         }
 
         /**
-         * Starts the thread and returns immediately; the runnable then executes on the new thread. Set
-         * name first, and do not call this twice on the same Thread.
+         * Starts the thread and returns immediately. The new thread receives a deep copy of the
+         * runnable and executes its run() on its own heap and its own statics. Set name first, and do
+         * not call this twice on the same Thread. Throws if the runnable references an object that is
+         * not sendable.
          */
         native fun start()
         /**
-         * Blocks the calling thread until this thread has finished. Call it before reading anything the
-         * thread produced, so the writes are complete and visible.
+         * Blocks the calling thread until this thread has finished. Messages the thread sent before it
+         * finished are still waiting in the caller's mailbox afterwards, so join() then receive() is the
+         * usual way to collect a worker's result.
          */
         native fun join()
 
         /**
-         * Returns the Thread the calling code is running on.
+         * Delivers a deep copy of the message to this thread's mailbox and returns at once. The message
+         * and everything it references must be sendable; otherwise an exception is thrown and nothing
+         * is sent. A message sent to a thread that has already finished is dropped.
+         * @param message The object to send; the receiver gets its own copy
+         */
+        native fun send(message: Object)
+
+        /**
+         * Takes the oldest message out of the calling thread's mailbox, waiting until one arrives. The
+         * returned object belongs to the calling thread; cast it to the type you expect.
+         * @return The next message
+         */
+        native static fun receive(): Object
+
+        /**
+         * Takes the oldest message out of the calling thread's mailbox if there is one, without waiting.
+         * @return The next message, or null when the mailbox is empty
+         */
+        native static fun tryReceive(): Object?
+
+        /**
+         * Returns a handle to the thread the calling code is running on, the main thread included.
          * @return The current thread
          */
         native static fun getCurrent(): Thread
+
+        /**
+         * Returns a handle to the thread that started the calling thread, the usual target for a
+         * worker's replies. Throws on the main thread, which has no parent.
+         * @return The parent thread
+         */
+        native static fun getParent(): Thread
+
         /**
          * Pauses the calling thread for at least the given time. The usual way to pace a polling loop
          * so it does not spin the CPU.

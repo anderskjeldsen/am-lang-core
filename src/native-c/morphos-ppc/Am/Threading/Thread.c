@@ -4,10 +4,8 @@
 #include <Am/Lang/Runnable.h>
 #include <Am/Lang/Long.h>
 #include <Am/Lang/String.h>
+#include <Am/Lang/Exception.h>
 #include <libc/core_inline_functions.h>
-
-#include <morphos-ppc/morphos.h>
-
 
 #include <exec/types.h>
 #include <dos/dostags.h>
@@ -17,215 +15,191 @@
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <utility/tagitem.h>
+#include <string.h>
 
-typedef struct _Am_Threading_Thread_data Am_Threading_Thread_data;
-struct _Am_Threading_Thread_data {
-	ULONG stack_size;
-	bool done;
-};
+// MorphOS PPC backend of Am.Threading.Thread under the ISOLATE model — the
+// AmigaOS twin (../../../amigaos/Am/Threading/Thread.c) with the MorphOS
+// CreateNewProc differences: NP_CodeType, CODETYPE_PPC is REQUIRED (dos.library
+// is 68k, so without it the PPC entry is run as 68k code and the worker
+// silently never executes), and NP_Priority is not passed. A Thread aobject
+// is a HANDLE on an aisolate; the worker finds its isolate in its own
+// tc_UserData, which is also what __amlc_isolate() reads here.
+
+typedef struct {
+	struct Process * process;
+	bool launched;
+} thread_native;
+
+static aisolate * handle_isolate(aobject * const this)
+{
+	return (aisolate *) this->object_properties.class_object_properties.object_data.value.custom_value;
+}
+
+static void bind_handle(aobject * const this, aisolate * const iso)
+{
+	this->object_properties.class_object_properties.object_data.value.custom_value = iso;
+}
+
+static aobject * make_handle(aisolate * const iso)
+{
+	aobject * h = __allocate_object(&Am_Threading_Thread);
+	if (h == NULL) return NULL;
+	function_result r = Am_Threading_Thread___init_instance((nullable_value) { .flags = 0, .value.object_value = h });
+	if (r.exception != NULL) __decrease_reference_count(r.exception);
+	__amlc_isolate_retain(iso);
+	bind_handle(h, iso);
+	if (iso->name != NULL) {
+		aobject * name = __create_string(iso->name, &Am_Lang_String);
+		if (name != NULL) {
+			__set_property(h, Am_Threading_Thread_P_name, (nullable_value) { .flags = 0, .value.object_value = name });
+			__decrease_reference_count(name);
+		}
+	}
+	return h;
+}
 
 function_result Am_Threading_Thread__native_init_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
-	bool __returning = false;
-
-	// printf("[native_init] enter (this=%p)\n", (void *) this); fflush(stdout);
-	SysBase = *((struct ExecBase **)4UL);
-	// dos.library is opened by amiga-gcc's C runtime before main()
-	// runs (printf above would crash without it), so the previous
-	// defensive __ensure_library("dos.library") here was dead code.
-	Am_Threading_Thread_data *data = malloc(sizeof(Am_Threading_Thread_data));
-	// Unwrap for the write — a cross-thread wrapper's object_data union
-	// variant is unrelated to the real object's; storing through the
-	// wrapper would leave the real's custom_value at NULL, and every
-	// subsequent read (start/join/native_release) would see NULL.
-	__unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value = data;
-	data->stack_size = 4000 * 1024; // TODO
-	data->done = false;
-	// printf("[native_init] done (this=%p, data=%p, stack=%lu)\n",
-	//        (void *) this, (void *) data, (unsigned long) data->stack_size); fflush(stdout);
-
-__exit: ;
+	bind_handle(this, NULL);
 	return __result;
 };
 
 function_result Am_Threading_Thread__native_release_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
-	bool __returning = false;
-
-	aobject * const real = __unwrap(this);
-	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) real->object_properties.class_object_properties.object_data.value.custom_value;
-	free(data);
-	real->object_properties.class_object_properties.object_data.value.custom_value = NULL;
-
-__exit: ;
+	aisolate * iso = handle_isolate(this);
+	if (iso != NULL) {
+		bind_handle(this, NULL);
+		__amlc_isolate_release(iso);
+	}
 	return __result;
 };
 
 function_result Am_Threading_Thread__native_mark_children_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
-	bool __returning = false;
-__exit: ;
+	(void) this;
 	return __result;
 };
 
+aobject * Am_Threading_Thread__native_copy_0(aobject * const src, void * const copy_ctx)
+{
+	aobject * dst = __allocate_object(src->class_ptr);
+	if (dst == NULL) return NULL;
+	function_result r = Am_Threading_Thread___init_instance((nullable_value) { .flags = 0, .value.object_value = dst });
+	if (r.exception != NULL) __decrease_reference_count(r.exception);
+	aobject * name = src->object_properties.class_object_properties.properties[Am_Threading_Thread_P_name].nullable_value.value.object_value;
+	if (name != NULL) {
+		aobject * c = __amlc_copy_child(copy_ctx, name);
+		if (c == NULL) {
+			__decrease_reference_count(dst);
+			return NULL;
+		}
+		__set_property(dst, Am_Threading_Thread_P_name, (nullable_value) { .flags = 0, .value.object_value = c });
+		__decrease_reference_count(c);
+	}
+	aisolate * iso = handle_isolate(src);
+	if (iso != NULL) {
+		__amlc_isolate_retain(iso);
+		bind_handle(dst, iso);
+	}
+	return dst;
+}
+
+// Worker process entry. The creator stores the aisolate in our tc_UserData
+// right after CreateNewProc returns; we may be scheduled before that, so
+// poll one tick at a time until it is there.
 void Am_Threading_Thread__InitTask()
 {
-	// Very first thing: prove the worker process actually started.
-	// If this print never lands, CreateNewProc handed control to
-	// something else (or trance never bridged to our entry).
-//	printf("[_InitTask] entry (FindTask=%p)\n", (void *) FindTask(NULL)); fflush(stdout);
+	struct Task *own_task = FindTask(NULL);
+	if (own_task == NULL) {
+		printf("Thread: FindTask failed\n");
+		return;
+	}
+	while (own_task->tc_UserData == NULL) {
+		Delay(1);
+	}
+	aisolate * const iso = (aisolate *) own_task->tc_UserData;
 
-	struct Task *own_task = NULL;
-	struct Process *own_process = NULL;
+	__amlc_isolate_enter(iso);
+	__amlc_isolate_run_static_inits();
 
-	own_task = FindTask(NULL);
-	if ( own_task != NULL )
-	{
-		own_process = (struct Process *) own_task;
-//		OwnTask->tc_Switch = NULL; // SwitchEvent;
-//		OwnTask->tc_Launch = NULL; // LaunchEvent;
-//		UBYTE   Flags = OwnTask->tc_Flags;
-//		UBYTE	OldFlags = Flags;
-//		Flags = Flags | TF_SWITCH | TF_LAUNCH;
-//		OwnTask->tc_Flags = Flags;
-
-		// `tc_UserData` holds the wrapper pointer that `start_0` stashed
-		// (matches the ref we took there). All DATA reads on the
-		// Thread/Runnable below must unwrap — cross-thread wrapper
-		// aobjects overlay their union variants, so raw derefs would
-		// read garbage and silently no-op run().
-		aobject * thread_ref = (aobject *) own_task->tc_UserData;
-//		printf("[_InitTask] initial tc_UserData=%p\n", (void *) thread_ref); fflush(stdout);
-
-		while ( thread_ref == NULL )
-		{
-			Am_Threading_Thread_sleep_0(100);
-			thread_ref = (aobject *) own_task->tc_UserData;
+	amessage * boot = iso->boot;
+	iso->boot = NULL;
+	aobject * runnable = boot != NULL ? __amlc_message_open(boot) : NULL;
+	if (runnable != NULL) {
+		// Runnable is an interface: run() is at functions[3], after the three
+		// inherited AnyInterface methods (see the libc twin).
+		Am_Lang_Runnable_f_run_0_T rFunc = (Am_Lang_Runnable_f_run_0_T) runnable->object_properties.iface_reference.iface_implementation->functions[3];
+		function_result r = rFunc(runnable->object_properties.iface_reference.implementation_object);
+		if (r.exception != NULL) {
+			Am_Lang_Exception_f_printWithStackTrace_0(r.exception);
+			__decrease_reference_count(r.exception);
 		}
-//		printf("[_InitTask] tc_UserData resolved (thread=%p)\n", (void *) thread_ref); fflush(stdout);
+		__decrease_reference_count(runnable);
+	}
 
-		if ( thread_ref != NULL )
-		{
-			aobject * thread = __unwrap(thread_ref);
-			aobject * runnable_ref = thread->object_properties.class_object_properties.properties[0].nullable_value.value.object_value;
-			aobject * runnable = __unwrap(runnable_ref);
-//			printf("[_InitTask] runnable=%p iface_impl=%p impl_obj=%p\n",
-//			       (void *) runnable,
-//			       (void *) (runnable ? runnable->object_properties.iface_reference.iface_implementation : NULL),
-//			       (void *) (runnable ? runnable->object_properties.iface_reference.implementation_object : NULL));
-//			fflush(stdout);
-
-			// Runnable is an interface, so dispatch through the iface_implementation
-			// the wrapper carries. run() is at functions[3], NOT [0]: the interface's
-			// inherited Am.Lang.AnyInterface methods take slots 0..2 so run() lands at
-			// 3 (matches the libc Thread native — see reference_amlang_thread_runnable_dispatch).
-			// Calling [0] ran an AnyInterface method that returned right away, so the
-			// worker's run() loop never executed ("worker exiting cleanly"). Going via
-			// runnable->class_ptr
-			// instead would pick up the Am.Lang.Runnable aclass's `functions` field,
-			// which is left NULL for interfaces — silent crash on the worker task.
-			Am_Lang_Runnable_f_run_0_T rFunc = (Am_Lang_Runnable_f_run_0_T) runnable->object_properties.iface_reference.iface_implementation->functions[3];
-//			printf("[_InitTask] rFunc=%p (functions[3]); calling run()\n", (void *) rFunc); fflush(stdout);
-			rFunc(runnable->object_properties.iface_reference.implementation_object);
-
-//			printf("[_InitTask] rFunc returned; about to runFinalizers (task=%p, thread=%p)\n",
-//			       (void *) own_task, (void *) thread);
-//			fflush(stdout);
-
-			// Run user-registered finalizers on this task, in reverse
-			// order, before flipping `done`. The typical caller is the
-			// per-task bsdsocket / amissl cleanup that needs to call
-			// CloseLibrary from inside the same task that called
-			// OpenLibrary — see Am.Net.Socket's nativeInit pattern.
-			// Calling on this task (not the joiner) means finalizers
-			// still see FindTask(NULL) == own_task. Pass the wrapper —
-			// AmLang-side callee unwraps itself.
+	// Finalizers registered on this task's own handle — the per-task
+	// bsdsocket / amissl CloseLibrary case — run on this task.
+	if (iso->self_handle != NULL) {
 #ifdef Am_Threading_Thread_f_runFinalizers_0__DIRECT_NOTHROW_ABI
-			Am_Threading_Thread_f_runFinalizers_0__direct(thread_ref);
+		Am_Threading_Thread_f_runFinalizers_0__direct(iso->self_handle);
 #else
-			Am_Threading_Thread_f_runFinalizers_0(thread_ref);
+		function_result fr = Am_Threading_Thread_f_runFinalizers_0(iso->self_handle);
+		if (fr.exception != NULL) __decrease_reference_count(fr.exception);
 #endif
-//			printf("[_InitTask] runFinalizers returned\n");
-//			fflush(stdout);
-
-			Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) thread->object_properties.class_object_properties.object_data.value.custom_value;
-			data->done = true;
-//			printf("[_InitTask] flagged done; dropping worker ref\n");
-//			fflush(stdout);
-
-			// Drop the worker's reference on the wrapper we were handed
-			// (matches the `__increase_reference_count(this)` implicitly
-			// held via `start_0`). Every access above this line runs
-			// while the wrapper — and thus the real — is alive.
-			__decrease_reference_count(thread_ref);
-//			printf("[_InitTask] worker exiting cleanly\n");
-//			fflush(stdout);
-		}
-		else
-		{
-			printf("Thread not found\n");
-		}
 	}
-	else
-	{
-		printf("Process not found\n");
-	}
+
+	__amlc_isolate_teardown(iso);   // sets iso->done; join() polls it
+	__amlc_isolate_release(iso);    // the running task's own handle
+	__amlc_isolate_count_dec();
 }
 
 function_result Am_Threading_Thread_start_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
-	bool __returning = false;
 
-	// printf("[start] enter (this=%p)\n", (void *) this); fflush(stdout);
-	void (*fptr)() = Am_Threading_Thread__InitTask;
-
-	// Unwrap for every DATA read on the Thread instance. `this` may be
-	// a cross-thread wrapper handle if the caller obtained it from a
-	// shared collection / another thread — direct derefs would read the
-	// wrapper's union variant, not the real object's properties[] slot.
-	aobject * const this_r = __unwrap(this);
-	aobject * name_ref = this_r->object_properties.class_object_properties.properties[1].nullable_value.value.object_value;
-	aobject * name = __unwrap(name_ref);
-	string_holder *name_holder = name->object_properties.class_object_properties.object_data.value.custom_value;
-	STRPTR name_strptr = "";
-	if ( name_holder->string_value != NULL ) {
-		name_strptr = name_holder->string_value;
+	if (handle_isolate(this) != NULL) {
+		__throw_simple_exception("Thread.start called on a thread that was already started", "in Am_Threading_Thread_start_0", &__result);
+		return __result;
 	}
-	// printf("[start] fptr=%p name=\"%s\"\n", (void *) fptr, name_strptr); fflush(stdout);
 
-	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) this_r->object_properties.class_object_properties.object_data.value.custom_value;
+	aisolate * iso = __amlc_isolate_create();
+	bind_handle(this, iso);
 
-//	printf("stack_size: %d\n", data->stack_size);
-//	printf("thread name: %s\n", name_holder->string_value);
+	STRPTR name_strptr = "thread";
+	aobject * name = this->object_properties.class_object_properties.properties[Am_Threading_Thread_P_name].nullable_value.value.object_value;
+	if (name != NULL) {
+		string_holder *nh = (string_holder *) name->object_properties.class_object_properties.object_data.value.custom_value;
+		if (nh != NULL && nh->string_value != NULL) {
+			iso->name = strdup(nh->string_value);
+			name_strptr = iso->name;
+		}
+	}
+	iso->priority = this->object_properties.class_object_properties.properties[Am_Threading_Thread_P_priority].nullable_value.value.int_value;
 
-	// Inherit the calling process's CLI streams so println in the
-	// worker shows up alongside main's println (notably under
-	// `Startup-Sequence: app >output.log` headless setups). Without
-	// NP_Output/NP_Input the new process gets NULL handles and any
-	// printf is silently dropped — which masks runtime errors emitted
-	// from worker tasks. NP_CloseOutput/NP_CloseInput=FALSE keeps the
-	// parent owning the handles so a worker exit doesn't close the
-	// CLI's stdout from under main.
+	// The runnable travels to the worker as a message: a deep copy, or an
+	// exception here if it references something that cannot be copied.
+	aobject * runnable = this->object_properties.class_object_properties.properties[Am_Threading_Thread_P_runnable].nullable_value.value.object_value;
+	iso->boot = __amlc_message_create(runnable, &__result);
+	if (iso->boot == NULL) {
+		return __result;
+	}
+
+	// Inherit the calling process's CLI streams so println in the worker
+	// shows up alongside main's. NP_Close*=FALSE keeps the parent owning
+	// the handles.
 	struct Process *parent_proc = (struct Process *) FindTask(NULL);
 	BPTR parent_out = parent_proc->pr_COS;
 	BPTR parent_in = parent_proc->pr_CIS;
 	BPTR parent_err = parent_proc->pr_CES;
 
-	// NP_CodeType, CODETYPE_PPC is required on MorphOS: dos.library
-	// is 68k, so CreateNewProc defaults to a 68k entry point. Without
-	// this tag our PPC `_InitTask` pointer is interpreted as a 68k
-	// instruction address — the process is spawned, tc_UserData is
-	// set, but the entry never executes (silent: the new process
-	// just sits or dies on its first emulated step). Tag is a no-op
-	// on AmigaOS m68k builds since it's never reached there.
+	void (*fptr)() = Am_Threading_Thread__InitTask;
 	struct TagItem tags[] = {
 		NP_Entry, (ULONG) fptr,
 		NP_CodeType, CODETYPE_PPC,
-		NP_StackSize, data->stack_size,
+		NP_StackSize, iso->stack_size,
 		NP_Name, (ULONG) name_strptr,
 		NP_Output, (ULONG) parent_out,
 		NP_Input, (ULONG) parent_in,
@@ -236,90 +210,109 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 		TAG_DONE, TAG_DONE,
 	};
 
+	thread_native * n = (thread_native *) calloc(1, sizeof(thread_native));
+	iso->native = n;
+	__amlc_isolate_retain(iso);   // the running task's own handle; dropped at the end of _InitTask
+	__amlc_isolate_count_inc();
 
-//	printf("CreateNewProc\n");
-
-	// Take an extra ref for the worker; _InitTask drops it at the end.
-	// Doing this BEFORE CreateNewProc closes the existing race where
-	// the new task starts running and busy-waits on `tc_UserData`
-	// while the caller could otherwise drop their last ref to `this`.
-
-	// printf("[start] calling CreateNewProc\n"); fflush(stdout);
 	struct Process * process = CreateNewProc(tags);
-	// printf("[start] CreateNewProc returned (process=%p)\n", (void *) process); fflush(stdout);
-
-	if ( process == NULL )
-	{
-		// Worker won't run, so undo the ref we took above.
-		printf("CreateNewProc returned a null-pointer\n");
-// TODO:		throw( new GException("CreateNewProc returned a null-pointer") );
+	if (process == NULL) {
+		__amlc_isolate_count_dec();
+		__amlc_isolate_release(iso);
+		__throw_simple_exception("Thread.start: CreateNewProc failed", "in Am_Threading_Thread_start_0", &__result);
+		return __result;
 	}
-	else
-	{
-		process->pr_Task.tc_UserData = (void *) this;
-		// printf("[start] set tc_UserData=%p on task=%p\n",
-		//        (void *) this, (void *) &process->pr_Task); fflush(stdout);
-	}
-
-__exit: ;
+	n->process = process;
+	n->launched = true;
+	// What the worker (and __amlc_isolate() on it) reads: set once, never
+	// changed. The worker polls until it is non-NULL.
+	process->pr_Task.tc_UserData = (void *) iso;
 	return __result;
 };
 
 function_result Am_Threading_Thread_join_0(aobject * const this)
 {
 	function_result __result = { .has_return_value = false };
-	bool __returning = false;
-
-	// printf("[join] start (thread=%p)\n", (void *) this); fflush(stdout);
-	Am_Threading_Thread_data *data = (Am_Threading_Thread_data *) __unwrap(this)->object_properties.class_object_properties.object_data.value.custom_value;
-
-	while( !data->done )
-	{
-		Am_Threading_Thread_sleep_0(200);
+	aisolate * iso = handle_isolate(this);
+	if (iso == NULL || iso->native == NULL) {
+		return __result;
 	}
-	// printf("[join] done (thread=%p)\n", (void *) this); fflush(stdout);
-
-__exit: ;
+	// One tick per poll: a real Wait(), so a same-priority worker gets the
+	// CPU. `done` is set by the worker's teardown.
+	while (!iso->done) {
+		Delay(1);
+	}
 	return __result;
 };
+
+function_result Am_Threading_Thread_send_0(aobject * const this, aobject * message)
+{
+	function_result __result = { .has_return_value = false };
+	aisolate * iso = handle_isolate(this);
+	if (iso == NULL) {
+		__throw_simple_exception("Thread.send: the thread has not been started", "in Am_Threading_Thread_send_0", &__result);
+		return __result;
+	}
+	__amlc_send(iso, message, &__result);
+	return __result;
+}
+
+function_result Am_Threading_Thread_receive_0()
+{
+	function_result __result = { .has_return_value = true };
+	aobject * m = __amlc_receive(true);
+	if (m == NULL) {
+		__throw_simple_exception("Thread.receive: the mailbox is closed", "in Am_Threading_Thread_receive_0", &__result);
+		return __result;
+	}
+	__result.return_value.value.object_value = m;
+	return __result;
+}
+
+function_result Am_Threading_Thread_tryReceive_0()
+{
+	function_result __result = { .has_return_value = true };
+	__result.return_value.value.object_value = __amlc_receive(false);
+	return __result;
+}
 
 function_result Am_Threading_Thread_getCurrent_0()
 {
-	function_result __result = { .has_return_value = false };
-
-	bool __returning = false;
-	struct Task *own_task = FindTask(NULL);
-	if ( own_task != NULL )
-	{
-		__result.return_value.value.object_value = (aobject *) own_task->tc_UserData;
+	function_result __result = { .has_return_value = true };
+	aisolate * iso = __amlc_isolate();
+	if (iso->self_handle == NULL) {
+		iso->self_handle = make_handle(iso);
 	}
-	else
-	{
-		printf("Unable to get own task");
-//		throw( GException("Could not get own task!") );
+	if (iso->self_handle != NULL) {
+		__increase_reference_count(iso->self_handle);
 	}
-
-
-
-__exit: ;
+	__result.return_value.value.object_value = iso->self_handle;
 	return __result;
 };
+
+function_result Am_Threading_Thread_getParent_0()
+{
+	function_result __result = { .has_return_value = true };
+	aisolate * parent = __amlc_isolate()->parent;
+	if (parent == NULL) {
+		__throw_simple_exception("Thread.getParent: the main thread has no parent", "in Am_Threading_Thread_getParent_0", &__result);
+		return __result;
+	}
+	__result.return_value.value.object_value = make_handle(parent);
+	return __result;
+}
 
 function_result Am_Threading_Thread_sleep_0(long long milliseconds)
 {
 	function_result __result = { .has_return_value = false };
-	bool __returning = false;
 
-	// Delay() is 50 Hz (1 tick = 20ms). A plain integer divide FLOORED any sub-20ms
-	// sleep to 0 ticks, and Delay(0) returns immediately — so Thread.sleep(2) (the
-	// chunk-loader worker's idle back-off) did NOT sleep, and the idle workers spun
-	// hot, saturating the single CPU and starving the main thread (frozen UI, CPU
-	// pegged a few seconds into play once the workers ran out of chunks). CEIL instead
-	// so any positive request waits at least one tick; 0ms stays a no-op (yield).
+	// Delay() is 50 Hz (1 tick = 20ms). Round UP so any positive sleep
+	// gives at least one tick — a real Wait() that yields the CPU.
 	int ticks = (int) ((milliseconds + 19) / 20);
-	Delay(ticks); // Ticks (50 per second)
-
-__exit: ;
+	if (milliseconds > 0 && ticks < 1) {
+		ticks = 1;
+	}
+	Delay(ticks);
 	return __result;
 };
 
