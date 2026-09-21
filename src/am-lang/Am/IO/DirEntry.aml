@@ -1,0 +1,30 @@
+namespace Am.IO {
+
+    /**
+     * One entry of a directory listing, as returned by File.listEntries(): the entry's name (without
+     * the directory) and what kind of thing it is, taken from the listing itself so no per-entry stat
+     * is needed. A symlink is reported as a link, not as what it points to.
+     * @param name The entry name, without any directory part
+     * @param kind One of the Kind constants
+     */
+    class DirEntry(var name: String, var kind: Int) {
+        import Am.Lang
+
+        /** The listing did not report a type; ask File.isDirectory() if it matters. */
+        static const KindUnknown: Int = 0
+        /** A regular file. */
+        static const KindFile: Int = 1
+        /** A directory. */
+        static const KindDir: Int = 2
+        /** A symbolic link (not followed). */
+        static const KindLink: Int = 3
+
+        /**
+         * True when the entry is a directory.
+         * @return Whether kind is KindDir
+         */
+        fun isDirectory(): Bool {
+            return this.kind == DirEntry.KindDir
+        }
+    }
+}

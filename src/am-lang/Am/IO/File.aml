@@ -172,6 +172,28 @@ namespace Am.IO
         private native fun listDirsNative(folderFilename: String, list: List<String>)
 
         /**
+         * Lists every entry of this directory — files, directories and links — with its kind, in one
+         * pass over the directory: the kind comes from the listing (d_type on POSIX, the entry type on
+         * AmigaOS), so unlike listFiles() followed by isDirectory() no entry is stat'ed. The names are
+         * bare entry names without the directory part; "." and ".." are never included. An entry whose
+         * kind the file system did not report has DirEntry.KindUnknown — stat it yourself if needed.
+         * @return The entries, in directory order
+         */
+        fun listEntries(): DirEntry[] {
+            var names = List.newList<String>()
+            var kinds = List.newList<Int>()
+            this.listEntriesNative(this.filename, names, kinds)
+            var out = new DirEntry[names.getSize().toUInt()]
+            var i = 0
+            while (i < names.getSize()) {
+                out[i.toUInt()] = new DirEntry(names.get(i), kinds.get(i))
+                i++
+            }
+            return out
+        }
+        private native fun listEntriesNative(folderFilename: String, names: List<String>, kinds: List<Int>)
+
+        /**
          * Tests whether this path is a directory. This FOLLOWS symbolic links, so a link pointing at a
          * directory answers true — code that walks a tree must ask isSymbolicLink() first or it will
          * descend through the link into whatever it points at. Throws when the path cannot be examined

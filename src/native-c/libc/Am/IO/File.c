@@ -179,6 +179,83 @@ __exit: ;
 
 // List only the sub-directory names of `folderFilename` — the type bit
 // is read during the single listing walk, so no per-entry stat/Examine.
+// Every entry with its kind (see Am.IO.DirEntry), from the listing walk
+// alone: d_type on POSIX, fib_DirEntryType on AmigaOS. No stat per entry.
+static void __am_io_file_push_entry(aobject * names, aobject * kinds, const char * name, int kind)
+{
+	aobject *name_str = __create_string(name, &Am_Lang_String);
+#ifdef Am_Collections_List_ta_Am_Lang_String_f_add_0__DIRECT_NOTHROW_ABI
+	Am_Collections_List_ta_Am_Lang_String_f_add_0__direct(names, name_str);
+#else
+	Am_Collections_List_ta_Am_Lang_String_f_add_0(names, name_str);
+#endif
+	__decrease_reference_count(name_str);
+#ifdef Am_Collections_List_ta_Am_Lang_Int_f_add_0__DIRECT_NOTHROW_ABI
+	Am_Collections_List_ta_Am_Lang_Int_f_add_0__direct(kinds, kind);
+#else
+	Am_Collections_List_ta_Am_Lang_Int_f_add_0(kinds, kind);
+#endif
+}
+
+function_result Am_IO_File_listEntriesNative_0(aobject * const this, aobject * folderFilename, aobject * names, aobject * kinds)
+{
+	function_result __result = { .has_return_value = false };
+	bool __returning = false;
+	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
+	string_holder *filename_string_holder = (string_holder *) ((char *) filename + sizeof(aobject));
+	const char *dir_path = filename_string_holder->string_value;
+#ifdef __amigaos__
+	BPTR lock = Lock((CONST_STRPTR) dir_path, ACCESS_READ);
+	if (lock == (BPTR) NULL) {
+		char msg[1024];
+		snprintf(msg, sizeof(msg), "Failed to open directory '%s' (IoErr %ld)", dir_path, (long) IoErr());
+		__throw_simple_exception_copy(msg, "in Am_IO_File_listEntriesNative_0", &__result);
+		goto __exit;
+	}
+	struct FileInfoBlock *fib = (struct FileInfoBlock *) AllocDosObject(DOS_FIB, NULL);
+	if (fib == NULL) {
+		UnLock(lock);
+		__throw_simple_exception("Out of memory listing directory", "in Am_IO_File_listEntriesNative_0", &__result);
+		goto __exit;
+	}
+	if (Examine(lock, fib)) {
+		while (ExNext(lock, fib)) {
+			LONG t = fib->fib_DirEntryType;
+			int kind = (t == ST_SOFTLINK) ? 3 : (t > 0 ? 2 : 1);
+			__am_io_file_push_entry(names, kinds, (const char *) fib->fib_FileName, kind);
+		}
+	}
+	FreeDosObject(DOS_FIB, fib);
+	UnLock(lock);
+#else
+	DIR *d = opendir(dir_path);
+	if (!d) {
+		char msg[1024];
+		snprintf(msg, sizeof(msg), "Failed to open directory '%s': %s", dir_path, strerror(errno));
+		__throw_simple_exception_copy(msg, "in Am_IO_File_listEntriesNative_0", &__result);
+		goto __exit;
+	}
+	struct dirent *dir;
+	while ((dir = readdir(d)) != NULL) {
+		if (dir->d_name[0] == '.' &&
+		    (dir->d_name[1] == '\0' ||
+		     (dir->d_name[1] == '.' && dir->d_name[2] == '\0'))) {
+			continue;
+		}
+		int kind = 0;
+#ifdef DT_DIR
+		if (dir->d_type == DT_DIR) kind = 2;
+		else if (dir->d_type == DT_REG) kind = 1;
+		else if (dir->d_type == DT_LNK) kind = 3;
+#endif
+		__am_io_file_push_entry(names, kinds, dir->d_name, kind);
+	}
+	closedir(d);
+#endif
+__exit: ;
+	return __result;
+};
+
 function_result Am_IO_File_listDirsNative_0(aobject * const this, aobject * folderFilename, aobject * list)
 {
 	function_result __result = { .has_return_value = false };
