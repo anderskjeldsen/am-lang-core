@@ -1,130 +1,114 @@
 namespace Am.Lang 
 {
     /**
-     * Reflection descriptor for one property of a class: its name, its type and accessors that
-     * read or write it on an instance. Obtained from ClassRef.getProperties(). Reflection data
-     * only exists when the binary was compiled with the -reflection option; without it the
-     * registry is empty.
+     * One property of a reflected class (see ClassRef.getProperties()): its name, its slot, its
+     * declared type and whether it was declared nullable, plus reading and writing it on an
+     * instance. Values travel as Any: a primitive slot reads as the boxed primitive, an object
+     * slot as the object or null.
      */
     native class PropertyInfo {
-        /**
-         * The property's name. Populated by the reflection runtime at startup (which only runs
-         * when the binary was compiled with `-reflection`). Declared nullable to be honest about
-         * that; getName() asserts non-null because the contract is that reflection setup ran
-         * before anyone reads it.
-         */
         private var name: String? = null
-        /**
-         * Slot number of this property within its class layout.
-         */
-        private var index: UByte
+        private var index: UInt = 0UI
+        private var nullable: Bool = false
 
         /**
-         * Returns the property's declared name.
-         * @return The property name
+         * Returns the property's name as declared.
+         * @return The name
          */
         fun getName(): String {
             return this.name
         }
 
         /**
-         * Returns the declared type of the property as a ClassRef.
-         * @return The property's type descriptor
+         * Returns the property's slot index within the instance.
+         * @return The slot index
+         */
+        fun getIndex(): UInt {
+            return this.index
+        }
+
+        /**
+         * Tells whether the property was declared nullable (`T?`).
+         * @return True for a nullable declaration
+         */
+        fun isNullable(): Bool {
+            return this.nullable
+        }
+
+        /**
+         * Returns the ClassRef of the property's DECLARED type: for `var items: List<Person>` the
+         * List<Person> variant, whose type arguments are then available through
+         * ClassRef.getTypeArguments(). The runtime type of a value may be a subclass of it.
+         * @return The declared type's ClassRef
          */
         native fun getPropertyClassRef(): ClassRef
 
         /**
-         * Reads this property from an instance. The target must be an Object — primitives carry
-         * no properties — and the value comes back as Any, so cast it to the expected type.
-         * @param target The instance to read from
-         * @return The current value of the property
+         * Reads the property from an instance of the declaring class.
+         * @param target The instance to read
+         * @return The value: a boxed primitive, an object, or null
          */
         native fun getValue(target: Object): Any
+
         /**
-         * Writes this property on an instance. The value must match the property's declared type;
-         * a mismatch is not checked at compile time.
-         * @param target The instance to write to
-         * @param value The value to store
+         * Writes the property on an instance of the declaring class. A primitive slot accepts any
+         * numeric primitive and converts it; an object slot takes the object or null.
+         * @param target The instance to write
+         * @param value The new value
          */
         native fun setValue(target: Object, value: Any)
     }
 
     /**
-     * Runtime descriptor of a class: its name and, when the binary was built with reflection
-     * enabled, its properties. Get one from any value with getClassRef(), by name with
-     * ClassRef.getClassRef(name), or for a type parameter with
-     * `ClassRef.getClassRefFromClass<T>()`. This is the entry point for the small amount of
-     * reflection AmLang offers — enough for generic serializers and debug dumps, and not much
-     * more.
+     * Describes a class at run time. Every value answers getClassRef() with the ClassRef of its
+     * class, which always carries the class name; a class marked `#reflect` (and every class in
+     * its closure: base classes, property types with their type arguments, and subclasses) also
+     * exposes its properties, can be found by name and can be instantiated. That is what a
+     * serializer needs to walk and rebuild an object graph without knowing the types in advance.
+     * ClassRefs are shared by all threads and live for the whole program.
      */
     native class ClassRef
     {
         import Am.Collections
 
-        /**
-         * The class name. Same shape as PropertyInfo.name: populated by the reflection runtime,
-         * and getClassName() asserts non-null on read.
-         */
         private var className: String? = null
-        /**
-         * The class's property descriptors, or null when the binary was built without reflection.
-         */
         private var properties: Array<PropertyInfo>? = null
-        /**
-         * Registry of every class descriptor, keyed by class name and filled in at startup.
-         */
-        private static var classRefs: HashMap<String, ClassRef> = new HashMap<String, ClassRef>()
+        private var reflected: Bool = false
 
         /**
-         * Looks up a class descriptor by name. The name must match what the runtime registered, and
-         * an unknown name throws rather than returning null.
-         * @param name The class name to look up
-         * @return The descriptor for that class
-         * @throws KeyNotFoundException if no class with that name is registered
+         * Finds a reflected class by its full name, for example "Shop.Order" or
+         * "Am.Collections.List_ta_Shop.Order" for a generic variant.
+         * @param name The class name
+         * @return The ClassRef, or null when no class of that name is reflected
          */
-        static fun getClassRef(name: String): ClassRef {
-            return ClassRef.classRefs.get(name)
+        native static fun getClassRef(name: String): ClassRef?
+
+        /**
+         * Finds the reflected class named by a type argument.
+         * @return The ClassRef, or null when T is not reflected
+         */
+        static fun getClassRefFromClass<T>(): ClassRef? {
+            return ClassRef.getClassRef(nameof(T))
         }
 
         /**
-         * Returns the descriptor for a type known at compile time, as in
-         * `ClassRef.getClassRefFromClass<MyType>()`.
-         * @return The descriptor for T
-         */
-        static fun getClassRefFromClass<T>(): ClassRef {
-            return ClassRef.classRefs.get(nameof(T))
-        }
-
-
-        /**
-         * Returns the descriptor for the runtime type of a value — the type it actually is, not the
-         * type of the variable holding it.
-         * @param any The value to inspect
-         * @return The descriptor for that value's runtime type
+         * Returns the ClassRef of a value's run-time class - what getClassRef() on the value does.
+         * @param any The value
+         * @return Its class
          */
         native static fun getClassRefFromAny(any: Any): ClassRef
 
         /**
-         * Adds a descriptor to the registry. Called by generated startup code; application code has
-         * no reason to call it.
-         * @param name The class name to register under
-         * @param classRef The descriptor to register
+         * Tells whether the class carries reflection data (properties, instantiation). A class
+         * that does not still has a name.
+         * @return True for a `#reflect` class or one in a reflected closure
          */
-        static fun registerClassRef(name: String, classRef: ClassRef) {
-            ClassRef.classRefs.set(name, classRef)
+        fun isReflected(): Bool {
+            return this.reflected
         }
 
         /**
-         * Returns the class's properties. Only populated when the binary was compiled with
-         * reflection enabled.
-         * @return The property descriptors for this class
-         */
-        fun getProperties(): PropertyInfo[] {
-            return this.properties
-        }
-
-        /**
-         * Returns the name of the class this descriptor represents.
+         * Returns the full class name; a generic variant includes its type arguments.
          * @return The class name
          */
         fun getClassName(): String {
@@ -132,9 +116,97 @@ namespace Am.Lang
         }
 
         /**
-         * Returns the class name.
-         * @return The class name
+         * Returns the instance properties in slot order, base classes first. Throws when the
+         * class is not reflected.
+         * @return The properties
          */
+        fun getProperties(): PropertyInfo[] {
+            this.ensureProperties()
+            return this.properties
+        }
+
+        private native fun ensureProperties()
+
+        /**
+         * Finds an instance property by name.
+         * @param name The property name
+         * @return The property, or null
+         */
+        fun getProperty(name: String): PropertyInfo? {
+            var props = this.getProperties()
+            var i = 0UI
+            while (i < props.length()) {
+                var p = props[i]
+                if (p.getName() == name) {
+                    return p
+                }
+                i++
+            }
+            return null
+        }
+
+        /**
+         * Returns the type arguments of a generic variant (List<Person> gives [Person]); empty
+         * for a non-generic class.
+         * @return The type arguments' ClassRefs
+         */
+        native fun getTypeArguments(): ClassRef[]
+
+        /**
+         * Creates an instance of a reflected class without running its constructor: the object
+         * is allocated and its property defaults applied, constructor parameters start null and
+         * are expected to be set through PropertyInfo.setValue(). Throws for a class that is not
+         * reflected.
+         * @return The new instance
+         */
+        native fun newInstance(): Object
+
+        /**
+         * Calls an instance method of a reflected class by name. The arguments are converted to
+         * the method's declared parameter types, numeric primitives included; the return value
+         * comes back as Any (null for a method that returns nothing), and an exception thrown by
+         * the method propagates. Overloads are matched by name and argument count, so two
+         * overloads taking the same number of arguments are not distinguishable here.
+         * @param target The instance to call on; its run-time class is searched, then its bases
+         * @param name The method name
+         * @param args The arguments, in order
+         * @return The method's return value, or null
+         */
+        native static fun invoke(target: Object, name: String, args: Any[]): Any
+
+        /**
+         * Creates an array of the given array type (`Int[]`, `Person[]` - the ClassRef of the
+         * Array variant, as PropertyInfo.getPropertyClassRef() returns for an array property).
+         * @param arrayType The array variant's ClassRef
+         * @param length The number of elements, zero/null-filled
+         * @return The array
+         */
+        native static fun newArray(arrayType: ClassRef, length: Int): Object
+
+        /**
+         * Returns the length of any array given as an Object.
+         * @param array The array
+         * @return Its length
+         */
+        native static fun arrayLength(array: Object): Int
+
+        /**
+         * Reads an element of any array given as an Object.
+         * @param array The array
+         * @param index The element index
+         * @return The element as Any
+         */
+        native static fun arrayGet(array: Object, index: Int): Any
+
+        /**
+         * Writes an element of any array given as an Object; numeric primitives are converted to
+         * the element type.
+         * @param array The array
+         * @param index The element index
+         * @param value The new element
+         */
+        native static fun arraySet(array: Object, index: Int, value: Any)
+
         override fun toString(): String {
             return this.className
         }

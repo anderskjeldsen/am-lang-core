@@ -1615,26 +1615,111 @@ bool implements_interface(aclass const * const iface, aclass const * const cls) 
     return false;
 }
 
-void create_property_info(const unsigned char index, char * const name, aobject ** property_infos, aclass *cls) {
-    aobject * property_info = __allocate_object_with_extra_size(&__property_info_class_alias, sizeof(cls));
-    property *properties = (property *) ((char *) property_info + sizeof(aobject));
-    aclass ** class_holder_ptr = (aclass **) (properties + 2); // given that PropertyInfo has exactly 2 properties
-    *class_holder_ptr = cls;
+// ---------------------------------------------------------------------------
+// Reflection. ClassRef objects are process-global (one per aclass, hung on
+// class_ptr->class_ref_singleton) and read from every isolate, so they and
+// everything they own - the name string, the PropertyInfo array and its
+// entries - are immortal: pinned counts, never released by the isolates,
+// freed only by __amlc_reflection_teardown at exit. Creation happens under
+// the global lock, and never inside a fast-lane arena.
+// ---------------------------------------------------------------------------
 
-    __property_info_constructor_alias(property_info);
-    aobject * property_name = __create_string_constant(name, &__string_class_alias);
-    __set_property(property_info, Am_Lang_PropertyInfo_P_name, (nullable_value) { .flags = 0, .value.object_value = property_name});
-    __set_property(property_info, Am_Lang_PropertyInfo_P_index, (nullable_value) { .flags = PRIMITIVE_UCHAR, .value.uchar_value = index });
-	property_infos[index] = property_info;
-    if (__is_suspicious_object_ptr(property_info)) {
-        printf("[create_property_info] SUSPICIOUS index=%d name=%s value=%p\n",
-            index, name, (void*)property_info);
-        fflush(stdout);
-        exit(0);
+static aclass * __amlc_reflected_first = NULL;
+
+typedef struct __amlc_cr_node {
+    aobject * ref;
+    struct __amlc_cr_node * next;
+} __amlc_cr_node;
+static __amlc_cr_node * __amlc_cr_list = NULL;
+
+void __amlc_register_reflected(aclass * const cls) {
+    cls->reflected_next = __amlc_reflected_first;
+    __amlc_reflected_first = cls;
+}
+
+aclass * __amlc_find_reflected_class(const char * const name) {
+    for (aclass * c = __amlc_reflected_first; c != NULL; c = c->reflected_next) {
+        if (strcmp(c->name, name) == 0) return c;
     }
-    __increase_property_reference_count(property_info);
-    __decrease_reference_count(property_info);
-    __decrease_reference_count(property_name);
+    return NULL;
+}
+
+void __amlc_make_immortal(aobject * const obj) {
+    obj->immortal = true;
+    obj->reference_count = 0x40000000;
+}
+
+aobject * __amlc_allocate_immortal(aclass * const cls, size_t extra_size) {
+    aisolate * const iso = __amlc_isolate();
+    int const saved_depth = iso->fast_depth;
+    iso->fast_depth = 0;   // never from an arena: the object outlives every fast block
+    aobject * obj = extra_size > 0 ? __allocate_object_with_extra_size(cls, extra_size) : __allocate_object(cls);
+    iso->fast_depth = saved_depth;
+    if (obj != NULL) __amlc_make_immortal(obj);
+    return obj;
+}
+
+aobject * __amlc_class_ref(aclass * const cls) {
+    if (cls->class_ref_singleton != NULL) return cls->class_ref_singleton;
+    __amlc_global_lock();
+    if (cls->class_ref_singleton == NULL) {
+        aobject * ref = __amlc_allocate_immortal(&__class_ref_class_alias, 0);
+        if (ref != NULL) {
+            ref->object_properties.class_object_properties.object_data.value.custom_value = cls;
+            aobject * name = __create_string_constant(cls->name, &__string_class_alias);
+            if (name != NULL) {
+                __amlc_make_immortal(name);
+                __set_property(ref, Am_Lang_ClassRef_P_className, (nullable_value) { .flags = 0, .value.object_value = name });
+            }
+            __set_property(ref, Am_Lang_ClassRef_P_reflected, (nullable_value) { .flags = PRIMITIVE_BOOL, .value.bool_value = cls->reflect != NULL });
+            __amlc_cr_node * node = (__amlc_cr_node *) malloc(sizeof(__amlc_cr_node));
+            if (node != NULL) {
+                node->ref = ref;
+                node->next = __amlc_cr_list;
+                __amlc_cr_list = node;
+            }
+            cls->class_ref_singleton = ref;
+        }
+    }
+    __amlc_global_unlock();
+    return cls->class_ref_singleton;
+}
+
+// Frees an immortal object: the pinned count becomes a real one and drops.
+// Children it holds are immortal too (their property counts were never
+// taken), so each is freed on its own by the caller.
+static void __amlc_free_immortal(aobject * const obj) {
+    if (obj == NULL) return;
+    obj->reference_count = 1;
+    __decrease_reference_count(obj);
+}
+
+void __amlc_reflection_teardown(void) {
+    __amlc_cr_node * node = __amlc_cr_list;
+    __amlc_cr_list = NULL;
+    while (node != NULL) {
+        aobject * const ref = node->ref;
+        aclass * const cls = (aclass *) ref->object_properties.class_object_properties.object_data.value.custom_value;
+        aobject * const props = ref->object_properties.class_object_properties.properties[Am_Lang_ClassRef_P_properties].nullable_value.value.object_value;
+        if (props != NULL) {
+            array_holder * const ah = (array_holder *) ((char *) props + sizeof(aobject));
+            aobject ** const items = (aobject **) ah->array_data;
+            for (unsigned int i = 0; i < ah->size; i++) {
+                aobject * const pi = items[i];
+                if (pi == NULL) continue;
+                aobject * const pname = pi->object_properties.class_object_properties.properties[Am_Lang_PropertyInfo_P_name].nullable_value.value.object_value;
+                __amlc_free_immortal(pi);
+                __amlc_free_immortal(pname);
+            }
+            __amlc_free_immortal(props);
+        }
+        __amlc_free_immortal(ref->object_properties.class_object_properties.properties[Am_Lang_ClassRef_P_className].nullable_value.value.object_value);
+        __amlc_free_immortal(ref);
+        if (cls != NULL) cls->class_ref_singleton = NULL;
+        __amlc_cr_node * const next = node->next;
+        free(node);
+        node = next;
+    }
 }
 
 aclass * const get_class_from_any(nullable_value const value) {

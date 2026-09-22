@@ -227,6 +227,13 @@ struct _class_static {
     class_static *next;
 };
 
+// Reflection (`#reflect` classes, see __amlc_class_ref): one read-only
+// descriptor per class (variant), generated into the class's .c and hung
+// on the aclass in <Class>_init(). Everything else is materialised lazily.
+typedef struct _amlc_prop_desc amlc_prop_desc;
+typedef struct _amlc_method_desc amlc_method_desc;
+typedef struct _amlc_reflect_desc amlc_reflect_desc;
+
 struct _aclass {
     char * name;
     class_static * const statics;
@@ -257,7 +264,54 @@ struct _aclass {
     // allocates the class, so concurrent isolates can lose an update —
     // diagnostic accuracy only. Always present so aclass literals stay valid.
     int instance_count;
+    // `#reflect`: the class's property descriptor, or NULL. A class without
+    // one still answers getClassRef() (name only, created on first use).
+    const amlc_reflect_desc * reflect;
+    // Registry of reflected classes for ClassRef.getClassRef(name).
+    aclass * reflected_next;
 };
+
+// Reflected calls pass their arguments in a small fixed array.
+#define AMLC_MAX_REFLECT_ARGS 8
+
+#define AMLC_PROP_NULLABLE 1   // declared `T?`
+#define AMLC_PROP_STRUCT 2     // slot holds a Struct<T> box
+
+struct _amlc_prop_desc {
+    const char * name;
+    unsigned int slot;         // index into object_properties...properties[]
+    unsigned int flags;        // AMLC_PROP_*
+    aclass * type;             // declared type (a variant aclass for generics)
+};
+
+// One invokable instance method. `thunk` is a generated
+// `function_result (*)(aobject * this, nullable_value * args)` that unpacks
+// the argument array into the method's real C parameter types and calls it.
+struct _amlc_method_desc {
+    const char * name;
+    unsigned int arg_count;
+    __anonymous_function thunk;
+};
+
+struct _amlc_reflect_desc {
+    const amlc_prop_desc * props;
+    unsigned int count;
+    __anonymous_function init_instance;   // <Class>___init_instance, or NULL
+    aclass * const * type_args;           // the class's own type arguments, NULL-terminated, or NULL
+    const amlc_method_desc * methods;
+    unsigned int method_count;
+};
+
+// Reflection runtime (core.c / Am/Lang/ClassRef.c).
+void __amlc_register_reflected(aclass * const cls);          // from <Class>_init()
+aclass * __amlc_find_reflected_class(const char * const name);
+aobject * __amlc_class_ref(aclass * const cls);              // the class's ClassRef, created on first use
+aobject * __amlc_allocate_immortal(aclass * const cls, size_t extra_size);
+void __amlc_make_immortal(aobject * const obj);
+void __amlc_reflection_teardown(void);                       // from the generated startup, at exit
+ctype __amlc_class_ctype(aclass * const cls);                // primitive class -> value kind, else object_type
+unsigned char __amlc_ctype_flags(ctype const t);
+nullable_value __amlc_coerce_primitive(nullable_value v, ctype const target);
 
 struct _iface_implementation {    
     aclass * iface_class;
@@ -676,7 +730,6 @@ unsigned int __string_byte_to_unit(string_holder * const holder, unsigned int co
 void deallocate_annotations(class_static * const __class_static);
 array_holder * get_array_holder(aobject * const array_obj);
 char * get_array_data(array_holder * holder);
-void create_property_info(const unsigned char index, char * const name, aobject ** property_infos, aclass *cls);
 
 // Mark & Sweep (GC)
 void __mark_root_objects();
@@ -698,6 +751,7 @@ void __print_memory_header(aobject * const obj, const char * prefix);
 // aliases for generated code
 #include <Am/Lang/Object.h>
 #include <Am/Lang/ClassRef.h>
+#include <Am/Lang/PropertyInfo.h>
 #include <Am/Lang/Exception.h>
 #include <Am/Lang/OutOfMemoryException.h>
 // typedef Am_Lang_Object_equals_0_T __object_equals_alias;

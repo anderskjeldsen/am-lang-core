@@ -1,0 +1,228 @@
+namespace Tests {
+
+    // `#reflect` on RtOrder pulls in its closure: RtCustomer and RtLine
+    // (property types), List<RtLine> and Int[] (variants, with their type
+    // arguments), RtAddress (property type) and RtHomeAddress (a subclass
+    // of a reflected class). RtUnrelated stays name-only.
+    #reflect
+    class RtOrder(var id: Int, var customer: RtCustomer) {
+        import Am.Lang
+        import Am.Collections
+
+        var lines: List<RtLine> = List<RtLine>.newList<RtLine>()
+        var note: String? = null
+        var shipTo: RtAddress? = null
+        var codes: Int[] = new Int[0]
+        var rating: Int? = null
+        var paid: Bool = false
+    }
+
+    class RtCustomer(var name: String, var email: String) {
+        import Am.Lang
+    }
+
+    class RtLine(var sku: String, var qty: Int) {
+        import Am.Lang
+        var price: Double = 0.0
+    }
+
+    class RtAddress(var street: String) {
+        import Am.Lang
+    }
+
+    class RtHomeAddress(street: String, var floor: Int) : RtAddress(street) {
+        import Am.Lang
+    }
+
+    class RtUnrelated {
+        import Am.Lang
+        var x: Int = 1
+    }
+
+    class ReflectionTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        // Every value has a ClassRef with a name - reflected or not.
+        test nameOnlyClassRefs() {
+            var s = "hello"
+            Assert.assertEquals("Am.Lang.String", s.getClassRef().getClassName())
+            var i = 20
+            Assert.assertEquals("Am.Lang.Int", i.getClassRef().getClassName())
+            var u = new RtUnrelated()
+            Assert.assertEquals("Tests.RtUnrelated", u.getClassRef().getClassName())
+            Assert.assertTrue(!u.getClassRef().isReflected())
+            // The same ClassRef every time.
+            Assert.assertTrue(u.getClassRef() == new RtUnrelated().getClassRef())
+        }
+
+        test unreflectedHasNoProperties() {
+            var threw = false
+            try {
+                new RtUnrelated().getClassRef().getProperties()
+            } catch (ex: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+            Assert.assertTrue(ClassRef.getClassRef("Tests.RtUnrelated") == null)
+        }
+
+        test reflectedClassLists() {
+            var o = new RtOrder(7, new RtCustomer("Ann", "ann@x"))
+            var cr = o.getClassRef()
+            Assert.assertTrue(cr.isReflected())
+            Assert.assertEquals("Tests.RtOrder", cr.getClassName())
+            var props = cr.getProperties()
+            Assert.assertEquals(8, props.length().toInt())
+            Assert.assertEquals("id", props[0UI].getName())
+            Assert.assertEquals("customer", props[1UI].getName())
+            Assert.assertEquals("Am.Lang.Int", props[0UI].getPropertyClassRef().getClassName())
+            Assert.assertEquals("Tests.RtCustomer", props[1UI].getPropertyClassRef().getClassName())
+            Assert.assertTrue(!props[0UI].isNullable())
+            Assert.assertTrue(cr.getProperty("note").isNullable())
+            Assert.assertTrue(cr.getProperty("rating").isNullable())
+            Assert.assertTrue(cr.getProperty("nope") == null)
+        }
+
+        test closureReachesPropertyTypesVariantsAndSubclasses() {
+            var customer = ClassRef.getClassRef("Tests.RtCustomer")
+            Assert.assertTrue(customer != null)
+            Assert.assertTrue(customer.isReflected())
+            Assert.assertEquals(2, customer.getProperties().length().toInt())
+
+            var o = new RtOrder(1, new RtCustomer("a", "b"))
+            var lines = o.getClassRef().getProperty("lines").getPropertyClassRef()
+            Assert.assertTrue(lines.isReflected())
+            var targs = lines.getTypeArguments()
+            Assert.assertEquals(1, targs.length().toInt())
+            Assert.assertEquals("Tests.RtLine", targs[0UI].getClassName())
+            Assert.assertTrue(targs[0UI].isReflected())
+
+            var codes = o.getClassRef().getProperty("codes").getPropertyClassRef()
+            Assert.assertEquals("Am.Lang.Int", codes.getTypeArguments()[0UI].getClassName())
+
+            // Subclass of a reflected class (through the RtAddress property).
+            var home = ClassRef.getClassRef("Tests.RtHomeAddress")
+            Assert.assertTrue(home != null)
+            Assert.assertEquals(2, home.getProperties().length().toInt())
+            Assert.assertEquals("street", home.getProperties()[0UI].getName())
+            Assert.assertEquals("floor", home.getProperties()[1UI].getName())
+        }
+
+        test getAndSetValues() {
+            var o = new RtOrder(7, new RtCustomer("Ann", "ann@x"))
+            var cr = o.getClassRef()
+            var id = cr.getProperty("id").getValue(o) as Int
+            Assert.assertEquals(7, id)
+            var c = cr.getProperty("customer").getValue(o) as RtCustomer
+            Assert.assertEquals("Ann", c.name)
+            Assert.assertTrue(cr.getProperty("note").getValue(o) == null)
+
+            cr.getProperty("id").setValue(o, 42)
+            Assert.assertEquals(42, o.id)
+            // A Long lands in an Int slot converted.
+            cr.getProperty("id").setValue(o, 43L)
+            Assert.assertEquals(43, o.id)
+            cr.getProperty("note").setValue(o, "hi")
+            Assert.assertEquals("hi", o.note)
+            cr.getProperty("paid").setValue(o, true)
+            Assert.assertTrue(o.paid)
+            cr.getProperty("rating").setValue(o, 5)
+            Assert.assertEquals(5, o.rating as Int)
+            cr.getProperty("rating").setValue(o, null)
+            Assert.assertTrue(o.rating == null)
+            var home = new RtHomeAddress("Main st", 3)
+            cr.getProperty("shipTo").setValue(o, home)
+            Assert.assertEquals("Tests.RtHomeAddress", o.shipTo.getClassRef().getClassName())
+        }
+
+        test newInstanceAndFill() {
+            var cr = ClassRef.getClassRef("Tests.RtCustomer")
+            var obj = cr.newInstance()
+            cr.getProperty("name").setValue(obj, "Bob")
+            cr.getProperty("email").setValue(obj, "bob@x")
+            var c = obj as RtCustomer
+            Assert.assertEquals("Bob", c.name)
+            Assert.assertEquals("bob@x", c.email)
+
+            // Property defaults are applied by newInstance (no constructor).
+            var lineRef = ClassRef.getClassRef("Tests.RtLine")
+            var line = lineRef.newInstance() as RtLine
+            Assert.assertTrue(line.price == 0.0)
+            Assert.assertTrue(line.sku == null)
+        }
+
+        test arrays() {
+            var o = new RtOrder(1, new RtCustomer("a", "b"))
+            var arrType = o.getClassRef().getProperty("codes").getPropertyClassRef()
+            var arr = ClassRef.newArray(arrType, 3)
+            Assert.assertEquals(3, ClassRef.arrayLength(arr))
+            ClassRef.arraySet(arr, 0, 10)
+            ClassRef.arraySet(arr, 1, 20L)
+            ClassRef.arraySet(arr, 2, 30)
+            Assert.assertEquals(20, ClassRef.arrayGet(arr, 1) as Int)
+            o.getClassRef().getProperty("codes").setValue(o, arr)
+            Assert.assertEquals(3UI, o.codes.length())
+            Assert.assertEquals(30, o.codes[2UI])
+
+            // An object array: the List's backing storage, reflected through List<RtLine>.
+            var lineList = o.getClassRef().getProperty("lines").getPropertyClassRef()
+            var itemsType = lineList.getProperty("items").getPropertyClassRef()
+            var items = ClassRef.newArray(itemsType, 2)
+            ClassRef.arraySet(items, 0, new RtLine("A", 1))
+            Assert.assertEquals("A", (ClassRef.arrayGet(items, 0) as RtLine).sku)
+            Assert.assertTrue(ClassRef.arrayGet(items, 1) == null)
+        }
+
+        // Instance methods of reflected classes are callable by name: this is
+        // what lets a serializer use a collection's own API instead of poking
+        // at its storage.
+        test invokeMethods() {
+            var list = List<RtLine>.newList<RtLine>()
+            var addArgs = new Any[1UI]
+            addArgs[0UI] = new RtLine("A-1", 2)
+            ClassRef.invoke(list, "add", addArgs)
+            Assert.assertEquals(1, ClassRef.invoke(list, "getSize", new Any[0UI]) as Int)
+
+            var idxArgs = new Any[1UI]
+            idxArgs[0UI] = 0
+            var line = ClassRef.invoke(list, "get", idxArgs) as RtLine
+            Assert.assertEquals("A-1", line.sku)
+
+            // Arguments are converted to the declared parameter types.
+            var order = new RtOrder(1, new RtCustomer("a", "b"))
+            var setArgs = new Any[1UI]
+            setArgs[0UI] = "note via invoke"
+            var props = order.getClassRef().getProperty("note")
+            props.setValue(order, "x")
+            Assert.assertEquals("x", order.note)
+
+            var threw = false
+            try {
+                ClassRef.invoke(list, "noSuchMethod", new Any[0UI])
+            } catch (ex: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+
+            // An exception from the called method propagates.
+            var badIdx = new Any[1UI]
+            badIdx[0UI] = 99
+            var threw2 = false
+            try {
+                ClassRef.invoke(list, "get", badIdx)
+            } catch (ex2: Exception) {
+                threw2 = true
+            }
+            Assert.assertTrue(threw2)
+        }
+
+        test byNameLookupOfVariant() {
+            var listRef = ClassRef.getClassRef("Am.Collections.List_ta_Tests.RtLine")
+            Assert.assertTrue(listRef != null)
+            var l = listRef.newInstance() as List<RtLine>
+            Assert.assertEquals(0, l.getSize())
+        }
+    }
+}
