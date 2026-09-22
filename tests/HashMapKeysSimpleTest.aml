@@ -29,5 +29,24 @@ namespace Tests {
             Assert.assertTrue(hasKey1)
             Assert.assertTrue(hasKey2)
         }
+
+        // keys() shares its name with HashMap's private key ARRAY. The
+        // binder used to resolve `map.keys()` to that field from any other
+        // class (through a parameter, a local, a local copy alike) and then
+        // fail to call it - buildKeys() worked, keys() did not.
+        test keysMethodBindsThroughParameterAndLocal() {
+            var map = new HashMap<String, Int>()
+            map.set("a", 1)
+            map.set("b", 2)
+            Assert.assertEquals(2, map.keys().getSize())
+            Assert.assertEquals(2, HashMapKeysSimpleTest.countKeys(map))
+            var copy = map
+            Assert.assertEquals(2, copy.keys().getSize())
+        }
+
+        static fun countKeys(m: HashMap<String, Int>): Int {
+            var ks = m.keys()
+            return ks.getSize()
+        }
     }
 }
