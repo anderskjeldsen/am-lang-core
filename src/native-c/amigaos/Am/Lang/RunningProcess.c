@@ -219,11 +219,7 @@ struct rp_state {
     BOOL any_open;
 
     volatile BOOL child_exited;
-    // Exit status captured by rp_child_exit (D0 from NP_ExitCode).
-    // Read by the AmLang side via RunningProcess.exitCode() to gate
-    // the New CLI auto-retry: 161 is ixemul's "libc init failed"
-    // sentinel and is the only code we want to retry on. Initialised
-    // to 0; only valid once child_exited is TRUE.
+    // D0 from NP_ExitCode; valid once child_exited is TRUE.
     volatile LONG exit_code;
     volatile BOOL shutdown_requested;
 
@@ -303,16 +299,7 @@ struct rp_state {
     volatile ULONG pkt_other_count;
     volatile LONG  pkt_other_last_type;
 
-    // BPTR of the child's stdin FakeFileHandle, mirrored from
-    // running_process_data at startNative time. The handler task
-    // doesn't have access to `d`, so the EXAMINE_FH handler reads
-    // this to distinguish stdin probes (bebbossh's handleKeyboard
-    // polling, which needs DOSFALSE pre-raw_mode to trigger
-    // SetMode) from stdout/stderr probes (ixemul's fdopen at
-    // child startup, which needs DOSTRUE+fib or the child bails
-    // with exit 161 before reaching main()). Single-write at
-    // startNative, multi-read from the handler task — no lock
-    // needed.
+    // Mirrored handle values for handler-side diagnostics.
     BPTR fh_in_bptr;
     // Mirrored stdout / stderr BPTRs so the handler-side EXAMINE_FH
     // diagnostic can identify which FH is being probed when it
@@ -321,21 +308,9 @@ struct rp_state {
     BPTR fh_out_bptr;
     BPTR fh_err_bptr;
 
-    // Pool of DupLock'd cwd locks pre-allocated at startNative time
-    // (when the AmLang main task can safely call DOS). Handed out
-    // one-at-a-time by the handler's ACTION_COPY_DIR_FH (1030) and
-    // ACTION_PARENT_FH (1031) cases — ixemul-based programs (ls,
-    // make, gcc, etc.) make 3 such calls during fdopen() of their
-    // inherited stdin/stdout/stderr and bail (exit 161 before main())
-    // if any returns a null Lock. The caller takes ownership of the
-    // returned BPTR and is responsible for UnLock'ing it. When the
-    // pool drains, further requests reply DOSFALSE; any locks still
-    // in the pool at handler shutdown are UnLock'd by rp_state_free
-    // so they don't leak.
-    //
-    // 6 entries covers ixemul's 3 fdopen + 3 follow-up Parent/Copy
-    // probes; an unusually chatty caller will see a few DOSFALSEs at
-    // the tail (correctly handled by ixemul as "lock op failed").
+    // Directory locks allocated by the caller for ACTION_COPY_DIR_FH and
+    // ACTION_PARENT_FH. Ownership transfers to the requesting process.
+    // Exhaustion returns DOSFALSE; unused locks are released at teardown.
     BPTR cached_locks[6];
 };
 
@@ -688,6 +663,11 @@ static BOOL rp_task_exists(struct Task * t) {
 //   7 child_exit callback (arg=status)       8 close: alive-wait ticks
 //   9 close: task-gone wait ticks (+1000 if forced)   10 close: DIE sent
 //  11 close: handler-exit wait ticks         12 END: open_count after
+//  20 lockpool src_lock (0 = nothing to DupLock)   21 lockpool filled
+//  22 lockpool handed out (BPTR)                   23 lockpool EMPTY (arg=type)
+//  24 child pr_CLI BPTR (0 = no CLI)
+//  25 cli_Interactive as set   26 NP_HomeDir lock   27 NP_CurrentDir lock
+//  28 child stack bytes
 static void rp_tr(rp_state * st, ULONG code, ULONG arg) {
     if (st == NULL) return;
     Forbid();
@@ -1343,16 +1323,8 @@ static void rp_handler_entry(void) {
                     break;
                 case 1030:                  /* ACTION_COPY_DIR_FH */
                 case 1031: {                /* ACTION_PARENT_FH */
-                    /* ixemul's fdopen() of the 3 inherited stdio FHs
-                     * sends one of these per fd and bails (exit 161)
-                     * if it doesn't get back a valid dir Lock — so
-                     * pop a pre-DupLock'd cwd lock from the pool and
-                     * transfer ownership to the caller (it'll UnLock
-                     * later). Pool was populated at startNative when
-                     * the AmLang main task could safely call DupLock;
-                     * the handler task can't (recursive packet wait
-                     * deadlock risk). When the pool drains, reply 0
-                     * — caller treats it as a clean failure. */
+                    // Transfer a cached lock without making recursive DOS
+                    // calls from the handler. An empty pool returns failure.
                     BPTR popped = 0;
                     if (!st->child_exited) {
                         int li;
@@ -1375,9 +1347,11 @@ static void rp_handler_entry(void) {
                     if (popped != 0) {
                         rp_log_event("[rp] lockpool: pop type=", (LONG) type);
                         rp_log_event("[rp] lockpool: handed=",   (LONG) popped);
+                        rp_tr(st, 22, (ULONG) popped);
                         rp_pkt_reply_ex(pkt, popped, 0, reply_ok);
                     } else {
                         rp_log_event("[rp] lockpool: EMPTY type=", (LONG) type);
+                        rp_tr(st, 23, (ULONG) type);
                         rp_pkt_reply_ex(pkt, 0, ERROR_ACTION_NOT_KNOWN, reply_ok);
                     }
                     break;
@@ -1417,38 +1391,10 @@ static void rp_handler_entry(void) {
                     // ring returns 0 instead of deferring, so the
                     // event loop doesn't wedge on that one Read.
                     //
-                    // 2026-06-23 refinement for ixemul programs:
-                    // restrict the DOSFALSE-pre-raw_mode trick to
-                    // STDIN probes. Bebbossh's handleKeyboard only
-                    // ExamineFH's stdin, so the trigger still fires
-                    // exactly when needed. ixemul-based programs
-                    // (ls/make/gcc) call fdopen() on all 3 inherited
-                    // BPTRs at startup, and DOSFALSE on stdout/stderr
-                    // there made ixemul think stdio init had failed,
-                    // bailing with exit 161 before reaching main()
-                    // (zero ACTION_WRITE packets). Replying DOSTRUE+
-                    // fib for stdout/stderr lets ixemul's fdopen
-                    // succeed, the child runs main(), writes its
-                    // output through ACTION_WRITE.
                     if (st->child_exited) {
                         rp_pkt_reply_ex(pkt, DOSFALSE, 0, reply_ok);
                         break;
                     }
-                    // STDIN probe + raw_mode==FALSE: reply DOSFALSE
-                    // so bebbossh / nano's handleKeyboard takes its
-                    // SetMode(stdin, 1) fallback, which sends
-                    // ACTION_SCREEN_MODE → raw_mode=TRUE → terminal
-                    // grid takes over. STDOUT/STDERR probes get
-                    // DOSTRUE+fib unconditionally.
-                    //
-                    // (Earlier this was gated on pkt_write_count to
-                    // try to let ixemul's fdopen succeed at the same
-                    // time, but ixemul still bails on something else
-                    // entirely — and the guard regressed nano /
-                    // bebbossh by suppressing the SetMode trigger
-                    // during init. ixemul tools now go through the
-                    // SystemTagList path in CliView instead, so this
-                    // handler only needs to satisfy libnix programs.)
                     // Pre-raw-mode rule: reply DOSFALSE to every
                     // EXAMINE_FH that reaches us, regardless of which
                     // FH BPTR the caller used. bebbossh's
@@ -1462,15 +1408,11 @@ static void rp_handler_entry(void) {
                     // DOSTRUE+fib forever and SetMode never fired
                     // → no raw_mode → nano renders as line-history.
                     //
-                    // This used to be narrowed to stdin-only because
-                    // ixemul's fdopen() on stdout/stderr bailed on
-                    // DOSFALSE. Ixemul tools now route through the
-                    // CliView auto-retry → Process.run* path's
-                    // CreateNewProcTags + real-FH spawn, so this
-                    // handler only has to satisfy libnix
-                    // (bebbossh/nano/ssh) — which want DOSFALSE on
-                    // every pre-raw probe.
-                    if (!st->raw_mode) {
+                    // Preserve startup metadata probes until the first write.
+                    // After that, pre-raw probes use the SetMode fallback
+                    // described above. Match the phase, not a particular FH:
+                    // callers may open another handle through "*".
+                    if (!st->raw_mode && st->pkt_write_count > 0) {
                         static int s_first_dosfalse_logged = 0;
                         if (!s_first_dosfalse_logged) {
                             s_first_dosfalse_logged = 1;
@@ -1486,12 +1428,8 @@ static void rp_handler_entry(void) {
                         for (ULONG i = 0; i < sizeof(struct FileInfoBlock); i++) {
                             z[i] = 0;
                         }
-                        // fib_DirEntryType MUST be set — 0 is invalid
-                        // and ixemul's fdopen() treats it as "fd
-                        // broken" → exit 161 before main(). ST_PIPEFILE
-                        // (-5) is the closest semantic match for a
-                        // stream-like FH; ixemul accepts it and proceeds
-                        // to wrap the inherited BPTR into a FILE*.
+                        // Report stream-like metadata rather than an invalid
+                        // zero entry type.
                         fib->fib_DirEntryType = ST_PIPEFILE;
                         fib->fib_EntryType    = ST_PIPEFILE;
                         // BCPL-string filename so ixemul's strncpy /
@@ -1578,18 +1516,37 @@ static void rp_handler_entry(void) {
 // struct is freed. We flip child_exited on the shared state so the
 // AmLang side's isAlive() observes the transition.
 
-// NP_ExitCode hook — AmigaOS calls this with D0=return-code,
-// D1=NP_ExitData. Without explicit register binding gcc reads from
-// the stack and gets garbage, so the state pointer we set up via
-// NP_ExitData arrives NULL and child_exited never flips.
+// NP_ExitCode uses D0=return-code, D1=NP_ExitData, but DO NOT pass st in D1
+// via NP_ExitData. Keep that tag zero. With networking active, ixemul 48's
+// ixnet init_inet_daemon() interprets any nonzero pr_ExitData as an inetd
+// DaemonMessage. Our state pointer becomes bogus ObtainSocket() arguments,
+// causing exit(DERR_OBTAIN=161) before GCC/make reach main or print anything.
+// This is a startup-data collision, not a failure to support streaming or
+// capture stderr. A synchronous retry with the same mistake also fails.
+// See Process.c's g_cap_contexts comment for the source details and the
+// ade-network regression profile; tests without active ixnet miss this bug.
+//
+// Find state in our own list using FindTask(NULL); tc_UserData is NOT an
+// alternative because ixemul uses it internally. Register child_task under
+// the spawn's Forbid BEFORE its first Permit, so immediate exits are found.
+// Match the active child_task, not child_task_ever (Exec can reuse addresses),
+// and pin the state while the callback uses it across scheduling points.
 static void __saveds rp_child_exit(
     register LONG status __asm("d0"),
     register LONG data   __asm("d1"))
 {
-    rp_log_event("rp_child_exit status=", status);
-    rp_log_event("rp_child_exit data=",   data);
-    rp_state * st = (rp_state *) data;
+    (void) data;
+    struct Task *self = FindTask(NULL);
+    Forbid();
+    rp_state *st = g_handler_list_head;
+    while (st != NULL && (st->child_task != self || st->refcount <= 0)) {
+        st = st->next_handler;
+    }
+    // Keep state alive through logging and handler wakeups below.
+    if (st != NULL) st->refcount++;
+    Permit();
     if (st == NULL) return;
+    rp_log_event("rp_child_exit status=", status);
     rp_tr(st, 7, (ULONG) status);
     // Packet histogram. If pkt_write_count == 0 for a child that
     // clearly produced output (ls / make / gcc), ixemul opened a
@@ -1645,6 +1602,7 @@ static void __saveds rp_child_exit(
     // routed to the dead child, and the panel stopped repainting until it
     // was closed and reopened. One signal here closes that gap.
     rp_signal_main_wake();
+    rp_state_release(st);
 }
 
 // =================================================================
@@ -1823,6 +1781,21 @@ struct rp_path_node {
 // The child's NP_HomeDir (its PROGDIR:) has to name the drawer the BINARY
 // lives in, and only the resolver knows which of its candidates won.
 static char g_resolved_cmd_path[260];
+
+// NP_CommandName accepts at most 104 characters. Keep a short full path
+// for argv[0]; for a longer path, use the filename without changing LoadSeg.
+static void rp_command_name(const char *binary, char name[105])
+{
+    int i = 0;
+    while (i < 104 && binary[i] != 0) i++;
+    if (binary[i] != 0) binary = (const char *) FilePart((STRPTR) binary);
+    i = 0;
+    while (i < 104 && binary[i] != 0) {
+        name[i] = binary[i];
+        i++;
+    }
+    name[i] = 0;
+}
 
 static void rp_record_resolved(const char * p) {
     int i = 0;
@@ -2215,7 +2188,18 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     {
         struct Process * self_proc = (struct Process *) FindTask(NULL);
         BPTR src_lock = (self_proc != NULL) ? self_proc->pr_CurrentDir : 0;
+        BPTR fallback_lock = 0;
+        if (src_lock == 0) {
+            // A Workbench-started process can have no current-dir lock.
+            // Try the program drawer as a source for the handler's lock pool.
+            fallback_lock = Lock((CONST_STRPTR) "PROGDIR:", ACCESS_READ);
+            src_lock = fallback_lock;
+        }
         rp_log_event("[rp] lockpool: src_lock=", (LONG) src_lock);
+        // Also into the Forbid-safe ring, so this is visible in
+        // T:rp-trace.log WITHOUT -DRP_VERBOSE_LOG (whose Write()s from
+        // handler context are themselves a hazard).
+        rp_tr(st, 20, (ULONG) src_lock);
         if (src_lock != 0) {
             int li;
             int filled = 0;
@@ -2225,6 +2209,12 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
             }
             rp_log_event("[rp] lockpool: filled=", (LONG) filled);
             rp_log_event("[rp] lockpool: slot0=", (LONG) st->cached_locks[0]);
+            rp_tr(st, 21, (ULONG) filled);
+        }
+        // The dups are independent of their source, so the temporary
+        // fallback lock is ours to release.
+        if (fallback_lock != 0) {
+            UnLock(fallback_lock);
         }
     }
 
@@ -2285,18 +2275,11 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     // extension drawer, found neither, and quietly scaffolded the built-in
     // cross-compiling package.yml (and a "build -bt macos-arm" hint) instead
     // of the packager's native AmigaOS one.
-    // ixemul children (GeekGadgets coreutils, gcc, make) read pr_HomeDir at
-    // libc init to find "the program's own location" — the binary's drawer is
-    // the right answer for them too; with no HomeDir at all they exit 161
-    // before reaching main(), so the cwd stays as the fallback.
     // DOS calls are safe here — we're on the AmLang main task, not the
     // handler. NP_HomeDir and NP_CurrentDir are freed independently when the
     // child exits, so these must be two separate locks, never the same one.
     BPTR child_home_lock = 0;
-    // The child's CURRENT dir. Without NP_CurrentDir the child does not
-    // inherit ours — it starts at the boot volume root, so a relative path
-    // handed to the child (`amlc new MyProject`) was created in `SYS:` no
-    // matter what directory the terminal was showing.
+    // Give the child its own lock for the terminal's working directory.
     BPTR child_cwd_lock = 0;
     {
         struct Process * self_proc = (struct Process *) FindTask(NULL);
@@ -2326,6 +2309,8 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     // "no extra dirs", and NP_Path is then omitted so the child keeps the
     // default inherited path.
     BPTR sp_chain = __build_spawn_path();
+    char child_command_name[105];
+    rp_command_name(g_cmd_buf, child_command_name);
     struct Process * child = CreateNewProcTags(
         NP_Seglist,     (ULONG) seg,
         NP_FreeSeglist, TRUE,
@@ -2335,6 +2320,7 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         NP_Error,       (ULONG) d->fh_err_bptr,    /* ignored on V40, see below */
         NP_ConsoleTask, (ULONG) st->handler_port,
         NP_Arguments,   (ULONG) g_arg_buf,
+        NP_CommandName, (ULONG) child_command_name,
         // Explicit: a child inherits the CREATING task's priority, and the
         // application's UI task may run above 0 (am-ide raises itself to
         // +1 so it preempts its workers). A compiler at +1 would then sit
@@ -2348,9 +2334,15 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         NP_CurrentDir,  (ULONG) child_cwd_lock,
         NP_CopyVars,    TRUE,
         NP_ExitCode,    (ULONG) rp_child_exit,
-        NP_ExitData,    (LONG)  st,
+        NP_ExitData,    (LONG)  0, /* ixnet reserves nonzero data for inetd */
         (sp_chain != 0 ? NP_Path : TAG_IGNORE), (ULONG) sp_chain,
         TAG_DONE);
+    BPTR launched_input = 0, launched_output = 0, launched_error = 0;
+    struct MsgPort *launched_console = NULL;
+    // Record the launch context without making DOS calls from the handler.
+    rp_tr(st, 26, (ULONG) child_home_lock);
+    rp_tr(st, 27, (ULONG) child_cwd_lock);
+    rp_tr(st, 28, (ULONG) child_stack);
     // NDK note in dostags.h: "V40 DID NOT, unlike claimed, support
     // NP_Error and NP_CloseError." On Kickstart 3.1 (V40) NP_Error
     // is silently dropped — pr_CES stays 0, and libnix's stdio
@@ -2360,8 +2352,16 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
     // CON: window instead. Manually set pr_CES while Forbid is
     // held so the child hasn't run yet.
     if (child != NULL) {
+        // Register before Permit: even a child that exits immediately must
+        // be discoverable by rp_child_exit, which cannot use pr_ExitData.
+        st->child_task = &child->pr_Task;
+        st->child_task_ever = &child->pr_Task;
         // V40 fix: NP_Error silently dropped, set pr_CES manually.
         child->pr_CES = d->fh_err_bptr;
+        launched_input = child->pr_CIS;
+        launched_output = child->pr_COS;
+        launched_error = child->pr_CES;
+        launched_console = child->pr_ConsoleTask;
 
         // V40 fix: CLI struct's standard I/O fields aren't fully
         // populated from NP_Input/NP_Output either — some programs
@@ -2371,33 +2371,18 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         // has no ambiguity.
         struct CommandLineInterface * cli =
             (struct CommandLineInterface *) BADDR(child->pr_CLI);
+        rp_tr(st, 24, (ULONG) child->pr_CLI);
         if (cli != NULL) {
             cli->cli_StandardInput  = d->fh_in_bptr;
             cli->cli_CurrentInput   = d->fh_in_bptr;
             cli->cli_StandardOutput = d->fh_out_bptr;
             cli->cli_CurrentOutput  = d->fh_out_bptr;
-            // cli_Interactive == 1 tells the child's libc / shell
-            // it's running with a real (interactive) console rather
-            // than a batch script. ixemul-based programs branch on
-            // this for stdio buffering AND in some versions abort
-            // with a custom exit code (0xA1 / 161) when it reads
-            // as 0. Set both this and cli_Background to mirror what
-            // a normal shell-spawned process looks like.
+            // This handler presents an interactive foreground CLI.
             cli->cli_Interactive    = 1;
             cli->cli_Background     = 0;
-            // cli_CommandName is a BSTR (length-prefixed BCPL string)
-            // ixemul uses for argv[0] reconstruction. A NULL BSTR
-            // here makes ixemul's _start choke; a sensible default
-            // mirrors what SystemTagList sets. Stash it in a static
-            // BCPL-format buffer — CLI struct just stores the BPTR.
-            static UBYTE s_cmd_name_bstr[36];
-            int slen = 0;
-            while (slen < 30 && g_cmd_buf[slen] != 0) {
-                s_cmd_name_bstr[slen + 1] = g_cmd_buf[slen];
-                slen++;
-            }
-            s_cmd_name_bstr[0] = (UBYTE) slen;
-            cli->cli_CommandName = MKBADDR(s_cmd_name_bstr);
+            rp_tr(st, 25, (ULONG) cli->cli_Interactive);
+            // DOS owns and frees cli_CommandName. NP_CommandName supplies
+            // the name without replacing its BSTR with shared static memory.
             rp_log_event("[rp] CLI patched, cli=", (LONG) cli);
         } else {
             rp_log_event("[rp] no CLI on child (pr_CLI=", (LONG) child->pr_CLI);
@@ -2423,25 +2408,17 @@ function_result Am_Lang_RunningProcess_startNative_0(aobject * const this, aobje
         goto __exit;
     }
     d->child_owns_seg = TRUE;
-    // Capture the child's Task pointer for the graceful-kill path
-    // (terminateChild_0 uses this to Signal SIGBREAKF_CTRL_C to the
-    // child so it exits via its own CTRL_C check instead of us
-    // tearing down the handler while the child is mid-Read → alert
-    // on the freed fh_Type MsgPort). `struct Process` embeds `struct
-    // Task` as its first member, so this cast is safe. Cleared by
-    // rp_child_exit when the child dies.
-    Forbid();
-    st->child_task = &child->pr_Task;
-    st->child_task_ever = &child->pr_Task;
-    Permit();
+    // Child task pointers were registered before its first dispatch.
     // Confirm the new process actually got our FH wiring + handler
     // port. If any of these don't match what we passed in NP_*, the
     // tag wasn't honoured for some reason and we'll see writes go
     // elsewhere.
-    rp_log_event("[rp] child pr_CIS=",         (LONG) child->pr_CIS);
-    rp_log_event("[rp] child pr_COS=",         (LONG) child->pr_COS);
-    rp_log_event("[rp] child pr_CES=",         (LONG) child->pr_CES);
-    rp_log_event("[rp] child pr_ConsoleTask=", (LONG) child->pr_ConsoleTask);
+    // These were copied before Permit; a fast child's Process may already
+    // have been freed by the time parent-side diagnostics run.
+    rp_log_event("[rp] child pr_CIS=",         (LONG) launched_input);
+    rp_log_event("[rp] child pr_COS=",         (LONG) launched_output);
+    rp_log_event("[rp] child pr_CES=",         (LONG) launched_error);
+    rp_log_event("[rp] child pr_ConsoleTask=", (LONG) launched_console);
     rp_log_event("[rp] expected fh_out_bptr=", (LONG) d->fh_out_bptr);
     rp_log_event("[rp] expected handler_port=",(LONG) st->handler_port);
 
@@ -2627,9 +2604,6 @@ function_result Am_Lang_RunningProcess_isAlive_0(aobject * const this) {
 
 // Exit status captured by NP_ExitCode. Returns 0 until the child has
 // exited (callers should gate on isAlive() == false before reading).
-// New CLI uses this to detect ixemul's "libc init failed" sentinel
-// (status 161) so the auto-retry only fires for that specific case,
-// not for any silent-success command.
 function_result Am_Lang_RunningProcess_exitCode_0(aobject * const this) {
     function_result __result = { .has_return_value = true };
     running_process_data * d = rp_data(this);

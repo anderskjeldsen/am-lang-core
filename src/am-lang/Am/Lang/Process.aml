@@ -45,9 +45,9 @@ namespace Am.Lang
         /**
          * Runs a shell command in a given directory and captures only stdout, going through the
          * DOS System() shell with file redirection instead of spawning the child directly. On
-         * AmigaOS this is the reliable path for a child built without ixemul: the spawn recipe
-         * used by runAndCaptureOutputInDir is tuned for ixemul children and hangs a -noixemul one
-         * at startup. stderr is not captured. On the libc platforms this behaves exactly like
+         * AmigaOS this captures stdout only: V40 System() does not propagate the caller's
+         * stderr handle to the shell. Use runAndCaptureOutputInDir for external commands
+         * whose diagnostics must be captured. On libc platforms this behaves like
          * runAndCaptureOutputInDir.
          * @param command The command line to execute
          * @param workingDir Directory to run in, or an empty string for the current one

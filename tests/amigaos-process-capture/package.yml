@@ -1,0 +1,24 @@
+id: amigaos-process-capture
+version: 1.0.0
+type: application
+dependencies:
+  - id: am-lang-core
+    type: local
+    path: ../..
+platforms:
+  - id: libc
+    abstract: true
+  - id: amigaos
+    extends: libc
+    gccCommand: m68k-amigaos-gcc -O3
+    gccAdditionalOptions:
+      - -noixemul
+    additionalLinkerFlags:
+      - -noixemul
+buildTargets:
+  - id: amigaos-docker
+    platform: amigaos
+    treeShake: true
+    dockerBuild:
+      image: amiga-gcc:13
+      buildPath: /host
