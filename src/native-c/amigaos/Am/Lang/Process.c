@@ -11,6 +11,7 @@
 
 #include <exec/types.h>
 #include <exec/memory.h>
+#include <exec/execbase.h>
 #include <dos/dos.h>
 #include <dos/dostags.h>
 #include <dos/dosextens.h>
@@ -80,13 +81,8 @@ __exit: ;
 	return __result;
 }
 
-// Read the entire contents of a closed temp file at `path` into a
-// freshly-AllocVec'd buffer. Caller frees with FreeVec on success.
-// Returns the number of bytes read on success, -1 on any failure
-// (caller treats as "empty file" and just doesn't append anything).
-// Deletes the temp file before returning regardless of success.
 // =================================================================
-// Capture completion: ask DOS, do not guess
+// Capture completion: wait until DOS has finished cleaning up the child
 // =================================================================
 //
 // The two capture entry points below spawn with CreateNewProcTags --
@@ -108,13 +104,110 @@ __exit: ;
 // pr_ExitCode / pr_ExitData at $FA6358 / $FA636C. (Unlike NP_Error,
 // whose tag constant appears NOWHERE in the 512K ROM -- which is why
 // pr_CES still has to be patched by hand at each spawn site.) So let
-// DOS tell us: the hook flips `done` as the child exits and the wait
-// becomes authoritative. The remaining cap covers only the child that
-// never exits at all, so it can afford to be generous.
-typedef struct {
+// DOS tell us its return code. The hook runs BEFORE DOS closes the child's
+// streams, however, so completion requires the task to leave Exec's lists.
+// An early read of a still-open output file fails with ERROR_OBJECT_IN_USE.
+typedef struct am_cap_ctx {
+	struct am_cap_ctx *next;
+	struct Task *child_task;
 	volatile LONG done;        /* child's exit hook ran               */
 	volatile LONG rc;          /* its return code                     */
 } am_cap_ctx;
+
+// IMPORTANT: keep NP_ExitData/pr_ExitData ZERO for ordinary child commands.
+// Although DOS permits callback data here, ixemul 48's network startup uses
+// the same field for a different purpose. With the AmiTCP backend active,
+// ixnet/socket.c:init_inet_daemon() treats ANY nonzero pr_ExitData as an
+// inetd DaemonMessage. Passing our am_cap_ctx pointer makes it call
+// ObtainSocket() with unrelated memory as the socket parameters. Failure
+// calls exit(DERR_OBTAIN), defined as 0xA1 (161) in ixemul's inetd.h.
+// GCC/make then exit before main(), producing NO stdout or stderr. Changing
+// redirection or switching to RunCommand cannot repair that startup failure.
+//
+// This caused the New CLI regression diagnosed on 2026-09-27. Tests with
+// ixnet's networking backend inactive passed, hiding the bug. The relevant
+// regression profile is tests/amigaos-process-capture/run.sh with
+// CAPTURE_PROFILE=ade-network: it exposes AmiTCP:libs/usergroup.library so
+// the backend actually activates. Merely enabling socket emulation is not
+// sufficient. Test both synchronous APIs and RunningProcess with GCC/make.
+//
+// Keep our completion context in this task-to-context registry instead.
+// Register under Forbid BEFORE the child can run, and retain it until the
+// child leaves Exec's task lists (the exit hook precedes DOS stream cleanup).
+// Do not move it to tc_UserData: ixemul owns that field for its runtime state.
+// RunningProcess.c must preserve the same rules for asynchronous children.
+static am_cap_ctx *g_cap_contexts = NULL;
+
+// All list access is protected by Forbid. Contexts remain allocated until
+// the child has left Exec's task lists, including its DOS cleanup.
+static void am_cap_register(am_cap_ctx *ctx, struct Task *child)
+{
+	ctx->child_task = child;
+	ctx->next = g_cap_contexts;
+	g_cap_contexts = ctx;
+}
+
+static am_cap_ctx *am_cap_find_current(void)
+{
+	struct Task *self = FindTask(NULL);
+	Forbid();
+	am_cap_ctx *ctx = g_cap_contexts;
+	while (ctx != NULL && ctx->child_task != self) ctx = ctx->next;
+	Permit();
+	return ctx;
+}
+
+static void am_cap_release(am_cap_ctx *ctx)
+{
+	Forbid();
+	am_cap_ctx **link = &g_cap_contexts;
+	while (*link != NULL && *link != ctx) link = &(*link)->next;
+	if (*link == ctx) *link = ctx->next;
+	Permit();
+	FreeVec(ctx);
+}
+
+static am_cap_ctx *am_cap_create(void)
+{
+	return (am_cap_ctx *) AllocVec(sizeof(am_cap_ctx), MEMF_PUBLIC | MEMF_CLEAR);
+}
+
+// Temporary capture diagnostics for this build. Disable with -D...=0.
+// Log only the binary and numeric results, never arguments or output text.
+#ifndef AM_PROCESS_CAPTURE_DIAGNOSTICS
+#define AM_PROCESS_CAPTURE_DIAGNOSTICS 1
+#endif
+
+static void am_cap_log_result(const char *binary, const char *resolved, BOOL completed,
+    const am_cap_ctx *ctx, LONG out_size, LONG err_size)
+{
+#if AM_PROCESS_CAPTURE_DIAGNOSTICS
+	LONG hook_seen = ctx != NULL ? ctx->done : FALSE;
+	LONG status = hook_seen ? ctx->rc : -1;
+	LONG ix_version = -1, ix_revision = -1;
+	Forbid();
+	struct Library *ix = (struct Library *) FindName(&SysBase->LibList, "ixemul.library");
+	if (ix != NULL) {
+		ix_version = ix->lib_Version;
+		ix_revision = ix->lib_Revision;
+	}
+	Permit();
+	BPTR log = Open("PROGDIR:process-capture.log", MODE_READWRITE);
+	if (log != 0) {
+		if (Seek(log, 0, OFFSET_END) >= 0) {
+			FPrintf(log, "binary=%s completed=%ld hook=%ld rc=%ld out=%ld err=%ld\n",
+			    binary, (LONG) completed, hook_seen, status, out_size, err_size);
+			FPrintf(log, "completion=task-registry spawnExitData=0\n");
+			FPrintf(log, "resolved=%s dos=%ld.%ld exec=%ld.%ld cpuFlags=%ld ixemul=%ld.%ld\n",
+			    resolved, (LONG) ((struct Library *) DOSBase)->lib_Version,
+			    (LONG) ((struct Library *) DOSBase)->lib_Revision,
+			    (LONG) SysBase->LibNode.lib_Version, (LONG) SysBase->LibNode.lib_Revision,
+			    (LONG) SysBase->AttnFlags, ix_version, ix_revision);
+		}
+		Close(log);
+	}
+#endif
+}
 
 // NP_ExitCode hook. AmigaOS calls this in the CHILD's context as the
 // process exits, D0 = return code, D1 = NP_ExitData. The register
@@ -126,18 +219,15 @@ static void __saveds am_cap_child_exit(
     register LONG status __asm("d0"),
     register LONG data   __asm("d1"))
 {
-	am_cap_ctx *ctx = (am_cap_ctx *) data;
+	(void) data;
+	am_cap_ctx *ctx = am_cap_find_current();
 	if (ctx == NULL) return;
 	ctx->rc = status;
 	ctx->done = TRUE;
 }
 
-// Per-capture task name. The name is the FALLBACK completion check, for
-// a child that somehow leaves without its hook running; the old fixed
-// "amProcessCapture" was the same for every capture, so two in flight
-// each saw the other's child as its own. Qualify it with the waiting
-// task's address -- one task cannot be inside two captures at once,
-// these calls being synchronous.
+// Per-capture task label, for diagnostics only. Programs may rename their
+// task, so its name must never be used to decide whether capture is done.
 static void am_proc_format_cap_name(char *out, const struct Task *self)
 {
 	static const char hex[] = "0123456789abcdef";
@@ -149,42 +239,42 @@ static void am_proc_format_cap_name(char *out, const struct Task *self)
 	out[i] = 0;
 }
 
-// Block until the child is gone. Returns TRUE if it genuinely
-// finished, FALSE if we gave up on it.
-//
-// Two independent completion signals, because neither alone covers
-// everything: `ctx->done` is authoritative and fires the moment the
-// child exits, while the task-list check still catches a child that
-// somehow never runs its hook. `max_ticks` is in Delay() ticks
-// (1 tick = 20 ms); it is a backstop for the suspended-on-a-requester
-// child, NOT a deadline for a slow one, so it is minutes rather than
-// seconds. A healthy child no longer races it at all.
-static BOOL am_cap_wait_for_child(const am_cap_ctx *ctx, const char *task_name,
-                                  LONG max_ticks)
+// Compare task addresses under Forbid without dereferencing the saved child
+// pointer: its Process structure may already have been freed. This is the
+// same lifetime check used by RunningProcess before stopping its handler.
+static BOOL am_cap_task_exists(const struct Task *child)
+{
+	BOOL found = FALSE;
+	if (child == NULL) return FALSE;
+	Forbid();
+	if (child == SysBase->ThisTask) {
+		found = TRUE;
+	} else {
+		struct Node *node;
+		for (node = SysBase->TaskReady.lh_Head; node->ln_Succ != NULL; node = node->ln_Succ) {
+			if ((const struct Task *) node == child) { found = TRUE; break; }
+		}
+		if (!found) {
+			for (node = SysBase->TaskWait.lh_Head; node->ln_Succ != NULL; node = node->ln_Succ) {
+				if ((const struct Task *) node == child) { found = TRUE; break; }
+			}
+		}
+	}
+	Permit();
+	return found;
+}
+
+// The exit hook and a fixed delay cannot guarantee closed streams. Wait for
+// actual removal, even if the program changed its task name while running.
+static BOOL am_cap_wait_for_child(const struct Task *child, LONG max_ticks)
 {
 	LONG waited = 0;
 	while (waited < max_ticks) {
-		struct Task *t;
-		if (ctx != NULL && ctx->done) break;
-		Forbid();
-		t = FindTask((STRPTR) task_name);
-		Permit();
-		if (t == NULL) break;
+		if (!am_cap_task_exists(child)) return TRUE;
 		Delay(2);
 		waited += 2;
 	}
-	if (ctx != NULL && ctx->done) {
-		Delay(5);   /* flush window for in-flight CLI cleanup */
-		return TRUE;
-	}
-	{
-		struct Task *t;
-		Forbid();
-		t = FindTask((STRPTR) task_name);
-		Permit();
-		if (t == NULL) { Delay(5); return TRUE; }
-	}
-	return FALSE;   /* still there after max_ticks -- wedged, not slow */
+	return !am_cap_task_exists(child);
 }
 
 // Backstop for a child that never exits: 5 minutes at 20 ms a tick.
@@ -199,6 +289,8 @@ static const char AM_CAP_INCOMPLETE_NOTE[] =
 	"\n[am-lang-core] capture gave up waiting for the command; it was still "
 	"running, so this output is INCOMPLETE.\n";
 
+// Read and delete a closed temp file. Never call this for a live child:
+// opening can fail while its handle is exclusive, and deletion loses output.
 static LONG am_proc_read_and_delete_temp(const UBYTE *path, UBYTE **out_buf)
 {
 	*out_buf = NULL;
@@ -260,8 +352,8 @@ static void am_proc_build_temp_path(UBYTE *temp_path, struct Task *self, const c
 }
 
 // Where a capture spawn's LoadSeg actually found the binary, plus a lock on
-// the drawer holding it. A child created from a pre-loaded NP_Seglist gives
-// DOS no file to derive pr_HomeDir from, so without NP_HomeDir the child has
+// the drawer holding it. A child created with a preloaded NP_Seglist gives
+// DOS no filename to derive pr_HomeDir from, so without NP_HomeDir the child has
 // NO PROGDIR: at all — and PROGDIR: is how a bundled tool finds the files
 // shipped beside it (amlc's config.json / templates/package.yml, for one:
 // without this it silently scaffolded the built-in cross-compiling
@@ -269,6 +361,21 @@ static void am_proc_build_temp_path(UBYTE *temp_path, struct Task *self, const c
 // Returns 0 when the resolved name has no directory part; the tag is then
 // omitted and behaviour is exactly what it was before.
 static char g_cap_resolved[192];
+
+// NP_CommandName accepts at most 104 characters. Keep a short full path
+// for argv[0]; for a longer path, use the filename without changing LoadSeg.
+static void am_proc_command_name(const char *binary, char name[105])
+{
+    int i = 0;
+    while (i < 104 && binary[i] != 0) i++;
+    if (binary[i] != 0) binary = (const char *) FilePart((STRPTR) binary);
+    i = 0;
+    while (i < 104 && binary[i] != 0) {
+        name[i] = binary[i];
+        i++;
+    }
+    name[i] = 0;
+}
 
 static void am_proc_record_resolved(const char * p) {
 	int i = 0;
@@ -294,6 +401,12 @@ static BPTR am_proc_lock_binary_dir(void) {
 	if (p[0] != 0) {
 		fl = Lock((CONST_STRPTR) p, ACCESS_READ);
 		if (fl != 0) {
+			// Record the canonical path, including the volume behind an assign,
+			// so diagnostics identify the actual executable that was loaded.
+			char full_name[sizeof(g_cap_resolved)];
+			if (NameFromLock(fl, full_name, sizeof(full_name)) != DOSFALSE) {
+				am_proc_record_resolved(full_name);
+			}
 			dir = ParentDir(fl);
 			UnLock(fl);
 			if (dir != 0) return dir;
@@ -443,11 +556,9 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 	am_proc_build_temp_path(temp_path,     self, NULL);
 	am_proc_build_temp_path(temp_path_err, self, "_e");
 
-	// V40 stderr capture: same recipe as the InDir variant — see the
-	// banner there for the full rationale. Brief: CreateNewProcTags
-	// with NP_ConsoleTask=NULL + manual pr_CES patch + asymmetric
-	// Close (only err_file in parent; out_file + nil_in handled by
-	// child's CLI cleanup).
+	// V40 stderr capture: a child runs the loaded command with
+	// real file handles and a manually assigned pr_CES. Only stderr is closed
+	// here; DOS closes the child's inherited input and output on completion.
 	BPTR out_file = Open((CONST_STRPTR) temp_path, MODE_NEWFILE);
 	BPTR err_file = Open((CONST_STRPTR) temp_path_err, MODE_NEWFILE);
 	BPTR nil_in   = Open((CONST_STRPTR) "NIL:", MODE_OLDFILE);
@@ -491,18 +602,24 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 	// PROGDIR: for the child. Taken BEFORE Forbid() — Lock() is a DOS call.
 	BPTR child_home = am_proc_lock_binary_dir();
 
-	// Completion context for the NP_ExitCode hook. AllocVec, never a
-	// stack local: if the wait below gives up, the child is still alive
-	// and will write through this pointer whenever it finally exits, so
-	// that path LEAKS the block rather than freeing it. A few bytes per
-	// wedged child beats a write into a reused stack frame. A failed
-	// allocation is not fatal — the wait just falls back to watching the
-	// task list, exactly as it did before.
-	am_cap_ctx *cap_ctx = (am_cap_ctx *) AllocVec(sizeof(am_cap_ctx), MEMF_ANY | MEMF_CLEAR);
+	// Keep context until the child leaves Exec's task lists, including on
+	// timeout. DOS owns the command segment after a successful spawn.
+	am_cap_ctx *cap_ctx = am_cap_create();
+	if (cap_ctx == NULL) {
+		UnLoadSeg(seg);
+		if (child_home != 0) UnLock(child_home);
+		Close(out_file); Close(err_file); Close(nil_in);
+		DeleteFile((CONST_STRPTR) temp_path);
+		DeleteFile((CONST_STRPTR) temp_path_err);
+		__throw_simple_exception("Out of memory creating command context", "in Am_Lang_Process_runAndCaptureOutput_0", &__result);
+		goto __exit;
+	}
 	BOOL cap_completed = FALSE;
 	static char cap_name[32];
 	am_proc_format_cap_name(cap_name, self);
 
+	char child_command_name[105];
+	am_proc_command_name(g_bin_buf2, child_command_name);
 	Forbid();
 	struct Process *child = CreateNewProcTags(
 		NP_Seglist,     (ULONG) seg,
@@ -514,15 +631,17 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 		NP_Error,       (ULONG) err_file,
 		NP_ConsoleTask, (ULONG) NULL,
 		NP_Arguments,   (ULONG) g_arg_buf2,
+		NP_CommandName, (ULONG) child_command_name,
 		NP_Name,        (ULONG) cap_name,
 		NP_StackSize,   (ULONG) 65536,
 		/* Tell us when you are done instead of making us guess. Both
 		   tags are real on V40; NP_Error above is not (see banner). */
-		(cap_ctx != NULL ? NP_ExitCode : TAG_IGNORE), (ULONG) am_cap_child_exit,
-		(cap_ctx != NULL ? NP_ExitData : TAG_IGNORE), (ULONG) cap_ctx,
+		NP_ExitCode,    (ULONG) am_cap_child_exit,
+		NP_ExitData,    (ULONG) 0, /* ixnet reserves nonzero data for inetd */
 		(child_home != 0 ? NP_HomeDir : TAG_IGNORE), (ULONG) child_home,
 		TAG_DONE);
 	if (child != NULL) {
+		am_cap_register(cap_ctx, (struct Task *) child);
 		child->pr_CIS = nil_in;
 		child->pr_COS = out_file;
 		child->pr_CES = err_file;
@@ -533,21 +652,8 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 			cli->cli_CurrentInput   = nil_in;
 			cli->cli_StandardOutput = out_file;
 			cli->cli_CurrentOutput  = out_file;
-			// cli_CommandName is a BSTR; ixemul reads it for
-			// argv[0]. Without setting it the child inherits a
-			// stale value ("app" — the parent binary's name) and
-			// gcc prints "app: No input files" instead of
-			// "gcc: No input files". Build a length-prefixed
-			// BCPL string from g_bin_buf2 into a static buffer
-			// and point cli_CommandName at it (BPTR = MKBADDR).
-			static UBYTE s_cmd_name_bstr[34];
-			int slen = 0;
-			while (slen < 30 && g_bin_buf2[slen] != 0) {
-				s_cmd_name_bstr[slen + 1] = (UBYTE) g_bin_buf2[slen];
-				slen++;
-			}
-			s_cmd_name_bstr[0] = (UBYTE) slen;
-			cli->cli_CommandName = MKBADDR(s_cmd_name_bstr);
+			// NP_CommandName lets DOS allocate the CLI-owned BSTR.
+			// Never replace it with static storage: DOS frees it on exit.
 		}
 	}
 	Permit();
@@ -564,14 +670,7 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 		goto __exit;
 	}
 
-	{
-		// Authoritative now: the child's NP_ExitCode hook flips
-		// cap_ctx->done, with the task-list check as a fallback. The cap
-		// is a backstop for a child that NEVER exits (crashed on exit ->
-		// suspended on a requester -> never leaves the task list), not a
-		// deadline for a slow one, so nothing healthy races it.
-		cap_completed = am_cap_wait_for_child(cap_ctx, cap_name, AM_CAP_MAX_TICKS);
-	}
+	cap_completed = am_cap_wait_for_child((struct Task *) child, AM_CAP_MAX_TICKS);
 
 	// Asymmetric Close: only err_file — out_file + nil_in are closed by the
 	// child's CLI cleanup, and closing them here would be a use-after-free.
@@ -581,17 +680,19 @@ function_result Am_Lang_Process_runAndCaptureOutput_0(aobject * command)
 	// instead — same trade as cap_ctx.
 	if (cap_completed) Close(err_file);
 
-	// Read both temp files. Both reads delete the temp file as part
-	// of the helper, regardless of success — no orphaned files on
-	// any partial-failure path.
-	// Completion context: the child is gone, so nothing can write through it
-	// any more. If we gave up, it is deliberately NOT freed — see its banner.
-	if (cap_completed && cap_ctx != NULL) FreeVec(cap_ctx);
-
 	UBYTE *out_buf = NULL;
-	LONG out_size = am_proc_read_and_delete_temp(temp_path, &out_buf);
 	UBYTE *err_buf = NULL;
-	LONG err_size = am_proc_read_and_delete_temp(temp_path_err, &err_buf);
+	LONG out_size = 0, err_size = 0;
+	// A timed-out child still owns these files. Leave them intact and return
+	// the incomplete marker; neither read nor delete a live capture.
+	if (cap_completed) {
+		out_size = am_proc_read_and_delete_temp(temp_path, &out_buf);
+		err_size = am_proc_read_and_delete_temp(temp_path_err, &err_buf);
+	}
+	am_cap_log_result(g_bin_buf2, g_cap_resolved, cap_completed, cap_ctx, out_size, err_size);
+	// Keep the context until diagnostics have read the exit status. A live
+	// child may still write it, so the timeout path deliberately retains it.
+	if (cap_completed) am_cap_release(cap_ctx);
 	if (out_size < 0) out_size = 0;
 	if (err_size < 0) err_size = 0;
 
@@ -696,12 +797,9 @@ function_result Am_Lang_Process_getCwd_0()
 	return __result;
 }
 
-// Capture ONLY stdout, run via the DOS System() shell with `> tempfile`
-// redirection. System() is synchronous and manages the child's lifecycle
-// the standard DOS way — unlike the hand-rolled CreateNewProc capture in
-// runAndCaptureOutputInDir, this works for a -noixemul child (am-git),
-// which the CreateNewProc recipe (tuned for ixemul children) hangs at
-// startup. stderr goes wherever the shell sends it (not captured).
+// Shell-based stdout capture for callers that need DOS command parsing.
+// On V40 System() does not propagate the parent's pr_CES. `>` redirects
+// stdout only; diagnostics require the direct capture entry point below.
 function_result Am_Lang_Process_captureStdoutInDir_0(aobject * command, aobject * workingDir)
 {
 	function_result __result = { .has_return_value = true };
@@ -840,9 +938,8 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 		did_swap = true;
 	}
 
-	// Body mirrors runAndCaptureOutput. Duplicated rather than
-	// refactored so the cwd save/restore stays tight against the
-	// actual SystemTagList call.
+	// Body mirrors runAndCaptureOutput, with cwd save/restore wrapped
+	// around the direct child spawn and capture.
 	string_holder *cmd_holder = (string_holder *) ((char *) command + sizeof(aobject));
 	STRPTR cmd_strptr = (STRPTR) cmd_holder->string_value;
 
@@ -854,8 +951,9 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 
 	// V40 stderr-capture recipe (verified via gcctest harness):
 	//   1. Open out_file, err_file (MODE_NEWFILE) + NIL: as stdin
-	//   2. LoadSeg the command binary, parse args
-	//   3. CreateNewProcTags with NP_Input=NIL, NP_Output=out,
+	//   2. LoadSeg the command binary
+	//   3. CreateNewProcTags with NP_Seglist + NP_FreeSeglist,
+	//      NP_Input=NIL, NP_Output=out,
 	//      NP_Error=err, NP_ConsoleTask=NULL (breaks ixemul's
 	//      "*" fallback that otherwise leaks stderr to the
 	//      launching shell)
@@ -864,7 +962,8 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 	//      be set manually; the cli_StandardInput/Output fields
 	//      are needed for child's libc init to read consistent
 	//      values)
-	//   5. Wait FindTask returns NULL + small extra delay
+	//   5. Track completion outside pr_ExitData, which ixnet uses for inetd.
+	//      Wait until the child leaves Exec's task lists after DOS cleanup.
 	//   6. ASYMMETRIC Close: only err_file in parent. V40 honours
 	//      NP_Input/Output so CLI cleanup closes those (parent
 	//      Close = use-after-free → hang). V40 drops NP_Error so
@@ -882,7 +981,7 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 		goto __exit;
 	}
 
-	// Split "binary args..." for NP_Arguments and LoadSeg.
+	// Split "binary args..." for CreateNewProc and LoadSeg.
 	// Same shape as rp_split_cmd in RunningProcess.c — kept local so
 	// Process.c doesn't depend on RunningProcess internals.
 	static char g_bin_buf[128];
@@ -920,19 +1019,26 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 	// PROGDIR: for the child. Taken BEFORE Forbid() — Lock() is a DOS call.
 	BPTR child_home = am_proc_lock_binary_dir();
 
-	// Completion context for the NP_ExitCode hook. AllocVec, never a
-	// stack local: if the wait below gives up, the child is still alive
-	// and will write through this pointer whenever it finally exits, so
-	// that path LEAKS the block rather than freeing it. A few bytes per
-	// wedged child beats a write into a reused stack frame. A failed
-	// allocation is not fatal — the wait just falls back to watching the
-	// task list, exactly as it did before.
-	am_cap_ctx *cap_ctx = (am_cap_ctx *) AllocVec(sizeof(am_cap_ctx), MEMF_ANY | MEMF_CLEAR);
+	// Context outlives the child, including its exit hook and DOS cleanup.
+	// DOS owns the command segment after a successful spawn.
+	am_cap_ctx *cap_ctx = am_cap_create();
+	if (cap_ctx == NULL) {
+		UnLoadSeg(seg);
+		if (child_home != 0) UnLock(child_home);
+		Close(out_file); Close(err_file); Close(nil_in);
+		DeleteFile((CONST_STRPTR) temp_path);
+		DeleteFile((CONST_STRPTR) temp_path_err);
+		if (did_swap) { CurrentDir(old_lock); UnLock(new_lock); }
+		__throw_simple_exception("Out of memory creating command context", "in Am_Lang_Process_runAndCaptureOutputInDir_0", &__result);
+		goto __exit;
+	}
 	BOOL cap_completed = FALSE;
 	static char cap_name[32];
 	am_proc_format_cap_name(cap_name, self);
 
 	// Spawn child under Forbid + manual CLI/process field patches.
+	char child_command_name[105];
+	am_proc_command_name(g_bin_buf, child_command_name);
 	Forbid();
 	struct Process *child = CreateNewProcTags(
 		NP_Seglist,     (ULONG) seg,
@@ -944,15 +1050,17 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 		NP_Error,       (ULONG) err_file,
 		NP_ConsoleTask, (ULONG) NULL,
 		NP_Arguments,   (ULONG) g_arg_buf,
+		NP_CommandName, (ULONG) child_command_name,
 		NP_Name,        (ULONG) cap_name,
 		NP_StackSize,   (ULONG) 65536,
 		/* Tell us when you are done instead of making us guess. Both
 		   tags are real on V40; NP_Error above is not (see banner). */
-		(cap_ctx != NULL ? NP_ExitCode : TAG_IGNORE), (ULONG) am_cap_child_exit,
-		(cap_ctx != NULL ? NP_ExitData : TAG_IGNORE), (ULONG) cap_ctx,
+		NP_ExitCode,    (ULONG) am_cap_child_exit,
+		NP_ExitData,    (ULONG) 0, /* ixnet reserves nonzero data for inetd */
 		(child_home != 0 ? NP_HomeDir : TAG_IGNORE), (ULONG) child_home,
 		TAG_DONE);
 	if (child != NULL) {
+		am_cap_register(cap_ctx, (struct Task *) child);
 		child->pr_CIS = nil_in;
 		child->pr_COS = out_file;
 		child->pr_CES = err_file;
@@ -963,21 +1071,8 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 			cli->cli_CurrentInput   = nil_in;
 			cli->cli_StandardOutput = out_file;
 			cli->cli_CurrentOutput  = out_file;
-			// cli_CommandName is a BSTR; ixemul reads it for
-			// argv[0]. Without setting it the child inherits a
-			// stale value ("app" — the parent binary's name) and
-			// gcc prints "app: No input files" instead of
-			// "gcc: No input files". Build a length-prefixed
-			// BCPL string from g_bin_buf into a static buffer
-			// and point cli_CommandName at it (BPTR = MKBADDR).
-			static UBYTE s_cmd_name_bstr[34];
-			int slen = 0;
-			while (slen < 30 && g_bin_buf[slen] != 0) {
-				s_cmd_name_bstr[slen + 1] = (UBYTE) g_bin_buf[slen];
-				slen++;
-			}
-			s_cmd_name_bstr[0] = (UBYTE) slen;
-			cli->cli_CommandName = MKBADDR(s_cmd_name_bstr);
+			// NP_CommandName lets DOS allocate the CLI-owned BSTR.
+			// Never replace it with static storage: DOS frees it on exit.
 		}
 	}
 	Permit();
@@ -995,16 +1090,9 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 		goto __exit;
 	}
 
-	// Wait for child to fully exit before touching the inherited FHs.
-	// 600 ticks * 40ms = 24 seconds cap.
-	{
-		// Authoritative now: the child's NP_ExitCode hook flips
-		// cap_ctx->done, with the task-list check as a fallback. The cap
-		// is a backstop for a child that NEVER exits (crashed on exit ->
-		// suspended on a requester -> never leaves the task list), not a
-		// deadline for a slow one, so nothing healthy races it.
-		cap_completed = am_cap_wait_for_child(cap_ctx, cap_name, AM_CAP_MAX_TICKS);
-	}
+	// The exit hook runs before stream cleanup; wait for the actual task to
+	// disappear before touching the inherited handles or reading their files.
+	cap_completed = am_cap_wait_for_child((struct Task *) child, AM_CAP_MAX_TICKS);
 
 	// Asymmetric Close — see banner above. Only when the child is actually
 	// GONE, though: one we gave up on still has pr_CES pointing at err_file,
@@ -1014,14 +1102,18 @@ function_result Am_Lang_Process_runAndCaptureOutputInDir_0(aobject * command, ao
 	// out_file + nil_in: DON'T touch — CLI cleanup closed them, our
 	// Close would be use-after-free → handler-port hang.
 
-	// Completion context: the child is gone, so nothing can write through it
-	// any more. If we gave up, it is deliberately NOT freed — see its banner.
-	if (cap_completed && cap_ctx != NULL) FreeVec(cap_ctx);
-
 	UBYTE *out_buf = NULL;
-	LONG out_size = am_proc_read_and_delete_temp(temp_path, &out_buf);
 	UBYTE *err_buf = NULL;
-	LONG err_size = am_proc_read_and_delete_temp(temp_path_err, &err_buf);
+	LONG out_size = 0, err_size = 0;
+	// Do not read or delete files still owned by a child that timed out.
+	if (cap_completed) {
+		out_size = am_proc_read_and_delete_temp(temp_path, &out_buf);
+		err_size = am_proc_read_and_delete_temp(temp_path_err, &err_buf);
+	}
+	am_cap_log_result(g_bin_buf, g_cap_resolved, cap_completed, cap_ctx, out_size, err_size);
+	// Keep the context until diagnostics have read the exit status. A live
+	// child may still write it, so the timeout path deliberately retains it.
+	if (cap_completed) am_cap_release(cap_ctx);
 	if (out_size < 0) out_size = 0;
 	if (err_size < 0) err_size = 0;
 

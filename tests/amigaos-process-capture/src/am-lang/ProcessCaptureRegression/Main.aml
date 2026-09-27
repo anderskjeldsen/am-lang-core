@@ -1,0 +1,203 @@
+namespace ProcessCaptureRegression {
+    class Main {
+        import Am.Lang
+        import Am.Threading
+
+        private static var failures: Int = 0
+
+        private static fun check(ok: Bool, label: String) {
+            if (ok) {
+                ("PASS " + label).println()
+            } else {
+                Main.failures = Main.failures + 1
+                ("FAIL " + label).println()
+            }
+        }
+
+        private static fun checkOutput(mode: String, output: String, label: String) {
+            if (mode.equals("long-path")) {
+                Main.check(output.equals("NAME=child-long\n"), label + " bounded CLI basename")
+            } else if (mode.equals("gcc") || mode.equals("gcc-path")) {
+                Main.check(output.toLowerCase().indexOf("no input files") >= 0, label + " compiler diagnostic")
+            } else if (mode.equals("make")) {
+                Main.check(output.indexOf("MAKE-STDOUT\n") >= 0, label + " make stdout")
+                Main.check(output.indexOf("MAKE-STDERR\n") >= 0, label + " make stderr")
+            } else if (mode.equals("stderr")) {
+                Main.check(output.equals("STDERR-ONLY\n"), label + " stderr only")
+            } else if (mode.equals("silent")) {
+                Main.check(output.length() == 0, label + " zero output")
+            } else if (mode.equals("renamed")) {
+                Main.check(output.equals("RENAMED-STDERR\n"), label + " delayed renamed stderr")
+            } else if (mode.equals("exit-cleanup")) {
+                Main.check(output.equals("EXIT-STDOUT\nEXIT-STDERR\n"), label + " waits for stream cleanup")
+            } else if (mode.equals("mixed")) {
+                Main.check(output.indexOf("STDOUT-FIRST\n") >= 0, label + " first stdout")
+                Main.check(output.indexOf("STDERR-MIDDLE\n") >= 0, label + " stderr")
+                Main.check(output.indexOf("STDOUT-LAST\n") >= 0, label + " final stdout")
+                Main.check(output.length() == 39, label + " output length")
+            } else {
+                Main.check(output.indexOf("CWD-OK\n") >= 0, label + " working directory")
+                Main.check(output.indexOf("MODULE-OK\n") >= 0, label + " CLI module")
+                Main.check(output.indexOf("CES-OK\n") >= 0, label + " stderr handle")
+                Main.check(output.indexOf("EXITDATA-CLEAR\n") >= 0, label + " no inetd startup data")
+                Main.check(output.indexOf("ARGV0-OK\n") >= 0, label + " command name")
+            }
+        }
+
+        private static fun command(mode: String): String {
+            if (mode.equals("long-path")) {
+                // 107-byte executable path: longer than NP_CommandName's
+                // limit, but within the capture parser's 128-byte buffer.
+                return "DH1:command-name-regression-level1/command-name-regression-level2/command-name-regression-level3/child-long identity"
+            }
+            if (mode.equals("gcc")) {
+                return "ADE:bin/gcc"
+            }
+            if (mode.equals("gcc-path")) {
+                return "gcc"
+            }
+            if (mode.equals("make")) {
+                return "ADE:bin/make -f DH1:makefile"
+            }
+            return "DH1:child " + mode
+        }
+
+        private static fun capture(mode: String) {
+            var before = Process.getCwd()
+            var start = new DateTime().getEpochMillis()
+            try {
+                var output = Process.runAndCaptureOutputInDir(Main.command(mode), "DH1:data")
+                Main.checkOutput(mode, output, "capture " + mode)
+            } catch (e: Exception) {
+                Main.check(false, "capture " + mode + " exception: " + e.message)
+            }
+            var elapsed = new DateTime().getEpochMillis() - start
+            Main.check(elapsed < 15000L, "capture " + mode + " completes within 15s")
+            Main.check(Process.getCwd().equals(before), "capture " + mode + " restores directory")
+        }
+
+        private static fun captureWithoutDir(mode: String) {
+            var start = new DateTime().getEpochMillis()
+            try {
+                var output = Process.runAndCaptureOutput(Main.command(mode))
+                Main.checkOutput(mode, output, "captureWithoutDir " + mode)
+            } catch (e: Exception) {
+                Main.check(false, "captureWithoutDir " + mode + " exception: " + e.message)
+            }
+            var elapsed = new DateTime().getEpochMillis() - start
+            Main.check(elapsed < 15000L, "captureWithoutDir " + mode + " completes within 15s")
+        }
+
+        private static fun stream(mode: String, expectedExit: Int) {
+            var before = Process.getCwd()
+            var start = new DateTime().getEpochMillis()
+            try {
+                var child = Process.start(Main.command(mode), "DH1:data")
+                var output = ""
+                var ticks = 0
+                var emptyAfterExit = 0
+                var observedStreaming = false
+                while (ticks < 750 && emptyAfterExit < 3) {
+                    var chunk = child.tryReadOutput()
+                    var alive = child.isAlive()
+                    if (chunk.length() > 0) {
+                        output = output + chunk
+                        emptyAfterExit = 0
+                        if (alive) {
+                            observedStreaming = true
+                        }
+                    } else if (!alive) {
+                        emptyAfterExit = emptyAfterExit + 1
+                    }
+                    Thread.sleep(20L)
+                    ticks = ticks + 1
+                }
+                Main.check(!child.isAlive(), "stream " + mode + " exits within 15s")
+                Main.check(child.exitCode() == expectedExit, "stream " + mode + " exit status " + expectedExit.toString())
+                Main.checkOutput(mode, output, "stream " + mode)
+                if (mode.equals("mixed")) {
+                    Main.check(observedStreaming, "stream mixed delivers output before exit")
+                }
+                child.close()
+            } catch (e: Exception) {
+                Main.check(false, "stream " + mode + " exception: " + e.message)
+            }
+            var elapsed = new DateTime().getEpochMillis() - start
+            Main.check(elapsed < 20000L, "stream " + mode + " completes within 20s")
+            Main.check(Process.getCwd().equals(before), "stream " + mode + " restores directory")
+        }
+
+        private static fun simultaneous() {
+            try {
+                var first = Process.start("DH1:child identity", "DH1:data")
+                var second = Process.start("DH1:child-other identity", "DH1:data")
+                var firstOutput = ""
+                var secondOutput = ""
+                var ticks = 0
+                var emptyAfterExit = 0
+                while (ticks < 750 && emptyAfterExit < 3) {
+                    var a = first.tryReadOutput()
+                    var b = second.tryReadOutput()
+                    firstOutput = firstOutput + a
+                    secondOutput = secondOutput + b
+                    if (first.isAlive() || second.isAlive() || a.length() > 0 || b.length() > 0) {
+                        emptyAfterExit = 0
+                    } else {
+                        emptyAfterExit = emptyAfterExit + 1
+                    }
+                    Thread.sleep(20L)
+                    ticks = ticks + 1
+                }
+                Main.check(!first.isAlive() && !second.isAlive(), "simultaneous children exit")
+                Main.check(first.exitCode() == 0 && second.exitCode() == 0, "simultaneous exit statuses")
+                Main.check(firstOutput.equals("NAME=DH1:child\n"), "simultaneous first CLI name")
+                Main.check(secondOutput.equals("NAME=DH1:child-other\n"), "simultaneous second CLI name")
+                first.close()
+                second.close()
+            } catch (e: Exception) {
+                Main.check(false, "simultaneous exception: " + e.message)
+            }
+        }
+
+        static fun main(args: String[]) {
+            "CAPTURE-SUITE-BEGIN".println()
+            Main.capture("stderr")
+            Main.capture("mixed")
+            Main.capture("silent")
+            Main.capture("metadata")
+            Main.capture("renamed")
+            Main.capture("exit-cleanup")
+            Main.captureWithoutDir("renamed")
+            Main.captureWithoutDir("exit-cleanup")
+            Main.stream("stderr", 10)
+            Main.stream("mixed", 0)
+            Main.stream("silent", 23)
+            Main.stream("metadata", 0)
+            Main.simultaneous()
+            Main.capture("long-path")
+            Main.stream("long-path", 0)
+            var i = 0
+            while (i < args.length()) {
+                if (args[i].equals("ade")) {
+                    "ADE-TOOLCHAIN-BEGIN".println()
+                    Main.capture("gcc")
+                    Main.captureWithoutDir("gcc")
+                    Main.capture("make")
+                    Main.stream("gcc", 1)
+                    Main.stream("make", 0)
+                    "SPAWN-PATH-BEGIN".println()
+                    Main.check(Process.setSpawnSearchPath("DH1:data\nADE:bin"), "spawn search path installed")
+                    Main.capture("gcc-path")
+                    Main.stream("gcc-path", 1)
+                    Main.check(Process.setSpawnSearchPath(""), "spawn search path restored")
+                }
+                i = i + 1
+            }
+            if (Main.failures == 0) {
+                "AMIGAOS-PROCESS-CAPTURE PASSED".println()
+            } else {
+                ("AMIGAOS-PROCESS-CAPTURE FAILED " + Main.failures.toString()).println()
+            }
+        }
+    }
+}
