@@ -138,7 +138,10 @@ namespace Am.Collections {
          */
         fun set(key: K, value: V) {
             if (this.nextIndexes.length() == 0) {
-                this.bucketSize = 128
+                // Most lexical scopes and property metadata maps hold only a
+                // handful of keys. Grow on demand instead of reserving 128
+                // entries (plus 256 bucket heads) for their first binding.
+                this.bucketSize = 8
                 this.nextIndexes = new Int[this.bucketSize]
                 this.keys = new K[this.bucketSize]
                 this.values = new V[this.bucketSize]

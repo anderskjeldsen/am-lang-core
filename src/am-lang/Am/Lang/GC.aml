@@ -1,0 +1,15 @@
+namespace Am.Lang {
+    /** Explicit cycle collection for the calling isolate's reference-counted heap. */
+    native class GC {
+        /**
+         * Reclaims unreachable property, array and interface/closure cycles,
+         * preserving local references, static roots and unknown native owners.
+         * Uses normal ARC releases; native ownership it cannot prove is retained.
+         * Call between work batches (for example, between event-loop callbacks).
+         * Other isolates are unaffected. Returns the number of cyclic candidates
+         * reclaimed; returns zero if collection cannot run or allocate workspace.
+         */
+        #noThrow
+        native static fun collect(): Long
+    }
+}

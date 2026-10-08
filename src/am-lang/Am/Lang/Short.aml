@@ -24,18 +24,21 @@ namespace Am.Lang
          * @return The value as a Byte
          */
         #noThrow
+        #obsolete "Use as Byte instead"
         native fun toByte(): Byte
         /**
          * Converts this Short value to a Int (32-bit signed).
          * @return The value as a Int
          */
         #noThrow
+        #obsolete "Use as Int instead"
         native fun toInt(): Int
         /**
          * Converts this Short value to a Long (64-bit signed).
          * @return The value as a Long
          */
         #noThrow
+        #obsolete "Use as Long instead"
         native fun toLong(): Long
         /**
          * Converts this Short value to a UByte (8-bit unsigned).
@@ -43,6 +46,7 @@ namespace Am.Lang
          * @return The value as a UByte
          */
         #noThrow
+        #obsolete "Use as UByte instead"
         native fun toUByte(): UByte
         /**
          * Converts this Short value to a UShort (16-bit unsigned).
@@ -50,6 +54,7 @@ namespace Am.Lang
          * @return The value as a UShort
          */
         #noThrow
+        #obsolete "Use as UShort instead"
         native fun toUShort(): UShort
         /**
          * Converts this Short value to a UInt (32-bit unsigned).
@@ -57,6 +62,7 @@ namespace Am.Lang
          * @return The value as a UInt
          */
         #noThrow
+        #obsolete "Use as UInt instead"
         native fun toUInt(): UInt
         /**
          * Converts this Short value to a ULong (64-bit unsigned).
@@ -64,6 +70,7 @@ namespace Am.Lang
          * @return The value as a ULong
          */
         #noThrow
+        #obsolete "Use as ULong instead"
         native fun toULong(): ULong
         #require floatingPoint
         /**
@@ -71,6 +78,7 @@ namespace Am.Lang
          * @return The value as a Float
          */
         #noThrow
+        #obsolete "Use as Float instead"
         native fun toFloat(): Float
         #require floatingPoint
         /**
@@ -78,6 +86,7 @@ namespace Am.Lang
          * @return The value as a Double
          */
         #noThrow
+        #obsolete "Use as Double instead"
         native fun toDouble(): Double
 
         /**

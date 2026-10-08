@@ -9,6 +9,11 @@
 
 #include <stdio.h>
 #include <errno.h>
+#include <limits.h>
+#if defined(__APPLE__) || defined(__linux__)
+#include <unistd.h>
+#include <fcntl.h>
+#endif
 #include <string.h>
 
 typedef struct _file_holder file_holder;
@@ -197,8 +202,20 @@ __exit: ;
 function_result Am_IO_FileStream_seekFromStart_0(aobject * const this, long long offset)
 {
 	function_result __result = { .has_return_value = false };
-	bool __returning = false;
-__exit: ;
+	file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+	// fread's offset argument addresses its destination buffer, not the file.
+	// Paged readers depend on this absolute seek; the old no-op silently read
+	// the following bytes instead of the requested page. Check the cast too:
+	// Amiga libc uses a 32-bit long even though the API accepts a Long.
+	if (holder == NULL || holder->file == NULL) {
+		__throw_simple_exception_copy("Cannot seek a closed file", "in Am_IO_FileStream_seekFromStart_0", &__result);
+	} else if (offset < 0 || offset > LONG_MAX) {
+		__throw_simple_exception_copy("File seek offset out of range", "in Am_IO_FileStream_seekFromStart_0", &__result);
+	} else if (fseek(holder->file, (long) offset, SEEK_SET) != 0) {
+		char msg[256];
+		snprintf(msg, sizeof(msg), "File seek failed: %s", strerror(errno));
+		__throw_simple_exception_copy(msg, "in Am_IO_FileStream_seekFromStart_0", &__result);
+	}
 	return __result;
 };
 
@@ -235,3 +252,76 @@ __exit: ;
 	return __result;
 };
 
+
+// These capabilities deliberately report unsupported rather than pretending a
+// stdio flush provides durable storage. Other platforms can supply overrides.
+function_result Am_IO_FileStream_setLength_0(aobject * const this, long long length)
+{
+    function_result result = { .has_return_value = false };
+    file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+#if defined(__APPLE__) || defined(__linux__)
+    if (holder == NULL || holder->file == NULL || length < 0 || length > LONG_MAX) {
+        __throw_simple_exception_copy("Invalid file resize", "FileStream.setLength", &result);
+    } else if (fflush(holder->file) != 0 || ftruncate(fileno(holder->file), (off_t)length) != 0) {
+        __throw_simple_exception_copy("File resize failed", "FileStream.setLength", &result);
+    }
+#else
+    __throw_simple_exception_copy("File resize is unsupported on this platform", "FileStream.setLength", &result);
+#endif
+    return result;
+}
+function_result Am_IO_FileStream_syncToDisk_0(aobject * const this)
+{
+    function_result result = { .has_return_value = true };
+    result.return_value.value.bool_value = false;
+    file_holder *holder = this->object_properties.class_object_properties.object_data.value.custom_value;
+#if defined(__APPLE__) || defined(__linux__)
+    if (holder == NULL || holder->file == NULL || fflush(holder->file) != 0) {
+        __throw_simple_exception_copy("Cannot flush file", "FileStream.syncToDisk", &result);
+        return result;
+    }
+    int rc;
+#if defined(__APPLE__) && defined(F_FULLFSYNC)
+    rc = fcntl(fileno(holder->file), F_FULLFSYNC);
+#else
+    rc = fsync(fileno(holder->file));
+#endif
+    if (rc != 0) {
+        __throw_simple_exception_copy("File storage sync failed", "FileStream.syncToDisk", &result);
+    } else { result.return_value.value.bool_value = true; }
+#endif
+    return result;
+}
+function_result Am_IO_FileStream_syncParentDirectory_0(aobject * const this)
+{
+    function_result result = { .has_return_value = true };
+    result.return_value.value.bool_value = false;
+#if defined(__APPLE__) || defined(__linux__)
+    const char *path = get_file_path(this);
+    if (path == NULL) {
+        __throw_simple_exception_copy("Missing file path", "FileStream.syncParentDirectory", &result);
+        return result;
+    }
+    char *parent = strdup(path);
+    if (parent == NULL) {
+        __throw_simple_exception_copy("Out of memory", "FileStream.syncParentDirectory", &result);
+        return result;
+    }
+    char *slash = strrchr(parent, '/');
+    if (slash == parent) { slash[1] = '\0'; }
+    else if (slash != NULL) { *slash = '\0'; }
+    else { free(parent); parent = strdup("."); }
+    if (parent == NULL) {
+        __throw_simple_exception_copy("Out of memory", "FileStream.syncParentDirectory", &result);
+        return result;
+    }
+    int fd = open(parent, O_RDONLY | O_DIRECTORY);
+    free(parent);
+    int rc = (fd < 0) ? -1 : fsync(fd);
+    if (fd >= 0) { close(fd); }
+    if (rc != 0) {
+        __throw_simple_exception_copy("Parent directory sync failed", "FileStream.syncParentDirectory", &result);
+    } else { result.return_value.value.bool_value = true; }
+#endif
+    return result;
+}

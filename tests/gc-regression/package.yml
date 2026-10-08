@@ -1,0 +1,18 @@
+id: gc-regression
+version: 0.1.0
+type: application
+dependencies:
+  - id: am-lang-core
+    type: local
+    path: ../..
+platforms:
+  - id: libc
+    abstract: true
+  - id: macos-arm
+    extends: libc
+    gccCommand: gcc -O1 -g -fsanitize=address,undefined
+    additionalLinkerFlags:
+      - -fsanitize=address,undefined
+buildTargets:
+  - id: macos-arm
+    platform: macos-arm

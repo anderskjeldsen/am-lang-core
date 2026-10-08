@@ -1,0 +1,158 @@
+namespace GcRegression {
+    class Node {
+        import Am.Lang
+        var next: Node? = null
+        var values: Any[]? = null
+        var number: Int = 17
+    }
+    class TaskNode : Am.Lang.Runnable {
+        import Am.Lang
+        var link: Runnable? = null
+        override fun run() { }
+    }
+    class CallbackNode {
+        import Am.Lang
+        var callback: (() => Bool)? = null
+        var value: Int = 19
+    }
+    class Reply(var reclaimed: Long) { import Am.Lang }
+    class Worker : Am.Lang.Runnable {
+        import Am.Lang
+        import Am.Threading
+        override fun run() {
+            Program.deepGarbage()
+            Thread.getParent().send(new Reply(0L))
+            Thread.receive()
+            var reclaimed = GC.collect()
+            Thread.getParent().send(new Reply(reclaimed))
+        }
+    }
+    class Program {
+        import Am.Lang
+        import Am.Collections
+        import Am.Lang.Diagnostics
+        import Am.Threading
+        static var kept: Node? = null
+        static fun check(ok: Bool, text: String) {
+            if (!ok) { throw new Exception(text) }
+        }
+        static fun garbage() {
+            var a = new Node()
+            var b = new Node()
+            a.next = b
+            b.next = a
+            var values = new Any[3UI]
+            values[0UI] = a
+            values[1UI] = b
+            values[2UI] = 19
+            a.values = values
+        }
+        static fun deepGarbage() {
+            var head = new Node()
+            var tail = head
+            var i = 0
+            while (i < 10000) {
+                var next = new Node()
+                tail.next = next
+                tail = next
+                i++
+            }
+            tail.next = head
+        }
+        static fun interfaceGarbage() {
+            var task = new TaskNode()
+            task.link = task
+        }
+        static fun closureGarbage() {
+            var item = new CallbackNode()
+            item.callback = () => { return item.value == 19 }
+        }
+        static fun liveClosure(): () => Bool {
+            var item = new CallbackNode()
+            item.callback = () => { return item.value == 19 }
+            return item.callback
+        }
+        static fun checkClosureRoot() {
+            var callback = Program.liveClosure()
+            GC.collect()
+            Program.check(callback(), "escaped closure survives collection")
+        }
+        static fun staticRoot() {
+            var value = new Node()
+            value.next = value
+            Program.kept = value
+        }
+        static fun mapGrowth() {
+            var map = new HashMap<String, Int>()
+            var i = 0
+            while (i < 300) { map.set(i.toString(), i)
+                i++ }
+            i = 0
+            while (i < 300) { Program.check(map.get(i.toString()) == i, "small map grows without losing keys")
+                i++ }
+            i = 0
+            while (i < 300) { map.remove(i.toString())
+                i += 2 }
+            i = 0
+            while (i < 300) { map.set(i.toString(), i + 1)
+                i += 2 }
+            Program.check(map.getSize() == 300, "removed map slots are reused")
+            i = 0
+            while (i < 300) { Program.check(map.get(i.toString()) == i + 1, "reinserted map values survive")
+                i += 2 }
+        }
+        static fun main(args: String[]) {
+            Program.mapGrowth()
+            GC.collect()
+            var baseline = Arc.getAllocationCount()
+            Program.garbage()
+            Program.check(Arc.getAllocationCount() > baseline, "fixture must contain retained cycles")
+            Program.check(GC.collect() >= 3L, "object/Any-array cycles reclaimed")
+            Program.check(Arc.getAllocationCount() == baseline, "cycle returns to baseline")
+            Program.interfaceGarbage()
+            Program.check(GC.collect() >= 2L, "interface implementation cycle reclaimed")
+            Program.closureGarbage()
+            Program.check(GC.collect() >= 2L, "closure cycle reclaimed")
+            Program.checkClosureRoot()
+            GC.collect()
+            Program.check(Arc.getAllocationCount() == baseline, "interface/closure cycles return to baseline")
+            var local = new Node()
+            local.next = new Node()
+            local.next.next = local.next
+            GC.collect()
+            Program.check(local.next.number == 17, "local-only owner protects property-linked child")
+            local.next = null
+            GC.collect()
+            Program.staticRoot()
+            GC.collect()
+            Program.check(Program.kept.next.number == 17, "static root survives")
+            Program.kept = null
+            GC.collect()
+            var beforeDeep = Arc.getAllocationCount()
+            Program.deepGarbage()
+            Program.check(GC.collect() >= 10001L, "deep cycle reclaimed iteratively")
+            Program.check(Arc.getAllocationCount() == beforeDeep, "deep cycle returns to baseline")
+            fast {
+                Program.garbage()
+                Program.check(GC.collect() >= 3L, "cycles reclaimed inside fast arena")
+            }
+            GC.collect()
+            var rounds = 0
+            while (rounds < 100) { Program.garbage()
+                GC.collect()
+                rounds++ }
+            Program.check(Arc.getAllocationCount() == beforeDeep, "repeated collections stable")
+            var worker = new Thread(new Worker())
+            worker.name = "gc-isolation-regression"
+            worker.start()
+            Thread.receive()
+            Program.deepGarbage()
+            Program.check(GC.collect() >= 10001L, "parent reclaims its own heap")
+            worker.send(new Reply(1L))
+            var reply = Thread.receive() as Reply
+            worker.join()
+            Program.check(reply.reclaimed >= 10001L, "parent GC leaves worker garbage for worker GC")
+            "GC regression passed: roots, Any arrays, deep cycles, arenas, repeated collection, thread isolation".println()
+        }
+    }
+}

@@ -18,7 +18,7 @@ namespace Am.IO
         /**
          * Reads up to length bytes from the file into a buffer.
          * @param buffer Destination buffer
-         * @param offset Position in the FILE to read from
+         * @param offset Position in the destination BUFFER; use seekFromStart to position the file
          * @param length Maximum number of bytes to read
          * @return The number of bytes actually read; 0 at end of file
          */
@@ -26,15 +26,23 @@ namespace Am.IO
         /**
          * Writes length bytes from a buffer to the file.
          * @param buffer Source buffer
-         * @param offset Position in the FILE to write at
+         * @param offset Position in the source BUFFER; use seekFromStart to position the file
          * @param length Number of bytes to write
          */
         native fun write(buffer: UByte[], offset: Long, length: UInt)
         /**
          * Moves the file position to an absolute offset from the beginning of the file.
+         * Throws if closed, negative, outside the platform file-offset range, or seeking fails.
          * @param offset Byte offset from the start
          */
         native fun seekFromStart(offset: Long)
+        /** Resize an open writable file. Throws if unsupported or unsuccessful. */
+        native fun setLength(length: Long)
+        /** Flush file data to storage. Returns false on unsupported platforms; throws on I/O failure. */
+        native fun syncToDisk(): Bool
+        /** Persist directory entry changes for this file's parent. Same support/error contract as syncToDisk. */
+        native fun syncParentDirectory(): Bool
+
         /**
          * Reads a single byte from the file. Slow in a loop — use read() or readAll() for anything
          * larger than a header.

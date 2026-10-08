@@ -38,8 +38,8 @@ namespace Am.Lang
      * Base class for everything thrown with `throw`, carrying a human-readable message and the
      * stack trace captured as the exception travelled outwards. Derive your own types from it to
      * let callers catch specific failures: `class ParseError(var line: Int) : Exception("bad
-     * input")`. Catch with try/catch, and note that a `return` inside catch is not an early
-     * return — code after the try block still runs unless you guard it with a success flag.
+     * input")`. Catch with try/catch. A return from try or catch leaves the function after
+     * any finally block runs; a return or throw from finally replaces the pending transfer.
      */
     class Exception(var message: String) {
         import Am.Collections

@@ -18,10 +18,9 @@ namespace Am.Lang.Diagnostics
         native static fun printAllocatedObjects()
 
         /**
-         * Returns the total number of objects allocated since the program started. The counter is
-         * monotonic and never decreases, so a difference between two samples tells you the
-         * allocation churn of the work in between.
-         * @return The cumulative allocation count
+         * Returns the calling isolate's live object count: allocations minus deallocations.
+         * Compare before and after a workload and GC.collect() to measure retained objects.
+         * @return The live allocation count for this thread's isolate
          */
         #noThrow
         native static fun getAllocationCount(): Long

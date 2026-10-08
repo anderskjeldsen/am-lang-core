@@ -21,6 +21,7 @@ platforms:
     additionalHeaders:
       - core.h
       - core_inline_functions.h
+      - gc_graph.h
     additionalCSources:
       - inputFilename: core.c
         outputFilename: core.o

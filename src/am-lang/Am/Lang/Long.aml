@@ -26,6 +26,7 @@ namespace Am.Lang
          * @return The value as a Short
          */
         #noThrow
+        #obsolete "Use as Short instead"
         native fun toShort(): Short
         /**
          * Converts this Long value to a Int (32-bit signed).
@@ -33,6 +34,7 @@ namespace Am.Lang
          * @return The value as a Int
          */
         #noThrow
+        #obsolete "Use as Int instead"
         native fun toInt(): Int
         /**
          * Converts this Long value to a Byte (8-bit signed).
@@ -40,6 +42,7 @@ namespace Am.Lang
          * @return The value as a Byte
          */
         #noThrow
+        #obsolete "Use as Byte instead"
         native fun toByte(): Byte
         /**
          * Converts this Long value to a UByte (8-bit unsigned).
@@ -47,6 +50,7 @@ namespace Am.Lang
          * @return The value as a UByte
          */
         #noThrow
+        #obsolete "Use as UByte instead"
         native fun toUByte(): UByte
         /**
          * Converts this Long value to a UShort (16-bit unsigned).
@@ -54,6 +58,7 @@ namespace Am.Lang
          * @return The value as a UShort
          */
         #noThrow
+        #obsolete "Use as UShort instead"
         native fun toUShort(): UShort
         /**
          * Converts this Long value to a UInt (32-bit unsigned).
@@ -61,6 +66,7 @@ namespace Am.Lang
          * @return The value as a UInt
          */
         #noThrow
+        #obsolete "Use as UInt instead"
         native fun toUInt(): UInt
         /**
          * Converts this Long value to a ULong (64-bit unsigned).
@@ -68,6 +74,7 @@ namespace Am.Lang
          * @return The value as a ULong
          */
         #noThrow
+        #obsolete "Use as ULong instead"
         native fun toULong(): ULong
         #require floatingPoint
         /**
@@ -75,6 +82,7 @@ namespace Am.Lang
          * @return The value as a Float
          */
         #noThrow
+        #obsolete "Use as Float instead"
         native fun toFloat(): Float
         #require floatingPoint
         /**
@@ -82,6 +90,7 @@ namespace Am.Lang
          * @return The value as a Double
          */
         #noThrow
+        #obsolete "Use as Double instead"
         native fun toDouble(): Double
         /**
          * Converts to a Bool, where zero is false and any other value is true.
