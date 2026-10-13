@@ -257,6 +257,16 @@ struct _aclass {
     // boxes set it (sizeof(struct T)) so the generic copier can clone the
     // value tail; 0 otherwise.
     unsigned int extra_size;
+    // `#keepAlways`: instances NEVER come from a scratch arena, whatever
+    // extent is open. For classes whose instances escape by construction —
+    // Am.Lang.Exception above all, since a throw out of a `scratch { }` block
+    // propagates past it — or are long-lived by design. This has to be a
+    // runtime flag rather than a compile-time rewrite because the runtime
+    // throwers (__create_exception, the bounds/null/size/OOM site helpers)
+    // allocate from C, with no `new` site for a compiler to annotate. The
+    // compiler resolves inheritance and sets it on every class whose base
+    // chain declares the directive.
+    bool keep_always;
     iface_implementation * iface_implementations;
     aclass *next;
     // TRACKOBJECTS live-instance counter feeding the `instances(Class)` test
@@ -547,7 +557,8 @@ extern unsigned int __amlc_static_init_count;
 #define AMLC_ARENA_ALIGN 8
 #define AMLC_ARENA_ROUND(n) (((n) + (AMLC_ARENA_ALIGN - 1)) & ~((size_t) (AMLC_ARENA_ALIGN - 1)))
 struct _aarena {
-    aarena * next;          // isolate's list of every arena
+    aarena * next;          // isolate's list of every arena (doubly linked:
+    aarena * prev;          // detaching one is O(1), as for aobject)
     aarena * next_free;     // free-list link while empty and kept
     char * data;            // aligned start of the object area
     size_t capacity;

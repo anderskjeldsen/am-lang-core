@@ -592,12 +592,39 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
 
     aobject * __obj = NULL;
     bool chunked = false;
-    if (__iso->fast_depth > 0) {
+    // Outside a scratch extent fast_depth is 0 and the && short-circuits, so
+    // the keep_always test costs nothing on the ordinary path.
+    if (__iso->fast_depth > 0 && !__class->keep_always) {
         __obj = __amlc_arena_allocate(__iso, size_with_properties);
         chunked = (__obj != NULL);
     }
     if (__obj == NULL) {
+        #ifdef AMLC_SEED_PROPERTIES
+        // -fseed-properties: the generated constructor seeds every property
+        // slot nothing else assigns, so for a PLAIN CLASS INSTANCE only the
+        // header needs clearing here (prev/next/marked/pending_deallocation/
+        // immortal and the object_properties union are all read by ARC and the
+        // GC before any constructor runs, so they must be sound regardless).
+        //
+        // extra_size > 0 means the tail is NOT a property array and no
+        // generated constructor describes it, so it must still be zeroed:
+        //   - arrays  -> element storage. HashMap reads keyIndexes[i] before
+        //     writing it, with 0 as the "empty bucket" sentinel, so garbage
+        //     there walks a bucket chain forever. This is what hung the test
+        //     suite when the malloc path was applied unconditionally.
+        //   - strings -> string_holder plus the characters.
+        //   - Struct<T> boxes -> the value tail.
+        if (extra_size == 0) {
+            __obj = (aobject *) malloc(size_with_properties);
+            if (__obj != NULL) {
+                memset(__obj, 0, sizeof(aobject));
+            }
+        } else {
+            __obj = (aobject *) calloc(1, size_with_properties);
+        }
+        #else
         __obj = (aobject *) calloc(1, size_with_properties);
+        #endif
     }
 
     if (__obj != NULL) {
@@ -2044,6 +2071,8 @@ static aarena * __amlc_arena_new(aisolate * const iso) {
     a->live = 0;
     a->next_free = NULL;
     a->next = iso->arenas;
+    a->prev = NULL;
+    if (iso->arenas != NULL) iso->arenas->prev = a;
     iso->arenas = a;
     return a;
 }
@@ -2079,10 +2108,11 @@ void __amlc_arena_recycle(aisolate * const iso, aarena * const a) {
         iso->free_arena_count++;
         return;
     }
-    // Above the keep limit: hand it back. Unlink from the isolate's list.
-    aarena ** link = &iso->arenas;
-    while (*link != NULL && *link != a) link = &(*link)->next;
-    if (*link == a) *link = a->next;
+    // Above the keep limit: hand it back. O(1) unlink — walking `arenas` from
+    // the head cost a scan per freed arena, which bites once a program holds
+    // hundreds of them.
+    if (a->prev != NULL) a->prev->next = a->next; else iso->arenas = a->next;
+    if (a->next != NULL) a->next->prev = a->prev;
     free(a);
 }
 

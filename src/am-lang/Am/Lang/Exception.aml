@@ -41,6 +41,7 @@ namespace Am.Lang
      * input")`. Catch with try/catch. A return from try or catch leaves the function after
      * any finally block runs; a return or throw from finally replaces the pending transfer.
      */
+    #keepAlways
     class Exception(var message: String) {
         import Am.Collections
         import Am.Lang.Diagnostics
