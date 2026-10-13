@@ -76,6 +76,17 @@ namespace Am.Lang
 
         private native fun copyToNative(dest: T[], destOffset: UInt, srcOffset: UInt, length: UInt)
 
+        /** Resets a range to default values and releases references held there. */
+        fun clearRange(offset: UInt, length: UInt) {
+            var size = this.length()
+            if (length > size || offset > size - length) {
+                throw new IndexOutOfBoundsException(offset as Int, size)
+            }
+            if (length > 0UI) { this.clearRangeNative(offset, length) }
+        }
+
+        private native fun clearRangeNative(offset: UInt, length: UInt)
+
         /**
          * Allocates an uninitialised array with this array's element type, used by subArray to
          * build its result without knowing T at runtime.

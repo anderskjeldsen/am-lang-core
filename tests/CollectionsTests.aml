@@ -380,5 +380,86 @@ namespace Tests {
             Assert.assertEquals("banana", sortedStrings.get(2))
             Assert.assertEquals("apple", sortedStrings.get(3))
         }
+
+        // remove() used to shift with a single cursor that the inner loop ran
+        // to the end, so the outer scan was already past the list and only the
+        // FIRST match was ever removed. These pin the behaviour down.
+        test listRemoveTakesEveryOccurrence() {
+            var list = List.newList<Int>()
+            list.add(1)
+            list.add(2)
+            list.add(2)
+            list.add(3)
+
+            list.remove(2)
+
+            Assert.assertEquals(2, list.getSize())
+            Assert.assertEquals(1, list.get(0))
+            Assert.assertEquals(3, list.get(1))
+        }
+
+        test listRemoveHandlesMatchesAtBothEnds() {
+            var list = List.newList<Int>()
+            list.add(5)
+            list.add(1)
+            list.add(5)
+            list.add(2)
+            list.add(5)
+
+            list.remove(5)
+
+            Assert.assertEquals(2, list.getSize())
+            Assert.assertEquals(1, list.get(0))
+            Assert.assertEquals(2, list.get(1))
+        }
+
+        test listRemoveCanEmptyTheList() {
+            var list = List.newList<Int>()
+            list.add(7)
+            list.add(7)
+            list.add(7)
+
+            list.remove(7)
+
+            Assert.assertEquals(0, list.getSize())
+            list.add(9)
+            Assert.assertEquals(1, list.getSize())
+            Assert.assertEquals(9, list.get(0))
+        }
+
+        test listRemoveOfAbsentItemChangesNothing() {
+            var list = List.newList<Int>()
+            list.add(1)
+            list.add(2)
+
+            list.remove(9)
+
+            Assert.assertEquals(2, list.getSize())
+            Assert.assertEquals(1, list.get(0))
+            Assert.assertEquals(2, list.get(1))
+        }
+
+        // The vacated tail must be CLEARED, not just hidden behind size: a
+        // reference left above size is unreachable to the list and keeps the
+        // object alive for as long as the backing array does.
+        test listClearReleasesItsElements() {
+            var list = List.newList<Removable>()
+            var i = 0
+            while (i < 3) {
+                list.add(new Removable())
+                i++
+            }
+            Assert.assertEquals(3, instances(Removable))
+
+            list.clear()
+
+            Assert.assertEquals(0, list.getSize())
+            Assert.assertEquals(0, instances(Removable))
+        }
+    }
+
+    // Plain object with identity equality, so the live count is unambiguous.
+    class Removable {
+        import Am.Lang
     }
 }

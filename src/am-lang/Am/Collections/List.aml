@@ -69,7 +69,7 @@ namespace Am.Collections {
                     // Bulk move (memmove for primitive T, refcount-correct
                     // for objects) - growing a big List<UByte> was a per-
                     // element loop before, quadratic-ish on byte streams.
-                    this.items.copyTo(newItems, 0UI, 0UI, this.size.toUInt())
+                    this.items.copyTo(newItems, 0UI, 0UI, this.size as UInt)
                     this.capacity = newCapacity // bla
                     this.items = newItems
                 }
@@ -125,23 +125,28 @@ namespace Am.Collections {
          * @param item The element to remove
          */
         fun remove(item: T) {
-//            if (item != null) {
-                var i = 0
-                while(i < this.size) {
-                    var x = this.items[i]
-                    if (x == item) {
-                        while(i < this.size) {
-                            var j = i + 1
-                            if (j < this.size) {
-                                this.items[i] = this.items[j]
-                            }
-                            i++
-                        }
-                        this.size--
-                    }
-                    i++
+            // One pass, shifting each survivor down by however many matches
+            // have been seen so far, so an element moves at most once. Calling
+            // removeAt per match would re-shift the whole tail every time:
+            // O(n*k) moves for k matches, and O(n^2) when everything matches.
+            var i = 0
+            var removed = 0
+            while (i < this.size) {
+                if (this.items[i] == item) {
+                    removed++
+                } else if (removed > 0) {
+                    this.items[i - removed] = this.items[i]
                 }
-//            }
+                i++
+            }
+            if (removed > 0) {
+                // The tail now holds the matches plus duplicates of the moved
+                // survivors. Clear it in ONE call: that is what releases those
+                // references, and a slot left above size is a leak the list can
+                // never reach again (and, with arenas, pins the whole arena).
+                this.size = this.size - removed
+                this.items.clearRange(this.size as UInt, removed as UInt)
+            }
         }
 
         /**
@@ -163,6 +168,7 @@ namespace Am.Collections {
                 i++
             }
             this.size--
+            this.items.clearRange(this.size as UInt, 1UI)
             return value
         }
 
@@ -177,7 +183,9 @@ namespace Am.Collections {
                 throw new Exception("Cannot remove last element from empty list")
             }
             this.size--
-            return this.items[this.size]
+            var value = this.items[this.size]
+            this.items.clearRange(this.size as UInt, 1UI)
+            return value
         }
 
         /**
@@ -229,7 +237,7 @@ namespace Am.Collections {
          */
         fun toArray(): T[] {
             var arr = new T[this.size]
-            this.items.copyTo(arr, 0UI, 0UI, this.size.toUInt())
+            this.items.copyTo(arr, 0UI, 0UI, this.size as UInt)
             return arr
         }
 
@@ -249,6 +257,7 @@ namespace Am.Collections {
          * rounds of work stops reallocating after the first round.
          */
         fun clear() {
+            this.items.clearRange(0UI, this.size as UInt)
             this.size = 0
         }
 

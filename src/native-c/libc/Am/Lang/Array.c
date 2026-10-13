@@ -214,3 +214,33 @@ aobject * Am_Lang_Array__native_copy_0(aobject * const src, void * const copy_ct
 	}
 	return dst;
 }
+
+// Clearing collection storage must release its owning references, even though
+// the backing array remains allocated for reuse. Generic primitive/Any arrays
+// need different slot sizes, so do this once in the native Array implementation.
+function_result Am_Lang_Array_clearRangeNative_0(aobject *const this, unsigned int offset, unsigned int length) {
+    array_holder *array = (array_holder *)((char *)this + sizeof(aobject));
+    function_result result = {.has_return_value=false};
+    if (length > array->size || offset > array->size - length) {
+        __throw_simple_exception_copy("clearRange: invalid range", "in Am_Lang_Array_clearRangeNative_0", &result);
+        return result;
+    }
+    if (array->ctype == object_type) {
+        aobject **items = (aobject **)(array + 1);
+        for (unsigned int i = offset; i < offset + length; ++i) {
+            aobject *old = items[i];
+            items[i] = NULL;
+            if (old) __decrease_property_reference_count(old);
+        }
+    } else if (array->ctype == any_type) {
+        nullable_value *items = (nullable_value *)(array + 1);
+        for (unsigned int i = offset; i < offset + length; ++i) {
+            nullable_value old = items[i];
+            items[i] = (nullable_value){0};
+            __decrease_property_reference_count_nullable_value(old);
+        }
+    } else {
+        memset((char *)(array + 1) + (size_t)offset * array->item_size, 0, (size_t)length * array->item_size);
+    }
+    return result;
+}
