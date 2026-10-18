@@ -482,7 +482,37 @@ function_result Am_Lang_RunningProcess_close_0(aobject * const this) {
 // continues to work exactly as it did before the amigaos split.
 function_result Am_Lang_RunningProcess_terminateChild_0(aobject * const this) {
     function_result __result = { .has_return_value = false };
-    (void) this;
+    running_process_data * d = rp_data(this);
+    if (d == NULL) {
+        return __result;
+    }
+    // The child runs under forkpty(), so it owns a controlling terminal and
+    // sits in its own session. Writing the INTR byte to the master is what a
+    // real terminal does: the line discipline raises SIGINT on the whole
+    // FOREGROUND PROCESS GROUP, so a shell pipeline dies the way the user
+    // expects -- which killing d->child_pid alone would not achieve. It is
+    // also correct for a child in raw mode: ISIG is off there, so the app
+    // simply receives ^C as input and decides for itself, exactly as it
+    // would in a terminal.
+    // stdin_writer_fd IS the pty master (both fd slots hold it) -- except
+    // in binary mode, which uses a socketpair with no line discipline, so
+    // there the byte would just be data and the signal path below is the
+    // only one that works.
+    int fd = d->binary ? -1 : d->stdin_writer_fd;
+    if (fd >= 0) {
+        const unsigned char intr = 0x03;
+        ssize_t n = write(fd, &intr, 1);
+        if (n == 1) {
+            return __result;
+        }
+    }
+    // No usable pty (or the write failed): fall back to signalling the
+    // child's process group directly, then the process itself.
+    if (d->child_pid > 0) {
+        if (killpg(d->child_pid, SIGINT) != 0) {
+            kill(d->child_pid, SIGINT);
+        }
+    }
     return __result;
 }
 

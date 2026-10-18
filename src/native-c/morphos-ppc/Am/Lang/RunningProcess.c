@@ -1922,7 +1922,20 @@ function_result Am_Lang_RunningProcess_close_0(aobject * const this) {
 // that terminateChild fixes, so a no-op is safe.
 function_result Am_Lang_RunningProcess_terminateChild_0(aobject * const this) {
     function_result __result = { .has_return_value = false };
-    (void) this;
+    running_process_data * d = rp_data(this);
+    if (d != NULL && d->state != NULL) {
+        rp_state * st = d->state;
+        // Same recipe as the amigaos backend: Ctrl-C is a signal to the
+        // child's task, letting it exit on its own terms, and the handle is
+        // reaped by the normal isAlive() polling. Read under Forbid -- the
+        // handler nulls child_task as the child goes away, and signalling a
+        // freed task struct is a crash.
+        Forbid();
+        if (!st->child_exited && st->child_task != NULL) {
+            Signal((struct Task *) st->child_task, SIGBREAKF_CTRL_C);
+        }
+        Permit();
+    }
     return __result;
 }
 

@@ -15,6 +15,87 @@
 #include <fcntl.h>
 #endif
 #include <string.h>
+#if defined(PLATFORM_AMIGAOS) || defined(PLATFORM_MORPHOS_PPC)
+#include <dos/dosextens.h>
+#include <proto/dos.h>
+#endif
+
+#if defined(PLATFORM_AMIGAOS) || defined(PLATFORM_MORPHOS_PPC)
+// Worker isolates are separate Exec processes. Avoid libnix's shared stdio
+// descriptor/buffer tables: each stream owns a DOS handle directly instead.
+// These aliases are confined to this translation unit.
+typedef struct {
+    BPTR handle;
+    int append;
+    int readable;
+    int writable;
+} am_dos_stream;
+static am_dos_stream *am_dos_open(const char *path, const char *mode)
+{
+    LONG access = mode[0] == 'w' ? MODE_NEWFILE :
+        (mode[0] == 'a' ? MODE_READWRITE : MODE_OLDFILE);
+    BPTR handle = Open((CONST_STRPTR)path, access);
+    if (!handle) { errno = EIO; return NULL; }
+    am_dos_stream *stream = calloc(1, sizeof(*stream));
+    if (!stream) { Close(handle); errno = ENOMEM; return NULL; }
+    stream->handle = handle;
+    stream->append = mode[0] == 'a';
+    stream->readable = mode[0] == 'r' || strchr(mode, '+') != NULL;
+    stream->writable = mode[0] != 'r' || strchr(mode, '+') != NULL;
+    return stream;
+}
+static int am_dos_close(am_dos_stream *stream)
+{
+    LONG ok = Close(stream->handle);
+    free(stream);
+    if (!ok) { errno = EIO; return EOF; }
+    return 0;
+}
+static long am_dos_tell(am_dos_stream *stream)
+{
+    LONG position = Seek(stream->handle, 0, OFFSET_CURRENT);
+    if (position < 0) { errno = EIO; }
+    return position;
+}
+static int am_dos_seek(am_dos_stream *stream, long offset, int origin)
+{
+    LONG mode = origin == SEEK_SET ? OFFSET_BEGINNING :
+        (origin == SEEK_END ? OFFSET_END : OFFSET_CURRENT);
+    if (Seek(stream->handle, offset, mode) < 0) { errno = EIO; return -1; }
+    return 0;
+}
+static size_t am_dos_read(void *buffer, size_t size, size_t count, am_dos_stream *stream)
+{
+    if (!size || !count) { return 0; }
+    if (!stream->readable || count > LONG_MAX / size) { errno = EINVAL; return 0; }
+    LONG got = Read(stream->handle, buffer, (LONG)(size * count));
+    if (got < 0) { errno = EIO; return 0; }
+    return (size_t)got / size;
+}
+static size_t am_dos_write(const void *buffer, size_t size, size_t count, am_dos_stream *stream)
+{
+    if (!size || !count) { return 0; }
+    if (!stream->writable || count > LONG_MAX / size) { errno = EINVAL; return 0; }
+    if (stream->append && am_dos_seek(stream, 0, SEEK_END) != 0) { return 0; }
+    LONG wrote = Write(stream->handle, (APTR)buffer, (LONG)(size * count));
+    if (wrote < 0) { errno = EIO; return 0; }
+    return (size_t)wrote / size;
+}
+static int am_dos_flush(am_dos_stream *stream)
+{
+    if (!stream->writable) { return 0; }
+    if (!Flush(stream->handle)) { errno = EIO; return EOF; }
+    return 0;
+}
+#define FILE am_dos_stream
+#define fopen am_dos_open
+#define fclose am_dos_close
+#define ftell am_dos_tell
+#define fseek am_dos_seek
+#define fread am_dos_read
+#define fwrite am_dos_write
+#define fflush am_dos_flush
+#endif
 
 typedef struct _file_holder file_holder;
 
@@ -253,6 +334,31 @@ __exit: ;
 };
 
 
+#if defined(PLATFORM_AMIGAOS) || defined(PLATFORM_MORPHOS_PPC)
+// libnix fsync is a no-op. Ask the filesystem handler to flush both file
+// data and directory changes instead; unsupported handlers must fail closed.
+static int am_stream_flush_volume(const char *path)
+{
+    if (path == NULL) { return 0; }
+    struct DevProc *device = GetDeviceProc((CONST_STRPTR)path, NULL);
+    if (device == NULL) { return 0; }
+    LONG ok = DoPkt(device->dvp_Port, ACTION_FLUSH, 0, 0, 0, 0, 0);
+    FreeDeviceProc(device);
+    return ok != DOSFALSE;
+}
+
+static int am_stream_resize(FILE *stream, const char *path, long length)
+{
+    // Resize the same DOS handle, with no secondary stdio descriptor.
+    if (!stream->writable) { return 0; }
+    long position = ftell(stream);
+    if (position < 0 || fflush(stream) != 0 || fseek(stream, 0, SEEK_SET) != 0) { return 0; }
+    int ok = SetFileSize(stream->handle, length, OFFSET_BEGINNING) == length;
+    if (fseek(stream, position, SEEK_SET) != 0) { ok = 0; }
+    return ok;
+}
+#endif
+
 // These capabilities deliberately report unsupported rather than pretending a
 // stdio flush provides durable storage. Other platforms can supply overrides.
 function_result Am_IO_FileStream_setLength_0(aobject * const this, long long length)
@@ -264,6 +370,12 @@ function_result Am_IO_FileStream_setLength_0(aobject * const this, long long len
         __throw_simple_exception_copy("Invalid file resize", "FileStream.setLength", &result);
     } else if (fflush(holder->file) != 0 || ftruncate(fileno(holder->file), (off_t)length) != 0) {
         __throw_simple_exception_copy("File resize failed", "FileStream.setLength", &result);
+    }
+#elif defined(PLATFORM_AMIGAOS) || defined(PLATFORM_MORPHOS_PPC)
+    if (holder == NULL || holder->file == NULL || length < 0 || length > LONG_MAX || get_file_path(this) == NULL) {
+        __throw_simple_exception_copy("Invalid file resize", "FileStream.setLength", &result);
+    } else if (!am_stream_resize(holder->file, get_file_path(this), (long)length)) {
+        __throw_simple_exception_copy("AmigaDOS file resize failed", "FileStream.setLength", &result);
     }
 #else
     __throw_simple_exception_copy("File resize is unsupported on this platform", "FileStream.setLength", &result);
@@ -288,6 +400,10 @@ function_result Am_IO_FileStream_syncToDisk_0(aobject * const this)
 #endif
     if (rc != 0) {
         __throw_simple_exception_copy("File storage sync failed", "FileStream.syncToDisk", &result);
+    } else { result.return_value.value.bool_value = true; }
+#elif defined(PLATFORM_AMIGAOS) || defined(PLATFORM_MORPHOS_PPC)
+    if (holder == NULL || holder->file == NULL || fflush(holder->file) != 0 || !am_stream_flush_volume(get_file_path(this))) {
+        __throw_simple_exception_copy("Amiga filesystem flush failed or unsupported", "FileStream.syncToDisk", &result);
     } else { result.return_value.value.bool_value = true; }
 #endif
     return result;
@@ -321,6 +437,10 @@ function_result Am_IO_FileStream_syncParentDirectory_0(aobject * const this)
     if (fd >= 0) { close(fd); }
     if (rc != 0) {
         __throw_simple_exception_copy("Parent directory sync failed", "FileStream.syncParentDirectory", &result);
+    } else { result.return_value.value.bool_value = true; }
+#elif defined(PLATFORM_AMIGAOS) || defined(PLATFORM_MORPHOS_PPC)
+    if (!am_stream_flush_volume(get_file_path(this))) {
+        __throw_simple_exception_copy("Amiga filesystem directory flush failed or unsupported", "FileStream.syncParentDirectory", &result);
     } else { result.return_value.value.bool_value = true; }
 #endif
     return result;
