@@ -8,6 +8,9 @@
 #include <libc/core_inline_functions.h>
 
 #include <pthread.h>
+#if defined(AM_PLATFORM_NINTENDO_PPC)
+#include <malloc.h>
+#endif
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -193,13 +196,20 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
     __amlc_isolate_retain(iso);   // the running thread's own handle
     __amlc_isolate_count_inc();
 #if defined(AM_PLATFORM_NINTENDO_PPC)
-    // GameCube/Wii: libogc2's default thread stack is far too small for
-    // AmLang's call depth, and an overflow there silently tramples the heap.
+    // GameCube/Wii: libogc2's pthread_create is LWP_CreateThread. Given no
+    // stack it carves one out of libogc's small internal workspace -- sized
+    // like the CALLING thread's, which is main's 4 MB (see nintendo-ppc.c),
+    // so it fails with EAGAIN -- and a small one overflows on AmLang's call
+    // depth, silently trampling memory. So hand it a 1 MB stack from the
+    // heap. Threads live as long as the program here, so it is not freed.
+    #define AM_NINTENDO_THREAD_STACK (1024 * 1024)
+    void *stack = memalign(32, AM_NINTENDO_THREAD_STACK);
     pthread_attr_t attr;
     pthread_attr_init(&attr);
-    pthread_attr_setstacksize(&attr, 1024 * 1024);
+    if (stack != NULL) pthread_attr_setstack(&attr, stack, AM_NINTENDO_THREAD_STACK);
     int rc = pthread_create(&n->thread_id, &attr, Am_Threading_Thread__pthread_entry, (void *) iso);
     pthread_attr_destroy(&attr);
+    if (rc != 0 && stack != NULL) free(stack);
 #else
     int rc = pthread_create(&n->thread_id, NULL, Am_Threading_Thread__pthread_entry, (void *) iso);
 #endif
