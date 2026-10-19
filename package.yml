@@ -226,6 +226,29 @@ platforms:
       #
       # Cost is one fewer scratch register.
       - -ffixed-x18
+  # GameCube/Wii (PowerPC Gekko/Broadway, libogc2). Built with devkitPPC in
+  # the webhdx/devkitppc-libogc2 docker image; run the resulting .dol in
+  # Dolphin. Every heap pointer is >= 0x80000000 here (see
+  # core_inline_functions.h), and an app must never return from main.
+  - id: nintendo-ppc
+    extends: libc
+    gccCommand: powerpc-eabi-gcc -O2 -mogc -mcpu=750 -meabi -mhard-float
+    additionalIncludePaths:
+      - /opt/devkitpro/libogc2/gamecube/include
+    additionalHeaders:
+      - nintendo-ppc.h
+    additionalCSources:
+      - inputFilename: nintendo-ppc.c
+        outputFilename: nintendo-ppc.o
+    gccAdditionalOptions:
+      - -DAM_PLATFORM_NINTENDO_PPC
+      - -DGEKKO
+    gccLibraryPaths:
+      - /opt/devkitpro/libogc2/gamecube/lib
+      - /opt/devkitpro/devkitPPC/powerpc-eabi/lib
+    gccAdditionalLibraries:
+      - ogc
+      - m
 #  - id: msdos-x86
 #    extends: libc
 #    gccCommand: gcc
