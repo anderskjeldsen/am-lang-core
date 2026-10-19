@@ -2194,6 +2194,29 @@ static void __amlc_isolate_alloc_statics(aisolate * const iso) {
     }
 }
 
+// Stack for a new thread. Amiga family: as big as the CREATING thread's own
+// (main's, which amiga.c / morphos.c size with __stack), never below
+// 100 KB -- AmLang's call depth needs real stack, and an overflow there is
+// silent. A flat 4 MB per thread was a lot of a 68k's memory. Elsewhere:
+// 4 MB, as before.
+#define AMLC_MIN_THREAD_STACK (100 * 1024)
+static unsigned int __amlc_thread_stack_size(void) {
+#if defined(AMLC_AMIGA_FAMILY)
+    unsigned long have = 0;
+#if defined(__MORPHOS__)
+    // A native PPC task runs on its PPC stack, not the 68k one in tc_SP*.
+    NewGetTaskAttrsA(NULL, &have, sizeof(have), TASKINFOTYPE_STACKSIZE, NULL);
+#else
+    struct Task * self = FindTask(NULL);
+    have = (unsigned long) ((char *) self->tc_SPUpper - (char *) self->tc_SPLower);
+#endif
+    if (have < AMLC_MIN_THREAD_STACK) have = AMLC_MIN_THREAD_STACK;
+    return (unsigned int) have;
+#else
+    return 4000 * 1024;
+#endif
+}
+
 static aisolate * __amlc_isolate_alloc(void) {
     aisolate * iso = (aisolate *) calloc(1, sizeof(aisolate));
     if (iso == NULL) {
@@ -2206,7 +2229,7 @@ static aisolate * __amlc_isolate_alloc(void) {
         abort();
     }
     iso->handle_count = 1;
-    iso->stack_size = 4000 * 1024;
+    iso->stack_size = __amlc_thread_stack_size();
     return iso;
 }
 

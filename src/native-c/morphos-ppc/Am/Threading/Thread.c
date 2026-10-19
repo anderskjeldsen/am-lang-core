@@ -200,6 +200,7 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 		NP_Entry, (ULONG) fptr,
 		NP_CodeType, CODETYPE_PPC,
 		NP_StackSize, iso->stack_size,
+		NP_PPCStackSize, iso->stack_size,   // AmLang code runs on the PPC stack
 		NP_Name, (ULONG) name_strptr,
 		NP_Output, (ULONG) parent_out,
 		NP_Input, (ULONG) parent_in,
