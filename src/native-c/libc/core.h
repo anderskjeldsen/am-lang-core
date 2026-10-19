@@ -510,8 +510,11 @@ struct _aisolate {
 // the running task's tc_UserData (SysBase->ThisTask is what FindTask(NULL)
 // returns without the library call). AROS and non-gcc Amiga builds go
 // through a function (AROS pthreads own tc_UserData; am-cc has no exec
-// headers on the hot path).
-#if defined(__AROS__)
+// headers on the hot path). GameCube/Wii (libogc2) takes the AROS route
+// too: its threads get no thread-local storage of their own (every thread
+// shares r2's TLS block), so a __thread isolate pointer is one value for all
+// threads and an object made on a worker gets unlinked from main's list.
+#if defined(__AROS__) || defined(AM_PLATFORM_NINTENDO_PPC)
 aisolate * __amlc_isolate_current(void);
 #define __amlc_isolate() (__amlc_isolate_current())
 #elif defined(__MORPHOS__) || defined(__AMIGA__) || defined(AMIGA) || defined(PLATFORM_AMIGAOS)

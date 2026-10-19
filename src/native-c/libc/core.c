@@ -1897,7 +1897,7 @@ void __amlc_global_unlock(void) { pthread_mutex_unlock(&__amlc_global_mutex); }
 #endif
 
 // ---- current-isolate binding ----------------------------------------------
-#if defined(__AROS__)
+#if defined(__AROS__) || defined(AM_PLATFORM_NINTENDO_PPC)
 static pthread_key_t  __amlc_iso_key;
 static pthread_once_t __amlc_iso_key_once = PTHREAD_ONCE_INIT;
 static void __amlc_make_iso_key(void) { pthread_key_create(&__amlc_iso_key, NULL); }
