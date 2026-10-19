@@ -1897,7 +1897,44 @@ void __amlc_global_unlock(void) { pthread_mutex_unlock(&__amlc_global_mutex); }
 #endif
 
 // ---- current-isolate binding ----------------------------------------------
-#if defined(__AROS__) || defined(AM_PLATFORM_NINTENDO_PPC)
+#if defined(AM_PLATFORM_NINTENDO_PPC)
+// GameCube/Wii: libogc2 gives threads no storage of their own -- __thread
+// and even pthread keys come out shared (one r2 TLS block for all) -- so
+// keep a small table keyed by the libogc thread handle. A program has a
+// handful of threads; a short scan per lookup is cheap.
+#include <ogc/lwp.h>
+#define AMLC_NINTENDO_MAX_THREADS 64
+static lwp_t     __amlc_iso_thread[AMLC_NINTENDO_MAX_THREADS];
+static aisolate *__amlc_iso_value[AMLC_NINTENDO_MAX_THREADS];
+static int       __amlc_iso_used = 0;
+aisolate * __amlc_isolate_current(void) {
+    lwp_t self = LWP_GetSelf();
+    for (int i = 0; i < __amlc_iso_used; i++) {
+        if (__amlc_iso_thread[i] == self) return __amlc_iso_value[i];
+    }
+    return NULL;
+}
+static void __amlc_bind_isolate(aisolate * const iso) {
+    lwp_t self = LWP_GetSelf();
+    __amlc_global_lock();
+    int slot = -1;
+    for (int i = 0; i < __amlc_iso_used; i++) {
+        if (__amlc_iso_thread[i] == self) { slot = i; break; }
+    }
+    if (slot < 0) {
+        // Reuse a slot an ended thread unbound (NULL), else append.
+        for (int i = 0; i < __amlc_iso_used; i++) {
+            if (__amlc_iso_value[i] == NULL) { slot = i; break; }
+        }
+    }
+    if (slot < 0 && __amlc_iso_used < AMLC_NINTENDO_MAX_THREADS) slot = __amlc_iso_used++;
+    if (slot >= 0) {
+        __amlc_iso_thread[slot] = self;
+        __amlc_iso_value[slot] = iso;
+    }
+    __amlc_global_unlock();
+}
+#elif defined(__AROS__)
 static pthread_key_t  __amlc_iso_key;
 static pthread_once_t __amlc_iso_key_once = PTHREAD_ONCE_INIT;
 static void __amlc_make_iso_key(void) { pthread_key_create(&__amlc_iso_key, NULL); }
