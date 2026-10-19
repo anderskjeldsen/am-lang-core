@@ -249,6 +249,26 @@ platforms:
     gccAdditionalLibraries:
       - ogc
       - m
+  # Wii: the same runtime as nintendo-ppc (it extends it, so the nintendo-ppc
+  # native code is shared), built for Broadway (-mrvl) against libogc2's Wii
+  # libraries, which add the Wii Remote (wiiuse/bte) and the SD slot.
+  - id: nintendo-wii
+    extends: nintendo-ppc
+    gccCommand: powerpc-eabi-gcc -O2 -mrvl -mcpu=750 -meabi -mhard-float
+    additionalIncludePaths:
+      - /opt/devkitpro/libogc2/wii/include
+    gccAdditionalOptions:
+      - -DAM_PLATFORM_NINTENDO_PPC
+      - -DAM_PLATFORM_NINTENDO_WII
+      - -DGEKKO
+    gccLibraryPaths:
+      - /opt/devkitpro/libogc2/wii/lib
+      - /opt/devkitpro/devkitPPC/powerpc-eabi/lib
+    gccAdditionalLibraries:
+      - wiiuse
+      - bte
+      - ogc
+      - m
 #  - id: msdos-x86
 #    extends: libc
 #    gccCommand: gcc
