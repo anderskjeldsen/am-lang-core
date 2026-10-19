@@ -249,6 +249,10 @@ platforms:
     gccAdditionalLibraries:
       - ogc
       - m
+    # Run main on a 4 MB stack instead of libogc2's fixed 128 KB one (see
+    # nintendo-ppc.c).
+    additionalLinkerFlags:
+      - -Wl,--wrap=main
   # Wii: the same runtime as nintendo-ppc (it extends it, so the nintendo-ppc
   # native code is shared), built for Broadway (-mrvl) against libogc2's Wii
   # libraries, which add the Wii Remote (wiiuse/bte) and the SD slot.

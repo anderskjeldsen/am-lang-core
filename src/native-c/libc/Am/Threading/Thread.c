@@ -192,7 +192,17 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
     iso->native = n;
     __amlc_isolate_retain(iso);   // the running thread's own handle
     __amlc_isolate_count_inc();
+#if defined(AM_PLATFORM_NINTENDO_PPC)
+    // GameCube/Wii: libogc2's default thread stack is far too small for
+    // AmLang's call depth, and an overflow there silently tramples the heap.
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, 1024 * 1024);
+    int rc = pthread_create(&n->thread_id, &attr, Am_Threading_Thread__pthread_entry, (void *) iso);
+    pthread_attr_destroy(&attr);
+#else
     int rc = pthread_create(&n->thread_id, NULL, Am_Threading_Thread__pthread_entry, (void *) iso);
+#endif
     if (rc != 0) {
         __amlc_isolate_count_dec();
         __amlc_isolate_release(iso);
