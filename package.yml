@@ -268,7 +268,11 @@ platforms:
     gccLibraryPaths:
       - /opt/devkitpro/libogc2/wii/lib
       - /opt/devkitpro/devkitPPC/powerpc-eabi/lib
+    # libfat before libogc: it is what mounts the SD card (see
+    # nintendo-ppc.c), and it calls into ogc, which GNU ld wants listed after
+    # its callers.
     gccAdditionalLibraries:
+      - fat
       - wiiuse
       - bte
       - ogc

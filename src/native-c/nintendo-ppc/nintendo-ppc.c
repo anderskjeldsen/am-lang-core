@@ -6,6 +6,11 @@
 #include <malloc.h>
 #include <pthread.h>
 #include <stdio.h>
+#ifdef AM_PLATFORM_NINTENDO_WII
+#include <fat.h>
+#include <string.h>
+#include <unistd.h>
+#endif
 
 // libogc2 runs main() on a fixed 128 KB stack (lwp.o's static __stack).
 // AmLang's call depth (recursive JSON / script parsing, deep ARC teardown)
@@ -19,6 +24,33 @@
 #define AM_NINTENDO_MAIN_STACK (4 * 1024 * 1024)
 
 extern int __real_main(int argc, char **argv);
+
+#ifdef AM_PLATFORM_NINTENDO_WII
+// A Wii app starts with NO filesystem: SD and USB are devices libfat has to
+// be asked to mount, and until it is, every fopen() fails. Mount it here,
+// before any AmLang code runs, so Am.IO.File behaves the way it does
+// everywhere else.
+//
+// Then move INTO the app's own folder. The Homebrew Channel passes the path
+// it launched (`sd:/apps/<name>/boot.dol`) as argv[0], and an app that reads
+// "assets/..." relative to the current directory would otherwise be reading
+// from the root of the card. This is the console's answer to "run it from
+// the build directory".
+static void am_nintendo_mount_storage(int argc, char **argv) {
+    char path[256];
+    char *slash;
+
+    if (!fatInitDefault()) return;
+    if (argc < 1 || argv == NULL || argv[0] == NULL) return;
+    if (strlen(argv[0]) >= sizeof(path)) return;
+
+    strcpy(path, argv[0]);
+    slash = strrchr(path, '/');
+    if (slash == NULL) return;
+    *slash = '\0';
+    chdir(path);
+}
+#endif
 
 typedef struct {
     int argc;
@@ -37,6 +69,9 @@ static void *am_main_entry(void *p) {
 
 int __wrap_main(int argc, char **argv) {
     static am_main_args args;
+#ifdef AM_PLATFORM_NINTENDO_WII
+    am_nintendo_mount_storage(argc, argv);
+#endif
     args.argc = argc;
     args.argv = argv;
     args.rc = 0;
