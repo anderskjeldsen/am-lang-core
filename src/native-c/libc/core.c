@@ -1934,6 +1934,13 @@ static void __amlc_bind_isolate(aisolate * const iso) {
     }
     __amlc_global_unlock();
 }
+#elif defined(AM_PLATFORM_XENON)
+// Xbox 360 (libxenon): a thread IS one of the six hardware threads (see
+// xenon/pthread.h), so the isolate table is indexed by the hardware thread
+// id itself -- one array load, no TLS needed (there is none to speak of).
+static aisolate * volatile __amlc_iso_by_hwthread[AM_XENON_HW_THREADS];
+aisolate * __amlc_isolate_current(void) { return __amlc_iso_by_hwthread[am_xenon_thread_id()]; }
+static void __amlc_bind_isolate(aisolate * const iso) { __amlc_iso_by_hwthread[am_xenon_thread_id()] = iso; }
 #elif defined(__AROS__)
 static pthread_key_t  __amlc_iso_key;
 static pthread_once_t __amlc_iso_key_once = PTHREAD_ONCE_INIT;

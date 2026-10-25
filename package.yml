@@ -277,6 +277,50 @@ platforms:
       - bte
       - ogc
       - m
+  # Xbox 360 homebrew (libxenon / Free60), run from XeLL on an RGH/JTAG
+  # console. Big-endian PowerPC (Xenon, 3 cores x 2 threads) in 32-bit mode.
+  # Built in the free60/libxenon docker image (amd64 only). No OS: xenon.c
+  # supplies pthreads on the hardware threads, a big main stack (main is
+  # wrapped like on the Nintendo consoles), USB/HDD mounting and log.txt.
+  - id: xenon
+    extends: libc
+    gccCommand: xenon-gcc -O2 -DXENON -m32 -maltivec -fno-pic -mpowerpc64 -mhard-float
+    additionalIncludePaths:
+      - /usr/local/xenon/usr/include
+    additionalHeaders:
+      - xenon.h
+      - pthread.h
+      - xenon_compat.h
+    additionalCSources:
+      - inputFilename: xenon.c
+        outputFilename: xenon.o
+    gccAdditionalOptions:
+      # Our pthread.h shadows newlib's (gated-off) one: search here first.
+      - -Iadditional/am-lang-core/xenon
+      # Every package's compile line gets this (additionalIncludePaths does not).
+      - -I/usr/local/xenon/usr/include
+      # One token: amlc de-dups repeated bare flags.
+      - -includexenon_compat.h
+      # xenon-gcc is a linux-targeted gcc and predefines __linux__; this is
+      # bare metal, so keep the runtime off its Linux-only paths (mmap, /proc).
+      - -U__linux__
+      - -U__linux
+      - -U__gnu_linux__
+      - -Ulinux
+      - -DAM_PLATFORM_XENON
+      - -DAM_NO_SYMLINKS
+      - -fwrapv
+    gccLibraryPaths:
+      - /usr/local/xenon/usr/lib
+      - /usr/local/xenon/xenon/lib/32
+    gccAdditionalLibraries:
+      - fat
+      - xenon
+      - m
+    additionalLinkerFlags:
+      - -Wl,--wrap=main
+      - -n
+      - -T/usr/local/xenon/app.lds
 #  - id: msdos-x86
 #    extends: libc
 #    gccCommand: gcc

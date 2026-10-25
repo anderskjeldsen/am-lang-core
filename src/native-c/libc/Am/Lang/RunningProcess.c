@@ -1,4 +1,4 @@
-#if defined(AM_PLATFORM_NINTENDO_PPC)
+#if defined(AM_PLATFORM_NINTENDO_PPC) || defined(AM_PLATFORM_XENON)
 
 #include <libc/core.h>
 #include <Am/Lang/RunningProcess.h>

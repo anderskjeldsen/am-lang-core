@@ -35,7 +35,8 @@ static inline void __set_primitive_nullable(nullable_value * nullable_value, boo
 // addresses by chance.
 static inline int __is_suspicious_object_ptr(aobject *v) {
     if (v == NULL) return 0;
-#if defined(AM_PLATFORM_NINTENDO_PPC)
+#if defined(AM_PLATFORM_NINTENDO_PPC) || defined(AM_PLATFORM_XENON)
+    // (Xbox 360: the libxenon heap is at 0x8xxxxxxx too.)
     // GameCube/Wii: ALL of MEM1 lives at 0x80000000+, so every valid
     // heap pointer is negative as a signed 32-bit long. The sign-bit
     // fingerprint below would flag every object and exit(0) on the
