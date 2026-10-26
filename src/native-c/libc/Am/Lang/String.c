@@ -109,13 +109,15 @@ function_result Am_Lang_String_print_0(aobject * const this)
 		// buffer.) Also never trips over a '%' in the text.
 		if (holder->string_value != NULL) {
 			size_t n = strlen(holder->string_value);
-			if (n > 0) {
+			if (n > 0 && !__amlc_stdout_held_write(holder->string_value, n)) {
 				fwrite(holder->string_value, 1, n, stdout);
 			}
 		}
-	} else {
+	} else if (!__amlc_stdout_held_write("null", 4)) {
 		fputs("null", stdout);
 	}
+	// Held (see core.h): nothing may reach the OS, so no flush either.
+	if (__amlc_stdout_is_held()) goto __exit;
 	// When stdout is redirected to a file on AmigaOS (Startup-Sequence
 	// `app >output.log` pattern), libnix's stdio defaults to full
 	// buffering. A long-running program that doesn't exit cleanly

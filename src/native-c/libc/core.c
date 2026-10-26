@@ -1886,6 +1886,43 @@ aobject * __concatenate_strings(int count, ...) {
 // portable lifecycle, then messaging (deep copy + mailbox).
 // ===========================================================================
 
+// ---- stdout hold (see core.h) ----------------------------------------------
+static int    __amlc_hold_depth = 0;
+static char  *__amlc_hold_buf = NULL;
+static size_t __amlc_hold_len = 0, __amlc_hold_cap = 0;
+
+void __amlc_stdout_hold(void) {
+    fflush(stdout);           // empty stdio while the OS can still take it
+    __amlc_hold_depth++;
+}
+
+int __amlc_stdout_is_held(void) { return __amlc_hold_depth > 0; }
+
+int __amlc_stdout_held_write(const char *text, size_t n) {
+    if (__amlc_hold_depth <= 0) return 0;
+    if (__amlc_hold_len + n > __amlc_hold_cap) {
+        size_t cap = __amlc_hold_cap ? __amlc_hold_cap * 2 : 16384;
+        while (cap < __amlc_hold_len + n) cap *= 2;
+        char *nb = (char *) realloc(__amlc_hold_buf, cap);
+        if (nb == NULL) return 1;   // out of memory: drop the text, never block
+        __amlc_hold_buf = nb;
+        __amlc_hold_cap = cap;
+    }
+    memcpy(__amlc_hold_buf + __amlc_hold_len, text, n);
+    __amlc_hold_len += n;
+    return 1;
+}
+
+void __amlc_stdout_release(void) {
+    if (__amlc_hold_depth <= 0) return;
+    if (--__amlc_hold_depth > 0) return;
+    if (__amlc_hold_len > 0) fwrite(__amlc_hold_buf, 1, __amlc_hold_len, stdout);
+    fflush(stdout);
+    free(__amlc_hold_buf);
+    __amlc_hold_buf = NULL;
+    __amlc_hold_len = __amlc_hold_cap = 0;
+}
+
 // ---- global lock ----------------------------------------------------------
 #ifdef AMLC_AMIGA_FAMILY
 void __amlc_global_lock(void)   { Forbid(); }

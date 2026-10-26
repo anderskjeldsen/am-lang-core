@@ -576,6 +576,15 @@ void __amlc_arenas_free_all(aisolate * const iso);
 
 // Small global lock for the few cross-isolate words: isolate handle counts
 // and mailbox queues. pthread mutex on POSIX, Forbid/Permit on the Amiga family.
+// stdout HOLD: while held, String.print appends to a memory buffer instead
+// of touching stdio; release writes it all out and flushes. For code that
+// takes the machine away from the OS (ctz-c2p's c2p_init kills the
+// interrupts AmigaOS DOS needs, so any Write() would block forever) yet calls
+// into AmLang that may println. Nests.
+void __amlc_stdout_hold(void);
+void __amlc_stdout_release(void);
+int  __amlc_stdout_is_held(void);
+int  __amlc_stdout_held_write(const char *text, size_t n);
 void __amlc_global_lock(void);
 void __amlc_global_unlock(void);
 
