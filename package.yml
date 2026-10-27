@@ -343,6 +343,21 @@ platforms:
       - ws2_32
     additionalLinkerFlags:
       - -static
+  # 32-bit Windows XP+ and ReactOS: the windows-x64 sources, built with
+  # Debian's i686 mingw-w64 (tools/mingw-msvcrt), which links the old
+  # msvcrt.dll every Windows since 95 ships -- Homebrew's mingw-w64 targets
+  # UCRT (Windows 10+). _WIN32_WINNT=0x0501 keeps the headers to XP's API.
+  - id: windows-x86
+    extends: windows-x64
+    gccCommand: i686-w64-mingw32-gcc -O2
+    linkerCommand: i686-w64-mingw32-gcc
+    gccAdditionalOptions:
+      - -includewindows_compat.h
+      - -Iadditional/am-lang-core/windows-x64
+      - -DAM_PLATFORM_WINDOWS
+      - -DAM_NO_SYMLINKS
+      - -D_WIN32_WINNT=0x0501
+      - -fwrapv
   # Classic Mac OS 8.6-9.2 on PowerPC, built with Retro68 (autc04/Retro68:
   # GCC 16, newlib, Multiversal interfaces). Threads are the Thread Manager's
   # (cooperative) behind a small pthreads shim; printf goes to Retro68's
@@ -451,6 +466,13 @@ buildTargets:
     commands:
       - make -f windows-x64.makefile all
       - cp bin/windows-x64/app bin/windows-x64/app.exe
+  # Image: docker build -t mingw-msvcrt tools/mingw-msvcrt
+  - id: windows-x86_docker
+    platform: windows-x86
+    features: ["floatingPoint"]
+    commands:
+      - docker run --rm -v ${build_dir}:${build_dir} -w ${build_dir} mingw-msvcrt make -j8 -f windows-x86.makefile all
+      - cp bin/windows-x86/app bin/windows-x86/app.exe
   - id: windows_docker
     commands: 
       - docker run --rm -v ${build_dir}:/usr/src/ -w /usr/src/ gcc:12.1 make -f linux-x64.makefile
