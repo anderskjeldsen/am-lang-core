@@ -1,0 +1,13 @@
+#!/bin/sh
+# Build an amlc macos9-ppc tree (run in the build dir): make, then turn the
+# linked XCOFF into a classic Mac OS application -- app.pef (PEF code),
+# app.bin (MacBinary) and app.dsk (an HFS disk image an emulator can mount).
+set -e
+export PATH=/Retro68-build/toolchain/bin:$PATH
+T=/Retro68-build/toolchain
+make -f macos9-ppc.makefile all
+cd bin/macos9-ppc
+MakePEF app -o app.pef
+Rez $T/RIncludes/RetroPPCAPPL.r -I$T/RIncludes -DCFRAG_NAME='"app"' \
+    -o app.bin --cc app.dsk -t APPL -c AMLG --data app.pef
+ls -la app.pef app.bin app.dsk

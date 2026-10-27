@@ -1,4 +1,5 @@
 #include <libc/core.h>
+#include <stdint.h>
 #include <Am/Lang/Diagnostics/Debug.h>
 #include <libc/Am/Lang/Diagnostics/Debug.h>
 #include <Am/Lang/ClassRef.h>
@@ -51,7 +52,8 @@ __exit: ;
 function_result Am_Lang_Diagnostics_Debug_formatExceptionSite_0(long long cls, long long line_kind)
 {
 	function_result __result = { .has_return_value = true };
-	aclass * site_class = (aclass *) (unsigned long) cls;
+	// uintptr_t: a long is 32 bits on LLP64 Windows and would cut the pointer.
+	aclass * site_class = (aclass *) (uintptr_t) cls;
 	unsigned long lk = (unsigned long) line_kind;
 	unsigned long line = lk >> 3;
 	unsigned long kind = lk & 7;

@@ -1146,7 +1146,7 @@ void __pass_exception(function_result *result, aobject * const exception, aobjec
 // __throw_exception / __pass_exception including their refcount contract
 // (throw retains the exception, pass transfers the callee's reference).
 void __throw_exception_site(function_result *result, aobject * const exception, void * const site_class, unsigned int line_kind) {
-    __add_stack_trace_site_function_alias(exception, (long long) (unsigned long) site_class, (long long) line_kind);
+    __add_stack_trace_site_function_alias(exception, (long long) (uintptr_t) site_class, (long long) line_kind);
     if (result->exception) {
         __decrease_reference_count(result->exception);
     }
@@ -1155,7 +1155,7 @@ void __throw_exception_site(function_result *result, aobject * const exception, 
 }
 
 void __pass_exception_site(function_result *result, aobject * const exception, void * const site_class, unsigned int line_kind) {
-    __add_stack_trace_site_function_alias(exception, (long long) (unsigned long) site_class, (long long) line_kind);
+    __add_stack_trace_site_function_alias(exception, (long long) (uintptr_t) site_class, (long long) line_kind);
     if (result->exception) {
         __decrease_reference_count(result->exception);
     }
@@ -1978,7 +1978,9 @@ static void __amlc_bind_isolate(aisolate * const iso) {
 static aisolate * volatile __amlc_iso_by_hwthread[AM_XENON_HW_THREADS];
 aisolate * __amlc_isolate_current(void) { return __amlc_iso_by_hwthread[am_xenon_thread_id()]; }
 static void __amlc_bind_isolate(aisolate * const iso) { __amlc_iso_by_hwthread[am_xenon_thread_id()] = iso; }
-#elif defined(__AROS__)
+#elif defined(__AROS__) || defined(AM_PLATFORM_PS3) || defined(AM_PLATFORM_MACOS9)
+// (Classic Mac OS: the macos9-ppc pthread shim keys data by Thread Manager thread.)
+// (PS3: PSL1GHT's pthread keys, rather than relying on __thread on lv2.)
 static pthread_key_t  __amlc_iso_key;
 static pthread_once_t __amlc_iso_key_once = PTHREAD_ONCE_INIT;
 static void __amlc_make_iso_key(void) { pthread_key_create(&__amlc_iso_key, NULL); }
@@ -2396,7 +2398,7 @@ typedef struct {
 
 static aobject * __amlc_copy_lookup(__amlc_copy_ctx * const ctx, aobject * const src) {
     if (ctx->tab == NULL) return NULL;
-    unsigned int h = (unsigned int) (((unsigned long) src) >> 4) & (ctx->cap - 1);
+    unsigned int h = (unsigned int) (((uintptr_t) src) >> 4) & (ctx->cap - 1);
     for (unsigned int i = 0; i < ctx->cap; i++) {
         __amlc_copy_pair * p = &ctx->tab[(h + i) & (ctx->cap - 1)];
         if (p->src == NULL) return NULL;
@@ -2406,7 +2408,7 @@ static aobject * __amlc_copy_lookup(__amlc_copy_ctx * const ctx, aobject * const
 }
 
 static void __amlc_copy_insert_raw(__amlc_copy_pair * const tab, unsigned int const cap, aobject * const src, aobject * const dst) {
-    unsigned int h = (unsigned int) (((unsigned long) src) >> 4) & (cap - 1);
+    unsigned int h = (unsigned int) (((uintptr_t) src) >> 4) & (cap - 1);
     for (unsigned int i = 0; i < cap; i++) {
         __amlc_copy_pair * p = &tab[(h + i) & (cap - 1)];
         if (p->src == NULL) { p->src = src; p->dst = dst; return; }

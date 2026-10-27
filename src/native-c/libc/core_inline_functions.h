@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -35,7 +36,8 @@ static inline void __set_primitive_nullable(nullable_value * nullable_value, boo
 // addresses by chance.
 static inline int __is_suspicious_object_ptr(aobject *v) {
     if (v == NULL) return 0;
-#if defined(AM_PLATFORM_NINTENDO_PPC) || defined(AM_PLATFORM_XENON)
+#if defined(AM_PLATFORM_NINTENDO_PPC) || defined(AM_PLATFORM_XENON) || defined(AM_PLATFORM_MACOS9)
+    // (Classic Mac OS: application heaps can sit anywhere, top half included.)
     // (Xbox 360: the libxenon heap is at 0x8xxxxxxx too.)
     // GameCube/Wii: ALL of MEM1 lives at 0x80000000+, so every valid
     // heap pointer is negative as a signed 32-bit long. The sign-bit
@@ -45,7 +47,9 @@ static inline int __is_suspicious_object_ptr(aobject *v) {
     (void) v;
     return 0;
 #endif
-    long lv = (long) v;
+    // intptr_t, not long: on LLP64 Windows a long is 32 bits and would keep
+    // only the low half of the pointer (bit 31 set = a false alarm and exit).
+    intptr_t lv = (intptr_t) v;
     if (lv > 0) {
         return 0;
     }
@@ -370,7 +374,7 @@ static inline void __increase_property_reference_count(aobject * const __obj) {
     if (__is_suspicious_object_ptr(__obj)) {
         printf("[increase_propref] SUSPICIOUS obj=%p", (void*)__obj); fflush(stdout);
         // Defensively probe class_ptr without trusting it.
-        unsigned long uc = (unsigned long)__obj->class_ptr;
+        uintptr_t uc = (uintptr_t)__obj->class_ptr;
         printf(" class_ptr=%p", (void*)uc); fflush(stdout);
         if (__obj->class_ptr != NULL) {
             const char *nm = __obj->class_ptr->name;

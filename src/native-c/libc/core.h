@@ -514,7 +514,7 @@ struct _aisolate {
 // too: its threads get no thread-local storage of their own (every thread
 // shares r2's TLS block), so a __thread isolate pointer is one value for all
 // threads and an object made on a worker gets unlinked from main's list.
-#if defined(__AROS__) || defined(AM_PLATFORM_NINTENDO_PPC) || defined(AM_PLATFORM_XENON)
+#if defined(__AROS__) || defined(AM_PLATFORM_NINTENDO_PPC) || defined(AM_PLATFORM_XENON) || defined(AM_PLATFORM_PS3) || defined(AM_PLATFORM_MACOS9)
 aisolate * __amlc_isolate_current(void);
 #define __amlc_isolate() (__amlc_isolate_current())
 #elif defined(__MORPHOS__) || defined(__AMIGA__) || defined(AMIGA) || defined(PLATFORM_AMIGAOS)

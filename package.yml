@@ -321,6 +321,86 @@ platforms:
       - -Wl,--wrap=main
       - -n
       - -T/usr/local/xenon/app.lds
+  # Windows 10/11 x64, cross-compiled with MinGW-w64 GCC
+  # (brew install mingw-w64). pthreads come from MinGW's winpthreads; the exe
+  # is linked statically so it needs no MinGW DLLs next to it.
+  - id: windows-x64
+    extends: libc
+    gccCommand: x86_64-w64-mingw32-gcc -O2
+    additionalHeaders:
+      - windows-x64.h
+      - windows_compat.h
+    additionalCSources:
+      - inputFilename: windows.c
+        outputFilename: windows.o
+    gccAdditionalOptions:
+      - -includewindows_compat.h
+      - -Iadditional/am-lang-core/windows-x64
+      - -DAM_PLATFORM_WINDOWS
+      - -DAM_NO_SYMLINKS
+      - -fwrapv
+    gccAdditionalLibraries:
+      - ws2_32
+    additionalLinkerFlags:
+      - -static
+  # Classic Mac OS 8.6-9.2 on PowerPC, built with Retro68 (autc04/Retro68:
+  # GCC 16, newlib, Multiversal interfaces). Threads are the Thread Manager's
+  # (cooperative) behind a small pthreads shim; printf goes to Retro68's
+  # console window. The build target below links an XCOFF, then MakePEF +
+  # Rez turn it into an application (app.bin MacBinary, app.dsk HFS image).
+  - id: macos9-ppc
+    extends: libc
+    gccCommand: powerpc-apple-macos-gcc -O2
+    linkerCommand: powerpc-apple-macos-g++
+    additionalHeaders:
+      - macos9.h
+      - pthread.h
+      - dirent.h
+      - macos9_compat.h
+    additionalCSources:
+      - inputFilename: macos9.c
+        outputFilename: macos9.o
+    gccAdditionalOptions:
+      # Our pthread.h stands in for the toolchain's (it has none).
+      - -Iadditional/am-lang-core/macos9-ppc
+      - -includemacos9_compat.h
+      - -DAM_PLATFORM_MACOS9
+      - -DAM_NO_SYMLINKS
+      - -fwrapv
+    gccAdditionalLibraries:
+      - RetroConsole
+      - ThreadsLib
+      - m
+  # PlayStation 3 homebrew (PSL1GHT, PPU, LP64 big-endian), for CFW/HEN
+  # consoles and RPCS3. Built in zeldin/ps3dev-docker (has an arm64 image).
+  - id: ps3
+    extends: libc
+    gccCommand: ppu-gcc -O2 -mhard-float -fmodulo-sched -ffunction-sections -fdata-sections
+    additionalHeaders:
+      - ps3.h
+    additionalCSources:
+      - inputFilename: ps3.c
+        outputFilename: ps3.o
+    gccAdditionalOptions:
+      - -I/usr/local/ps3dev/ppu/include
+      - -I/usr/local/ps3dev/portlibs/ppu/include
+      - -DAM_PLATFORM_PS3
+      - -DAM_NO_SYMLINKS
+      - -DPATH_MAX=1024
+      - -fwrapv
+    gccLibraryPaths:
+      - /usr/local/ps3dev/ppu/lib
+      - /usr/local/ps3dev/portlibs/ppu/lib
+    gccAdditionalLibraries:
+      - pthread
+      - sysutil
+      - sysmodule
+      - io
+      - rt
+      - lv2
+      - m
+    additionalLinkerFlags:
+      - -Wl,--wrap=main
 #  - id: msdos-x86
 #    extends: libc
 #    gccCommand: gcc
@@ -365,9 +445,22 @@ buildTargets:
   - id: linux-x64
     platform: linux-x64
     features: ["floatingPoint"]
+  - id: windows-x64
+    platform: windows-x64
+    features: ["floatingPoint"]
+    commands:
+      - make -f windows-x64.makefile all
+      - cp bin/windows-x64/app bin/windows-x64/app.exe
   - id: windows_docker
     commands: 
       - docker run --rm -v ${build_dir}:/usr/src/ -w /usr/src/ gcc:12.1 make -f linux-x64.makefile
+  # Retro68's image is amd64-only (runs emulated on Apple Silicon).
+  - id: macos9-ppc_docker
+    platform: macos9-ppc
+    features: ["floatingPoint"]
+    commands:
+      # Image: docker build --platform linux/amd64 -t retro68-amlang tools/retro68
+      - docker run --rm --platform linux/amd64 -v ${build_dir}:/work -w /work retro68-amlang amlc-macos9-build
   - id: morphos-ppc_docker
     platform: morphos-ppc
     commands:
