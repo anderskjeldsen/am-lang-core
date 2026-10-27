@@ -41,6 +41,12 @@ static void am_nintendo_mount_storage(int argc, char **argv) {
     char *slash;
 
     if (!fatInitDefault()) return;
+
+    // Start at the root of the card. A process that has never chdir'd has no
+    // working directory to speak of here -- there was no filesystem when it
+    // started -- so a relative path means nothing until this is done.
+    chdir("sd:/");
+
     if (argc < 1 || argv == NULL || argv[0] == NULL) return;
     if (strlen(argv[0]) >= sizeof(path)) return;
 
@@ -49,6 +55,20 @@ static void am_nintendo_mount_storage(int argc, char **argv) {
     if (slash == NULL) return;
     *slash = '\0';
     chdir(path);
+}
+
+// Give println() somewhere to go.
+//
+// A console has no terminal: stdout is discarded, so every diagnostic a
+// program prints is lost exactly when it is wanted. The card is the only
+// listener available, so stdout and stderr are pointed at a log file in the
+// app's own folder -- line buffered, so what was printed before a crash is
+// already on the card when the crash happens.
+static void am_nintendo_log_to_card(void) {
+    if (freopen("log.txt", "w", stdout) != NULL) {
+        setvbuf(stdout, NULL, _IOLBF, 0);
+    }
+    freopen("log.txt", "a", stderr);
 }
 #endif
 
@@ -69,8 +89,16 @@ static void *am_main_entry(void *p) {
 
 int __wrap_main(int argc, char **argv) {
     static am_main_args args;
+    // Make println() VISIBLE. A console has no terminal to run a program
+    // from, so stdout goes nowhere by default and every diagnostic the
+    // program prints is simply lost -- on hardware and in an emulator alike.
+    // SYS_STDIO_Report sends it to OSReport, which a USB Gecko prints and
+    // Dolphin writes to its log (enable the OSREPORT log type), and which
+    // costs nothing when nobody is listening.
+    SYS_STDIO_Report(true);
 #ifdef AM_PLATFORM_NINTENDO_WII
     am_nintendo_mount_storage(argc, argv);
+    am_nintendo_log_to_card();
 #endif
     args.argc = argc;
     args.argv = argv;

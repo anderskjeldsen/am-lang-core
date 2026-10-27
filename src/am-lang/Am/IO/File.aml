@@ -28,6 +28,20 @@ namespace Am.IO
         static native fun getCurrentDirectory(): String
 
         /**
+         * Moves the process into `path`, so relative paths resolve from there.
+         *
+         * Most programs are started from the directory they mean to work in
+         * and never need this. A console does not work that way: a Wii
+         * launched from the Homebrew Channel is told where it came from, and
+         * a Wii booted some other way is told nothing at all, so an app that
+         * reads "assets/..." has to put itself where those words are true.
+         *
+         * @param path The directory to move into
+         * @return Whether the move happened
+         */
+        static native fun setCurrentDirectory(path: String): Bool
+
+        /**
          * The directory the host system keeps temporary files in. Use this instead of hardcoding
          * "/tmp": that is a POSIX convention, and on AmigaOS-like systems (AmigaOS, AROS, MorphOS)
          * a leading "/" means the PARENT directory, so such a path cannot even be opened there.

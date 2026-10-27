@@ -116,6 +116,17 @@ __exit: ;
 	return __result;
 };
 
+function_result Am_IO_File_setCurrentDirectory_0(aobject * path)
+{
+	function_result __result = { .has_return_value = true };
+	__result.return_value.value.bool_value = false;
+	if (path == NULL) return __result;
+
+	string_holder *path_string_holder = (string_holder *) ((char *) path + sizeof(aobject));
+	__result.return_value.value.bool_value = (chdir(path_string_holder->string_value) == 0);
+	return __result;
+}
+
 function_result Am_IO_File_getCurrentDirectory_0()
 {
 	function_result __result = { .has_return_value = true };
