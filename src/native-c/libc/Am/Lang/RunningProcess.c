@@ -1,4 +1,4 @@
-#if defined(AM_PLATFORM_NINTENDO_PPC) || defined(AM_PLATFORM_XENON) || defined(AM_PLATFORM_PS3) || defined(AM_PLATFORM_MACOS9) || defined(AM_PLATFORM_WINDOWS)
+#if defined(AM_PLATFORM_NINTENDO_PPC) || defined(AM_PLATFORM_XENON) || defined(AM_PLATFORM_PS3) || defined(AM_PLATFORM_MACOS9) || defined(AM_PLATFORM_WINDOWS) || defined(AM_PLATFORM_3DS)
 
 #include <libc/core.h>
 #include <Am/Lang/RunningProcess.h>

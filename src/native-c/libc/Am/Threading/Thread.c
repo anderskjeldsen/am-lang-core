@@ -210,6 +210,15 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
     int rc = pthread_create(&n->thread_id, &attr, Am_Threading_Thread__pthread_entry, (void *) iso);
     pthread_attr_destroy(&attr);
     if (rc != 0 && stack != NULL) free(stack);
+#elif defined(AM_PLATFORM_3DS)
+    // 3DS: libctru's default thread stack is 32 KB, far short of AmLang's
+    // call depth. Threads stay on the app core (core 0) unless libctru is
+    // told otherwise.
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, 1024 * 1024);
+    int rc = pthread_create(&n->thread_id, &attr, Am_Threading_Thread__pthread_entry, (void *) iso);
+    pthread_attr_destroy(&attr);
 #else
     int rc = pthread_create(&n->thread_id, NULL, Am_Threading_Thread__pthread_entry, (void *) iso);
 #endif

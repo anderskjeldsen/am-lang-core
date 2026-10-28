@@ -277,6 +277,36 @@ platforms:
       - bte
       - ogc
       - m
+  # Nintendo 3DS (ARM11 MPCore, libctru). Built with devkitARM in the
+  # devkitpro/devkitarm docker image; the ELF is turned into a .3dsx for the
+  # Homebrew Launcher or Azahar. -mword-relocations: 3dsxtool cannot
+  # relocate MOVW/MOVT pairs. main is wrapped to send stdout to log.txt.
+  - id: nintendo-3ds
+    extends: libc
+    gccCommand: arm-none-eabi-gcc -O2 -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft -mword-relocations -ffunction-sections -fdata-sections
+    additionalIncludePaths:
+      - /opt/devkitpro/libctru/include
+    additionalHeaders:
+      - nintendo-3ds.h
+    additionalCSources:
+      - inputFilename: nintendo-3ds.c
+        outputFilename: nintendo-3ds.o
+    gccAdditionalOptions:
+      - -D__3DS__
+      - -DAM_PLATFORM_3DS
+      - -DAM_NO_SYMLINKS
+      - -I/opt/devkitpro/libctru/include
+      - -fwrapv
+    gccLibraryPaths:
+      - /opt/devkitpro/libctru/lib
+    gccAdditionalLibraries:
+      - ctru
+      - m
+    additionalLinkerFlags:
+      - -specs=3dsx.specs
+      - -Wl,--gc-sections
+      - -Wl,--wrap=main
+      - -Wl,--wrap=__syscall_thread_create
   # Xbox 360 homebrew (libxenon / Free60), run from XeLL on an RGH/JTAG
   # console. Big-endian PowerPC (Xenon, 3 cores x 2 threads) in 32-bit mode.
   # Built in the free60/libxenon docker image (amd64 only). No OS: xenon.c
@@ -466,6 +496,13 @@ buildTargets:
     commands:
       - make -f windows-x64.makefile all
       - cp bin/windows-x64/app bin/windows-x64/app.exe
+  # devkitpro/devkitarm (multi-arch); the ELF becomes app.3dsx.
+  - id: nintendo-3ds_docker
+    platform: nintendo-3ds
+    features: ["floatingPoint"]
+    commands:
+      - docker run --rm -v ${build_dir}:${build_dir} -w ${build_dir} -e PATH=/opt/devkitpro/devkitARM/bin:/opt/devkitpro/tools/bin:/usr/bin:/bin devkitpro/devkitarm make -j8 -f nintendo-3ds.makefile all
+      - docker run --rm -v ${build_dir}:${build_dir} -w ${build_dir}/bin/nintendo-3ds devkitpro/devkitarm /opt/devkitpro/tools/bin/3dsxtool app app.3dsx
   # Image: docker build -t mingw-msvcrt tools/mingw-msvcrt
   - id: windows-x86_docker
     platform: windows-x86
