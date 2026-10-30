@@ -1,0 +1,50 @@
+namespace CalendarRegression {
+ class Program {
+  import Am.Lang
+  static var checks: Int = 0
+  static fun check(ok: Bool, label: String) { if (!ok) { throw new Exception(label) }
+ Program.checks++ }
+  static fun main() {
+   var before = DateTime.calendarParts(-1.0, "UTC")
+   Program.check(before.length() == 9UI && before[0] == 1969 && before[1] == 12 && before[2] == 31 && before[3] == 23 && before[6] == 999 && before[7] == 3, "pre-epoch breakdown")
+   Program.check(DateTime.calendarMillis(1969.0,12.0,31.0,23.0,59.0,59.0,999.0,"UTC") == -1.0, "pre-epoch compose")
+   Program.check(DateTime.calendarMillis(1970.0,0.0,32.0,0.0,0.0,0.0,0.0,"UTC") == 0.0, "negative month normalization")
+   Program.check(DateTime.calendarMillis(1970.0,1.0,1.0,0.0,0.0,0.0,-1.0,"UTC") == -1.0, "negative millisecond normalization")
+   Program.check(DateTime.parseCalendarMillis("1970-01-01T01:30:00+01:30") == 0.0, "offset parse")
+   Program.check(DateTime.parseCalendarMillis("1969-12-31T23:59:59.999Z") == -1.0, "fraction parse")
+   Program.check(DateTime.parseCalendarMillis("1970-01-01T24:00:00Z") == 86400000.0, "24 hour parse")
+   Program.check(DateTime.parseCalendarMillis("1970") == 0.0, "year parse")
+   var invalid = DateTime.parseCalendarMillis("2024-01-01T00:00:00+01:00junk")
+   Program.check(invalid != invalid, "reject offset suffix")
+   invalid = DateTime.parseCalendarMillis("2024-01-01T24:00:01Z")
+   Program.check(invalid != invalid, "reject invalid 24 hour")
+   invalid = DateTime.parseCalendarMillis("-000000-01-01")
+   Program.check(invalid != invalid, "reject negative zero year")
+   Program.check(DateTime.calendarParts(8640000000000001.0,"UTC").length() == 0UI, "range rejection")
+   var maxParts = DateTime.calendarParts(8640000000000000.0,"UTC")
+   Program.check(maxParts[0] == 275760 && maxParts[1] == 9 && maxParts[2] == 13, "positive limit")
+   var minParts = DateTime.calendarParts(-8640000000000000.0,"UTC")
+   Program.check(minParts[0] == -271821 && minParts[1] == 4 && minParts[2] == 20, "negative limit")
+   Program.check(DateTime.parseCalendarMillis("+275760-09-13T00:00:00.000Z") == 8640000000000000.0, "expanded year parse")
+   Program.check(DateTime.resolveTimeZone("Not/AZone") == "", "unknown timezone")
+   Program.check(DateTime.calendarParts(0.0,"Not/AZone").length() == 0UI, "unknown zone parts")
+   var year = -800
+   while (year < 2800) {
+    var ms = DateTime.calendarMillis(year.toDouble(),3.0,1.0,12.0,34.0,56.0,789.0,"UTC")
+    var p = DateTime.calendarParts(ms,"UTC")
+    Program.check(p[0] == year && p[1] == 3 && p[2] == 1 && p[3] == 12 && p[4] == 34 && p[5] == 56 && p[6] == 789, "era roundtrip")
+    year += 37
+   }
+   if (DateTime.resolveTimeZone("Europe/Oslo") != "") {
+    var winter = DateTime.calendarParts(DateTime.parseCalendarMillis("2024-01-01T00:00:00Z"),"Europe/Oslo")
+    var summer = DateTime.calendarParts(DateTime.parseCalendarMillis("2024-07-01T00:00:00Z"),"Europe/Oslo")
+    Program.check(winter[8] == 60 && summer[8] == 120, "DST offsets")
+    Program.check(DateTime.calendarMillis(2024.0,7.0,1.0,2.0,0.0,0.0,0.0,"Europe/Oslo") == DateTime.parseCalendarMillis("2024-07-01T00:00:00Z"), "named zone compose")
+   } else {
+    Program.check(DateTime.availableTimeZones() == "UTC", "portable timezone list")
+   }
+   Program.check(Date.now().getValue() > 0UL, "core clock")
+   ("PASS signed calendar: " + Program.checks.toString()).println()
+  }
+ }
+}

@@ -64,6 +64,8 @@ platforms:
     gccCommand: powerpc-linux-gnu-gcc -O2
   - id: macos
     extends: libc
+    additionalLinkerFlags:
+      - -framework CoreFoundation
     gccCommand: gcc -O3
     gccAdditionalOptions:
       - -pthread
@@ -79,6 +81,8 @@ platforms:
 
   - id: macos-arm
     extends: libc
+    additionalLinkerFlags:
+      - -framework CoreFoundation
     gccCommand: gcc -O3
     gccAdditionalOptions:
       - -pthread
