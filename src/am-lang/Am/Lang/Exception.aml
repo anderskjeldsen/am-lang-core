@@ -27,9 +27,9 @@ namespace Am.Lang
      * Thrown from `new` when the underlying allocation fails — the realistic case on small
      * retro targets. A single instance is preallocated at startup so that throwing it never
      * needs to allocate, which means you may catch it and try to recover, but recovery is
-     * best-effort: the runtime re-uses that one frozen instance for every out-of-memory
-     * condition, so the stack trace reflects the first throw rather than the current one.
-     * In every other respect it behaves like any other exception.
+     * best-effort: the runtime re-uses one emergency instance. Its message includes a bounded
+     * trace of the current failure; unwind sites also print to stderr. Its ordinary stack
+     * trace remains empty so recording it cannot allocate while memory is exhausted.
      */
     class OutOfMemoryException() : Exception("Out of memory") {
     }

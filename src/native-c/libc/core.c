@@ -1085,6 +1085,42 @@ void deallocate_annotations(class_static * const __class_static) {
         __class_static->annotations[i] = NULL;
     }
 }
+// Emergency reporting must not call List.add or allocate while unwinding.
+static aobject * __oom_singleton = NULL;
+static aobject * __oom_message = NULL;
+static void * __oom_report_reserve = NULL;
+static char __oom_details[4096] = "Out of memory";
+static void __oom_record(void *site_class, unsigned int line_kind, const char *text) {
+    size_t used = strlen(__oom_details);
+    if (site_class != NULL) {
+        fprintf(stderr, "Out of memory: %s line %u (kind %u)\n",
+                ((aclass *)site_class)->name, line_kind >> 3, line_kind & 7);
+        if (used < sizeof(__oom_details) - 1)
+            snprintf(__oom_details + used, sizeof(__oom_details) - used,
+                     "\n%s line %u (kind %u)", ((aclass *)site_class)->name,
+                     line_kind >> 3, line_kind & 7);
+    } else if (text != NULL) {
+        fprintf(stderr, "Out of memory: %s\n", text);
+        if (used < sizeof(__oom_details) - 1)
+            snprintf(__oom_details + used, sizeof(__oom_details) - used, "\n%s", text);
+    }
+    fflush(stderr);
+    if (__oom_message != NULL) {
+        string_holder *holder = __oom_message->object_properties.class_object_properties.object_data.value.custom_value;
+        __string_wide_free(holder);
+        holder->length = (unsigned int)strlen(__oom_details);
+        holder->hash = __string_hash_and_units(__oom_details, holder->length, &holder->char_length);
+    }
+}
+static void __oom_begin(void) {
+    // Leave breathing room for the application's best-effort error display/log.
+    // Native emergency reporting itself never needs this reserve or allocates.
+    free(__oom_report_reserve);
+    __oom_report_reserve = NULL;
+    strcpy(__oom_details, "Out of memory (emergency trace)");
+    __oom_record(NULL, 0, NULL);
+}
+
 void __throw_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text) {
 
 //    exception_holder * const holder = (exception_holder *) calloc(1, sizeof(exception_holder));
@@ -1092,7 +1128,10 @@ void __throw_exception(function_result *result, aobject * const exception, aobje
 //    holder->first_stack_trace_item = __create_stack_trace_item(NULL, stack_trace_item_text);
 //    holder->last_stack_trace_item  = holder->first_stack_trace_item;
 
-    __add_stack_trace_item_function_alias(exception, stack_trace_item_text);
+    if (exception == __oom_singleton) {
+        string_holder *holder = stack_trace_item_text == NULL ? NULL : stack_trace_item_text->object_properties.class_object_properties.object_data.value.custom_value;
+        __oom_record(NULL, 0, holder == NULL ? NULL : holder->string_value);
+    } else { __add_stack_trace_item_function_alias(exception, stack_trace_item_text); }
 
 //    result.has_return_value = 0;
     if (result->exception) {
@@ -1104,7 +1143,10 @@ void __throw_exception(function_result *result, aobject * const exception, aobje
 
 void __pass_exception(function_result *result, aobject * const exception, aobject * const stack_trace_item_text) {
 
-    __add_stack_trace_item_function_alias(exception, stack_trace_item_text);
+    if (exception == __oom_singleton) {
+        string_holder *holder = stack_trace_item_text == NULL ? NULL : stack_trace_item_text->object_properties.class_object_properties.object_data.value.custom_value;
+        __oom_record(NULL, 0, holder == NULL ? NULL : holder->string_value);
+    } else { __add_stack_trace_item_function_alias(exception, stack_trace_item_text); }
     if (result->exception) {
         __decrease_reference_count(result->exception);
     }
@@ -1114,12 +1156,13 @@ void __pass_exception(function_result *result, aobject * const exception, aobjec
 //    result.exception_holder->last_stack_trace_item = new_item;
 }
 
-// Packed site-info (see core.h): store (aclass*, line*4+kind) on the
+// Packed site-info (see core.h): store (aclass*, line*8+kind) on the
 // exception instead of appending a pre-formatted string. Mirrors
 // __throw_exception / __pass_exception including their refcount contract
 // (throw retains the exception, pass transfers the callee's reference).
 void __throw_exception_site(function_result *result, aobject * const exception, void * const site_class, unsigned int line_kind) {
-    __add_stack_trace_site_function_alias(exception, (long long) (unsigned long) site_class, (long long) line_kind);
+    if (exception == __oom_singleton) { __oom_record(site_class, line_kind, NULL); }
+    else { __add_stack_trace_site_function_alias(exception, (long long) (unsigned long) site_class, (long long) line_kind); }
     if (result->exception) {
         __decrease_reference_count(result->exception);
     }
@@ -1128,7 +1171,8 @@ void __throw_exception_site(function_result *result, aobject * const exception, 
 }
 
 void __pass_exception_site(function_result *result, aobject * const exception, void * const site_class, unsigned int line_kind) {
-    __add_stack_trace_site_function_alias(exception, (long long) (unsigned long) site_class, (long long) line_kind);
+    if (exception == __oom_singleton) { __oom_record(site_class, line_kind, NULL); }
+    else { __add_stack_trace_site_function_alias(exception, (long long) (unsigned long) site_class, (long long) line_kind); }
     if (result->exception) {
         __decrease_reference_count(result->exception);
     }
@@ -1396,20 +1440,7 @@ char * get_array_data(array_holder * holder) {
     return (char *) ((char *) holder + sizeof(array_holder));
 }
 
-// Preallocated OutOfMemoryException singleton. Held immortal — every OOM
-// throw reuses the same aobject *. The `__throw_exception` path bumps
-// the refcount by one on each throw (and `__decrease_reference_count`
-// after a `pass` / handled site brings it back down), so a healthy
-// program churns the ref by +1/-1 per catch cycle. The initial ref
-// counts as one held forever by the runtime — the object is never
-// deallocated.
-//
-// Declared here (instead of alongside `__init_oom_singleton` further
-// down) so `__create_exception` — which is the immediate fallback path
-// on Exception allocation failure — can see it. `static` keeps it
-// file-local.
-static aobject * __oom_singleton = NULL;
-
+// The emergency object and message are reserved at startup and retained forever.
 aobject * __create_exception(aobject * const message) {
     aobject *ex = __allocate_object(&__exception_class_alias);
     if (ex == NULL) {
@@ -1421,10 +1452,20 @@ aobject * __create_exception(aobject * const message) {
         // accurate: the reason `message` couldn't be attached is that
         // we're out of memory. `__decrease_reference_count(ex)` in the
         // caller is safe on the immortal singleton — its rc just churns.
+        __oom_begin();
+        __increase_reference_count(__oom_singleton); // caller owns the returned reference
         return __oom_singleton;
     }
-    __exception_constructor_alias(ex, message);
-    __exception_init_instance_function_alias((nullable_value){ .value.object_value = ex });
+    function_result ctor = __exception_constructor_alias(ex, message);
+    if (ctor.exception != NULL) {
+        __decrease_reference_count(ex);
+        return ctor.exception;
+    }
+    function_result init = __exception_init_instance_function_alias((nullable_value){ .value.object_value = ex });
+    if (init.exception != NULL) {
+        __decrease_reference_count(ex);
+        return init.exception;
+    }
     return ex;
 }
 
@@ -1433,8 +1474,7 @@ void __throw_simple_exception(const char * const message, const char * const sta
     aobject * stit = __create_string_constant(stack_trace_item_text, &__string_class_alias);
     // If either string constant allocation failed, we're out of memory
     // and can't build the intended exception. Fall back to the
-    // preallocated OOM singleton — it has no per-throw message but is
-    // guaranteed constructable. Callers already expect the exception
+    // preallocated OOM singleton and its startup-reserved message buffer. Callers already expect the exception
     // path to run to completion; SIGSEGV'ing the caller because we
     // couldn't attach a stack-trace string is strictly worse.
     if (ex_msg == NULL || stit == NULL) {
@@ -1472,8 +1512,8 @@ void __throw_simple_exception_copy(const char * const message, const char * cons
     __decrease_reference_count(ex);
 }
 
-// The `__oom_singleton` definition + lifetime notes live above
-// `__create_exception` so that fallback path can compile against it.
+// The emergency state lives above the common throw/pass helpers so every
+// unwinding entry point can bypass allocating trace operations.
 // If startup fails to allocate this singleton the process is already in
 // a hopeless memory state; we abort rather than pretend to keep going.
 // `__throw_out_of_memory_exception` re-checks the singleton at throw
@@ -1482,26 +1522,23 @@ void __throw_simple_exception_copy(const char * const message, const char * cons
 
 void __init_oom_singleton(void) {
     if (__oom_singleton != NULL) return;
-    // Allocate directly rather than via __create_exception so we don't
-    // depend on __create_string_constant succeeding (it also uses
-    // calloc). The Exception class's `message` field will read as NULL
-    // — printWithStackTrace / toString handle NULL by degrading to
-    // "(no message)", so no user code SIGSEGVs on our singleton.
-    aobject * ex = calloc(1, sizeof(aobject) + (sizeof(property) * __out_of_memory_exception_class_alias.properties_count));
-    if (ex == NULL) {
-        // We are in a bad enough state that even the *singleton* can't
-        // fit. Nothing we can do — abort loudly so the failure isn't
-        // silent.
-        fprintf(stderr, "AmLang: unable to allocate OutOfMemoryException singleton; aborting.\n");
-        fflush(stderr);
+    aobject *ex = __allocate_object(&__out_of_memory_exception_class_alias);
+    __oom_message = __create_string_constant(__oom_details, &__string_class_alias);
+    if (ex == NULL || __oom_message == NULL) {
+        fprintf(stderr, "AmLang: unable to reserve emergency exception diagnostics; aborting.\n");
         abort();
     }
-    if (__out_of_memory_exception_class_alias.properties_count > 0) {
-        ex->object_properties.class_object_properties.properties = (property *) ((char *) ex + sizeof(aobject));
+    // Initialise message and both trace lists while memory is still available.
+    // The empty lists make getStackTrace/printWithStackTrace safe; emergency
+    // unwind sites go into the bounded message buffer and stderr instead.
+    function_result ctor = __exception_constructor_alias(ex, __oom_message);
+    function_result init = __exception_init_instance_function_alias((nullable_value){ .value.object_value = ex });
+    if (ctor.exception != NULL || init.exception != NULL) {
+        fprintf(stderr, "AmLang: unable to initialise emergency exception diagnostics; aborting.\n");
+        abort();
     }
-    ex->class_ptr = &__out_of_memory_exception_class_alias;
-    ex->reference_count = 1;
     __oom_singleton = ex;
+    __oom_report_reserve = malloc(65536);
 }
 
 void __throw_index_bounds_site(function_result * const result, void * const site_class, unsigned int line_kind) {
@@ -1519,55 +1556,22 @@ void __throw_out_of_memory_exception_site(function_result * const result, void *
         fflush(stderr);
         abort();
     }
-    // NOTE: attaching the packed frame goes through Exception.addStackTraceSite
-    // (List.add) which may allocate; under true OOM that can fail — same
-    // bounded hazard as the string-based path since the packed-trace rework.
+    __oom_begin();
     __throw_exception_site(result, __oom_singleton, site_class, line_kind);
 }
 
 void __throw_out_of_memory_exception(function_result * const result, const char * const stack_trace_item_text) {
     if (__oom_singleton == NULL) {
-        // Someone hit OOM before startup wired up the singleton. Same
-        // bad state as an allocation failure inside the singleton
-        // itself — abort rather than crash by throwing NULL.
-        fprintf(stderr, "AmLang: OOM before OutOfMemoryException singleton initialised; aborting (stack: %s)\n",
-                stack_trace_item_text ? stack_trace_item_text : "(unknown)");
-        fflush(stderr);
+        fprintf(stderr, "AmLang: OOM before emergency diagnostics initialised (%s)\n",
+                stack_trace_item_text ? stack_trace_item_text : "unknown site");
         abort();
     }
-    // Attach a stack-trace frame if the caller supplied one. The
-    // singleton's stack-trace list grows without bound over the
-    // process's lifetime, but that's a bounded leak — a handful of
-    // frames per throw, and the process is already in OOM territory.
-    // Guard against __create_string_constant itself failing (nested
-    // OOM) by throwing without a stack frame in that case.
-    aobject * stit = NULL;
-    if (stack_trace_item_text != NULL) {
-        stit = calloc(1, sizeof(aobject) + (sizeof(property) * __string_class_alias.properties_count) + sizeof(string_holder) + 1);
-        if (stit != NULL) {
-            if (__string_class_alias.properties_count > 0) {
-                stit->object_properties.class_object_properties.properties = (property *) ((char *) stit + sizeof(aobject));
-            }
-            stit->class_ptr = &__string_class_alias;
-            stit->reference_count = 1;
-            // The string holder lives after properties[].
-            string_holder * sh = (string_holder *) ((property *) ((char *) stit + sizeof(aobject)) + __string_class_alias.properties_count);
-            stit->object_properties.class_object_properties.object_data.value.custom_value = sh;
-            sh->string_value = (char *)((char *) sh + sizeof(string_holder));
-            // Bounded copy — cap at 255 bytes so a runaway string
-            // doesn't chew through what little memory we have left.
-            size_t n = 0;
-            while (n < 255 && stack_trace_item_text[n] != '\0') {
-                sh->string_value[n] = stack_trace_item_text[n];
-                n++;
-            }
-            sh->string_value[n] = '\0';
-        }
-    }
-    __throw_exception(result, __oom_singleton, stit);
-    if (stit != NULL) {
-        __decrease_reference_count(stit);
-    }
+    __oom_begin();
+    __oom_record(NULL, 0, stack_trace_item_text);
+    // No temporary String, List growth, or heap allocation on this path.
+    if (result->exception != NULL) __decrease_reference_count(result->exception);
+    result->exception = __oom_singleton;
+    __increase_reference_count(__oom_singleton);
 }
 
 // true meaning: is same class OR descendant
@@ -2044,6 +2048,8 @@ static aarena * __amlc_arena_new(aisolate * const iso) {
     a->live = 0;
     a->next_free = NULL;
     a->next = iso->arenas;
+    a->prev = NULL;
+    if (iso->arenas != NULL) iso->arenas->prev = a;
     iso->arenas = a;
     return a;
 }
@@ -2079,10 +2085,11 @@ void __amlc_arena_recycle(aisolate * const iso, aarena * const a) {
         iso->free_arena_count++;
         return;
     }
-    // Above the keep limit: hand it back. Unlink from the isolate's list.
-    aarena ** link = &iso->arenas;
-    while (*link != NULL && *link != a) link = &(*link)->next;
-    if (*link == a) *link = a->next;
+    // Above the keep limit: hand it back. O(1) unlink — walking `arenas` from
+    // the head cost a scan per freed arena, which bites once a program holds
+    // hundreds of them.
+    if (a->prev != NULL) a->prev->next = a->next; else iso->arenas = a->next;
+    if (a->next != NULL) a->next->prev = a->prev;
     free(a);
 }
 

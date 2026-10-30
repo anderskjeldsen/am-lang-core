@@ -547,7 +547,8 @@ extern unsigned int __amlc_static_init_count;
 #define AMLC_ARENA_ALIGN 8
 #define AMLC_ARENA_ROUND(n) (((n) + (AMLC_ARENA_ALIGN - 1)) & ~((size_t) (AMLC_ARENA_ALIGN - 1)))
 struct _aarena {
-    aarena * next;          // isolate's list of every arena
+    aarena * next;          // isolate's list of every arena (doubly linked:
+    aarena * prev;          // detaching one is O(1), as for aobject)
     aarena * next_free;     // free-list link while empty and kept
     char * data;            // aligned start of the object area
     size_t capacity;
@@ -672,8 +673,9 @@ void __throw_simple_exception(const char * const message, const char * const sta
 // error text that embeds the filename that failed to open.
 void __throw_simple_exception_copy(const char * const message, const char * const stack_trace_item_text, function_result * const result);
 // Preallocated OutOfMemoryException singleton — throw when `calloc` returns
-// NULL in generated `new` codegen. Uses a frozen instance built at startup
-// (`__init_oom_singleton`), so the throw itself never touches `calloc`.
+// NULL in generated `new` codegen. Startup reserves the object, message buffer
+// and empty trace lists. Emergency sites append to the bounded message and
+// stderr without allocating; the first failure releases a 64 KiB report reserve.
 // Never call before startup has initialised the singleton; the check-null
 // fallback aborts the process.
 void __throw_out_of_memory_exception(function_result * const result, const char * const stack_trace_item_text);
