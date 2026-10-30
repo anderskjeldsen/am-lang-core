@@ -62,6 +62,9 @@ function_result Am_Lang_GC_collect_0() {
     function_result result={.has_return_value=true};
     aisolate *iso=__amlc_isolate();
     if(iso->first_detached_object) return result;
+    // Do not inspect a half-detached object if a native release hook calls GC.
+    for(aobject *obj=iso->first_object;obj;obj=obj->next)
+        if(obj->pending_deallocation) return result;
     cycle_graph graph;
     // allocation_count also covers implementations held only through interface
     // wrappers (they have local references, so are absent from first_object).

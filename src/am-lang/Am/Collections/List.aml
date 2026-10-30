@@ -125,23 +125,11 @@ namespace Am.Collections {
          * @param item The element to remove
          */
         fun remove(item: T) {
-//            if (item != null) {
-                var i = 0
-                while(i < this.size) {
-                    var x = this.items[i]
-                    if (x == item) {
-                        while(i < this.size) {
-                            var j = i + 1
-                            if (j < this.size) {
-                                this.items[i] = this.items[j]
-                            }
-                            i++
-                        }
-                        this.size--
-                    }
-                    i++
-                }
-//            }
+            var i = 0
+            while (i < this.size) {
+                if (this.items[i] == item) { this.removeAt(i) }
+                else { i++ }
+            }
         }
 
         /**
@@ -163,6 +151,7 @@ namespace Am.Collections {
                 i++
             }
             this.size--
+            this.items.clearRange(this.size.toUInt(), 1UI)
             return value
         }
 
@@ -177,7 +166,9 @@ namespace Am.Collections {
                 throw new Exception("Cannot remove last element from empty list")
             }
             this.size--
-            return this.items[this.size]
+            var value = this.items[this.size]
+            this.items.clearRange(this.size.toUInt(), 1UI)
+            return value
         }
 
         /**
@@ -249,6 +240,7 @@ namespace Am.Collections {
          * rounds of work stops reallocating after the first round.
          */
         fun clear() {
+            this.items.clearRange(0UI, this.size.toUInt())
             this.size = 0
         }
 

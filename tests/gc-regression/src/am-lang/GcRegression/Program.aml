@@ -82,6 +82,41 @@ namespace GcRegression {
             value.next = value
             Program.kept = value
         }
+        static fun fillAndClear(list: List<Node>) {
+            var i = 0
+            while (i < 20) { var node = new Node()
+                node.next = node
+                list.add(node)
+                i++ }
+            list.clear()
+        }
+        static fun fillAndPop(list: List<Node>) {
+            var node = new Node()
+            node.next = node
+            list.add(node)
+            var removed = list.removeLast()
+            Program.check(removed.number == 17, "removed value remains usable")
+        }
+        static fun listReleasesStorage() {
+            var list = new List<Node>()
+            GC.collect()
+            var before = Arc.getAllocationCount()
+            Program.fillAndClear(list)
+            Program.check(GC.collect() >= 20L, "clear releases references in retained array storage")
+            Program.check(Arc.getAllocationCount() == before, "cleared list returns to baseline")
+            Program.fillAndPop(list)
+            Program.check(GC.collect() >= 1L, "removeLast releases vacated slot")
+            Program.check(Arc.getAllocationCount() == before, "popped list returns to baseline")
+            var ints = new List<Int>()
+            ints.add(3)
+            ints.add(5)
+            ints.add(3)
+            ints.remove(3)
+            Program.check(ints.getSize() == 1 && ints.get(0) == 5, "primitive duplicate removal")
+            ints.clear()
+            ints.add(9)
+            Program.check(ints.get(0) == 9, "primitive list reuses cleared storage")
+        }
         static fun mapGrowth() {
             var map = new HashMap<String, Int>()
             var i = 0
@@ -101,8 +136,23 @@ namespace GcRegression {
             while (i < 300) { Program.check(map.get(i.toString()) == i + 1, "reinserted map values survive")
                 i += 2 }
         }
+        static fun shadowedLocal(early: Bool) {
+            if (early) {
+                var value = new Node()
+                value.number = 42
+                return
+            }
+            var value = new Node()
+            value.number = 19
+        }
         static fun main(args: String[]) {
+            var shadowBaseline = Arc.getAllocationCount()
+            Program.shadowedLocal(true)
+            Program.shadowedLocal(false)
+            Program.check(Arc.getAllocationCount() == shadowBaseline, "inner local before same-named parent declaration releases on return")
+
             Program.mapGrowth()
+            Program.listReleasesStorage()
             GC.collect()
             var baseline = Arc.getAllocationCount()
             Program.garbage()
