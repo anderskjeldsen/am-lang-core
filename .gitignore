@@ -1,5 +1,9 @@
-builds*/*
-test-builds/*
+# Build output at any depth. The `*` matters: amlc v2 writes builds-v2/
+# and test-builds-v2/, which the old root-anchored `builds*/*` and
+# `test-builds/*` missed -- am-lang-core-isolate had 1662 untracked
+# files, burying the handful of real new sources among them.
+**/builds*/
+**/test-builds*/
 docs/*
 *.generated.c
 *.o
