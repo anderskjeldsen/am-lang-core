@@ -3,7 +3,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#if defined(__APPLE__) || defined(__linux__)
+#if defined(PLATFORM_AMIGAOS)
+#include <exec/memory.h>
+#include <proto/exec.h>
+#elif defined(__APPLE__) || defined(__linux__)
 #include <sys/mman.h>
 #define GC_GRAPH_MMAP 1
 #endif
@@ -37,7 +40,13 @@ static int cycle_init(cycle_graph *g, size_t count) {
     // freed large allocations, retaining hundreds of MB of dirty scratch pages.
     // A private mapping makes disposal release these pages, including compressed
     // pages, without touching allocator state belonging to another thread.
-#ifdef GC_GRAPH_MMAP
+#if defined(PLATFORM_AMIGAOS)
+    // Keep short-lived GC scratch outside libnix's pooled malloc heap. Small
+    // concurrent allocations can otherwise pin the large backing pool after
+    // free(), reducing Exec headroom despite an unchanged live object graph.
+    g->workspace=AllocVec(g->workspace_bytes,MEMF_PUBLIC|MEMF_CLEAR);
+    if(!g->workspace) return 0;
+#elif defined(GC_GRAPH_MMAP)
     g->workspace=mmap(NULL,g->workspace_bytes,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANON,-1,0);
     if(g->workspace==MAP_FAILED) { g->workspace=NULL; return 0; }
 #else
@@ -51,7 +60,9 @@ static int cycle_init(cycle_graph *g, size_t count) {
 }
 static void cycle_dispose(cycle_graph *g) {
     if(!g->workspace) return;
-#ifdef GC_GRAPH_MMAP
+#if defined(PLATFORM_AMIGAOS)
+    FreeVec(g->workspace);
+#elif defined(GC_GRAPH_MMAP)
     munmap(g->workspace,g->workspace_bytes);
 #else
     free(g->workspace);
