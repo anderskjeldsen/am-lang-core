@@ -8,11 +8,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <malloc.h>
 
 // libctru gives main a 32 KB stack unless the program says otherwise; it
 // reads this symbol at startup. AmLang's call depth (recursive parsing, deep
 // ARC teardown) needs a desktop-sized one, and an overrun here is silent.
 u32 __stacksize__ = 1024 * 1024;
+
+// libctru gives the GPU's linear heap a fixed 32 MB and malloc the rest. On
+// an original 3DS that leaves malloc 28 MB of the 64 while most of the linear
+// heap sits idle (framebuffers, vertex buffers and textures, a few MB).
+// 20 MB of linear memory leaves malloc about 40 MB there, and New 3DS
+// models far more.
+u32 __ctru_linear_heap_size = 20 * 1024 * 1024;
 
 extern int __real_main(int argc, char **argv);
 
@@ -92,13 +100,40 @@ int __wrap___syscall_thread_create(struct __pthread_t **thread, void *(*func)(vo
     return 0;
 }
 
+// Started with `3dslink -s`: stdout and stderr go back over Wi-Fi to the
+// 3dslink on the computer instead of to log.txt.
+#define AM_3DS_SOC_BUFFER (256 * 1024)
+static int am_3ds_log_to_3dslink(void) {
+    if (__3dslink_host.s_addr == 0) return 0;
+    u32 *buf = (u32 *) memalign(0x1000, AM_3DS_SOC_BUFFER);
+    if (buf == NULL || R_FAILED(socInit(buf, AM_3DS_SOC_BUFFER))) return 0;
+    if (link3dsStdio() < 0) {
+        socExit();
+        return 0;
+    }
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    printf("[3ds] stdout over 3dslink\n");
+    return 1;
+}
+
 int __wrap_main(int argc, char **argv) {
     // New 3DS: 804 MHz and the L2 cache instead of the old model's 268 MHz.
     // A no-op on an original 3DS.
     osSetSpeedupEnable(true);
     // Let one app thread run on the system core (see above).
     APT_SetAppCpuTimeLimit(AM_3DS_CORE1_PERCENT);
-    am_3ds_log_to_card();
+    if (!am_3ds_log_to_3dslink()) am_3ds_log_to_card();
+    {
+        // What this launch got to work with: an applet launch (Rosalina, a
+        // Download Play takeover) gets far less than a title takeover.
+        extern u32 __ctru_heap_size, __ctru_linear_heap_size;
+        bool n3ds = false;
+        APT_CheckNew3DS(&n3ds);
+        printf("[3ds] %s 3DS, app region %lu KB: heap %lu KB, linear %lu KB\n",
+            n3ds ? "New" : "Old",
+            (unsigned long) (osGetMemRegionSize(MEMREGION_APPLICATION) / 1024),
+            (unsigned long) (__ctru_heap_size / 1024), (unsigned long) (__ctru_linear_heap_size / 1024));
+    }
     argc = am_3ds_args_from_file(argc, argv, &argv);
     return __real_main(argc, argv);
 }
