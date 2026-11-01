@@ -27,7 +27,7 @@ namespace Tests {
         test testValuesInsideFastBlock() {
             var sum = 0
             fast {
-                for (i = 0 to 1000) {
+                for (i = 0 until 1000) {
                     var p = new FaPoint(i, i * 2)
                     sum = sum + p.x + p.y
                 }
@@ -39,7 +39,7 @@ namespace Tests {
         test testFastBlockReclaimsGarbage() {
             var before = Arc.getAllocationCount()
             fast {
-                for (i = 0 to 5000) {
+                for (i = 0 until 5000) {
                     var p = new FaPoint(i, i)
                     var s = "point " + i.toString()
                 }
@@ -51,7 +51,7 @@ namespace Tests {
         test testEscapingObjectSurvives() {
             var box = new FaBox()
             fast {
-                for (i = 0 to 100) {
+                for (i = 0 until 100) {
                     var p = new FaPoint(i, 7)
                     if (i == 42) {
                         box.kept = p
@@ -69,7 +69,7 @@ namespace Tests {
             var total = 0
             fast {
                 var list = List.newList<FaPoint>()
-                for (i = 0 to 200) {
+                for (i = 0 until 200) {
                     list.add(new FaPoint(i, 0))
                 }
                 var map = new HashMap<String, Int>()
