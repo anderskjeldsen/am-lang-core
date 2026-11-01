@@ -5,7 +5,7 @@ namespace ThreadTest {
         import Am.Threading
 
         override fun run() {
-            for (i = 0 to this.iterations) {
+            for (i = 0 until this.iterations) {
                 ("[" + this.label + "] tick " + i.toString()).println()
                 Thread.sleep(this.delayMs)
             }

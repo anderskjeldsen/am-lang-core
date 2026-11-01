@@ -62,7 +62,7 @@ namespace TaskSchedulerTest {
             // Main ticks while everything runs. Total work is
             // 3 * 150 = 450 ms on IO, 2 * 200 = 400 ms on Background;
             // they should both finish well within 1.5 s.
-            for (i = 0 to 8) {
+            for (i = 0 until 8) {
                 ("main: tick " + i.toString()).println()
                 Thread.sleep(200L)
             }

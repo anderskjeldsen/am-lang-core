@@ -227,7 +227,7 @@ switch (grade) {
 }
 
 // For loops - AmLang syntax
-for (i = 0 to 10) {
+for (i = 0 until 10) {
     i.println()
 }
 

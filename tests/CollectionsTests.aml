@@ -346,7 +346,7 @@ namespace Tests {
                     minLen = lenB
                 }
 
-                for (i = 0 to minLen) {
+                for (i = 0 until minLen) {
                     var charA = a.characterAt(i.toUInt())
                     var charB = b.characterAt(i.toUInt())
                     if (charA < charB) {

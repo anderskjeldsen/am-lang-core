@@ -170,7 +170,7 @@ namespace Tests {
 
         test testRepeatedStartJoin() {
             var iterations = 10
-            for (i = 0 to iterations) {
+            for (i = 0 until iterations) {
                 var w = new TtBasicWorker("iter", i)
                 var t = new Thread(w as Runnable)
                 t.name = "tt-repeat"
@@ -178,7 +178,7 @@ namespace Tests {
                 t.join()
             }
             var total = 0
-            for (i = 0 to iterations) {
+            for (i = 0 until iterations) {
                 var r = Thread.receive() as TtResult
                 total = total + r.runCount
             }
