@@ -2240,14 +2240,9 @@ static void __amlc_isolate_alloc_statics(aisolate * const iso) {
     }
 }
 
-// Stack for a new thread. Amiga family: as big as the CREATING thread's own
-// (main's, which amiga.c / morphos.c size with __stack), never below
-// 100 KB -- AmLang's call depth needs real stack, and an overflow there is
-// silent. A flat 4 MB per thread was a lot of a 68k's memory. Elsewhere:
-// 4 MB, as before.
-#define AMLC_MIN_THREAD_STACK (100 * 1024)
-static unsigned int __amlc_thread_stack_size(void) {
 #if defined(AMLC_AMIGA_FAMILY)
+// The size of the calling task's stack, in bytes.
+static unsigned long __amlc_stack_size(void) {
     unsigned long have = 0;
 #if defined(__MORPHOS__)
     // A native PPC task runs on its PPC stack, not the 68k one in tc_SP*.
@@ -2256,6 +2251,33 @@ static unsigned int __amlc_thread_stack_size(void) {
     struct Task * self = FindTask(NULL);
     have = (unsigned long) ((char *) self->tc_SPUpper - (char *) self->tc_SPLower);
 #endif
+    return have;
+}
+#endif
+
+// Runs first in main, before the runtime exists: plain C only. Exit code 20 is
+// RETURN_FAIL, which stops a script at the default FailAt. stdout, because the
+// OS 3 Shell cannot redirect stderr.
+void __amlc_require_stack(unsigned long required) {
+#if defined(AMLC_AMIGA_FAMILY)
+    unsigned long have = __amlc_stack_size();
+    if (have < required) {
+        printf("This program needs a stack of at least %lu bytes but has %lu. Use: Stack %lu\n", required, have, required);
+        exit(20);
+    }
+#else
+    (void) required;
+#endif
+}
+
+// Stack for a new thread. Amiga family: as big as the CREATING thread's own,
+// never below 100 KB -- AmLang's call depth needs real stack, and an overflow
+// there is silent. A flat 4 MB per thread was a lot of a 68k's memory.
+// Elsewhere: 4 MB, as before.
+#define AMLC_MIN_THREAD_STACK (100 * 1024)
+static unsigned int __amlc_thread_stack_size(void) {
+#if defined(AMLC_AMIGA_FAMILY)
+    unsigned long have = __amlc_stack_size();
     if (have < AMLC_MIN_THREAD_STACK) have = AMLC_MIN_THREAD_STACK;
     return (unsigned int) have;
 #else

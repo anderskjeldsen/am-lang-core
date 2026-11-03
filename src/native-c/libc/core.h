@@ -541,6 +541,11 @@ extern int __amlc_isolate_count;
 extern __thread aisolate * __amlc_tls_isolate;
 #define __amlc_isolate() (__amlc_tls_isolate)
 #endif
+// Startup check for a build target's requiredStack (see CRenderer): exits with
+// a message when the stack is known to be smaller. Amiga family only.
+#define AMLC_REQUIRE_STACK 1
+void __amlc_require_stack(unsigned long required);
+
 void __amlc_isolate_count_inc(void);   // before creating a worker thread
 void __amlc_isolate_count_dec(void);   // the worker's last runtime action
 

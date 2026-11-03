@@ -13,17 +13,11 @@
 lib_node *__first_lib_node = NULL;
 
 #if !defined(__AROS__)
-// The main task's stack. Launched from a Shell it otherwise runs on that
-// Shell's stack -- 4-8 KB by default on OS 3.x -- and AmLang's call depth
-// (JSON / script parsing, long ARC teardowns) overruns it SILENTLY: the
-// overflow tramples memory and something unrelated crashes much later.
-// libnix's startup swaps to a stack of __stack bytes if the current one is
-// smaller -- but only when its swapstack.o is linked, and DEFINING __stack
-// does not pull it in (measured: the request was silently ignored), so
-// reference __stkinit too. Threads copy main's size (core.c).
-unsigned long __stack = 1024 * 1024;
-extern void __stkinit(void);
-void * __amlc_keep_stkinit = (void *) __stkinit;
+// The user sets the main task's stack, with the Shell's Stack command or in the
+// icon. A build target's requiredStack checks it at startup
+// (__amlc_require_stack). Do not link libnix's swapstack.o (__stack + __stkinit):
+// at exit it copies the live frames back to the Shell's stack and frees the big
+// one, and programs then never get back to the Shell.
 #endif
 
 void __ensure_exec() {
