@@ -1,0 +1,27 @@
+namespace ProcCaptureTest {
+
+    // Validate Process.captureStdoutInDir (System()+redirect): does it
+    // capture a -noixemul child's stdout AND run it in the given dir?
+    class Main {
+        import Am.Lang
+        import Am.IO
+
+        static fun main(args: String[]) {
+            "=== proc-capture-test start ===".println()
+            "PARENT: captureStdoutInDir(DH1:child, DH1:data)".println()
+
+            var start = new DateTime()
+            var out = Process.captureStdoutInDir("DH1:child", "DH1:data")
+            var ms = new DateTime().getEpochMillis() - start.getEpochMillis()
+            ("PARENT: returned after " + ms.toString() + " ms").println()
+            if (out == null) {
+                "PARENT: captured <null>".println()
+            } else {
+                "PARENT: --- captured start ---".println()
+                out.print()
+                "PARENT: --- captured end ---".println()
+            }
+            "=== proc-capture-test done ===".println()
+        }
+    }
+}

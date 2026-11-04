@@ -1,0 +1,39 @@
+use_gui=no
+config_description=HandlerTest with CLIDrive boot disk
+config_hardware=true
+config_host=true
+
+chipset=aga
+chipset_compatible=A1200
+chipmem_size=4
+fastmem_size=8
+z3mem_size=64
+
+cpu_type=68020
+cpu_24bit_addressing=false
+cpu_compatible=false
+cpu_cycle_exact=false
+cpu_memory_cycle_exact=false
+mmu_model=0
+finegrain_cpu_speed=-1
+
+nr_floppies=0
+floppy_speed=0
+sound_output=none
+sound_volume=0
+sound_volume_cd=0
+gfx_framerate=100
+
+# Emulator-provided bsdsocket.library — bebbossh needs TCP and DNS.
+bsdsocket_emu=true
+
+# DH0 = CLIDrive (user's working AmigaOS boot disk with full Workbench
+# tree: Libs, Devs, Apps, etc. — including bebbossh at Apps:bebbossh/).
+# Substituted to the host path at runtime.
+# DH1 = our test binaries (parent / child / child2) so the boot
+# Startup-Sequence can chain into them.
+kickstart_rom_file=__ROM__
+filesystem2=rw,DH0:SYS:__ROOT_DIR__,6
+filesystem2=rw,DH1:DH1:__APP_DIR__,5
+uaehf0=dir,rw,DH0:SYS:__ROOT_DIR__,6
+uaehf1=dir,rw,DH1:DH1:__APP_DIR__,5

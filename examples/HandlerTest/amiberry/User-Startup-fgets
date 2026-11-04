@@ -1,0 +1,20 @@
+; FGets line-termination diagnostic — runs three back-to-back
+; parent_fgets invocations against child_fgets through our custom
+; DOS handler, one for each candidate line terminator.
+;
+; The host-side polling loop in run-fgets.sh waits for the final
+; "=== TEST RUN COMPLETE ===" sentinel and prints the log.
+
+echo "=== Test 1: LF (0x0a) ===" >>DH1:output.log
+DH1:parent_fgets lf >>DH1:output.log
+
+echo "" >>DH1:output.log
+echo "=== Test 2: CR (0x0d) ===" >>DH1:output.log
+DH1:parent_fgets cr >>DH1:output.log
+
+echo "" >>DH1:output.log
+echo "=== Test 3: CRLF (0x0d 0x0a) ===" >>DH1:output.log
+DH1:parent_fgets crlf >>DH1:output.log
+
+echo "" >>DH1:output.log
+echo "=== TEST RUN COMPLETE ===" >>DH1:output.log

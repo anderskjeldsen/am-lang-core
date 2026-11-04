@@ -1,0 +1,53 @@
+; HandlerTest User-Startup — bind-mounted over CLIDrive's existing
+; S:User-Startup. Keeps the AmiSSL setup the original file did, then
+; chains into our test runner: DH1:app spawned with whatever child
+; we want to drive through the handler. The Startup-Sequence's
+; default `Execute S:User-Startup` line picks this up.
+
+;BEGIN AmiSSL
+Assign AmiSSL: "SYS:Tools/AmiSSL"
+If Exists AmiSSL:Libs
+  Assign LIBS: AmiSSL:Libs ADD
+EndIf
+Path AmiSSL: ADD
+;END AmiSSL
+
+; Make Apps:bebbossh and friends reachable so the handler test can
+; spawn bebbossh by bare name.
+Path SYS:Apps/bebbossh ADD
+Path SYS:Apps/bebbossh/C ADD
+
+; amiberry is configured with cpu_type=68020 (see clidrive.uae.template).
+; bebbossh ships a generic libcryptossh.library (68000 build) plus
+; CPU-specific .library020 / .library060 variants. The readme says to
+; "rename libcryptossh.library020 and use this on 68020-68040", so
+; copy that variant into LIBS: where OpenLibrary("libcryptossh.library")
+; will find it on this 020-emulated host.
+Copy SYS:Apps/bebbossh/libcryptossh.library020 LIBS:libcryptossh.library CLONE
+
+; Mount PIPE: (Queue-Handler) so the test app can open it for the
+; stdout-capture leg of the hybrid bridge.
+Mount >NIL: PIPE:
+
+; Run the handler test parent with real bebbossh as the child.
+; Every dos.library packet bebbossh sends lands at our handler
+; (parent.c) and gets logged into output.log along with the bytes
+; it writes / reads — exactly what we need to see what bebbossh
+; actually does when stdin is a pre-staged ring buffer.
+;
+; The host argument is "anders@localhost" — change in the source
+; if you want to point at a real reachable SSH server. Note: this
+; runs inside the emulator with bsdsocket_emu=true, so it can
+; reach the host's network stack.
+; Try bebbossh -V through the rewritten CON-style handler — if we
+; see actual ACTION_WRITE for "invalid option" output now (per-fh
+; state + FINDxxx-populated FHs), we've cracked the libnix wall.
+; Phase A — Open(CON:) test. Parent opens a real CON: and passes
+; it to bebbossh -V. We just need to see bebbossh actually print
+; something (proves a real CON: makes libnix work where our fake
+; handler couldn't). The child's output goes into the CON: window,
+; not output.log — we read amiberry's screen / verify the sentinel.
+DH1:app SYS:Apps/bebbossh/bebbossh -V >DH1:output.log
+
+; Sentinel for the host-side polling loop in run-clidrive.sh.
+echo "=== TEST RUN COMPLETE ===" >>DH1:output.log

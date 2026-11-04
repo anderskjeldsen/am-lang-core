@@ -1,0 +1,22 @@
+namespace ProcCaptureChild {
+
+    // Spawned child: prints to stdout (captured by parent), and reads a
+    // RELATIVE file to prove which cwd it was spawned in.
+    class Main {
+        import Am.Lang
+        import Am.IO
+
+        static fun main(args: String[]) {
+            "HELLO FROM CHILD (stdout)".println()
+            var f = new File("cwdtest.txt")
+            if (f.exists()) {
+                var t = String.readFromFile("cwdtest.txt")
+                if (t != null) {
+                    ("cwd-file: " + t.trim()).println()
+                }
+            } else {
+                "cwd-file: MISSING (wrong cwd)".println()
+            }
+        }
+    }
+}
