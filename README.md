@@ -23,6 +23,37 @@ AmLang is inspired by other programming languages like Kotlin, Java, C#, TypeScr
 
 Currently it compiles only on Mac/Linux/Windows (using Docker), but one of the ultimate goals is to re-write the compiler in its own language. The compiler doesn't generate any machine code on its own, it writes C-code and lets GCC make the machine code. Performance-wise it's not as efficient as C (obviously?), but one can easily let c/asm do the heavy lifting and use this for orchestration. 
 
+# Explicit cycle collection
+
+`Am.Lang.GC.collect(): Long` collects unreachable reference cycles in the
+**calling thread's isolate**. It preserves live locals, statics, captured
+closures, and native ownership it cannot prove. Ordinary acyclic objects are
+still released by ARC. Call it between work batches; each worker must collect
+its own heap. It does not collect another thread's objects or guarantee a
+reduction in process resident memory.
+
+```aml
+import Am.Lang
+var reclaimed = GC.collect()
+```
+
+The result counts unreachable cyclic candidates released through normal ARC.
+Zero also means collection could not allocate its workspace or was invoked
+during object destruction. Objects kept alive by application references or
+unbalanced native reference counts cannot be reclaimed.
+
+On macOS ARM, run the sanitizer regression with a compiler supporting this core:
+
+```sh
+MAKEFLAGS=-j8 java -jar /path/to/amlc.jar build tests/gc-regression -bt macos-arm -lpp /path/to/AmLang-isolate
+ASAN_OPTIONS=detect_leaks=0 tests/gc-regression/builds/bin/macos-arm/app
+cc -fsanitize=address,undefined tests/gc-regression/graph_test.c -o /tmp/am-gc-graph-test
+/tmp/am-gc-graph-test
+```
+
+The tests cover deep cycles, arrays, interfaces, closures, live roots,
+independent threads, repeated collection, and collection/list storage reuse.
+
 # Requirements
 - Java 11+
 - Docker

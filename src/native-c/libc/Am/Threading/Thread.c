@@ -11,6 +11,7 @@
 #if defined(AM_PLATFORM_NINTENDO_PPC)
 #include <malloc.h>
 #endif
+#include <unistd.h>
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -107,6 +108,8 @@ aobject * Am_Threading_Thread__native_copy_0(aobject * const src, void * const c
         __set_property(dst, Am_Threading_Thread_P_name, (nullable_value) { .flags = 0, .value.object_value = c });
         __decrease_reference_count(c);
     }
+    __set_property(dst, Am_Threading_Thread_P_priority, src->object_properties.class_object_properties.properties[Am_Threading_Thread_P_priority].nullable_value);
+    __set_property(dst, Am_Threading_Thread_P_stackSize, src->object_properties.class_object_properties.properties[Am_Threading_Thread_P_stackSize].nullable_value);
     aisolate * iso = handle_isolate(src);
     if (iso != NULL) {
         __amlc_isolate_retain(iso);
@@ -173,8 +176,14 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
         return __result;
     }
 
+    int requested_stack = this->object_properties.class_object_properties.properties[Am_Threading_Thread_P_stackSize].nullable_value.value.int_value;
+    if (requested_stack != 0 && requested_stack < 16384) {
+        __throw_simple_exception("Thread.stackSize must be zero or at least 16384 bytes", "in Am_Threading_Thread_start_0", &__result);
+        return __result;
+    }
     aisolate * iso = __amlc_isolate_create();
     bind_handle(this, iso);
+    if (requested_stack > 0) iso->stack_size = (unsigned int)requested_stack;
 
     aobject * name = this->object_properties.class_object_properties.properties[Am_Threading_Thread_P_name].nullable_value.value.object_value;
     if (name != NULL) {
@@ -188,10 +197,18 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
     aobject * runnable = this->object_properties.class_object_properties.properties[Am_Threading_Thread_P_runnable].nullable_value.value.object_value;
     iso->boot = __amlc_message_create(runnable, &__result);
     if (iso->boot == NULL) {
+        bind_handle(this, NULL);
+        __amlc_isolate_release(iso);
         return __result;
     }
 
     thread_native * n = (thread_native *) calloc(1, sizeof(thread_native));
+    if (n == NULL) {
+        bind_handle(this, NULL);
+        __amlc_isolate_release(iso);
+        __throw_out_of_memory_exception(&__result, "Thread.start native state allocation");
+        return __result;
+    }
     iso->native = n;
     __amlc_isolate_retain(iso);   // the running thread's own handle
     __amlc_isolate_count_inc();
@@ -220,10 +237,23 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
     int rc = pthread_create(&n->thread_id, &attr, Am_Threading_Thread__pthread_entry, (void *) iso);
     pthread_attr_destroy(&attr);
 #else
-    int rc = pthread_create(&n->thread_id, NULL, Am_Threading_Thread__pthread_entry, (void *) iso);
+    pthread_attr_t attr;
+    int rc = pthread_attr_init(&attr);
+    if (rc == 0) {
+        if (requested_stack > 0) {
+            long page = sysconf(_SC_PAGESIZE);
+            size_t unit = page > 0 ? (size_t)page : 4096;
+            size_t bytes = ((size_t)requested_stack + unit - 1) / unit * unit;
+            rc = pthread_attr_setstacksize(&attr, bytes);
+        }
+        if (rc == 0) rc = pthread_create(&n->thread_id, &attr, Am_Threading_Thread__pthread_entry, (void *) iso);
+        pthread_attr_destroy(&attr);
+    }
 #endif
     if (rc != 0) {
         __amlc_isolate_count_dec();
+        __amlc_isolate_release(iso);
+        bind_handle(this, NULL);
         __amlc_isolate_release(iso);
         char msg[96];
         snprintf(msg, sizeof(msg), "Thread.start: pthread_create failed (rc=%d)", rc);

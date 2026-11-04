@@ -144,9 +144,14 @@ namespace Am.Threading {
          * platforms. (Rather than lowering workers, an application raises its UI task with
          * setCurrentPriority so the workers and its child processes can all stay at 0.)
          *
-         * Declared last on purpose: the native backends address the fields above by slot index.
+         * Kept after older fields to preserve their native slot indices.
          */
         var priority: Int = 0
+
+        /** Requested worker stack bytes, set before start(); 0 keeps the platform
+         * default. Nonzero values must be at least 16 KiB. pthread targets round
+         * up to a system page. This does not change the main process stack. */
+        var stackSize: Int = 0
     }
 
     /**

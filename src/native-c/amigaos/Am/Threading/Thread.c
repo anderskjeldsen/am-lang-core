@@ -10,6 +10,8 @@
 #include <amigaos/amiga.h>
 
 #include <exec/types.h>
+#include <exec/memory.h>
+#include <stdio.h>
 #include <dos/dostags.h>
 #include <dos/dos.h>
 #include <exec/exec.h>
@@ -101,6 +103,8 @@ aobject * Am_Threading_Thread__native_copy_0(aobject * const src, void * const c
 		__set_property(dst, Am_Threading_Thread_P_name, (nullable_value) { .flags = 0, .value.object_value = c });
 		__decrease_reference_count(c);
 	}
+    __set_property(dst, Am_Threading_Thread_P_priority, src->object_properties.class_object_properties.properties[Am_Threading_Thread_P_priority].nullable_value);
+    __set_property(dst, Am_Threading_Thread_P_stackSize, src->object_properties.class_object_properties.properties[Am_Threading_Thread_P_stackSize].nullable_value);
 	aisolate * iso = handle_isolate(src);
 	if (iso != NULL) {
 		__amlc_isolate_retain(iso);
@@ -167,8 +171,14 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 		return __result;
 	}
 
+    int requested_stack = this->object_properties.class_object_properties.properties[Am_Threading_Thread_P_stackSize].nullable_value.value.int_value;
+    if (requested_stack != 0 && requested_stack < 16384) {
+        __throw_simple_exception("Thread.stackSize must be zero or at least 16384 bytes", "in Am_Threading_Thread_start_0", &__result);
+        return __result;
+    }
 	aisolate * iso = __amlc_isolate_create();
 	bind_handle(this, iso);
+    if (requested_stack > 0) iso->stack_size = (unsigned int)requested_stack;
 
 	STRPTR name_strptr = "thread";
 	aobject * name = this->object_properties.class_object_properties.properties[Am_Threading_Thread_P_name].nullable_value.value.object_value;
@@ -180,7 +190,7 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 		}
 	}
 
-	// Thread.priority (slot 3, declared last in Thread.aml). Exec priorities
+	// Thread.priority keeps its original slot 3. Exec priorities
 	// are a signed byte.
 	int priority = this->object_properties.class_object_properties.properties[Am_Threading_Thread_P_priority].nullable_value.value.int_value;
 	if (priority < -128) priority = -128;
@@ -192,6 +202,8 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 	aobject * runnable = this->object_properties.class_object_properties.properties[Am_Threading_Thread_P_runnable].nullable_value.value.object_value;
 	iso->boot = __amlc_message_create(runnable, &__result);
 	if (iso->boot == NULL) {
+        bind_handle(this, NULL);
+        __amlc_isolate_release(iso);
 		return __result;
 	}
 
@@ -219,17 +231,32 @@ function_result Am_Threading_Thread_start_0(aobject * const this)
 	};
 
 	thread_native * n = (thread_native *) calloc(1, sizeof(thread_native));
+    if (n == NULL) {
+        bind_handle(this, NULL);
+        __amlc_isolate_release(iso);
+        __throw_out_of_memory_exception(&__result, "Thread.start native state allocation");
+        return __result;
+    }
 	iso->native = n;
 	__amlc_isolate_retain(iso);   // the running task's own handle; dropped at the end of _InitTask
 	__amlc_isolate_count_inc();
 
 	struct Process * process = CreateNewProc(tags);
-	if (process == NULL) {
-		__amlc_isolate_count_dec();
-		__amlc_isolate_release(iso);
-		__throw_simple_exception("Thread.start: CreateNewProc failed", "in Am_Threading_Thread_start_0", &__result);
-		return __result;
-	}
+    if (process == NULL) {
+        LONG error = IoErr();
+        char message[256];
+        snprintf(message, sizeof(message),
+            "Thread.start: CreateNewProc failed: IoErr=%ld stack=%lu Fast=%lu largest=%lu Chip=%lu largest=%lu",
+            (long)error, (unsigned long)iso->stack_size,
+            (unsigned long)AvailMem(MEMF_FAST), (unsigned long)AvailMem(MEMF_FAST | MEMF_LARGEST),
+            (unsigned long)AvailMem(MEMF_CHIP), (unsigned long)AvailMem(MEMF_CHIP | MEMF_LARGEST));
+        __amlc_isolate_count_dec();
+        __amlc_isolate_release(iso); // prospective running task
+        bind_handle(this, NULL);
+        __amlc_isolate_release(iso); // failed handle, including bootstrap and mailbox
+        __throw_simple_exception_copy(message, "in Am_Threading_Thread_start_0", &__result);
+        return __result;
+    }
 	n->process = process;
 	n->launched = true;
 	// What the worker (and __amlc_isolate() on it) reads: set once, never
