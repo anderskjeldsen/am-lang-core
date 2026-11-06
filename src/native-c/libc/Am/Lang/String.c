@@ -152,7 +152,8 @@ function_result Am_Lang_String_equals_0(aobject * const this, aobject * other)
 
 //	printf("compare strings %s vs %s\n", holder1->string_value, holder2->string_value);
 
-	bool res = holder1->hash == holder2->hash && strcmp(holder1->string_value, holder2->string_value) == 0;
+	bool res = holder1->hash == holder2->hash && holder1->length == holder2->length
+        && memcmp(holder1->string_value, holder2->string_value, holder1->length) == 0;
 	__result.return_value = (nullable_value) { .value.bool_value = res, .flags = PRIMITIVE_BOOL };
 
 __exit: ;
@@ -184,8 +185,9 @@ function_result Am_Lang_String__op__plus_0(aobject * const this, aobject * s)
 	string_holder *holder = (string_holder *) ((char *) str_obj + sizeof(aobject));
 	str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
 	char * new_str = (char *) ((char *) holder + sizeof(string_holder));
-	strcpy(new_str, holder1->string_value);
-	strcat(new_str, holder2->string_value);
+	memcpy(new_str, holder1->string_value, holder1->length);
+	memcpy(new_str + holder1->length, holder2->string_value, holder2->length);
+	new_str[holder1->length + holder2->length] = 0;
 	unsigned int units = 0;
 	unsigned int total = holder1->length + holder2->length;
 	// Recount rather than adding the two counts: if one operand ends in a
@@ -219,7 +221,8 @@ function_result Am_Lang_String_fromBytes_0(aobject * bytes, aobject * encoding)
     // string_holder * const holder = calloc(1, sizeof(string_holder));
     // str_obj->object_properties.class_object_properties.object_data.value.custom_value = holder;
     // char * const new_str = malloc(len + 1);
-    strncpy(new_str, a_holder->array_data, len);
+    /* The byte array may contain NUL; preserve the entire counted payload. */
+    memcpy(new_str, a_holder->array_data, len);
 	new_str[len] = 0;
 	unsigned int units = 0;
 	unsigned int hash = __string_hash_and_units(new_str, (unsigned int) len, &units);
