@@ -1,0 +1,42 @@
+namespace Tests {
+    class StringNulTests {
+        import Am.Lang
+        import Am.Tests
+        import Am.Collections
+        static fun value(tail: UByte): String {
+            var bytes = new UByte[3UI]
+            bytes[0UI] = 97UB
+            bytes[1UI] = 0UB
+            bytes[2UI] = tail
+            return String.fromBytes(bytes,"UTF-8")
+        }
+        test countedBytesPreserveNulAndFollowingBytes() {
+            var text = StringNulTests.value(98UB)
+            Assert.assertTrue(text.length() == 3UI)
+            Assert.assertTrue(text.characterAt(1UI) == 0US)
+            Assert.assertTrue(text.characterAt(2UI) == 98US)
+            var bytes = text.toBytes("UTF-8")
+            Assert.assertTrue(bytes[2UI] == 98UB)
+        }
+        test equalityAndMapKeysIncludeTheSuffixAfterNul() {
+            var first = StringNulTests.value(98UB)
+            var second = StringNulTests.value(99UB)
+            Assert.assertTrue(!first.equals(second))
+            var map = new HashMap<String,String>()
+            map.set(first,"first")
+            map.set(second,"second")
+            Assert.assertTrue(map.getSize() == 2)
+            Assert.assertEquals("first",map.get(first))
+            Assert.assertEquals("second",map.get(second))
+        }
+        test concatenationPreservesBothCountedPayloads() {
+            var text = StringNulTests.value(98UB)
+            var joined = text + text
+            Assert.assertTrue(joined.length() == 6UI)
+            Assert.assertTrue(joined.characterAt(2UI) == 98US)
+            Assert.assertTrue(joined.characterAt(3UI) == 97US)
+            Assert.assertTrue(joined.characterAt(4UI) == 0US)
+            Assert.assertTrue(joined.characterAt(5UI) == 98US)
+        }
+    }
+}
