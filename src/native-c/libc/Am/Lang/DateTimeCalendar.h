@@ -4,7 +4,7 @@
 #include <Am/Lang/ClassRef.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/Bool.h>
-#include <Am/Lang/Double.h>
+#include <Am/Lang/Long.h>
 #include <Am/Lang/String.h>
 #include <Am/Lang/Int.h>
 #include <Am/Lang/Array.h>

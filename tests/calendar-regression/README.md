@@ -12,12 +12,15 @@ UTC backend on macOS; `amigaos_docker` cross-compiles with `amiga-gcc:latest`.
 The two macOS targets enable address and undefined-behavior sanitizers.
 The Amiga executable needs a separate runtime test on hardware or an emulator.
 
-The new static `DateTime.calendarParts` and `calendarMillis` APIs accept signed
+The new static `DateTime.calendarParts` and `calendarMillis` APIs take signed `Long`
 millisecond timestamps independently of the existing unsigned instance API.
 They normalize calendar fields and cover +/-8.64e15 milliseconds using constant-time
 Gregorian arithmetic, without depending on the width of `time_t` or changing `TZ`.
 Parts use 1-based months and offsets east of UTC. Invalid timestamps/unsupported
-zones produce an empty parts array; composition/parsing failures produce NaN.
+zones produce an empty parts array; composition and parsing write their result to a
+`Long[]` output and return false on failure. The API needs no `floatingPoint`, and on
+non-Apple targets the native code uses integer arithmetic only. Tucanium converts to
+and from JavaScript's double/NaN time values in its adapter.
 Composition currently bounds each input field to +/-1e9 before normalization.
 
 `resolveTimeZone`, `timeZoneAbbreviation` and `availableTimeZones` use the Apple

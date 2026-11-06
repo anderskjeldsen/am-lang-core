@@ -19,25 +19,31 @@ namespace Am.Lang
          */
         private var timezoneOffsetMinutes: Int = DateTime.getLocalTimezoneOffset()
 
-        /** Signed calendar API. Milliseconds are integral values within +/-8.64e15.
+        /** Signed calendar API on Long milliseconds since 1970-01-01T00:00:00Z, within
+         * +/-8.64e15 (the JavaScript Date range). Unlike the legacy ULong API, these
+         * operations support dates before 1970.
          * Zone is a supported name, or empty for the platform default.
          * Parts: year, month (1-12), day, hour, minute, second, millisecond,
          * weekday (Sunday=0), offset in minutes EAST of UTC. Empty means invalid.
-         * Unlike the legacy ULong API, these operations support dates before 1970.
          */
-        static fun calendarParts(milliseconds: Double, zone: String): Int[] {
+        static fun calendarParts(milliseconds: Long, zone: String): Int[] {
             var parts = new Int[9UI]
             if (!DateTimeCalendar.parts(milliseconds, zone, parts)) { return new Int[0UI] }
             return parts
         }
-        static fun calendarMillis(year: Double, month: Double, day: Double, hour: Double, minute: Double, second: Double, millisecond: Double, zone: String): Double {
-            return DateTimeCalendar.compose(year, month, day, hour, minute, second, millisecond, zone)
+        /** Composes calendar fields into output[0]. Fields out of their usual range
+         * roll over (month 13 is January of the next year, day 0 the last day of the
+         * previous month); each must be within +/-1e9. Returns false, leaving output
+         * untouched, for an unsupported zone or a result outside the range. */
+        static fun calendarMillis(year: Long, month: Long, day: Long, hour: Long, minute: Long, second: Long, millisecond: Long, zone: String, output: Long[]): Bool {
+            return DateTimeCalendar.compose(year, month, day, hour, minute, second, millisecond, zone, output)
         }
-        /** ISO date parsing; returns NaN on invalid input. */
-        static fun parseCalendarMillis(text: String): Double { return DateTimeCalendar.parse(text) }
+        /** Parses ISO date text into output[0]. Returns false, leaving output untouched,
+         * on invalid input. */
+        static fun parseCalendarMillis(text: String, output: Long[]): Bool { return DateTimeCalendar.parse(text, output) }
         /** Empty result means the zone is unsupported. */
         static fun resolveTimeZone(zone: String): String { return DateTimeCalendar.zoneName(zone) }
-        static fun timeZoneAbbreviation(milliseconds: Double, zone: String): String { return DateTimeCalendar.abbreviation(milliseconds, zone) }
+        static fun timeZoneAbbreviation(milliseconds: Long, zone: String): String { return DateTimeCalendar.abbreviation(milliseconds, zone) }
         /** Newline-separated supported names. UTC-only platforms return UTC. */
         static fun availableTimeZones(): String { return DateTimeCalendar.zones() }
 

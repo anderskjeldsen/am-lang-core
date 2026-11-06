@@ -5,7 +5,6 @@ dependencies:
   - id: am-lang-core
     type: local
     path: ../..
-    features: ["floatingPoint"]
 platforms:
   - id: libc
     abstract: true
