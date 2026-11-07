@@ -1,0 +1,118 @@
+namespace Tests {
+
+    // Field initialisers that read another class's untyped static (Redmine
+    // #150). Declared before the class that owns the statics on purpose.
+    class BindRegHolder {
+        import Am.Lang
+
+        var sized: Int[] = new Int[BindRegZConsts.count]
+        var copied: Int = BindRegZConsts.count
+        var tier: UByte = 3UB
+    }
+
+    class BindRegZConsts {
+        import Am.Lang
+
+        static const var count = 5
+    }
+
+    enum BindRegColor<UByte> {
+        import Am.Lang
+
+        background = 0UB
+        white = 7UB
+    }
+
+    class BindingRegressionTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        var starts: Int[] = new Int[3]
+        var items: Int[] = new Int[4]
+
+        static fun maybeHolder(): BindRegHolder? {
+            return new BindRegHolder()
+        }
+
+        // #150
+        static test fieldInitialiserReadsUntypedStaticOfLaterClass() {
+            var h = new BindRegHolder()
+            Assert.assertEquals(5, h.sized.length().toInt())
+            Assert.assertEquals(5, h.copied)
+        }
+
+        // #148: loop bounds read straight from array elements
+        static test forLoopBoundsFromArrayElements() {
+            var t = new BindingRegressionTests()
+            t.starts[0] = 1
+            t.starts[1] = 3
+            t.items[1] = 10
+            t.items[2] = 20
+            var out = List.newList<Int>()
+            t.collect(0, out)
+            Assert.assertEquals(2, out.getSize())
+            Assert.assertEquals(10, out.get(0))
+            Assert.assertEquals(20, out.get(1))
+        }
+
+        fun collect(i0: Int, out: List<Int>) {
+            for (i = this.starts[i0] until this.starts[i0 + 1]) {
+                out.add(this.items[i])
+            }
+        }
+
+        // #149: a method of the backing type, called on an enum member
+        static test enumMemberCallsBackingTypeMethod() {
+            var c = new Int[8]
+            c[BindRegColor.white.toInt()] = 42
+            Assert.assertEquals(42, c[7])
+            var k = BindRegColor.white
+            Assert.assertEquals(7, k.toInt())
+        }
+
+        fun yes(): Bool {
+            return true
+        }
+
+        fun no(): Bool {
+            return false
+        }
+
+        // A bare call on the right of && / || is a call on `this`, not on
+        // the left operand's type (Bool).
+        static test bareCallAfterLogicalOperator() {
+            var t = new BindingRegressionTests()
+            t.checkLogical()
+        }
+
+        fun checkLogical() {
+            var a = true
+            var b = false
+            Assert.assertTrue(a && yes())
+            Assert.assertFalse(a && no())
+            Assert.assertTrue(b || yes())
+            Assert.assertFalse(b || no())
+        }
+
+        // #158: a member after `!!` / `?.` is never a same-named local
+        static test memberAfterNonNullAssertionIsNotALocal() {
+            var h = BindingRegressionTests.maybeHolder()
+            var tier = 4
+            if (h != null) {
+                tier = h!!.tier.toInt()
+            }
+            Assert.assertEquals(3, tier)
+
+            var copied = 9
+            if (h != null) {
+                copied = h!!.copied
+            }
+            Assert.assertEquals(5, copied)
+
+            copied = 1
+            copied = h?.copied ?? 0
+            Assert.assertEquals(5, copied)
+        }
+    }
+}
