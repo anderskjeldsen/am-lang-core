@@ -544,13 +544,10 @@ extern int __amlc_isolate_count;
 extern __thread aisolate * __amlc_tls_isolate;
 #define __amlc_isolate() (__amlc_tls_isolate)
 #endif
-// A platform that needs to set up the main task before the program runs -- AmigaOS gives
-// it a bigger stack -- defines AMLC_PLATFORM_MAIN. The generated main() then calls the
-// program as AMLC_PLATFORM_MAIN(body, argc, argv) instead of body(argc, argv).
-#if defined(PLATFORM_AMIGAOS) && !defined(__AROS__) && !defined(__MORPHOS__)
-int __amlc_platform_main(int (*body)(int, char **), int argc, char **argv);
-#define AMLC_PLATFORM_MAIN __amlc_platform_main
-#endif
+// Startup check for a build target's requiredStack (see CRenderer): exits with
+// a message when the stack is known to be smaller. Amiga family only.
+#define AMLC_REQUIRE_STACK 1
+void __amlc_require_stack(unsigned long required);
 
 void __amlc_isolate_count_inc(void);   // before creating a worker thread
 void __amlc_isolate_count_dec(void);   // the worker's last runtime action

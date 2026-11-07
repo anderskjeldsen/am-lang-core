@@ -13,94 +13,11 @@
 lib_node *__first_lib_node = NULL;
 
 #if !defined(__AROS__)
-// The main task's stack. Launched from a Shell the program otherwise runs on
-// that Shell's stack -- 4-8 KB by default on OS 3.x -- and AmLang's call depth
-// (JSON / script parsing, long ARC teardowns) overruns it SILENTLY: the
-// overflow tramples memory and something unrelated crashes much later.
-//
-// The generated main() runs the program through __amlc_platform_main(), which
-// calls it on a stack of its own with exec's StackSwap() and swaps back when it
-// returns. Threads copy main's size (core.c). libnix's own swap (__stack +
-// __stkinit) is NOT used: at exit it copies the live frames back to the Shell's
-// stack and frees the big one, and programs then never got back to the Shell
-// (an illegal instruction alert on real hardware).
-#define AMLC_MAIN_STACK_SIZE (1024 * 1024)
-
-static struct StackSwapStruct __amlc_main_stack;
-static APTR __amlc_main_stack_memory = NULL;
-
-// int __amlc_call_on_stack(int (*body)(int, char **), int argc, char **argv,
-//                          struct StackSwapStruct *stack)
-// Swaps to stack, calls body(argc, argv) there and swaps back. In assembler
-// because nothing may touch the C frame between the two StackSwap() calls.
-int __amlc_call_on_stack(int (*body)(int, char **), int argc, char **argv, struct StackSwapStruct *stack);
-__asm__(
-"       .text\n"
-"       .globl  ___amlc_call_on_stack\n"
-"___amlc_call_on_stack:\n"
-"       movem.l d2-d3/a2-a3/a6,-(sp)\n"
-"       move.l  24(sp),a2\n"                   /* body */
-"       move.l  28(sp),d2\n"                   /* argc */
-"       move.l  32(sp),d3\n"                   /* argv */
-"       move.l  36(sp),a3\n"                   /* stack */
-"       move.l  _SysBase,a6\n"
-"       move.l  a3,a0\n"
-"       jsr     -732(a6)\n"                    /* StackSwap(stack) */
-"       move.l  d3,-(sp)\n"
-"       move.l  d2,-(sp)\n"
-"       jsr     (a2)\n"
-"       addq.l  #8,sp\n"
-"       move.l  d0,d2\n"
-"       move.l  _SysBase,a6\n"
-"       move.l  a3,a0\n"
-"       jsr     -732(a6)\n"                    /* StackSwap(stack): back */
-"       move.l  d2,d0\n"
-"       movem.l (sp)+,d2-d3/a2-a3/a6\n"
-"       rts\n"
-);
-
-int __amlc_platform_main(int (*body)(int, char **), int argc, char **argv)
-{
-	struct Task *me = FindTask(NULL);
-	ULONG current = (ULONG) me->tc_SPUpper - (ULONG) me->tc_SPLower;
-
-	if (current >= AMLC_MAIN_STACK_SIZE)
-		return body(argc, argv);
-
-	__amlc_main_stack_memory = AllocVec(AMLC_MAIN_STACK_SIZE, MEMF_PUBLIC);
-	if (__amlc_main_stack_memory == NULL)
-		return body(argc, argv);
-
-	__amlc_main_stack.stk_Lower = __amlc_main_stack_memory;
-	__amlc_main_stack.stk_Upper = (ULONG) __amlc_main_stack_memory + AMLC_MAIN_STACK_SIZE;
-	__amlc_main_stack.stk_Pointer = (APTR) __amlc_main_stack.stk_Upper;
-
-	int result = __amlc_call_on_stack(body, argc, argv, &__amlc_main_stack);
-
-	FreeVec(__amlc_main_stack_memory);
-	__amlc_main_stack_memory = NULL;
-
-	return result;
-}
-
-// exit() from inside the program -- a fatal error, libnix's Ctrl-C check --
-// leaves without swapping back. libnix's exit resets the stack pointer to the
-// one saved at startup, on the Shell's stack, before it calls this, so the
-// task's stack bounds can be put back and the big stack freed here.
-// __amlc_main_stack holds the Shell's bounds after the first StackSwap().
-__attribute__((destructor))
-static void __amlc_main_stack_exit(void)
-{
-	if (__amlc_main_stack_memory != NULL) {
-		struct Task *me = FindTask(NULL);
-		Forbid();
-		me->tc_SPLower = __amlc_main_stack.stk_Lower;
-		me->tc_SPUpper = (APTR) __amlc_main_stack.stk_Upper;
-		Permit();
-		FreeVec(__amlc_main_stack_memory);
-		__amlc_main_stack_memory = NULL;
-	}
-}
+// The user sets the main task's stack, with the Shell's Stack command or in the
+// icon. A build target's requiredStack checks it at startup
+// (__amlc_require_stack). Do not link libnix's swapstack.o (__stack + __stkinit):
+// at exit it copies the live frames back to the Shell's stack and frees the big
+// one, and programs then never get back to the Shell.
 #endif
 
 void __ensure_exec() {

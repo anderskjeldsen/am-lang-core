@@ -12,11 +12,8 @@
 
 lib_node *__first_lib_node = NULL;
 
-// The main task's PPC stack. MorphOS's startup (crt0) honours __stack -- it
-// defines a weak default this replaces -- so a Shell's small default can't
-// leave AmLang's deep call chains to overrun it silently. Threads copy
-// main's size (core.c).
-unsigned long __stack = 1024 * 1024;
+// The user sets the main task's stack. A build target's requiredStack checks it
+// at startup (__amlc_require_stack).
 
 void __ensure_exec() {
 	if (SysBase == NULL) {
