@@ -519,5 +519,6 @@ aobject * Am_Lang_String__native_copy_0(aobject * const src, void * const copy_c
 	dh->hash = h->hash;
 	dh->char_length = h->char_length;
 	dh->wide = NULL;
+	dh->unit_marks = NULL;
 	return dst;
 }

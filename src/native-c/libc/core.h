@@ -188,7 +188,17 @@ struct _string_holder {
     // release hook used to be empty. It is not any more -- see
     // Am_Lang_String__native_release_0.
     unsigned short * wide;
+    // Lazily built checkpoints for NON-ASCII strings: pairs (unit index, byte
+    // offset) of the first character at or after every __STRING_MARK_STEP-th
+    // UTF-16 unit, or NULL. Without them every unit<->byte conversion (substring,
+    // indexOf) scanned from the start of the string, so walking a non-ASCII
+    // string by index -- a tokenizer, a parser -- was quadratic: one `é` in a
+    // comment made v2 tokenize a 2000-line file ~15x slower. Built and published
+    // like `wide` (immutable once stored), freed with it.
+    unsigned int * unit_marks;
 };
+
+#define __STRING_MARK_STEP 32
 
 struct _array_holder {
     unsigned int size; // number of items

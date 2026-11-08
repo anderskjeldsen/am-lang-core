@@ -233,5 +233,32 @@ namespace Tests {
             Assert.assertEquals("Hi", sb.toString())
             Assert.assertEquals(2, sb.getLength().toInt())
         }
+
+        // Index-based access far into a long non-ASCII string. Unit<->byte conversion
+        // starts from checkpoints (every 32 units) instead of the string's start; "aé𝄞b"
+        // is 5 units (𝄞 is a surrogate pair), so checkpoints land inside pairs too.
+        test indexedAccessDeepIntoNonAsciiString() {
+            var sb = new StringBuilder()
+            var r = 0
+            while (r < 200) {
+                sb.add("aé𝄞b")
+                r++
+            }
+            var s = sb.toString()
+            Assert.assertEquals(1000, s.getLength())
+            var k = 0
+            while (k < 200) {
+                var base = k * 5
+                Assert.assertEquals("aé𝄞b", s.substring(base.toUInt(), 5UI))
+                Assert.assertEquals("é", s.substring((base + 1).toUInt(), 1UI))
+                Assert.assertEquals("b", s.substring((base + 4).toUInt(), 1UI))
+                Assert.assertEquals(base + 4, s.indexOfAfter("b", base))
+                Assert.assertEquals(base + 1, s.indexOfAfter("é", base))
+                Assert.assertEquals(233, s.characterAt((base + 1).toUInt()).toInt())
+                k++
+            }
+            Assert.assertEquals(995, s.lastIndexOf("a"))
+            Assert.assertEquals("𝄞b", s.substringToEnd(997UI))
+        }
     }
 }

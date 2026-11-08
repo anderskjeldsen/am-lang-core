@@ -406,6 +406,30 @@ unsigned short * __string_wide(string_holder * const holder) {
     return buf;
 }
 
+// The checkpoint table for a non-ASCII string (see string_holder.unit_marks):
+// 2 * (char_length / __STRING_MARK_STEP + 1) entries. NULL when out of memory;
+// callers then scan from the start as before.
+static unsigned int * __string_marks(string_holder * const holder) {
+    unsigned int count, k, i = 0, o = 0, cp = 0, target;
+    unsigned int * marks;
+    if (holder->unit_marks != NULL) return holder->unit_marks;
+    count = holder->char_length / __STRING_MARK_STEP + 1;
+    marks = (unsigned int *) malloc((size_t) count * 2 * sizeof(unsigned int));
+    if (marks == NULL) return NULL;
+    for (k = 0; k < count; k++) {
+        target = k * __STRING_MARK_STEP;
+        while (i < holder->length && o < target) {
+            i += __utf8_decode(holder->string_value, holder->length, i, &cp);
+            o += (cp >= 0x10000) ? 2 : 1;
+        }
+        marks[2 * k] = o;       // may be target + 1 when an astral pair straddles it
+        marks[2 * k + 1] = i;
+    }
+    // Publish last; same reasoning as `wide` in __string_wide.
+    holder->unit_marks = marks;
+    return marks;
+}
+
 unsigned int __string_unit_to_byte(string_holder * const holder, unsigned int const unit_index, int * const out_split) {
     unsigned int i = 0, o = 0, cp = 0, step;
     if (out_split != NULL) *out_split = 0;
@@ -413,6 +437,20 @@ unsigned int __string_unit_to_byte(string_holder * const holder, unsigned int co
     // ASCII: one byte per unit, so the two index spaces are the same number.
     if (holder->char_length == holder->length) {
         return (unit_index < holder->length) ? unit_index : holder->length;
+    }
+    {
+        // Start from the nearest checkpoint at or before unit_index, so a lookup
+        // decodes at most one step of characters instead of the whole prefix.
+        unsigned int * marks = __string_marks(holder);
+        if (marks != NULL) {
+            unsigned int count = holder->char_length / __STRING_MARK_STEP + 1;
+            unsigned int k = unit_index / __STRING_MARK_STEP;
+            if (k >= count) k = count - 1;
+            while (k > 0 && marks[2 * k] > unit_index) k--;
+            o = marks[2 * k];
+            i = marks[2 * k + 1];
+            if (o > unit_index) { o = 0; i = 0; }
+        }
     }
     while (i < holder->length && o < unit_index) {
         step = __utf8_decode(holder->string_value, holder->length, i, &cp);
@@ -438,6 +476,19 @@ unsigned int __string_byte_to_unit(string_holder * const holder, unsigned int co
     if (holder->char_length == holder->length) {
         return (byte_offset < holder->length) ? byte_offset : holder->char_length;
     }
+    {
+        // Binary search for the last checkpoint at or before byte_offset.
+        unsigned int * marks = __string_marks(holder);
+        if (marks != NULL) {
+            unsigned int lo = 0, hi = holder->char_length / __STRING_MARK_STEP + 1;
+            while (hi - lo > 1) {
+                unsigned int mid = (lo + hi) / 2;
+                if (marks[2 * mid + 1] <= byte_offset) lo = mid; else hi = mid;
+            }
+            o = marks[2 * lo];
+            i = marks[2 * lo + 1];
+        }
+    }
     while (i < holder->length && i < byte_offset) {
         i += __utf8_decode(holder->string_value, holder->length, i, &cp);
         o += (cp >= 0x10000) ? 2 : 1;
@@ -449,6 +500,10 @@ void __string_wide_free(string_holder * const holder) {
     if (holder != NULL && holder->wide != NULL) {
         free(holder->wide);
         holder->wide = NULL;
+    }
+    if (holder != NULL && holder->unit_marks != NULL) {
+        free(holder->unit_marks);
+        holder->unit_marks = NULL;
     }
 }
 
@@ -1364,6 +1419,8 @@ aobject * __create_string_constant(char const * const str, aclass * const string
     holder->string_value = (char *) str;
     holder->hash = hash;
     holder->char_length = units;
+    holder->wide = NULL;
+    holder->unit_marks = NULL;
     return str_obj;
 }
 
@@ -1386,6 +1443,8 @@ aobject * __create_string(char const * const str, aclass * const string_class) {
     holder->string_value = newStr;
     holder->hash = hash;
     holder->char_length = units;
+    holder->wide = NULL;
+    holder->unit_marks = NULL;
     return str_obj;
 }
 
