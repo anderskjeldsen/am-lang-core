@@ -79,6 +79,42 @@ namespace Tests {
             Assert.assertEquals("a", parsers.get(1).peek(1 as UInt))
         }
 
+        // Returns inside if / else, a lambda inside the mapping lambda, and a map
+        // returning a map's result.
+        test mapResultTypeFromNestedReturnsAndLambdas() {
+            var labels = LambdaTests.numbers().map(n => {
+                if (n > 1) {
+                    return "big"
+                } else {
+                    return "small"
+                }
+            }).toList()
+            Assert.assertEquals("small", labels.get(0))
+            Assert.assertEquals("big", labels.get(2))
+
+            var counts = LambdaTests.numbers().map(n => {
+                return LambdaTests.numbers().filter(m => m <= n).toList().getSize()
+            }).toList()
+            Assert.assertEquals(1, counts.get(0))
+            Assert.assertEquals(3, counts.get(2))
+
+            var grid = LambdaTests.numbers().map(n => LambdaTests.numbers().map(m => m * n).toList()).toList()
+            Assert.assertEquals(9, grid.get(2).get(2))
+            Assert.assertEquals(2, grid.get(1).get(0))
+        }
+
+        // An extension function on a nested generic receiver: Iterable<List<Int>>.toList()
+        // didn't match (T = List<Int> was substituted as a bare List).
+        test extensionFunctionOnANestedGenericReceiver() {
+            var outer = new List<List<Int>>()
+            var inner = new List<Int>()
+            inner.add(7)
+            outer.add(inner)
+            var it: Iterable<List<Int>> = outer
+            var back = it.toList()
+            Assert.assertEquals(7, back.get(0).get(0))
+        }
+
         // The parameter type still comes from the callee: `w` is a String in
         // List<String>.filter, so length() is found.
         test passedLambdaGetsParameterTypesFromAGenericCallee() {
