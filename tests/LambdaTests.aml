@@ -1,0 +1,125 @@
+namespace Tests {
+
+    class LambdaCounter {
+        import Am.Lang
+
+        var n = 0
+
+        fun add() {
+            this.n = this.n + 1
+        }
+    }
+
+    // Lambdas as real programs: where they live (#34), the short forms (#188),
+    // void function types (#217), and captures through nested passed lambdas (#33).
+    class LambdaTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+        import Am.Util.Parsers.Text
+
+        static fun twice(f: () => void) {
+            f()
+            f()
+        }
+
+        static fun apply(f: (x: Int) => Int, v: Int): Int {
+            return f(v)
+        }
+
+        static fun numbers(): List<Int> {
+            var list = new List<Int>()
+            list.add(1)
+            list.add(2)
+            list.add(3)
+            return list
+        }
+
+        // #34: the lambda is passed to CollectionExtensions.filter, which doesn't import
+        // Am.Util.Parsers.Text. Before the fix the lambda took the callee's imports and
+        // TextParser didn't resolve.
+        test passedLambdaUsesTheImportsOfItsOwnFile() {
+            var words = new List<String>()
+            words.add("apple")
+            words.add("banana")
+            words.add("avocado")
+            var startsWithA = words.filter((w) => {
+                return new TextParser(w).peek(1 as UInt) == "a"
+            }).toList()
+            Assert.assertEquals(2, startsWithA.getSize())
+        }
+
+        // #33: an `as` cast to a type only this file imports, inside a passed lambda.
+        test passedLambdaCastsToATypeOfItsOwnFile() {
+            var parser: Object = new TextParser("abc")
+            var words = new List<String>()
+            words.add("x")
+            var kept = words.filter((w) => {
+                return (parser as TextParser).peek(1 as UInt) == "a"
+            }).toList()
+            Assert.assertEquals(1, kept.getSize())
+        }
+
+        // The parameter type still comes from the callee: `w` is a String in
+        // List<String>.filter, so length() is found. (map with a lambda can't infer its
+        // result type U yet: a separate, older bug.)
+        test passedLambdaGetsParameterTypesFromAGenericCallee() {
+            var words = new List<String>()
+            words.add("ab")
+            words.add("abcd")
+            var long = words.filter((w) => w.length() > (3 as UInt)).toList()
+            Assert.assertEquals(1, long.getSize())
+            Assert.assertEquals("abcd", long.get(0))
+        }
+
+        // #188: expression bodies and a single parameter without parentheses.
+        test expressionBodiesReturnTheirValue() {
+            Assert.assertEquals(6, LambdaTests.apply((x) => x * 2, 3))
+            Assert.assertEquals(4, LambdaTests.apply(x => x + 1, 3))
+            Assert.assertEquals(9, LambdaTests.apply((x) => return x * 3, 3))
+            Assert.assertEquals(2, LambdaTests.apply(x => {
+                return x - 1
+            }, 3))
+            var big = LambdaTests.numbers().filter(n => n > 1).toList()
+            Assert.assertEquals(2, big.getSize())
+            var stored: (x: Int) => Int = x => x * 10
+            Assert.assertEquals(70, stored(7))
+        }
+
+        // `() => void`: stored and passed, body a block or a single call.
+        test voidLambdas() {
+            var counter = new LambdaCounter()
+            LambdaTests.twice(() => {
+                counter.add()
+            })
+            LambdaTests.twice(() => counter.add())
+            var once: () => void = () => counter.add()
+            once()
+            Assert.assertEquals(5, counter.n)
+        }
+
+        // #33 / #34: an inner passed lambda reads a method local through an outer
+        // passed lambda. The capture is forwarded along the lexical chain, which
+        // used to start at the callee for a passed lambda.
+        test nestedPassedLambdasCaptureMethodLocals() {
+            var factor = 10
+            var outer = LambdaTests.apply((x) => {
+                return LambdaTests.apply((y) => y * factor, x) + 1
+            }, 2)
+            Assert.assertEquals(21, outer)
+        }
+
+        // Three levels, the innermost capturing locals of the method and of the
+        // first lambda.
+        test threeLevelsOfPassedLambdas() {
+            var base = 100
+            var r = LambdaTests.apply((a) => {
+                var mid = a + 1
+                return LambdaTests.apply((b) => {
+                    return LambdaTests.apply((c) => c + mid + base, b)
+                }, a)
+            }, 1)
+            Assert.assertEquals(103, r)
+        }
+    }
+}
