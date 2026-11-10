@@ -6,7 +6,7 @@ namespace Am.Lang
     /**
      * An 8-bit unsigned integer, range 0 to 255, and the element type for raw binary data:
      * Stream reads and writes, String.toBytes and String.fromBytes all work in UByte arrays.
-     * Literals take a UB suffix, as in 0xffUB.
+     * Literals take their type from where they are used (var b: UByte = 0xff), or a UB suffix on decimal ones, as in 255UB.
      */
     primitive native class UByte {
         /**
@@ -109,11 +109,11 @@ namespace Am.Lang
         /**
          * The largest value a UByte can hold.
          */
-        static const var maxValue: UByte = 0xffUB
+        static const var maxValue: UByte = 0xff
         /**
          * The smallest value a UByte can hold.
          */
-        static const var minValue: UByte = 0x00UB
+        static const var minValue: UByte = 0x00
 
 
         /**

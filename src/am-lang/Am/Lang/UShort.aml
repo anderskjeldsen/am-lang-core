@@ -107,11 +107,11 @@ namespace Am.Lang
         /**
          * The largest value a UShort can hold.
          */
-        static const var maxValue: UShort = 0xffffUS
+        static const var maxValue: UShort = 0xffff
         /**
          * The smallest value a UShort can hold.
          */
-        static const var minValue: UShort = 0x0000US
+        static const var minValue: UShort = 0x0000
 
         /**
          * Returns the smaller of two values.

@@ -79,6 +79,24 @@ namespace Tests {
             Assert.assertEquals("static hello", value)
         }
         
+        // Redmine #184: a hex literal takes its type from where it is used, without a suffix.
+        test hexLiteralsTakeTheirTypeFromContext() {
+            var esc = 0x1b
+            Assert.assertEquals(27, esc)
+            var u: UInt = 0xFFFFFFFF
+            Assert.assertEquals(UInt.maxValue, u)
+            var wide: Long = 0x100000000
+            Assert.assertEquals(4294967296L, wide)
+            var top: Long = 0x7fffffffffffffff
+            Assert.assertEquals(Long.maxValue, top)
+            var all: ULong = 0xffffffffffffffff
+            Assert.assertEquals(ULong.maxValue, all)
+            var us: UShort = 0xffff
+            Assert.assertEquals(UShort.maxValue, us)
+            var ub: UByte = 0xff
+            Assert.assertEquals(UByte.maxValue, ub)
+        }
+
         test parseLong() {
             var l1 = Long.parse("123")
             Assert.assertEquals(123L, l1)

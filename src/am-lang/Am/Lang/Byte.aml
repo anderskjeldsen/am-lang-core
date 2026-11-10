@@ -105,11 +105,11 @@ namespace Am.Lang
         /**
          * The largest value a Byte can hold.
          */
-        static const var maxValue: Byte = 0x7fB
+        static const var maxValue: Byte = 0x7f
         /**
          * The smallest value a Byte can hold.
          */
-        static const var minValue: Byte = 0x80B
+        static const var minValue: Byte = 0x80
 
         /**
          * Returns the smaller of two values.

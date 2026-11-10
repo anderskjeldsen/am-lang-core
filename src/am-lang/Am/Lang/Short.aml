@@ -107,11 +107,11 @@ namespace Am.Lang
         /**
          * The largest value a Short can hold.
          */
-        static const var maxValue: Short = 0x7fffS
+        static const var maxValue: Short = 0x7fff
         /**
          * The smallest value a Short can hold.
          */
-        static const var minValue: Short = 0x8000S
+        static const var minValue: Short = 0x8000
 
         /**
          * Returns the smaller of two values.

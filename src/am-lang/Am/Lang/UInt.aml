@@ -109,11 +109,11 @@ namespace Am.Lang
         /**
          * The largest value a UInt can hold.
          */
-        static const var maxValue: UInt = 0xffffffffUI
+        static const var maxValue: UInt = 0xffffffff
         /**
          * The smallest value a UInt can hold.
          */
-        static const var minValue: UInt = 0x00000000UI
+        static const var minValue: UInt = 0x00000000
 
         /**
          * Returns the smaller of two values.
