@@ -25,6 +25,54 @@ namespace Tests {
         white = 7UB
     }
 
+    // #160: bare calls on the right of an operator are calls on `this`.
+    class BindRegPicker {
+        import Am.Lang
+
+        fun pick(): BindRegColor {
+            return BindRegColor.white
+        }
+
+        fun two(): Int {
+            return 2
+        }
+
+        override fun toString(): String {
+            return "picker"
+        }
+
+        fun matches(k: BindRegColor): Bool {
+            return k == pick()
+        }
+
+        fun sum(n: Int): Int {
+            return n + two() * two()
+        }
+
+        fun greater(n: Int): Bool {
+            return n > two()
+        }
+
+        // String declares toString too: the bare call must still be this.toString().
+        fun sameText(other: String): Bool {
+            return other == toString()
+        }
+    }
+
+    // #18: writes through an inline cast, on an inherited field.
+    class BindRegBase {
+        import Am.Lang
+
+        var tool: BindRegHolder? = null
+        var n: Int = 0
+    }
+
+    class BindRegCanvas : BindRegBase {
+        import Am.Lang
+
+        var label: String = "unset"
+    }
+
     class BindingRegressionTests {
         import Am.Lang
         import Am.Collections
@@ -117,6 +165,50 @@ namespace Tests {
             copied = 1
             copied = h?.copied ?? 0
             Assert.assertEquals(5, copied)
+        }
+
+        // #160
+        static test bareCallOnTheRightOfAnOperator() {
+            var p = new BindRegPicker()
+            Assert.assertTrue(p.matches(BindRegColor.white))
+            Assert.assertFalse(p.matches(BindRegColor.background))
+            Assert.assertEquals(9, p.sum(5))
+            Assert.assertTrue(p.greater(3))
+            Assert.assertFalse(p.greater(2))
+            Assert.assertTrue(p.sameText("picker"))
+            Assert.assertFalse(p.sameText("other"))
+        }
+
+        // #211: a write through `!!` with a same-named local in scope.
+        static test writeAfterNonNullAssertionIsNotALocal() {
+            var h = BindingRegressionTests.maybeHolder()
+            var copied = 9
+            h!!.copied = 42
+            Assert.assertEquals(9, copied)
+            Assert.assertEquals(42, h!!.copied)
+        }
+
+        // #18: `(x as T).field = v` assigns to the object.
+        static test writeThroughInlineCast() {
+            var o: Object = new BindRegCanvas()
+            var tool = new BindRegHolder()
+            tool.copied = 77
+            (o as BindRegCanvas).tool = tool
+            (o as BindRegCanvas).n = 4
+            (o as BindRegCanvas).label = "cast"
+            var c = o as BindRegCanvas
+            Assert.assertEquals(77, c.tool!!.copied)
+            Assert.assertEquals(4, c.n)
+            Assert.assertEquals("cast", c.label)
+
+            var list = new List<Object>()
+            list.add(new BindRegCanvas())
+            var label = "from list"
+            (list.get(0) as BindRegCanvas).label = label
+            (list.get(0) as BindRegCanvas).n = 9
+            var back = list.get(0) as BindRegCanvas
+            Assert.assertEquals("from list", back.label)
+            Assert.assertEquals(9, back.n)
         }
     }
 }
