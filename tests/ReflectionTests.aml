@@ -74,7 +74,7 @@ namespace Tests {
             Assert.assertTrue(cr.isReflected())
             Assert.assertEquals("Tests.RtOrder", cr.getClassName())
             var props = cr.getProperties()
-            Assert.assertEquals(8, props.length().toInt())
+            Assert.assertEquals(8, (props.length() as Int))
             Assert.assertEquals("id", props[0UI].getName())
             Assert.assertEquals("customer", props[1UI].getName())
             Assert.assertEquals("Am.Lang.Int", props[0UI].getPropertyClassRef().getClassName())
@@ -89,13 +89,13 @@ namespace Tests {
             var customer = ClassRef.getClassRef("Tests.RtCustomer")
             Assert.assertTrue(customer != null)
             Assert.assertTrue(customer.isReflected())
-            Assert.assertEquals(2, customer.getProperties().length().toInt())
+            Assert.assertEquals(2, (customer.getProperties().length() as Int))
 
             var o = new RtOrder(1, new RtCustomer("a", "b"))
             var lines = o.getClassRef().getProperty("lines").getPropertyClassRef()
             Assert.assertTrue(lines.isReflected())
             var targs = lines.getTypeArguments()
-            Assert.assertEquals(1, targs.length().toInt())
+            Assert.assertEquals(1, (targs.length() as Int))
             Assert.assertEquals("Tests.RtLine", targs[0UI].getClassName())
             Assert.assertTrue(targs[0UI].isReflected())
 
@@ -105,7 +105,7 @@ namespace Tests {
             // Subclass of a reflected class (through the RtAddress property).
             var home = ClassRef.getClassRef("Tests.RtHomeAddress")
             Assert.assertTrue(home != null)
-            Assert.assertEquals(2, home.getProperties().length().toInt())
+            Assert.assertEquals(2, (home.getProperties().length() as Int))
             Assert.assertEquals("street", home.getProperties()[0UI].getName())
             Assert.assertEquals("floor", home.getProperties()[1UI].getName())
         }

@@ -65,11 +65,11 @@ namespace Am.Lang
             }
             var srcLen = this.length()
             if (length > srcLen || srcOffset > srcLen - length) {
-                throw new IndexOutOfBoundsException((srcOffset + length).toInt(), srcLen)
+                throw new IndexOutOfBoundsException(((srcOffset + length) as Int), srcLen)
             }
             var dstLen = dest.length()
             if (length > dstLen || destOffset > dstLen - length) {
-                throw new IndexOutOfBoundsException((destOffset + length).toInt(), dstLen)
+                throw new IndexOutOfBoundsException(((destOffset + length) as Int), dstLen)
             }
             this.copyToNative(dest, destOffset, srcOffset, length)
         }

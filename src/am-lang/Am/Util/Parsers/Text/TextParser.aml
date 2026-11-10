@@ -74,7 +74,7 @@ namespace Am.Util.Parsers.Text {
          * @return The upcoming text, possibly shorter than requested
          */
         fun peek(len: UInt) : String {
-            var remaining = (this.string.getLength() - this.index).toUInt()
+            var remaining = ((this.string.getLength() - this.index) as UInt)
             var actualLen = len
             if (actualLen > remaining) {
                 actualLen = remaining
@@ -99,7 +99,7 @@ namespace Am.Util.Parsers.Text {
          * @param len How many characters to skip
          */
         fun skip(len: UInt) {
-            this.index += len.toInt()
+            this.index += (len as Int)
         }
 
     }

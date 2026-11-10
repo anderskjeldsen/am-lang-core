@@ -149,7 +149,7 @@ namespace Am.Lang
          * @return The remainder of the string
          */
         fun substringToEnd(start: UInt): String {
-            var totalLength = this.getLength().toUInt()
+            var totalLength = (this.getLength() as UInt)
             if (start >= totalLength) {
                 return ""
             }
@@ -178,7 +178,7 @@ namespace Am.Lang
                 var found = true
                 var j = 0
                 while (j < patternLen) {
-                    if (searchText.characterAt((i + j).toUInt()) != s.characterAt(j.toUInt())) {
+                    if (searchText.characterAt(((i + j) as UInt)) != s.characterAt((j as UInt))) {
                         found = false
                         break
                     }
@@ -216,8 +216,8 @@ namespace Am.Lang
          * @throws IndexOutOfBoundsException if the index is at or past the end of the string
          */
         fun characterAt(index: UInt): UShort {
-            if (index >= this.getLength().toUInt()) {
-                throw new IndexOutOfBoundsException(index.toInt(), this.length().toUInt())
+            if (index >= (this.getLength() as UInt)) {
+                throw new IndexOutOfBoundsException((index as Int), (this.length() as UInt))
             }
             return this.characterAtNative(index)
         }
@@ -331,9 +331,9 @@ namespace Am.Lang
             
             while (currentIndex >= 0) {
                 // Add the substring before the separator
-                var partLength = (currentIndex - lastIndex).toUInt()
+                var partLength = ((currentIndex - lastIndex) as UInt)
                 if (partLength > 0UI) {
-                    result.add(this.substring(lastIndex.toUInt(), partLength))
+                    result.add(this.substring((lastIndex as UInt), partLength))
                 } else {
                     result.add("")
                 }
@@ -344,9 +344,9 @@ namespace Am.Lang
             }
             
             // Add the remaining part after the last separator
-            var remainingLength = (this.getLength() - lastIndex).toUInt()
+            var remainingLength = ((this.getLength() - lastIndex) as UInt)
             if (remainingLength > 0UI) {
-                result.add(this.substring(lastIndex.toUInt(), remainingLength))
+                result.add(this.substring((lastIndex as UInt), remainingLength))
             } else {
                 result.add("")
             }
@@ -416,7 +416,7 @@ namespace Am.Lang
          * @return The trimmed string
          */
         fun trim(): String {
-            var len = this.getLength().toUInt()
+            var len = (this.getLength() as UInt)
             if (len == 0UI) {
                 return this
             }
@@ -459,8 +459,8 @@ namespace Am.Lang
          * @return True if the string starts with prefix
          */
         fun startsWith(prefix: String): Bool {
-            var prefixLen = prefix.getLength().toUInt()
-            var thisLen = this.getLength().toUInt()
+            var prefixLen = (prefix.getLength() as UInt)
+            var thisLen = (this.getLength() as UInt)
             
             // Empty prefix should always return true
             if (prefixLen == 0UI) {

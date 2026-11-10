@@ -27,7 +27,7 @@ namespace Am.Lang
          * @return The hash value
          */
         override fun hash(): UInt {
-            return this.value.toUInt()
+            return (this.value as UInt)
         }
 
         /**

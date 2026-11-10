@@ -68,7 +68,7 @@ namespace Am.IO
         fun readShort(): Short {
             var s1 = this.readByte()
             var s2 = this.readByte()
-            return ((s1 << 8) | s2).toShort()
+            return (((s1 << 8) | s2) as Short)
         }
 
         /**
@@ -76,8 +76,8 @@ namespace Am.IO
          * @return The 32-bit value
          */
         fun readInt(): Int {
-            var s1 = this.readShort().toInt()
-            var s2 = this.readShort().toInt()
+            var s1 = (this.readShort() as Int)
+            var s2 = (this.readShort() as Int)
             return (s1 << 16) | s2
         }
 

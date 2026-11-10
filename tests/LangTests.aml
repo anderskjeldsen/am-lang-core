@@ -35,7 +35,7 @@ namespace Tests {
         
         test charToInt() {
             var c = 'a'
-            var i = c.toInt()
+            var i = (c as Int)
             
             // ASCII value of 'a' is 97
             Assert.assertEquals(97, i)
@@ -85,19 +85,19 @@ namespace Tests {
             var b: Byte = -128B
             Assert.assertTrue(b < 0B)
             Assert.assertEquals("-128", b.toString())
-            Assert.assertEquals(-128, b.toInt())
-            Assert.assertEquals(-128, Byte.minValue.toInt())
-            Assert.assertEquals(127, Byte.maxValue.toInt())
+            Assert.assertEquals(-128, (b as Int))
+            Assert.assertEquals(-128, (Byte.minValue as Int))
+            Assert.assertEquals(127, (Byte.maxValue as Int))
             var x: Byte = 127B
             x = x + 1B
-            Assert.assertEquals(-128, x.toInt())
+            Assert.assertEquals(-128, (x as Int))
             var arr = new Byte[2]
             arr[0] = -1B
             Assert.assertTrue(arr[0] < 0B)
-            Assert.assertEquals(-1, arr[0].toInt())
+            Assert.assertEquals(-1, (arr[0] as Int))
             var d = -5.0
-            Assert.assertEquals(-5, d.toByte().toInt())
-            Assert.assertEquals(-3, (-3).toByte().toInt())
+            Assert.assertEquals(-5, ((d as Byte) as Int))
+            Assert.assertEquals(-3, (((-3) as Byte) as Int))
         }
 
         // Redmine #184: a hex literal takes its type from where it is used, without a suffix.
@@ -251,15 +251,15 @@ namespace Tests {
         test floatConversions() {
             var f = 42.7F
             var i = 42
-            var i2 = f.toInt()
+            var i2 = (f as Int)
             // Test conversions to integer types
             Assert.assertEquals(i, i2)
-            Assert.assertEquals(42L, f.toLong())
-            Assert.assertEquals(42S, f.toShort())
-            Assert.assertEquals(42B, f.toByte())
+            Assert.assertEquals(42L, (f as Long))
+            Assert.assertEquals(42S, (f as Short))
+            Assert.assertEquals(42B, (f as Byte))
             
             // Test conversion to double
-            var d = f.toDouble()
+            var d = (f as Double)
             Assert.assertTrue(d > 42.69 && d < 42.71)
             
             // Test conversion to bool
@@ -322,13 +322,13 @@ namespace Tests {
             var d = 42.7
             
             // Test conversions to integer types
-            Assert.assertEquals(42, d.toInt())
-            Assert.assertEquals(42L, d.toLong())
-            Assert.assertEquals(42S, d.toShort())
-            Assert.assertEquals(42B, d.toByte())
+            Assert.assertEquals(42, (d as Int))
+            Assert.assertEquals(42L, (d as Long))
+            Assert.assertEquals(42S, (d as Short))
+            Assert.assertEquals(42B, (d as Byte))
             
             // Test conversion to float
-            var f = d.toFloat()
+            var f = (d as Float)
             Assert.assertTrue(f > 42.69F && f < 42.71F)
             
             // Test conversion to bool
@@ -374,11 +374,11 @@ namespace Tests {
             var d = 3.14
             
             // Test that float to double conversion works
-            var fAsDouble = f.toDouble()
+            var fAsDouble = (f as Double)
             Assert.assertTrue(fAsDouble > 3.13 && fAsDouble < 3.15)
             
             // Test that double to float conversion works
-            var dAsFloat = d.toFloat()
+            var dAsFloat = (d as Float)
             Assert.assertTrue(dAsFloat > 3.13F && dAsFloat < 3.15F)
         }
         

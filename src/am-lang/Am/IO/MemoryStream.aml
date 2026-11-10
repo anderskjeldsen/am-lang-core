@@ -34,9 +34,9 @@ namespace Am.IO
             var bufferIndex = offset
             var maxLength = length
 
-            while (bytesRead < maxLength && this.position < this.data.getSize().toLong()) {
-                if (bufferIndex < buffer.length().toLong()) {
-                    buffer[bufferIndex] = this.data.get(this.position.toInt())
+            while (bytesRead < maxLength && this.position < (this.data.getSize() as Long)) {
+                if (bufferIndex < (buffer.length() as Long)) {
+                    buffer[bufferIndex] = this.data.get((this.position as Int))
                     bufferIndex++
                     this.position++
                     bytesRead++
@@ -59,12 +59,12 @@ namespace Am.IO
             var bytesWritten = 0UI
             var bufferIndex = offset
 
-            while (bytesWritten < length && bufferIndex < buffer.length().toLong()) {
+            while (bytesWritten < length && bufferIndex < (buffer.length() as Long)) {
                 var byteToWrite = buffer[bufferIndex]
                 
-                if (this.position < this.data.getSize().toLong()) {
+                if (this.position < (this.data.getSize() as Long)) {
                     // Overwrite existing byte
-                    this.data.set(this.position.toInt(), byteToWrite)
+                    this.data.set((this.position as Int), byteToWrite)
                 } else {
                     // Append new byte
                     this.data.add(byteToWrite)
@@ -93,11 +93,11 @@ namespace Am.IO
          * @return The byte value 0 to 255, or -1 at the end of the buffer
          */
         fun readByte(): Int {
-            if (this.position >= this.data.getSize().toLong()) {
+            if (this.position >= (this.data.getSize() as Long)) {
                 return -1  // EOF
             }
 
-            var result = this.data.get(this.position.toInt()).toInt()
+            var result = (this.data.get((this.position as Int)) as Int)
             this.position++
             return result
         }
@@ -107,11 +107,11 @@ namespace Am.IO
          * @param byte The byte value to write, 0 to 255
          */
         fun writeByte(byte: Int) {
-            var byteToWrite = byte.toUByte()
+            var byteToWrite = (byte as UByte)
             
-            if (this.position < this.data.getSize().toLong()) {
+            if (this.position < (this.data.getSize() as Long)) {
                 // Overwrite existing byte
-                this.data.set(this.position.toInt(), byteToWrite)
+                this.data.set((this.position as Int), byteToWrite)
             } else {
                 // Append new byte
                 this.data.add(byteToWrite)
@@ -125,7 +125,7 @@ namespace Am.IO
          * @return The length in bytes
          */
         fun getLength(): Long {
-            return this.data.getSize().toLong()
+            return (this.data.getSize() as Long)
         }
 
         /**

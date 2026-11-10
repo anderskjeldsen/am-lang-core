@@ -197,10 +197,10 @@ namespace Am.IO
             var names = List.newList<String>()
             var kinds = List.newList<Int>()
             this.listEntriesNative(this.filename, names, kinds)
-            var out = new DirEntry[names.getSize().toUInt()]
+            var out = new DirEntry[(names.getSize() as UInt)]
             var i = 0
             while (i < names.getSize()) {
-                out[i.toUInt()] = new DirEntry(names.get(i), kinds.get(i))
+                out[(i as UInt)] = new DirEntry(names.get(i), kinds.get(i))
                 i++
             }
             return out

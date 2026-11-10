@@ -93,7 +93,7 @@ namespace Am.IO
                 var buf = new UByte[total as UInt]
                 var pos: Long = 0L
                 while (pos < total) {
-                    var remaining = (total - pos).toUInt()
+                    var remaining = ((total - pos) as UInt)
                     var got = this.read(buf, pos, remaining)
                     if (got == 0UI) {
                         break

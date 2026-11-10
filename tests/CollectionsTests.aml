@@ -347,8 +347,8 @@ namespace Tests {
                 }
 
                 for (i = 0 until minLen) {
-                    var charA = a.characterAt(i.toUInt())
-                    var charB = b.characterAt(i.toUInt())
+                    var charA = a.characterAt((i as UInt))
+                    var charB = b.characterAt((i as UInt))
                     if (charA < charB) {
                         return 1  // Reverse order: return positive if a < b
                     } else if (charA > charB) {

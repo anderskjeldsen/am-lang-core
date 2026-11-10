@@ -56,7 +56,7 @@ namespace CalendarRegression {
    Program.check(Program.composeFails(2000L,1L,1L,"Not/AZone"), "unknown zone compose")
    var year = -800
    while (year < 2800) {
-    var ms = Program.compose(year.toLong(),3L,1L,12L,34L,56L,789L,"UTC")
+    var ms = Program.compose((year as Long),3L,1L,12L,34L,56L,789L,"UTC")
     var p = DateTime.calendarParts(ms,"UTC")
     Program.check(p[0] == year && p[1] == 3 && p[2] == 1 && p[3] == 12 && p[4] == 34 && p[5] == 56 && p[6] == 789, "era roundtrip")
     year += 37

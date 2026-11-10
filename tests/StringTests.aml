@@ -52,14 +52,14 @@ namespace Tests {
 
         test getCharsAscii() {
             var chars = "abc".getChars()
-            Assert.assertEquals(3, chars.length().toInt())
-            Assert.assertEquals(97, chars[0].toInt())
-            Assert.assertEquals(98, chars[1].toInt())
-            Assert.assertEquals(99, chars[2].toInt())
+            Assert.assertEquals(3, (chars.length() as Int))
+            Assert.assertEquals(97, (chars[0] as Int))
+            Assert.assertEquals(98, (chars[1] as Int))
+            Assert.assertEquals(99, (chars[2] as Int))
         }
 
         test getCharsEmpty() {
-            Assert.assertEquals(0, "".getChars().length().toInt())
+            Assert.assertEquals(0, ("".getChars().length() as Int))
             Assert.assertEquals(0, "".charLength())
         }
 
@@ -70,7 +70,7 @@ namespace Tests {
             Assert.assertEquals(1, text.charLength())
             // byteLength() is the storage size, and is where the 2 went.
             Assert.assertEquals(2, text.byteLength())
-            Assert.assertEquals(248, text.getChars()[0].toInt())
+            Assert.assertEquals(248, (text.getChars()[0] as Int))
         }
 
         test getCharsSplitsAstralIntoSurrogatePair() {
@@ -78,9 +78,9 @@ namespace Tests {
             Assert.assertEquals(4, text.byteLength())  // four UTF-8 bytes
             Assert.assertEquals(2, text.getLength())   // but two UTF-16 units, as JS reports
             var chars = text.getChars()
-            Assert.assertEquals(2, chars.length().toInt())
-            Assert.assertEquals(55348, chars[0].toInt())   // 0xd834, high surrogate
-            Assert.assertEquals(56606, chars[1].toInt())   // 0xdd1e, low surrogate
+            Assert.assertEquals(2, (chars.length() as Int))
+            Assert.assertEquals(55348, (chars[0] as Int))   // 0xd834, high surrogate
+            Assert.assertEquals(56606, (chars[1] as Int))   // 0xdd1e, low surrogate
         }
 
         test addCharEncodesAboveAscii() {
@@ -96,7 +96,7 @@ namespace Tests {
             var chars = original.getChars()
             var sb = new StringBuilder()
             var i = 0
-            while (i < chars.length().toInt()) {
+            while (i < (chars.length() as Int)) {
                 sb.addChar(chars[i])
                 i++
             }
@@ -117,8 +117,8 @@ namespace Tests {
             var result = sb.toString()
             // U+FFFD for the orphan, then the 'A'. Two characters, four bytes.
             Assert.assertEquals(2, result.charLength())
-            Assert.assertEquals(65533, result.getChars()[0].toInt())
-            Assert.assertEquals(65, result.getChars()[1].toInt())
+            Assert.assertEquals(65533, (result.getChars()[0] as Int))
+            Assert.assertEquals(65, (result.getChars()[1] as Int))
         }
 
 
@@ -126,20 +126,20 @@ namespace Tests {
             var text = "aøb𝄞cæøå"
             var chars = text.getChars()
             var i = 0
-            while (i < chars.length().toInt()) {
+            while (i < (chars.length() as Int)) {
                 // Second read of the same index goes through the cached view rather than a
                 // fresh decode -- both must agree with the bulk accessor.
-                Assert.assertEquals(chars[i].toInt(), text.codeUnitAt(i.toUInt()).toInt())
-                Assert.assertEquals(chars[i].toInt(), text.codeUnitAt(i.toUInt()).toInt())
+                Assert.assertEquals((chars[i] as Int), (text.codeUnitAt((i as UInt)) as Int))
+                Assert.assertEquals((chars[i] as Int), (text.codeUnitAt((i as UInt)) as Int))
                 i++
             }
-            Assert.assertEquals(chars.length().toInt(), text.charLength())
+            Assert.assertEquals((chars.length() as Int), text.charLength())
         }
 
         test codeUnitAtAsciiNeedsNoCache() {
             var text = "hello"
-            Assert.assertEquals(104, text.codeUnitAt(0UI).toInt())
-            Assert.assertEquals(111, text.codeUnitAt(4UI).toInt())
+            Assert.assertEquals(104, (text.codeUnitAt(0UI) as Int))
+            Assert.assertEquals(111, (text.codeUnitAt(4UI) as Int))
             // byteLength == charLength is exactly the "pure ASCII" test the runtime uses.
             Assert.assertEquals(text.byteLength(), text.charLength())
         }
@@ -162,7 +162,7 @@ namespace Tests {
             var total = 0
             while (i < 2000) {
                 var s = "ø" + i.toString() + "æ"
-                total = total + s.codeUnitAt(0UI).toInt()
+                total = total + (s.codeUnitAt(0UI) as Int)
                 i++
             }
             Assert.assertEquals(248 * 2000, total)
@@ -187,8 +187,8 @@ namespace Tests {
             // characterAt agrees with getChars at every position.
             var chars = text.getChars()
             var i = 0
-            while (i < chars.length().toInt()) {
-                Assert.assertEquals(chars[i].toInt(), text.characterAt(i.toUInt()).toInt())
+            while (i < (chars.length() as Int)) {
+                Assert.assertEquals((chars[i] as Int), (text.characterAt((i as UInt)) as Int))
                 i++
             }
         }
@@ -197,13 +197,13 @@ namespace Tests {
             var text = "æøåABCæøå"
             Assert.assertEquals(9, text.getLength())
             Assert.assertEquals("ABC", text.substring(3UI, 3UI))
-            Assert.assertEquals(text, text.substring(0UI, text.getLength().toUInt()))
+            Assert.assertEquals(text, text.substring(0UI, (text.getLength() as UInt)))
         }
 
         test trimAndSplitSurviveNonAscii() {
             Assert.assertEquals("øæ", ("  øæ  ").trim())
             var parts = "ø,æ,å".split(44US)
-            Assert.assertEquals(3, parts.length().toInt())
+            Assert.assertEquals(3, (parts.length() as Int))
             Assert.assertEquals("ø", parts[0])
             Assert.assertEquals("æ", parts[1])
             Assert.assertEquals("å", parts[2])
@@ -231,7 +231,7 @@ namespace Tests {
             var sb = new StringBuilder()
             sb.addChar(72US).addChar(105US)
             Assert.assertEquals("Hi", sb.toString())
-            Assert.assertEquals(2, sb.getLength().toInt())
+            Assert.assertEquals(2, (sb.getLength() as Int))
         }
 
         // Index-based access far into a long non-ASCII string. Unit<->byte conversion
@@ -249,12 +249,12 @@ namespace Tests {
             var k = 0
             while (k < 200) {
                 var base = k * 5
-                Assert.assertEquals("aé𝄞b", s.substring(base.toUInt(), 5UI))
-                Assert.assertEquals("é", s.substring((base + 1).toUInt(), 1UI))
-                Assert.assertEquals("b", s.substring((base + 4).toUInt(), 1UI))
+                Assert.assertEquals("aé𝄞b", s.substring((base as UInt), 5UI))
+                Assert.assertEquals("é", s.substring(((base + 1) as UInt), 1UI))
+                Assert.assertEquals("b", s.substring(((base + 4) as UInt), 1UI))
                 Assert.assertEquals(base + 4, s.indexOfAfter("b", base))
                 Assert.assertEquals(base + 1, s.indexOfAfter("é", base))
-                Assert.assertEquals(233, s.characterAt((base + 1).toUInt()).toInt())
+                Assert.assertEquals(233, (s.characterAt(((base + 1) as UInt)) as Int))
                 k++
             }
             Assert.assertEquals(995, s.lastIndexOf("a"))

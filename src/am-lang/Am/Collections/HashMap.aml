@@ -103,7 +103,7 @@ namespace Am.Collections {
                 throw new KeyNotFoundException(key.toString())
             }
             var hash = key.hash()
-            var index = (hash & (this.bucketSize - 1).toUInt()) as Int
+            var index = (hash & ((this.bucketSize - 1) as UInt)) as Int
             var keyIndex = this.keyIndexes[index] - 1
             var entryIndex = this.findEntry(keyIndex, key)
             if (entryIndex >= 0) {
@@ -198,7 +198,7 @@ namespace Am.Collections {
          */
         private fun privateSetKeyValue(key: K, value: V) {
             var hash = key.hash()
-            var index = (hash & (this.bucketSize - 1).toUInt()) as Int
+            var index = (hash & ((this.bucketSize - 1) as UInt)) as Int
 
             // Update existing value if the key is already present.
             var keyIndex = this.keyIndexes[index] - 1
@@ -243,7 +243,7 @@ namespace Am.Collections {
                 return false
             }
             var hash = key.hash()
-            var index = (hash & (this.bucketSize - 1).toUInt()) as Int
+            var index = (hash & ((this.bucketSize - 1) as UInt)) as Int
             var keyIndex = this.keyIndexes[index] - 1
 
             if (keyIndex < 0) {
@@ -334,7 +334,7 @@ namespace Am.Collections {
                 return null
             }
             var hash = key.hash()
-            var index = (hash & (this.bucketSize - 1).toUInt()) as Int
+            var index = (hash & ((this.bucketSize - 1) as UInt)) as Int
             var keyIndex = this.keyIndexes[index] - 1
             var entryIndex = this.findEntry(keyIndex, key)
             if (entryIndex >= 0) {
@@ -353,7 +353,7 @@ namespace Am.Collections {
                 return false
             }
             var hash = key.hash()
-            var index = (hash & (this.bucketSize - 1).toUInt()) as Int
+            var index = (hash & ((this.bucketSize - 1) as UInt)) as Int
             var keyIndex = this.keyIndexes[index] - 1
             var entryIndex = this.findEntry(keyIndex, key)
             return entryIndex >= 0

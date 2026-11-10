@@ -57,7 +57,7 @@ namespace Am.Lang
          * @return The buffered byte count
          */
         fun getLength(): UInt {
-            return this.buffer.getSize().toUInt()
+            return (this.buffer.getSize() as UInt)
         }
 
 //        native fun getLength(): Int
@@ -107,7 +107,7 @@ namespace Am.Lang
          * @return This builder, for chaining
          */
         fun addChar(c: UShort) : StringBuilder {
-            var unit = c.toInt() & 0xffff
+            var unit = (c as Int) & 0xffff
             var high = this.pendingHigh
             if (high != 0) {
                 this.pendingHigh = 0
@@ -167,19 +167,19 @@ namespace Am.Lang
             }
             var buf = this.buffer
             if (v < 0x80) {
-                buf.add(v.toUByte())
+                buf.add((v as UByte))
             } else if (v < 0x800) {
-                buf.add((0xc0 | (v >> 6)).toUByte())
-                buf.add((0x80 | (v & 0x3f)).toUByte())
+                buf.add(((0xc0 | (v >> 6)) as UByte))
+                buf.add(((0x80 | (v & 0x3f)) as UByte))
             } else if (v < 0x10000) {
-                buf.add((0xe0 | (v >> 12)).toUByte())
-                buf.add((0x80 | ((v >> 6) & 0x3f)).toUByte())
-                buf.add((0x80 | (v & 0x3f)).toUByte())
+                buf.add(((0xe0 | (v >> 12)) as UByte))
+                buf.add(((0x80 | ((v >> 6) & 0x3f)) as UByte))
+                buf.add(((0x80 | (v & 0x3f)) as UByte))
             } else {
-                buf.add((0xf0 | (v >> 18)).toUByte())
-                buf.add((0x80 | ((v >> 12) & 0x3f)).toUByte())
-                buf.add((0x80 | ((v >> 6) & 0x3f)).toUByte())
-                buf.add((0x80 | (v & 0x3f)).toUByte())
+                buf.add(((0xf0 | (v >> 18)) as UByte))
+                buf.add(((0x80 | ((v >> 12) & 0x3f)) as UByte))
+                buf.add(((0x80 | ((v >> 6) & 0x3f)) as UByte))
+                buf.add(((0x80 | (v & 0x3f)) as UByte))
             }
         }
 
@@ -192,7 +192,7 @@ namespace Am.Lang
          */
         fun addCharAt(index: UInt, c: UShort) : StringBuilder {
             // Insert character at specific index using List's insertAt method
-            if (index >= this.buffer.getSize().toUInt()) {
+            if (index >= (this.buffer.getSize() as UInt)) {
                 // If index is at or beyond end, just append
                 this.addChar(c)
             } else {
@@ -201,10 +201,10 @@ namespace Am.Lang
                 // already straddles it. Safe for ASCII, which is all this is used for; anything
                 // above 127 is refused rather than written as a byte that would corrupt the
                 // buffer's encoding.
-                if (c.toInt() > 0x7f) {
+                if ((c as Int) > 0x7f) {
                     throw new Exception("addCharAt can only insert ASCII; use addChar to append")
                 }
-                this.buffer.insertAt(index.toInt(), c.toUByte())
+                this.buffer.insertAt((index as Int), (c as UByte))
             }
             return this
         }

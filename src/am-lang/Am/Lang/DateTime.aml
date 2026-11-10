@@ -234,7 +234,7 @@ namespace Am.Lang
          * @return The shifted DateTime
          */
         fun addDays(days: Int): DateTime {
-            var newMillis = this.epochMillis + (days.toULong() * 86400000UL)  // 24 * 60 * 60 * 1000
+            var newMillis = this.epochMillis + ((days as ULong) * 86400000UL)  // 24 * 60 * 60 * 1000
             var newDateTime = DateTime.fromEpochMillis(newMillis)
             newDateTime.timezoneOffsetMinutes = this.timezoneOffsetMinutes
             return newDateTime
@@ -246,7 +246,7 @@ namespace Am.Lang
          * @return The shifted DateTime
          */
         fun addHours(hours: Int): DateTime {
-            var newMillis = this.epochMillis + (hours.toULong() * 3600000UL)  // 60 * 60 * 1000
+            var newMillis = this.epochMillis + ((hours as ULong) * 3600000UL)  // 60 * 60 * 1000
             var newDateTime = DateTime.fromEpochMillis(newMillis)
             newDateTime.timezoneOffsetMinutes = this.timezoneOffsetMinutes
             return newDateTime
@@ -258,7 +258,7 @@ namespace Am.Lang
          * @return The shifted DateTime
          */
         fun addMinutes(minutes: Int): DateTime {
-            var newMillis = this.epochMillis + (minutes.toULong() * 60000UL)  // 60 * 1000
+            var newMillis = this.epochMillis + ((minutes as ULong) * 60000UL)  // 60 * 1000
             var newDateTime = DateTime.fromEpochMillis(newMillis)
             newDateTime.timezoneOffsetMinutes = this.timezoneOffsetMinutes
             return newDateTime
@@ -270,7 +270,7 @@ namespace Am.Lang
          * @return The shifted DateTime
          */
         fun addSeconds(seconds: Int): DateTime {
-            var newMillis = this.epochMillis + (seconds.toULong() * 1000UL)
+            var newMillis = this.epochMillis + ((seconds as ULong) * 1000UL)
             var newDateTime = DateTime.fromEpochMillis(newMillis)
             newDateTime.timezoneOffsetMinutes = this.timezoneOffsetMinutes
             return newDateTime
@@ -409,7 +409,7 @@ namespace Am.Lang
          * @return The hash value
          */
         override fun hash(): UInt {
-            return this.epochMillis.toUInt()
+            return (this.epochMillis as UInt)
         }
 
         /**

@@ -19,15 +19,15 @@ namespace Tests {
         
         test textParserPeek() {
             var tp = new TextParser("Hello World")
-            var peeked = tp.peek(5.toUInt())
+            var peeked = tp.peek((5 as UInt))
             
             Assert.assertEquals("Hello", peeked)
         }
         
         test textParserSkip() {
             var tp = new TextParser("Hello World")
-            tp.skip(6.toUInt())  // Skip "Hello "
-            var peeked = tp.peek(5.toUInt())
+            tp.skip((6 as UInt))  // Skip "Hello "
+            var peeked = tp.peek((5 as UInt))
             
             Assert.assertEquals("World", peeked)
         }

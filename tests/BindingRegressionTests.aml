@@ -40,7 +40,7 @@ namespace Tests {
         // #150
         static test fieldInitialiserReadsUntypedStaticOfLaterClass() {
             var h = new BindRegHolder()
-            Assert.assertEquals(5, h.sized.length().toInt())
+            Assert.assertEquals(5, (h.sized.length() as Int))
             Assert.assertEquals(5, h.copied)
             Assert.assertEquals(10, h.doubled)
             Assert.assertEquals("consts", BindRegZConsts.label)

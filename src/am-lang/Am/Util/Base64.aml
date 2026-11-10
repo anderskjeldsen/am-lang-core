@@ -17,7 +17,7 @@ namespace Am.Util {
          */
         static fun encode(data: Byte[], length: UInt): String {
             // Base64 character set
-            const var base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+            const base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
             
             var result = new StringBuilder()
             var i = 0
@@ -44,17 +44,17 @@ namespace Am.Util {
                 var idx4 = combined & 0x3F
                 
                 // Use addChar for better performance
-                result.addChar(base64Chars.characterAt(idx1.toUInt()))
-                result.addChar(base64Chars.characterAt(idx2.toUInt()))
+                result.addChar(base64Chars.characterAt((idx1 as UInt)))
+                result.addChar(base64Chars.characterAt((idx2 as UInt)))
                 
                 if (i + 1 < length) {
-                    result.addChar(base64Chars.characterAt(idx3.toUInt()))
+                    result.addChar(base64Chars.characterAt((idx3 as UInt)))
                 } else {
                     result.addChar('=')
                 }
                 
                 if (i + 2 < length) {
-                    result.addChar(base64Chars.characterAt(idx4.toUInt()))
+                    result.addChar(base64Chars.characterAt((idx4 as UInt)))
                 } else {
                     result.addChar('=')
                 }
