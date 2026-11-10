@@ -56,7 +56,7 @@ function_result Am_Lang_Double_toByte_0(double const this)
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
 
-	__result.return_value = (nullable_value) { .value = { .char_value = (char)this }, .flags = 0 };
+	__result.return_value = (nullable_value) { .value = { .char_value = (signed char)this }, .flags = 0 };
 __exit: ;
 	return __result;
 };

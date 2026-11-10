@@ -79,6 +79,27 @@ namespace Tests {
             Assert.assertEquals("static hello", value)
         }
         
+        // Redmine #209: Byte is signed on every platform. It was stored in a plain C
+        // `char`, which is unsigned on ARM and PowerPC, so -128B read back as 128 there.
+        test byteIsSigned() {
+            var b: Byte = -128B
+            Assert.assertTrue(b < 0B)
+            Assert.assertEquals("-128", b.toString())
+            Assert.assertEquals(-128, b.toInt())
+            Assert.assertEquals(-128, Byte.minValue.toInt())
+            Assert.assertEquals(127, Byte.maxValue.toInt())
+            var x: Byte = 127B
+            x = x + 1B
+            Assert.assertEquals(-128, x.toInt())
+            var arr = new Byte[2]
+            arr[0] = -1B
+            Assert.assertTrue(arr[0] < 0B)
+            Assert.assertEquals(-1, arr[0].toInt())
+            var d = -5.0
+            Assert.assertEquals(-5, d.toByte().toInt())
+            Assert.assertEquals(-3, (-3).toByte().toInt())
+        }
+
         // Redmine #184: a hex literal takes its type from where it is used, without a suffix.
         test hexLiteralsTakeTheirTypeFromContext() {
             var esc = 0x1b

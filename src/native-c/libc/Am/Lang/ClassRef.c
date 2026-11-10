@@ -122,7 +122,7 @@ nullable_value __amlc_coerce_primitive(nullable_value v, ctype const target)
 		case int_type: out.value.int_value = (int) l; break;
 		case long_type: out.value.long_value = l; break;
 		case short_type: out.value.short_value = (short) l; break;
-		case char_type: out.value.char_value = (char) l; break;
+		case char_type: out.value.char_value = (signed char) l; break;
 		case uint_type: out.value.uint_value = (unsigned int) l; break;
 		case ulong_type: out.value.ulong_value = (unsigned long long) l; break;
 		case ushort_type: out.value.ushort_value = (unsigned short) l; break;
@@ -400,7 +400,7 @@ function_result Am_Lang_ClassRef_arrayGet_0(aobject * array, int index)
 		case int_type: v.value.int_value = ((int *) data)[index]; break;
 		case long_type: v.value.long_value = ((long long *) data)[index]; break;
 		case short_type: v.value.short_value = ((short *) data)[index]; break;
-		case char_type: v.value.char_value = ((char *) data)[index]; break;
+		case char_type: v.value.char_value = ((signed char *) data)[index]; break;
 		case uint_type: v.value.uint_value = ((unsigned int *) data)[index]; break;
 		case ulong_type: v.value.ulong_value = ((unsigned long long *) data)[index]; break;
 		case ushort_type: v.value.ushort_value = ((unsigned short *) data)[index]; break;
@@ -449,7 +449,7 @@ function_result Am_Lang_ClassRef_arraySet_0(aobject * array, int index, nullable
 				case int_type: ((int *) data)[index] = v.value.int_value; break;
 				case long_type: ((long long *) data)[index] = v.value.long_value; break;
 				case short_type: ((short *) data)[index] = v.value.short_value; break;
-				case char_type: ((char *) data)[index] = v.value.char_value; break;
+				case char_type: ((signed char *) data)[index] = v.value.char_value; break;
 				case uint_type: ((unsigned int *) data)[index] = v.value.uint_value; break;
 				case ulong_type: ((unsigned long long *) data)[index] = v.value.ulong_value; break;
 				case ushort_type: ((unsigned short *) data)[index] = v.value.ushort_value; break;

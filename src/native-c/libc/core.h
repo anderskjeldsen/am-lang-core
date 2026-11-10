@@ -152,7 +152,7 @@ union _value {
         unsigned int uint_value; // 5
         short short_value; // 6
         unsigned short ushort_value; // 7
-        char char_value; // 8
+        signed char char_value; // 8 -- Byte. `signed`: plain char is unsigned on ARM and PowerPC (#209)
         unsigned char uchar_value; // 9
         bool bool_value; // 10
         #ifdef FEATURE_FLOATING_POINT

@@ -40,7 +40,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_Lang_Byte_toShort_0(char const this)
+function_result Am_Lang_Byte_toShort_0(signed char const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -50,7 +50,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_Lang_Byte_toInt_0(char const this)
+function_result Am_Lang_Byte_toInt_0(signed char const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -59,7 +59,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_Lang_Byte_toLong_0(char const this)
+function_result Am_Lang_Byte_toLong_0(signed char const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -68,7 +68,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_Lang_Byte_toUByte_0(char const this)
+function_result Am_Lang_Byte_toUByte_0(signed char const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -78,7 +78,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_Lang_Byte_toUShort_0(char const this)
+function_result Am_Lang_Byte_toUShort_0(signed char const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -87,7 +87,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_Lang_Byte_toUInt_0(char const this)
+function_result Am_Lang_Byte_toUInt_0(signed char const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -96,7 +96,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_Lang_Byte_toULong_0(char const this)
+function_result Am_Lang_Byte_toULong_0(signed char const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -105,7 +105,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_Lang_Byte_toBool_0(char const this)
+function_result Am_Lang_Byte_toBool_0(signed char const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -116,7 +116,7 @@ __exit: ;
 
 #ifdef FEATURE_FLOATING_POINT
 
-function_result Am_Lang_Byte_toFloat_0(char const this)
+function_result Am_Lang_Byte_toFloat_0(signed char const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -126,7 +126,7 @@ __exit: ;
 	return __result;
 };
 
-function_result Am_Lang_Byte_toDouble_0(char const this)
+function_result Am_Lang_Byte_toDouble_0(signed char const this)
 {
 	function_result __result = { .has_return_value = true };
 	bool __returning = false;
@@ -151,7 +151,7 @@ function_result Am_Lang_Byte_parse_0(aobject * const s)
 	
 	long result = strtol(str, &endptr, 10);
 	
-	__result.return_value = (nullable_value) { .value = { .char_value = (char)result }, .flags = 0 };
+	__result.return_value = (nullable_value) { .value = { .char_value = (signed char)result }, .flags = 0 };
 
 __exit: ;
 	__decrease_reference_count(s);
