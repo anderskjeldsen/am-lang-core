@@ -60,14 +60,32 @@ namespace Tests {
             Assert.assertEquals(1, kept.getSize())
         }
 
+        // #222: map's result type U comes from what the lambda returns.
+        test mapInfersItsResultTypeFromTheLambda() {
+            var words = new List<String>()
+            words.add("ab")
+            words.add("abcd")
+            var lengths = words.map((w) => w.length()).toList()
+            Assert.assertEquals(2, lengths.get(0))
+            Assert.assertEquals(4, lengths.get(1))
+            var doubled = LambdaTests.numbers().map(n => {
+                var twice = n * 2
+                return twice.toString()
+            }).toList()
+            Assert.assertEquals("6", doubled.get(2))
+            var chained = LambdaTests.numbers().map(n => n * 10).map(n => n + 1).toList()
+            Assert.assertEquals(31, chained.get(2))
+            var parsers = words.map(w => new TextParser(w)).toList()
+            Assert.assertEquals("a", parsers.get(1).peek(1 as UInt))
+        }
+
         // The parameter type still comes from the callee: `w` is a String in
-        // List<String>.filter, so length() is found. (map with a lambda can't infer its
-        // result type U yet: a separate, older bug.)
+        // List<String>.filter, so length() is found.
         test passedLambdaGetsParameterTypesFromAGenericCallee() {
             var words = new List<String>()
             words.add("ab")
             words.add("abcd")
-            var long = words.filter((w) => w.length() > (3 as UInt)).toList()
+            var long = words.filter((w) => w.length() > 3).toList()
             Assert.assertEquals(1, long.getSize())
             Assert.assertEquals("abcd", long.get(0))
         }
