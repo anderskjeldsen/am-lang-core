@@ -12,3 +12,6 @@ examples/**/builds/*
 examples/**/dependencies/*
 src/native-c/aros-x86-64/*
 src/native-c/linux-arm64v8/*
+
+# Packages amlc fetches (git-repo dependencies, e.g. am-tests for `amlc test`).
+dependencies/
