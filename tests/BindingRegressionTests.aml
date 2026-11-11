@@ -211,6 +211,29 @@ namespace Tests {
             Assert.assertEquals(9, back.n)
         }
 
+        // #181: `primitive` is a contextual word; a local may be named primitive.
+        test aLocalNamedPrimitive() {
+            var primitive = "p"
+            Assert.assertEquals(1, primitive.length())
+        }
+
+        // #180: a catch block whose first statement shares the `{` line and whose `}`
+        // shares the last statement's line.
+        test catchBlockOnTheSameLines() {
+            var canvas = new BindRegCanvas()
+            var r = BindingRegressionTests.closeOnError(canvas)
+            Assert.assertEquals(1, r)
+            Assert.assertEquals("closed", canvas.label)
+        }
+
+        static fun closeOnError(c: BindRegCanvas): Int {
+            try {
+                throw new Exception("boom")
+            } catch (e: Exception) { c.label = "closed"
+                return 1 }
+            return 0
+        }
+
         // #253: a member read or write through `!!` on null throws (v1 always did; v2
         // read through NULL). Guarded uses in the same statement must not throw.
         test memberAccessThroughNonNullAssertionOnNull() {

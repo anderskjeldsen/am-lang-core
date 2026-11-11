@@ -176,6 +176,17 @@ namespace Tests {
             Assert.assertEquals(103, r)
         }
 
+        test thisInsideLambdaIsTheEnclosingInstance() {
+            var b = new LambdaThisBox()
+            Assert.assertEquals(8, b.viaLambda())
+            Assert.assertEquals(12, b.viaBareCall())
+            Assert.assertEquals(16, b.nested())
+            Assert.assertEquals(14, b.passed())
+            Assert.assertEquals(12, b.cb!!())
+            b.bump()
+            Assert.assertEquals(2, b.hits)
+        }
+
         // #239: calling a nullable function through `!!`. `f!!(1)` used to parse as `f!!`
         // followed by the group `(1)`, so it evaluated to 1 without calling f, and a chained
         // `.toString()` crashed the compiler.
@@ -201,6 +212,55 @@ namespace Tests {
                 threw = true
             }
             Assert.assertTrue(threw)
+        }
+    }
+
+    // #39: `this` inside a lambda is the enclosing instance (v2 used the lambda object).
+    class LambdaThisBox {
+        import Am.Lang
+
+        var n: Int = 4
+        var cb: (() => Int)? = null
+        var hits: Int = 0
+
+        init {
+            this.cb = () => this.n * 3
+        }
+
+        fun helper(): Int {
+            return 2 * this.n
+        }
+
+        static fun apply(f: (x: Int) => Int, v: Int): Int {
+            return f(v)
+        }
+
+        fun viaLambda(): Int {
+            var f: () => Int = () => { return this.helper() }
+            return f()
+        }
+
+        fun viaBareCall(): Int {
+            var g: () => Int = () => { return helper() + this.n }
+            return g()
+        }
+
+        fun nested(): Int {
+            var outer: () => Int = () => {
+                var inner: () => Int = () => { return this.n + helper() }
+                return inner() + this.n
+            }
+            return outer()
+        }
+
+        fun passed(): Int {
+            return LambdaThisBox.apply((x) => x + this.n, 10)
+        }
+
+        fun bump() {
+            var f: () => void = () => { this.hits = this.hits + 1 }
+            f()
+            f()
         }
     }
 
