@@ -175,5 +175,40 @@ namespace Tests {
             }, 1)
             Assert.assertEquals(103, r)
         }
+
+        // #239: calling a nullable function through `!!`. `f!!(1)` used to parse as `f!!`
+        // followed by the group `(1)`, so it evaluated to 1 without calling f, and a chained
+        // `.toString()` crashed the compiler.
+        test callThroughNonNullAssertion() {
+            var holder = new LambdaHolder()
+            holder.listener = (x) => x + 1
+            Assert.assertEquals(2, holder.listener!!(1))
+            Assert.assertEquals("Q 2", "Q " + holder.listener!!(1).toString())
+            var f: ((p: Int, q: Int) => Int)? = (p, q) => p * 100 + q
+            Assert.assertEquals(304, f!!(3, 4))
+            holder.hello = () => "hi"
+            Assert.assertEquals(2, holder.hello!!().length())
+            var counter = new LambdaCounter()
+            holder.poke = () => counter.add()
+            holder.poke!!()
+            holder.poke!!()
+            Assert.assertEquals(2, counter.n)
+            var empty = new LambdaHolder()
+            var threw = false
+            try {
+                empty.listener!!(5)
+            } catch (ex: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+    }
+
+    class LambdaHolder {
+        import Am.Lang
+
+        var listener: ((x: Int) => Int)? = null
+        var hello: (() => String)? = null
+        var poke: (() => void)? = null
     }
 }
