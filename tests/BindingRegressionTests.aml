@@ -211,6 +211,28 @@ namespace Tests {
             Assert.assertEquals(9, back.n)
         }
 
+        // #253: a member read or write through `!!` on null throws (v1 always did; v2
+        // read through NULL). Guarded uses in the same statement must not throw.
+        test memberAccessThroughNonNullAssertionOnNull() {
+            var none: BindRegCanvas? = null
+            var t1 = false
+            try {
+                none!!.n = 1
+            } catch (ex: Exception) {
+                t1 = true
+            }
+            var t2 = false
+            try {
+                var u = none!!.n
+            } catch (ex: Exception) {
+                t2 = true
+            }
+            Assert.assertTrue(t1)
+            Assert.assertTrue(t2)
+            var guarded = none != null && none!!.n > 0
+            Assert.assertFalse(guarded)
+        }
+
         // #238: a generic `T?` slot holding a value type keeps its null: Box<Int> tells
         // null from 0, and Box<Bool> null from false.
         test genericNullableSlotOfAValueType() {
