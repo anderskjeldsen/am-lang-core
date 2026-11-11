@@ -210,5 +210,55 @@ namespace Tests {
             Assert.assertEquals("from list", back.label)
             Assert.assertEquals(9, back.n)
         }
+
+        // #238: a generic `T?` slot holding a value type keeps its null: Box<Int> tells
+        // null from 0, and Box<Bool> null from false.
+        test genericNullableSlotOfAValueType() {
+            var ints = new BindRegBox<Int>()
+            Assert.assertTrue(ints.isEmpty())
+            Assert.assertTrue(ints.get() == null)
+            ints.put(0)
+            Assert.assertFalse(ints.isEmpty())
+            Assert.assertEquals(0, ints.get()!!)
+            Assert.assertEquals(0, ints.orElse(9))
+            ints.clear()
+            Assert.assertTrue(ints.isEmpty())
+            Assert.assertEquals(9, ints.orElse(9))
+            var flags = new BindRegBox<Bool>()
+            Assert.assertTrue(flags.isEmpty())
+            flags.put(false)
+            Assert.assertFalse(flags.isEmpty())
+            Assert.assertFalse(flags.get()!!)
+        }
+    }
+
+    class BindRegBox<T> {
+        import Am.Lang
+
+        var v: T? = null
+
+        fun get(): T? {
+            return this.v
+        }
+
+        fun put(x: T) {
+            this.v = x
+        }
+
+        fun clear() {
+            this.v = null
+        }
+
+        fun isEmpty(): Bool {
+            return this.v == null
+        }
+
+        fun orElse(d: T): T {
+            var t: T? = this.v
+            if (t == null) {
+                return d
+            }
+            return t!!
+        }
     }
 }
