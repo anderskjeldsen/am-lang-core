@@ -526,18 +526,22 @@ buildTargets:
       - docker run --rm --platform linux/amd64 -v ${build_dir}:/work -w /work retro68-amlang amlc-macos9-build
   - id: morphos-ppc_docker
     platform: morphos-ppc
+    features: ["floatingPoint"]   # was implied by the old all-features fallback (Redmine #247)
     commands:
       - docker run --rm -v ${build_dir}:/work -e USER=$( id -u ) -e GROUP=$( id -g ) -it amigadev/crosstools:ppc-morphos make -f morphos_ppc.makefile -C /work all
   - id: morphos-ppc_docker_mac
     platform: morphos-ppc
+    features: ["floatingPoint"]   # was implied by the old all-features fallback (Redmine #247)
     commands:
       - docker run --rm -v ${build_dir}:/work -i amigadev/crosstools:ppc-morphos make -f morphos-ppc.makefile -C /work all
   - id: morphos-ppc_docker_win
     platform: morphos-ppc
+    features: ["floatingPoint"]   # was implied by the old all-features fallback (Redmine #247)
     commands:
       - docker run --rm -v ${build_dir}:/work -e -i amigadev/crosstools:ppc-morphos make -f morphos-ppc.makefile -C /work all
   - id: aros-x86-64_docker_win
     platform: aros-x86-64
+    features: ["floatingPoint"]   # was implied by the old all-features fallback (Redmine #247)
     commands: 
       - docker run --rm -v ${build_dir}:/work -i amigadev/crosstools:x86_64-aros make aros-x86-64.makefile all
   # In-environment build: needs aarch64-aros-gcc on PATH, i.e. run from inside
