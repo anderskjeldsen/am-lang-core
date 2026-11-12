@@ -1,5 +1,10 @@
 namespace Tests {
 
+    // An exception with a field of its own, for the catch-variable test.
+    class FieldException(var field: String) : Exception("bad " + field) {
+        import Am.Lang
+    }
+
     class ExceptionTests {
         import Am.Lang
         import Am.Collections
@@ -39,6 +44,26 @@ namespace Tests {
             }
             
             Assert.assertTrue(caught)
+        }
+
+        // Two catch clauses reusing a variable name with different types:
+        // each body must see its own clause's type. v2 rendered the first
+        // body with the LAST clause's type, so e.field became raw C.
+        test catchVariablesReusingANameKeepTheirOwnTypes() {
+            var field = ""
+            var message = ""
+            try {
+                throw new FieldException("age")
+            } catch (e: FieldException) {
+                field = e.field
+            }
+            try {
+                throw new Exception("plain")
+            } catch (e: Exception) {
+                message = e.message
+            }
+            Assert.assertEquals("age", field)
+            Assert.assertEquals("plain", message)
         }
     }
 }

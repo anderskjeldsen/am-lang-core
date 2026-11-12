@@ -1,0 +1,47 @@
+namespace Tests {
+
+    interface IaShape {
+        import Am.Lang
+
+        fun area(): Int
+    }
+
+    class IaRect(var w: Int, var h: Int) : IaShape {
+        import Am.Lang
+
+        override fun area(): Int {
+            return this.w * this.h
+        }
+    }
+
+    // Objects reaching an interface-typed parameter must arrive as interface
+    // references, exactly once. v2 got two cases wrong (found with the
+    // amigaos examples): a parameter typed by a class type parameter that is
+    // an interface (List<IaShape>.add(item: T)) was not wrapped, and a
+    // 'new X() as IaShape' argument was wrapped twice.
+    class InterfaceArgumentTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun areaOf(shape: IaShape): Int {
+            return shape.area()
+        }
+
+        test objectAddedToAListOfInterfacesDispatches() {
+            var shapes = List.newList<IaShape>()
+            shapes.add(new IaRect(3, 4))
+            var total = 0
+            each(shape in shapes) {
+                total = total + shape.area()
+            }
+            Assert.assertEquals(12, shapes.get(0).area())
+            Assert.assertEquals(12, total)
+        }
+
+        test newObjectCastToAnInterfaceArgumentDispatches() {
+            Assert.assertEquals(20, InterfaceArgumentTests.areaOf(new IaRect(4, 5) as IaShape))
+            Assert.assertEquals(6, InterfaceArgumentTests.areaOf(new IaRect(2, 3)))
+        }
+    }
+}
