@@ -24,6 +24,7 @@ namespace Am.IO
          *
          * @return The system temporary directory, e.g. "/tmp" or "T:"
          */
+        #noThrow
         static native fun getSystemTempFolder(): String
     }
 }

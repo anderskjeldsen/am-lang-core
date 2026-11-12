@@ -60,6 +60,7 @@ namespace Am.IO
          * ixemul can have a current directory that disagrees with the one its libc believes in.
          * @return The file size in bytes, or 0 when the handle cannot be measured
          */
+        #noThrow
         native fun fileSize(): Long
 
         /**
@@ -69,6 +70,7 @@ namespace Am.IO
          * writer's handle is gone. Safe to call more than once; reading or writing after close is
          * undefined.
          */
+        #noThrow
         native fun close()
 
         /**

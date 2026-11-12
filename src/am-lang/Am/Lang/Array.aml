@@ -93,6 +93,7 @@ namespace Am.Lang
          * @param length Number of elements to allocate
          * @return The new array
          */
+        #noThrow
         private native fun createEmptyArrayOfSameType(length: UInt): T[]
 
         /**

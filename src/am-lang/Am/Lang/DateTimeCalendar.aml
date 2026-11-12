@@ -2,11 +2,17 @@ namespace Am.Lang {
     /** Native implementation detail behind DateTime's signed calendar API. */
     #implementationPlatforms "libc"
     native class DateTimeCalendar {
+        #noThrow
         static native fun parts(milliseconds: Long, zone: String, output: Int[]): Bool
+        #noThrow
         static native fun compose(year: Long, month: Long, day: Long, hour: Long, minute: Long, second: Long, millisecond: Long, zone: String, output: Long[]): Bool
+        #noThrow
         static native fun parse(text: String, output: Long[]): Bool
+        #noThrow
         static native fun zoneName(zone: String): String
+        #noThrow
         static native fun abbreviation(milliseconds: Long, zone: String): String
+        #noThrow
         static native fun zones(): String
     }
 }

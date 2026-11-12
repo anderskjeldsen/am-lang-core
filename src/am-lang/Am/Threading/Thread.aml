@@ -85,6 +85,7 @@ namespace Am.Threading {
          * finished are still waiting in the caller's mailbox afterwards, so join() then receive() is the
          * usual way to collect a worker's result.
          */
+        #noThrow
         native fun join()
 
         /**
@@ -106,12 +107,14 @@ namespace Am.Threading {
          * Takes the oldest message out of the calling thread's mailbox if there is one, without waiting.
          * @return The next message, or null when the mailbox is empty
          */
+        #noThrow
         native static fun tryReceive(): Object?
 
         /**
          * Returns a handle to the thread the calling code is running on, the main thread included.
          * @return The current thread
          */
+        #noThrow
         native static fun getCurrent(): Thread
 
         /**
@@ -126,6 +129,7 @@ namespace Am.Threading {
          * so it does not spin the CPU.
          * @param milliseconds How long to sleep, in milliseconds
          */
+        #noThrow
         native static fun sleep(milliseconds: Long)
 
         /**
@@ -134,6 +138,7 @@ namespace Am.Threading {
          * preempts its own workers and child processes, which can then all stay at the conventional 0.
          * @param priority The new priority, -128..127 on AmigaOS
          */
+        #noThrow
         native static fun setCurrentPriority(priority: Int)
 
         /**

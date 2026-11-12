@@ -23,6 +23,7 @@ namespace Am.Lang.Diagnostics {
          * @param lineKind The site's source line * 8 + kind (0 pass, 1 throw, 2 suspend child, 3 resumed, 4 allocation failed)
          * @return The formatted frame line
          */
+        #noThrow
         native static fun formatExceptionSite(cls: Long, lineKind: Long): String
     }
 }

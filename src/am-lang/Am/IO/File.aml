@@ -25,6 +25,7 @@ namespace Am.IO
          * Returns the process's current working directory as a path.
          * @return The current directory
          */
+        #noThrow
         static native fun getCurrentDirectory(): String
 
         /**
@@ -39,6 +40,7 @@ namespace Am.IO
          * @param path The directory to move into
          * @return Whether the move happened
          */
+        #noThrow
         static native fun setCurrentDirectory(path: String): Bool
 
         /**
@@ -87,6 +89,7 @@ namespace Am.IO
          * @param suffix Text to end the generated name with, typically an extension
          * @return The path of the new file, or null if it could not be created
          */
+        #noThrow
         static native fun createTempFileInternal(pathPrefix: String, suffix: String): String?
 
         /**
@@ -223,12 +226,14 @@ namespace Am.IO
          * on AmigaOS and MorphOS, which have no symbolic links.
          * @return True if the path is a symbolic link
          */
+        #noThrow
         native fun isSymbolicLink(): Bool
 
         /**
          * Reads the target of a symbolic link.
          * @return The link's target, or null when this path is not a link
          */
+        #noThrow
         private native fun readLinkNative(): String?
         /**
          * Returns the target of this symbolic link. The target may be relative to the link's own
@@ -245,6 +250,7 @@ namespace Am.IO
          * @param target What the link should point at
          * @return True on success; false where symbolic links do not exist (AmigaOS and MorphOS) or the path is taken
          */
+        #noThrow
         static native fun createSymbolicLink(linkPath: String, target: String): Bool
 
         /**
@@ -260,32 +266,38 @@ namespace Am.IO
          * @param out Receives size, mtime seconds and kind
          * @return True when the entry could be examined; false (and `out` untouched) otherwise
          */
+        #noThrow
         static native fun statEntry(dirPath: String, name: String, out: Long[]): Bool
 
         /**
          * Tests whether this path exists. Follows symbolic links, so a dangling link reports false.
          * @return True if the path exists
          */
+        #noThrow
         native fun exists(): Bool
         /**
          * Returns the size of this file in bytes.
          * @return The file size in bytes
          */
+        #noThrow
         native fun getSize(): Long
         /**
          * Returns when this file was last written, as a timestamp comparable with other files'.
          * @return The modification time
          */
+        #noThrow
         native fun getLastModified(): Long
         /**
          * Tests whether the program is allowed to read this file.
          * @return True if the file is readable
          */
+        #noThrow
         native fun canRead(): Bool
         /**
          * Tests whether the program is allowed to write this file.
          * @return True if the file is writable
          */
+        #noThrow
         native fun canWrite(): Bool
 
         /**
@@ -293,6 +305,7 @@ namespace Am.IO
          * remove a directory with contents.
          * @return True if the entry was removed
          */
+        #noThrow
         native fun delete(): Bool
         /**
          * Deletes a file by path, without constructing a File yourself.
@@ -309,6 +322,7 @@ namespace Am.IO
          * @param path Path of the directory to create
          * @return True if the directory was created
          */
+        #noThrow
         static native fun createDirectory(path: String): Bool
         /**
          * Copies this single file to another path, overwriting whatever is there. For a directory tree
@@ -316,12 +330,14 @@ namespace Am.IO
          * @param destination Path to copy to
          * @return True if the copy succeeded
          */
+        #noThrow
         native fun copy(destination: String): Bool
         /**
          * Moves or renames this entry. Moving across filesystems may not be supported by the host.
          * @param destination Path to move to
          * @return True if the move succeeded
          */
+        #noThrow
         native fun move(destination: String): Bool
 
         /**

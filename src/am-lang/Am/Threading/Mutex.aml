@@ -20,6 +20,7 @@ namespace Am.Threading {
          * Blocks until the calling thread holds the lock. A thread that already holds it returns
          * immediately and increments the hold count.
          */
+        #noThrow
         native fun lock()
 
         /**
@@ -27,6 +28,7 @@ namespace Am.Threading {
          * Unlocking a mutex you do not hold is undefined behaviour — on AmigaOS it corrupts the
          * semaphore's wait queue rather than failing cleanly.
          */
+        #noThrow
         native fun unlock()
 
         /**
@@ -34,6 +36,7 @@ namespace Am.Threading {
          * the lock gets true straight away.
          * @return True if the lock is now held by the caller, who must unlock() it
          */
+        #noThrow
         native fun tryLock(): Bool
     }
 }

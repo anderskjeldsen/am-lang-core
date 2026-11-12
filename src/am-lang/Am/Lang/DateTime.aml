@@ -630,6 +630,7 @@ namespace Am.Lang
          * @param pattern The format pattern
          * @return The formatted text
          */
+        #noThrow
         private static native fun formatDateTime(epochMillis: ULong, timezoneOffsetMinutes: Int, pattern: String): String
         /**
          * Parses text into an instant using the pattern letters described on format().
@@ -637,6 +638,7 @@ namespace Am.Lang
          * @param pattern The pattern the text follows
          * @return Milliseconds since the Unix epoch
          */
+        #noThrow
         private static native fun parseDateTime(dateString: String, pattern: String): ULong
         /**
          * Applies the Gregorian leap-year rules.

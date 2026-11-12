@@ -20,12 +20,14 @@ namespace Am.Async {
          * Resumes the suspended computation. Idempotent: the first call wins and later calls do nothing
          * at all, neither erroring nor corrupting state.
          */
+        #noThrow
         native fun resume()
 
         /**
          * Tests whether resume() has already been called.
          * @return True once the continuation has fired
          */
+        #noThrow
         native fun isDone(): Bool
     }
 }

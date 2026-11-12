@@ -104,12 +104,14 @@ namespace Am.Lang
          * @param encoding Name of the character encoding
          * @return The decoded string
          */
+        #noThrow
         native static fun fromBytes(bytes: UByte[], encoding: String): String
         /**
          * Encodes this string into bytes using the named encoding, for example "UTF-8".
          * @param encoding Name of the character encoding
          * @return The encoded bytes
          */
+        #noThrow
         native fun toBytes(encoding: String): UByte[]
         /**
          * Finds the first occurrence of a substring.

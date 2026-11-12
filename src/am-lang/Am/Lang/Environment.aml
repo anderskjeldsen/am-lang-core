@@ -26,6 +26,7 @@ namespace Am.Lang
          * @param value Value to store
          * @return True when the variable was set
          */
+        #noThrow
         static native fun set(name: String, value: String): Bool
 
         /**
@@ -33,6 +34,7 @@ namespace Am.Lang
          * @param name Name of the variable
          * @return True if the variable existed and was removed
          */
+        #noThrow
         static native fun unset(name: String): Bool
 
         /**

@@ -81,6 +81,7 @@ namespace Am.Lang
          * @param name The class name
          * @return The ClassRef, or null when no class of that name is reflected
          */
+        #noThrow
         native static fun getClassRef(name: String): ClassRef?
 
         /**
@@ -188,6 +189,7 @@ namespace Am.Lang
          * @param array The array
          * @return Its length
          */
+        #noThrow
         native static fun arrayLength(array: Object): Int
 
         /**

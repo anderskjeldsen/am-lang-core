@@ -31,6 +31,7 @@ namespace Am.Lang
          * so pair it with isAlive() to decide when to stop polling.
          * @return The output collected so far, or an empty string
          */
+        #noThrow
         native fun tryReadOutput(): String
 
         /**
@@ -38,6 +39,7 @@ namespace Am.Lang
          * input, so append a newline yourself. Writing after close() does nothing.
          * @param text The text to send
          */
+        #noThrow
         native fun writeInput(text: String)
 
         /**
@@ -47,6 +49,7 @@ namespace Am.Lang
          * NUL and would corrupt, say, a git packfile.
          * @return The bytes available now, or an empty array
          */
+        #noThrow
         native fun tryReadOutputBytes(): UByte[]
 
         /**
@@ -57,6 +60,7 @@ namespace Am.Lang
          * @param length Number of bytes to write
          * @return The number of bytes actually accepted
          */
+        #noThrow
         native fun writeInputBytes(data: UByte[], offset: Long, length: UInt): UInt
 
         /**
@@ -65,6 +69,7 @@ namespace Am.Lang
          * pseudo-terminal for a raw socket pair; on AmigaOS it tells the console handler not to
          * intercept the terminal-size probe, so no bytes are ever swallowed from the stream.
          */
+        #noThrow
         native fun enableBinaryMode()
 
         /**
@@ -72,6 +77,7 @@ namespace Am.Lang
          * has exited, while the last of its output is still being drained.
          * @return True while the child is alive
          */
+        #noThrow
         native fun isAlive(): Bool
 
         /**
@@ -79,6 +85,7 @@ namespace Am.Lang
          * while the child is still running this returns 0.
          * @return The exit code of the finished child
          */
+        #noThrow
         native fun exitCode(): Int
 
         /**
@@ -89,6 +96,7 @@ namespace Am.Lang
          * call is cheap enough to read on every paint or keyboard tick.
          * @return True while the child has stdin in raw mode
          */
+        #noThrow
         native fun isRawMode(): Bool
 
         /**
@@ -99,6 +107,7 @@ namespace Am.Lang
          * @param rows Terminal height in character rows
          * @param cols Terminal width in character columns
          */
+        #noThrow
         native fun setReportedSize(rows: Int, cols: Int)
 
         /**
@@ -111,6 +120,7 @@ namespace Am.Lang
          * from the cause. Compilers and parsers are the usual reason to raise it.
          * @param bytes Stack size in bytes; values below a platform minimum are raised to it
          */
+        #noThrow
         native fun setStackSize(bytes: Int)
 
         /**
@@ -120,6 +130,7 @@ namespace Am.Lang
          * terminateChild(): closing out from under a running child on AmigaOS tears down the
          * handler while the child may still issue calls through it.
          */
+        #noThrow
         native fun close()
 
         /**
@@ -128,6 +139,7 @@ namespace Am.Lang
          * normal isAlive() polling. This is the right call for a user-initiated stop while the
          * child is alive.
          */
+        #noThrow
         native fun terminateChild()
 
         /**
@@ -138,6 +150,7 @@ namespace Am.Lang
          * @param taskPtr Pointer to the task to signal
          * @param sigBit The signal bit to set on that task
          */
+        #noThrow
         native static fun setGlobalWake(taskPtr: Long, sigBit: Int)
 
         /**
@@ -146,6 +159,7 @@ namespace Am.Lang
          * alive afterwards would execute freed memory the next time it was dispatched. It runs
          * automatically at exit, so application code does not need to call it.
          */
+        #noThrow
         native static fun shutdownAllNative()
 
         /**

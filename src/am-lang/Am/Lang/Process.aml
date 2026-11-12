@@ -20,6 +20,7 @@ namespace Am.Lang
          * @param command The command line to execute
          * @return The child's exit code, 0 by convention meaning success
          */
+        #noThrow
         static native fun run(command: String): Int
 
         /**
@@ -64,6 +65,7 @@ namespace Am.Lang
          * @param path The path to resolve
          * @return The canonical path, or the input unchanged when it cannot be resolved
          */
+        #noThrow
         static native fun canonicalPath(path: String): String
 
         /**
@@ -72,6 +74,7 @@ namespace Am.Lang
          * a name and should be treated as "unknown" rather than as a path.
          * @return The current directory, or an empty string when unknown
          */
+        #noThrow
         static native fun getCwd(): String
 
         /**
@@ -88,6 +91,7 @@ namespace Am.Lang
          * @param dirs Newline-separated directories, or an empty string to clear
          * @return True when the list was stored
          */
+        #noThrow
         static native fun setSpawnSearchPath(dirs: String): Bool
 
         /**
