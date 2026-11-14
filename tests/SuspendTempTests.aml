@@ -1,0 +1,70 @@
+namespace Tests {
+
+    class SuspendTempBox {
+        import Am.Lang
+        var count: Int = 0
+    }
+
+    // Redmine #35: a value computed in a statement before a suspend call in the same
+    // statement (`this.total + this.park()`, the receiver of `this.box.count = ...`)
+    // was a C temporary that wasn't saved across the suspension. The function resumes
+    // through a fresh C call, so it read whatever was on the stack: a wrong sum, or a
+    // write through a garbage pointer (a crash).
+    class SuspendTempTests {
+        import Am.Lang
+        import Am.Async
+        import Am.Tests
+
+        static var pending: Continuation? = null
+        var total: Int = 10
+        var label: String = ""
+        var box: SuspendTempBox = new SuspendTempBox()
+        var finished: Bool = false
+
+        suspend fun park(v: Int): Int {
+            suspend(cont) {
+                SuspendTempTests.pending = cont
+            }
+            return v
+        }
+
+        suspend fun parkText(v: String): String {
+            suspend(cont) {
+                SuspendTempTests.pending = cont
+            }
+            return v
+        }
+
+        suspend fun run() {
+            this.total = this.total + this.park(5)
+            this.box.count = this.park(7)
+            this.label = "a" + "-" + this.parkText("b")
+            var sum = this.total + this.park(100) + this.box.count
+            this.total = sum
+            this.finished = true
+        }
+
+        // Resume whatever is parked, as an event loop would, until run() is done.
+        private static fun drive(t: SuspendTempTests) {
+            var guard = 0
+            while (!t.finished && guard < 20) {
+                var c = SuspendTempTests.pending
+                SuspendTempTests.pending = null
+                if (c != null) {
+                    c.resume()
+                }
+                guard = guard + 1
+            }
+        }
+
+        test tempsBeforeASuspendCallSurviveIt() {
+            var t = new SuspendTempTests()
+            t.run()
+            SuspendTempTests.drive(t)
+            Assert.assertTrue(t.finished)
+            Assert.assertEquals(7, t.box.count)
+            Assert.assertEquals("a-b", t.label)
+            Assert.assertEquals(122, t.total)
+        }
+    }
+}
