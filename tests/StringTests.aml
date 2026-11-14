@@ -276,5 +276,21 @@ namespace Tests {
             Assert.assertEquals(995, s.lastIndexOf("a"))
             Assert.assertEquals("𝄞b", s.substringToEnd(997UI))
         }
+    
+
+        // #185: compareTo orders strings by their bytes (UTF-8, so code point order),
+        // a prefix first; `<` on strings compared pointers.
+        test compareToOrdersStrings() {
+            Assert.assertTrue("apple".compareTo("banana") < 0)
+            Assert.assertTrue("banana".compareTo("apple") > 0)
+            Assert.assertEquals(0, "same".compareTo("sa" + "me"))
+            Assert.assertTrue("app".compareTo("apple") < 0)
+            Assert.assertTrue("apple".compareTo("app") > 0)
+            Assert.assertTrue("".compareTo("a") < 0)
+            Assert.assertEquals(0, "".compareTo(""))
+            Assert.assertTrue("Zebra".compareTo("apple") < 0)
+            Assert.assertTrue("z".compareTo("æ") < 0)
+            Assert.assertTrue("æ".compareTo("ø") < 0)
+        }
     }
 }

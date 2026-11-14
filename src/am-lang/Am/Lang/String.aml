@@ -89,6 +89,17 @@ namespace Am.Lang
         #noThrow
         native override fun equals(other: Object): Bool
         /**
+         * Orders this string against another: negative when this one sorts first, 0 when they
+         * hold the same characters, positive when it sorts after. The order is byte-wise on the
+         * UTF-8 form, as C's strcmp, which for UTF-8 is code point order; it ignores locale and
+         * case. A shorter string that is a prefix of the other sorts first. Use it where `<`
+         * would be written: `<`, `>`, `<=` and `>=` don't apply to strings.
+         * @param other The string to compare with
+         * @return -1, 0 or 1
+         */
+        #noThrow
+        native fun compareTo(other: String): Int
+        /**
          * Concatenates two strings into a new string. Each + allocates, so prefer StringBuilder
          * inside loops.
          * @param s The string to append

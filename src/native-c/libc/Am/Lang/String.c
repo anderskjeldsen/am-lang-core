@@ -132,6 +132,32 @@ __exit: ;
 	return __result;
 };
 
+// Byte-wise, locale-free ordering of the UTF-8 storage (strcmp's order; for UTF-8
+// that is also code point order): -1, 0 or 1. A null other orders first.
+function_result Am_Lang_String_compareTo_0(aobject * const this, aobject * other)
+{
+	function_result __result = { .has_return_value = false };
+	bool __returning = false;
+	int r = 1;
+	if (other != NULL) {
+		string_holder *a = this->object_properties.class_object_properties.object_data.value.custom_value;
+		string_holder *b = other->object_properties.class_object_properties.object_data.value.custom_value;
+		unsigned int la = a != NULL ? a->length : 0;
+		unsigned int lb = b != NULL ? b->length : 0;
+		unsigned int n = la < lb ? la : lb;
+		int c = n > 0 ? memcmp(a->string_value, b->string_value, n) : 0;
+		if (c < 0) { r = -1; }
+		else if (c > 0) { r = 1; }
+		else if (la < lb) { r = -1; }
+		else if (la > lb) { r = 1; }
+		else { r = 0; }
+	}
+	__result.return_value.value.int_value = r;
+
+__exit: ;
+	return __result;
+};
+
 function_result Am_Lang_String_equals_0(aobject * const this, aobject * other)
 {	
 	function_result __result = { .has_return_value = true };
