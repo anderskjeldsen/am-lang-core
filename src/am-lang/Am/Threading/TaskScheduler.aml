@@ -20,6 +20,7 @@ namespace Am.Threading {
     class TaskScheduler {
         import Am.Lang
         import Am.Collections
+        import Am.Async
 
         /**
          * Each thread type mapped to its dedicated runner, created lazily. Per thread, like every
@@ -67,6 +68,78 @@ namespace Am.Threading {
             }
             var runner = TaskScheduler.ensureRunner(threadType)
             runner.submit(wrapper)
+        }
+
+        /**
+         * The runAsync calls this thread is waiting for, by id. Per thread, like every static: a
+         * continuation stays on the thread that suspended, and is resumed there (Redmine #299).
+         */
+        private static var pendingRuns: HashMap<Int, PendingRun> = new HashMap<Int, PendingRun>()
+        private static var nextRunId: Int = 1
+
+        /**
+         * Runs work on the worker for a thread type and suspends the caller until it is done, then
+         * returns its result on the caller's own thread. The work travels as a deep copy, like any
+         * scheduled task, and so does its result on the way back: the work can't write into the
+         * caller's objects, it returns what it made. If the work throws, runAsync throws an Exception
+         * with the same message (the exception's class doesn't travel back). The caller's thread must
+         * process its mailbox for the reply to arrive: the main thread by calling handleMainTasks()
+         * from its event loop, a worker by returning to its task loop.
+         *
+         * Use it instead of capturing a Continuation in a scheduled lambda, which fails: a
+         * Continuation can't be sent to another thread.
+         * @param threadType Which worker runs the work, typically a TaskThreadType constant
+         * @param work What to run there; its result is sent back
+         * @return What work returned
+         */
+        static suspend fun runAsync<T>(threadType: Int, work: () => T): T {
+            var id = TaskScheduler.nextRunId
+            TaskScheduler.nextRunId = id + 1
+            var run = new PendingRun()
+            TaskScheduler.pendingRuns.set(id, run)
+            var owner = Thread.getCurrent()
+            suspend(cont) {
+                run.cont = cont
+                var task: () => Bool = () => {
+                    var value: Any = null
+                    var failure: String? = null
+                    try {
+                        value = work() as Any
+                    } catch (e: Exception) {
+                        failure = e.toString()
+                    }
+                    var reply: () => Bool = () => {
+                        TaskScheduler.completeRun(id, value, failure)
+                        return true
+                    }
+                    owner.send(new Task(reply))
+                    return true
+                }
+                TaskScheduler.schedule(threadType, task)
+            }
+            if (run.error != null) {
+                throw new Exception(run.error)
+            }
+            return run.result as T
+        }
+
+        /**
+         * The worker's reply to runAsync, run on the waiting thread: record the outcome and resume
+         * the continuation there. An unknown id (already completed) is ignored.
+         */
+        private static fun completeRun(id: Int, value: Any, failure: String?) {
+            if (!TaskScheduler.pendingRuns.containsKey(id)) {
+                return
+            }
+            var run = TaskScheduler.pendingRuns.get(id)
+            TaskScheduler.pendingRuns.remove(id)
+            run.result = value
+            run.error = failure
+            run.done = true
+            var c = run.cont
+            if (c != null) {
+                c.resume()
+            }
         }
 
         /**

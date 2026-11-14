@@ -1,0 +1,109 @@
+namespace Tests {
+
+    // Redmine #299: TaskScheduler.runAsync runs work on a worker and resumes the caller on its own
+    // thread with the result. The continuation stays in the caller's thread (a per-thread map);
+    // only the work and the reply travel.
+    class RunAsyncTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Threading
+        import Am.Tests
+
+        var doneCount: Int = 0
+        var number: Int = 0
+        var text: String = ""
+        var items: Int = 0
+        var error: String = ""
+        var workerThread: String = ""
+        var resumedOnCaller: Bool = false
+        var first: Int = 0
+        var second: Int = 0
+
+        suspend fun numberAndText() {
+            var me = Thread.getCurrent()
+            this.number = TaskScheduler.runAsync<Int>(TaskThreadType.IO, () => {
+                return 40 + 2
+            })
+            this.text = TaskScheduler.runAsync<String>(TaskThreadType.IO, () => {
+                return "from " + Thread.getCurrent().name
+            })
+            var list = TaskScheduler.runAsync<List<Int>>(TaskThreadType.IO, () => {
+                var l = List.newList<Int>()
+                l.add(1)
+                l.add(2)
+                l.add(3)
+                return l
+            })
+            this.items = list.getSize()
+            this.resumedOnCaller = Thread.getCurrent() == me
+            this.doneCount = this.doneCount + 1
+        }
+
+        suspend fun failing() {
+            try {
+                var n = TaskScheduler.runAsync<Int>(TaskThreadType.IO, () => {
+                    throw new Exception("worker failed")
+                    return 0
+                })
+                this.error = "no exception: " + n.toString()
+            } catch (e: Exception) {
+                this.error = e.toString()
+            }
+            this.doneCount = this.doneCount + 1
+        }
+
+        suspend fun firstOne() {
+            this.first = TaskScheduler.runAsync<Int>(TaskThreadType.IO, () => {
+                Thread.sleep(20L)
+                return 1
+            })
+            this.doneCount = this.doneCount + 1
+        }
+
+        suspend fun secondOne() {
+            this.second = TaskScheduler.runAsync<Int>(TaskThreadType.Background, () => {
+                return 2
+            })
+            this.doneCount = this.doneCount + 1
+        }
+
+        // The event loop: replies arrive as Tasks in this thread's mailbox.
+        private fun pumpUntil(count: Int) {
+            var guard = 0
+            while (this.doneCount < count && guard < 3000) {
+                TaskScheduler.handleMainTasks()
+                Thread.sleep(1L)
+                guard = guard + 1
+            }
+        }
+
+        test runAsyncReturnsTheWorkersResultOnTheCallersThread() {
+            var t = new RunAsyncTests()
+            t.numberAndText()
+            t.pumpUntil(1)
+            Assert.assertEquals(1, t.doneCount)
+            Assert.assertEquals(42, t.number)
+            Assert.assertTrue(t.text.startsWith("from "))
+            Assert.assertEquals(3, t.items)
+            Assert.assertTrue(t.resumedOnCaller)
+        }
+
+        test runAsyncRethrowsTheWorkersException() {
+            var t = new RunAsyncTests()
+            t.failing()
+            t.pumpUntil(1)
+            Assert.assertEquals(1, t.doneCount)
+            Assert.assertTrue(t.error.indexOf("worker failed") >= 0)
+        }
+
+        test twoRunsInFlightEachGetTheirOwnResult() {
+            var t = new RunAsyncTests()
+            t.firstOne()
+            t.secondOne()
+            t.pumpUntil(2)
+            Assert.assertEquals(2, t.doneCount)
+            Assert.assertEquals(1, t.first)
+            Assert.assertEquals(2, t.second)
+        }
+    }
+}

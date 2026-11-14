@@ -1,0 +1,17 @@
+namespace Am.Threading {
+
+    /**
+     * One TaskScheduler.runAsync call waiting for its worker: the suspended caller's continuation and,
+     * once the worker has replied, the result or the error. Lives only in the waiting thread's
+     * TaskScheduler.pendingRuns; the continuation never leaves that thread.
+     */
+    class PendingRun {
+        import Am.Lang
+        import Am.Async
+
+        var cont: Continuation? = null
+        var result: Any = null
+        var error: String? = null
+        var done: Bool = false
+    }
+}
