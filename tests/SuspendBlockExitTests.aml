@@ -1,0 +1,115 @@
+namespace Tests {
+
+    // Redmine #298: an exception thrown inside a `suspend(cont) { }` body released `cont`
+    // without a resume, which fired a ContinuationCancelledException into the suspended
+    // state and re-entered it; the caller saw "Continuation cancelled" instead of the real
+    // exception, and the throwing frame then used the freed state (a segfault).
+    class SuspendBlockExitTests {
+        import Am.Lang
+        import Am.Async
+        import Am.Tests
+
+        static var parked: Continuation? = null
+        var caught: String = ""
+        var result: Int = 0
+        var finished: Bool = false
+
+        suspend fun throwsInBlock(): Int {
+            suspend(cont) {
+                throw new Exception("thrown inside the suspend block")
+            }
+            return 1
+        }
+
+        // The block hands cont out, then throws: the exception wins and a later
+        // resume() of the parked continuation does nothing.
+        suspend fun parksThenThrows(): Int {
+            suspend(cont) {
+                SuspendBlockExitTests.parked = cont
+                throw new Exception("parked, then thrown")
+            }
+            return 2
+        }
+
+        // resume() already drove the function on; the throw afterwards is dropped.
+        suspend fun resumesThenThrows(): Int {
+            suspend(cont) {
+                cont.resume()
+                throw new Exception("after resume")
+            }
+            return 3
+        }
+
+        suspend fun returnsInBlock(): Int {
+            suspend(cont) {
+                return 4
+            }
+            return 5
+        }
+
+        suspend fun runThrows() {
+            try {
+                this.result = this.throwsInBlock()
+            } catch (e: Exception) {
+                this.caught = e.toString()
+            }
+            this.finished = true
+        }
+
+        suspend fun runParks() {
+            try {
+                this.result = this.parksThenThrows()
+            } catch (e: Exception) {
+                this.caught = e.toString()
+            }
+            this.finished = true
+        }
+
+        suspend fun runResumes() {
+            this.result = this.resumesThenThrows()
+            this.finished = true
+        }
+
+        suspend fun runReturns() {
+            this.result = this.returnsInBlock()
+            this.finished = true
+        }
+
+        test exceptionInSuspendBlockReachesTheCaller() {
+            var t = new SuspendBlockExitTests()
+            t.runThrows()
+            Assert.assertTrue(t.finished)
+            Assert.assertEquals(0, t.result)
+            Assert.assertTrue(t.caught.indexOf("thrown inside the suspend block") >= 0)
+        }
+
+        test parkedContinuationIsDeadAfterTheBlockThrows() {
+            var t = new SuspendBlockExitTests()
+            t.runParks()
+            Assert.assertTrue(t.finished)
+            Assert.assertTrue(t.caught.indexOf("parked, then thrown") >= 0)
+            var c = SuspendBlockExitTests.parked
+            SuspendBlockExitTests.parked = null
+            Assert.assertTrue(c != null)
+            if (c != null) {
+                Assert.assertTrue(c.isDone())
+                c.resume()
+            }
+            Assert.assertEquals(0, t.result)
+        }
+
+        test throwAfterResumeDoesNotUnwindTheResumedFrame() {
+            var t = new SuspendBlockExitTests()
+            t.runResumes()
+            Assert.assertTrue(t.finished)
+            Assert.assertEquals(3, t.result)
+        }
+
+        test returnInSuspendBlock() {
+            var t = new SuspendBlockExitTests()
+            t.runReturns()
+            Assert.assertTrue(t.finished)
+            Assert.assertEquals(4, t.result)
+        }
+    }
+}

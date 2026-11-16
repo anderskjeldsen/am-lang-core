@@ -197,3 +197,22 @@ function_result Am_Async_Continuation_isDone_0(aobject * const this)
 __exit: ;
     return __result;
 }
+
+// Compiler-only helper (#298). Called from the cleanup of a
+// `suspend(cont) { ... }` body that exits abnormally (throw, return,
+// break): flips `done` the way resume() does, so the release that
+// follows doesn't fire a cancellation into `__state` and a later
+// resume() is a no-op. Returns true when this call won, i.e. nobody
+// resumed (or cancelled) the continuation first and the suspending
+// frame still owns `__state`.
+bool Am_Async_Continuation___claim(aobject * const this)
+{
+    if (this == NULL) return true;
+    Am_Async_Continuation_data *data =
+        (Am_Async_Continuation_data *) this->object_properties.class_object_properties.object_data.value.custom_value;
+    if (data == NULL) return true;
+    bool expected = false;
+    return atomic_compare_exchange_strong_explicit(
+        &data->done, &expected, true,
+        memory_order_acq_rel, memory_order_acquire);
+}
