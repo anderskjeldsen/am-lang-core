@@ -1,0 +1,71 @@
+namespace Tests {
+
+    class SuspendArcPayload {
+        import Am.Lang
+        var n: Int = 0
+    }
+
+    // Redmine #336: a suspend fun retained `this` and its object parameters on entry and
+    // never released them, so every call leaked its receiver and arguments.
+    class SuspendArcTests {
+        import Am.Lang
+        import Am.Lang.Diagnostics
+        import Am.Async
+        import Am.Tests
+
+        static var pending: Continuation? = null
+        var total: Int = 0
+
+        suspend fun add(p: SuspendArcPayload): Int {
+            this.total = this.total + p.n
+            return this.total
+        }
+
+        suspend fun addParked(p: SuspendArcPayload): Int {
+            suspend(cont) {
+                SuspendArcTests.pending = cont
+            }
+            this.total = this.total + p.n
+            return this.total
+        }
+
+        suspend fun throwsAfter(p: SuspendArcPayload): Int {
+            suspend(cont) {
+                cont.resume()
+            }
+            throw new Exception("after the resume")
+        }
+
+        suspend fun run(p: SuspendArcPayload) {
+            var a = this.add(p)
+            var b = this.addParked(p)
+            try {
+                var c = this.throwsAfter(p)
+            } catch (e: Exception) {
+                this.total = this.total + 1000
+            }
+        }
+
+        private static fun once() {
+            var t = new SuspendArcTests()
+            var p = new SuspendArcPayload()
+            p.n = 3
+            t.run(p)
+            var c = SuspendArcTests.pending
+            SuspendArcTests.pending = null
+            if (c != null) {
+                c.resume()
+            }
+            Assert.assertEquals(1006, t.total)
+        }
+
+        test suspendCallsReleaseReceiverAndArguments() {
+            SuspendArcTests.once()
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 10) {
+                SuspendArcTests.once()
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+    }
+}
