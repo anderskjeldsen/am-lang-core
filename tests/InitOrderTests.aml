@@ -1,0 +1,70 @@
+namespace Tests {
+
+    class IoTrace {
+        import Am.Lang
+        static var log: String = ""
+        static fun add(s: String): Int {
+            IoTrace.log = IoTrace.log + s + ";"
+            return 1
+        }
+    }
+
+    // Only init blocks, no properties: v1 treated the class as having nothing
+    // to initialise and skipped them (#25).
+    class IoInitsOnly {
+        import Am.Lang
+        init { IoTrace.add("i1") }
+        init { IoTrace.add("i2") }
+    }
+
+    class IoRect(var width: Int, var height: Int) {
+        import Am.Lang
+        var area: Int = width * height
+        init { IoTrace.add("init1 area=" + this.area.toString() + " b=" + this.b.toString()) }
+        var b: Int = IoTrace.add("b") + 1
+        init { IoTrace.add("init2 b=" + this.b.toString()) }
+        var c: Int = this.b * 10
+    }
+
+    class IoBase(var x: Int) {
+        import Am.Lang
+        init { IoTrace.add("base-i1") }
+        var bx: Int = IoTrace.add("base-p x=" + x.toString())
+        init { IoTrace.add("base-i2") }
+    }
+
+    class IoDerived(var y: Int) : IoBase(y + 1) {
+        import Am.Lang
+        init { IoTrace.add("der-i1 x=" + this.x.toString()) }
+        var dy: Int = IoTrace.add("der-p y=" + y.toString())
+        init { IoTrace.add("der-i2") }
+    }
+
+    // Redmine #25: construction runs the constructor parameter stores, then the
+    // property initializers and init blocks top to bottom in source order; a base
+    // class completes before the derived class starts.
+    class InitOrderTests {
+        import Am.Lang
+        import Am.Tests
+
+        test initBlocksRunWithoutProperties() {
+            IoTrace.log = ""
+            var o = new IoInitsOnly()
+            Assert.assertEquals("i1;i2;", IoTrace.log)
+        }
+
+        test initializersAndInitBlocksRunInSourceOrder() {
+            IoTrace.log = ""
+            var r = new IoRect(3, 4)
+            Assert.assertEquals("init1 area=12 b=0;b;init2 b=2;", IoTrace.log)
+            Assert.assertEquals(12, r.area)
+            Assert.assertEquals(20, r.c)
+        }
+
+        test baseCompletesBeforeDerived() {
+            IoTrace.log = ""
+            var d = new IoDerived(5)
+            Assert.assertEquals("base-i1;base-p x=6;base-i2;der-i1 x=6;der-p y=5;der-i2;", IoTrace.log)
+        }
+    }
+}
