@@ -36,6 +36,32 @@ namespace Tests {
             Assert.assertEquals(33, add(3))
         }
 
+        // `g.run(...)` is the same call as `g(...)` (#372).
+        test typedLambdaLocalCalledThroughRun() {
+            var g: () => Int = () => 4
+            Assert.assertEquals(4, g.run())
+            Assert.assertEquals(5, g.run() + 1)
+        }
+
+        test typedLambdaLocalWithTwoParametersThroughRun() {
+            var add: (Int, Int) => Int = (a, b) => a + b
+            Assert.assertEquals(5, add.run(2, 3))
+            Assert.assertEquals(30, add(10, 20))
+        }
+
+        test typedLambdaLocalReturningStringThroughRun() {
+            var h: (Int) => String = (x) => x.toString() + "!"
+            Assert.assertEquals("7!", h.run(7))
+            Assert.assertEquals("8!", h(8))
+            Assert.assertEquals("9!", h.run(9).toString())
+        }
+
+        test capturedLambdaLocalCalledThroughRun() {
+            var g: () => Int = () => 9
+            var outer: () => Int = () => g.run() + 1
+            Assert.assertEquals(10, outer())
+        }
+
         test typedLambdaLocalInInitBlock() {
             var h = new LlHolder()
             Assert.assertEquals(42, h.made)
