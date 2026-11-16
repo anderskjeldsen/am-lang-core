@@ -1,0 +1,44 @@
+namespace Tests {
+
+    class LlHolder {
+        import Am.Lang
+        var made: Int = 0
+        init {
+            var g: () => Int = () => 40
+            this.made = g() + 2
+        }
+    }
+
+    // A lambda in a typed local (`var g: () => Int = ...`) can be called and passed
+    // on, in a method and in an init { } block. The untyped `var g = () => 1` is a
+    // compile error (#367).
+    class LambdaLocalTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun take(h: (Int) => Int, v: Int): Int {
+            return h(v)
+        }
+
+        test typedLambdaLocalIsCalled() {
+            var g: () => Int = () => 4
+            Assert.assertEquals(4, g())
+        }
+
+        test typedLambdaLocalWithParameterIsPassedOn() {
+            var twice: (Int) => Int = (n) => n * 2
+            Assert.assertEquals(10, LambdaLocalTests.take(twice, 5))
+        }
+
+        test typedLambdaLocalCapturesALocal() {
+            var base = 30
+            var add: (Int) => Int = (n) => n + base
+            Assert.assertEquals(33, add(3))
+        }
+
+        test typedLambdaLocalInInitBlock() {
+            var h = new LlHolder()
+            Assert.assertEquals(42, h.made)
+        }
+    }
+}
