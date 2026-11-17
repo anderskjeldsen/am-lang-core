@@ -1,0 +1,106 @@
+namespace Tests {
+
+    class PgBox<T>(var v: T) {
+        import Am.Lang
+
+        var puts: Int = 0
+
+        fun put(x: T) {
+            this.v = x
+            this.puts = this.puts + 1
+        }
+
+        fun get(): T {
+            return this.v
+        }
+    }
+
+    class PgHolder {
+        import Am.Lang
+        import Am.Collections
+
+        var items: List<Int> = new List<Int>()
+        var b: PgBox<Int> = new PgBox<Int>(0)
+
+        fun box(): PgBox<Int> {
+            return this.b
+        }
+    }
+
+    // Redmine #402: in v2 a call on a parenthesised generic receiver, `(l).add(5)`
+    // or `(x as List<Int>).get(0)`, used the erased class's symbol
+    // (`Am_Collections_List_f_add_0_T`, a gcc error) and left T unbound, as a
+    // statement and as an argument. It goes through the receiver's variant now.
+    class ParenGenericReceiverTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun twice(i: Int): Int {
+            return i * 2
+        }
+
+        static fun echo(s: String): String {
+            return s
+        }
+
+        test listOfInt() {
+            var l = new List<Int>()
+            (l).add(5)
+            (l).add(6)
+            Assert.assertEquals(2, (l).getSize())
+            Assert.assertEquals(5, (l).get(0))
+            Assert.assertEquals(12, ParenGenericReceiverTests.twice((l).get(1)))
+            Assert.assertEquals("6", (l).get(1).toString())
+            (l).get(0)
+            Assert.assertEquals(5, l.get(0))
+        }
+
+        test listOfString() {
+            var l = new List<String>()
+            (l).add("a")
+            (l).add("bc")
+            Assert.assertEquals("a", (l).get(0))
+            Assert.assertEquals("bc", ParenGenericReceiverTests.echo((l).get(1)))
+            Assert.assertEquals(2, (l).get(1).length())
+        }
+
+        test hashMapOfStringToInt() {
+            var m = new HashMap<String, Int>()
+            (m).set("k", 7)
+            Assert.assertTrue((m).containsKey("k"))
+            Assert.assertEquals(7, (m).get("k"))
+            Assert.assertEquals(14, ParenGenericReceiverTests.twice((m).get("k")))
+        }
+
+        test userGeneric() {
+            var b = new PgBox<Int>(0)
+            (b).put(9)
+            Assert.assertEquals(9, (b).get())
+            Assert.assertEquals(18, ParenGenericReceiverTests.twice((b).get()))
+            Assert.assertEquals(1, (b).puts)
+            var s = new PgBox<String>("x")
+            (s).put("y")
+            Assert.assertEquals("y", (s).get())
+        }
+
+        test throughACast() {
+            var l = new List<Int>()
+            l.add(1)
+            var any: Any = l
+            (any as List<Int>).add(11)
+            Assert.assertEquals(2, l.getSize())
+            Assert.assertEquals(11, (any as List<Int>).get(1))
+            Assert.assertEquals(22, ParenGenericReceiverTests.twice((any as List<Int>).get(1)))
+        }
+
+        test throughAMemberOrACall() {
+            var h = new PgHolder()
+            (h.items).add(21)
+            Assert.assertEquals(21, (h.items).get(0))
+            (h.box()).put(3)
+            Assert.assertEquals(3, (h.box()).get())
+            Assert.assertEquals(1, h.b.puts)
+        }
+    }
+}
