@@ -1,0 +1,202 @@
+namespace Tests {
+
+    enum WhenColor {
+        red = 0
+        green = 1
+        blue = 2
+    }
+
+    enum WhenSolo {
+        only = 7
+    }
+
+    class WhenPaint {
+        import Am.Lang
+
+        var color: WhenColor = WhenColor.green
+        var name: String = "paint"
+        var inner: WhenPaint? = null
+    }
+
+    // `when` used as a value (#192): no `else` over an enum when every member
+    // has a branch; any expression as the subject, evaluated exactly once.
+    class WhenValueTests {
+        import Am.Lang
+        import Am.Tests
+
+        static var calls: Int = 0
+
+        static fun nextColor(c: WhenColor): WhenColor {
+            WhenValueTests.calls = WhenValueTests.calls + 1
+            return c
+        }
+
+        static fun nameOf(c: WhenColor): String = when (c) {
+            WhenColor.red -> "red"
+            WhenColor.green -> "green"
+            WhenColor.blue -> "blue"
+        }
+
+        static fun codeOf(c: WhenColor): Int {
+            return when (c) {
+                WhenColor.red, WhenColor.green -> 1
+                WhenColor.blue -> 2
+            }
+        }
+
+        test exhaustiveEnumNeedsNoElse() {
+            Assert.assertEquals("red", WhenValueTests.nameOf(WhenColor.red))
+            Assert.assertEquals("green", WhenValueTests.nameOf(WhenColor.green))
+            Assert.assertEquals("blue", WhenValueTests.nameOf(WhenColor.blue))
+            Assert.assertEquals(1, WhenValueTests.codeOf(WhenColor.red))
+            Assert.assertEquals(1, WhenValueTests.codeOf(WhenColor.green))
+            Assert.assertEquals(2, WhenValueTests.codeOf(WhenColor.blue))
+        }
+
+        test singleMemberEnum() {
+            var s = WhenSolo.only
+            var v = when (s) {
+                WhenSolo.only -> 42
+            }
+            Assert.assertEquals(42, v)
+        }
+
+        test callSubjectIsEvaluatedOnce() {
+            WhenValueTests.calls = 0
+            var v = when (WhenValueTests.nextColor(WhenColor.blue)) {
+                WhenColor.red -> "r"
+                WhenColor.green -> "g"
+                WhenColor.blue -> "b"
+            }
+            Assert.assertEquals("b", v)
+            Assert.assertEquals(1, WhenValueTests.calls)
+
+            // With an `else` too, and as an argument.
+            WhenValueTests.calls = 0
+            Assert.assertEquals(3, when (WhenValueTests.nextColor(WhenColor.green)) {
+                WhenColor.red -> 1
+                else -> 3
+            })
+            Assert.assertEquals(1, WhenValueTests.calls)
+        }
+
+        test subjectNotEvaluatedWhenNotReached() {
+            WhenValueTests.calls = 0
+            var reached = false
+            var b = reached && when (WhenValueTests.nextColor(WhenColor.red)) {
+                WhenColor.red -> true
+                WhenColor.green -> false
+                WhenColor.blue -> false
+            }
+            Assert.assertFalse(b)
+            Assert.assertEquals(0, WhenValueTests.calls)
+        }
+
+        test subjectInALoopIsEvaluatedEachTime() {
+            WhenValueTests.calls = 0
+            var total = 0
+            for (i = 0 until 5) {
+                total = total + when (WhenValueTests.nextColor(WhenColor.blue)) {
+                    WhenColor.red -> 100
+                    WhenColor.green -> 10
+                    WhenColor.blue -> 1
+                }
+            }
+            Assert.assertEquals(5, total)
+            Assert.assertEquals(5, WhenValueTests.calls)
+        }
+
+        test propertyChainSubject() {
+            var p = new WhenPaint()
+            p.inner = new WhenPaint()
+            p.inner!!.color = WhenColor.red
+            var s = when (p.inner!!.color) {
+                WhenColor.red -> "R"
+                WhenColor.green -> "G"
+                WhenColor.blue -> "B"
+            }
+            Assert.assertEquals("R", s)
+            var t = when (p.color) {
+                WhenColor.red -> "R"
+                WhenColor.green -> "G"
+                WhenColor.blue -> "B"
+            }
+            Assert.assertEquals("G", t)
+        }
+
+        test stringSubjectFromAChainWithElse() {
+            var p = new WhenPaint()
+            p.inner = new WhenPaint()
+            p.inner!!.name = "deep"
+            var n = when (p.inner!!.name) {
+                "paint" -> 1
+                "deep" -> 2
+                else -> 3
+            }
+            Assert.assertEquals(2, n)
+        }
+
+        test returnsObjects() {
+            var a = new WhenPaint()
+            a.name = "a"
+            var b = new WhenPaint()
+            b.name = "b"
+            for (i = 0 until 3) {
+                var picked: WhenPaint = when (WhenValueTests.nextColor(WhenColor.green)) {
+                    WhenColor.red -> a
+                    WhenColor.green -> b
+                    WhenColor.blue -> new WhenPaint()
+                }
+                Assert.assertEquals("b", picked.name)
+            }
+            var fresh = when (a.color) {
+                WhenColor.red -> a
+                WhenColor.green -> new WhenPaint()
+                WhenColor.blue -> b
+            }
+            Assert.assertEquals("paint", fresh.name)
+        }
+
+        test nestedWhenValues() {
+            var c = WhenColor.blue
+            var d = WhenColor.red
+            var v = when (c) {
+                WhenColor.red -> "x"
+                WhenColor.green -> "y"
+                WhenColor.blue -> when (WhenValueTests.nextColor(d)) {
+                    WhenColor.red -> "blue-red"
+                    WhenColor.green -> "blue-green"
+                    WhenColor.blue -> "blue-blue"
+                }
+            }
+            Assert.assertEquals("blue-red", v)
+        }
+
+        test statementFormWithoutElseStillDoesNothing() {
+            var c = WhenColor.blue
+            var hit = 0
+            when (c) {
+                WhenColor.red -> hit = 1
+            }
+            Assert.assertEquals(0, hit)
+        }
+
+        static fun describe(n: Int?): String = when (n) {
+            3 -> "three"
+            null -> "none"
+            else -> "other"
+        }
+
+        // A nullable subject: null matches only the `null` branch.
+        test nullableSubjectWithValueBranches() {
+            Assert.assertEquals("none", WhenValueTests.describe(null))
+            Assert.assertEquals("three", WhenValueTests.describe(3))
+            Assert.assertEquals("other", WhenValueTests.describe(4))
+        }
+
+        test whenStaysAName() {
+            var when = 3
+            Assert.assertEquals(4, when + 1)
+        }
+    }
+}
