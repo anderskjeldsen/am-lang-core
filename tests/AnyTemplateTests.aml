@@ -1,0 +1,152 @@
+namespace Tests {
+
+    class TemplatePet {
+        import Am.Lang
+
+        var name: String = "pet"
+
+        override fun toString(): String {
+            return "Pet " + this.name
+        }
+    }
+
+    class TemplateHolder {
+        import Am.Lang
+
+        var item: Any = null
+
+        fun put(v: Any) {
+            this.item = v
+        }
+
+        fun describe(): String {
+            return "item=${this.item}"
+        }
+    }
+
+    // Redmine #417: in v2 a string template over an Any (`"${a}"`) segfaulted
+    // when the Any held a Double: the template had its own type switch with no
+    // Float/Double case, so the double was read as an object pointer. It uses
+    // the Any receiver dispatch of #405 now. Each kind is checked through a
+    // parameter, a local, a field and a call returning Any; a null Any throws,
+    // as in v1, and so does a null Int?.
+    class AnyTemplateTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun show(a: Any): String {
+            return "v=${a}"
+        }
+
+        static fun giveDouble(): Any {
+            return 0.25
+        }
+
+        static fun giveLong(): Any {
+            return 5000000000L
+        }
+
+        static fun pet(name: String): TemplatePet {
+            var p = new TemplatePet()
+            p.name = name
+            return p
+        }
+
+        test eachKindThroughAParameter() {
+            Assert.assertEquals("v=42", AnyTemplateTests.show(42))
+            Assert.assertEquals("v=-7", AnyTemplateTests.show(0 - 7))
+            Assert.assertEquals("v=9", AnyTemplateTests.show(9L))
+            Assert.assertEquals("v=8", AnyTemplateTests.show(8UI))
+            Assert.assertEquals("v=true", AnyTemplateTests.show(true))
+            Assert.assertEquals("v=false", AnyTemplateTests.show(false))
+            Assert.assertEquals("v=1.5", AnyTemplateTests.show(1.5))
+            Assert.assertEquals("v=2.5", AnyTemplateTests.show(2.5.toFloat()))
+            Assert.assertEquals("v=str", AnyTemplateTests.show("str"))
+            Assert.assertEquals("v=Pet rex", AnyTemplateTests.show(AnyTemplateTests.pet("rex")))
+        }
+
+        test anyLocals() {
+            var d: Any = 1.25
+            Assert.assertEquals("d=1.25", "d=${d}")
+            var l: Any = 5000000000L
+            Assert.assertEquals("l=5000000000", "l=${l}")
+            var f: Any = 0.5.toFloat()
+            Assert.assertEquals("f=0.5", "f=${f}")
+            var i: Any = 3
+            Assert.assertEquals("i=3", "i=${i}")
+            i = 4.5
+            Assert.assertEquals("i=4.5", "i=${i}")
+            i = AnyTemplateTests.pet("local")
+            Assert.assertEquals("i=Pet local", "i=${i}")
+        }
+
+        test anyFieldAndCallResult() {
+            var h = new TemplateHolder()
+            h.put(13)
+            Assert.assertEquals("field=13", "field=${h.item}")
+            Assert.assertEquals("item=13", h.describe())
+            h.put(6.5)
+            Assert.assertEquals("field=6.5", "field=${h.item}")
+            Assert.assertEquals("item=6.5", h.describe())
+            h.put(AnyTemplateTests.pet("f"))
+            Assert.assertEquals("item=Pet f", h.describe())
+            Assert.assertEquals("fn=0.25", "fn=${AnyTemplateTests.giveDouble()}")
+            Assert.assertEquals("fn=5000000000", "fn=${AnyTemplateTests.giveLong()}")
+        }
+
+        test severalInOneTemplate() {
+            var x: Any = 1.75
+            var y: Any = 9
+            var z: Any = "zed"
+            var h = new TemplateHolder()
+            h.put(false)
+            var m = "m"
+            Assert.assertEquals("1.75 9 zed false Pet m", "${x} ${y} ${z} ${h.item} ${AnyTemplateTests.pet(m)}")
+            var s = "a=${x}, b=${y}"
+            Assert.assertEquals("a=1.75, b=9", s)
+        }
+
+        test inALoop() {
+            var parts = ""
+            var i = 0
+            while (i < 3) {
+                var a: Any = 0.5
+                if (i == 1) { a = i }
+                parts = parts + "[${a}]"
+                i = i + 1
+            }
+            Assert.assertEquals("[0.5][1][0.5]", parts)
+        }
+
+        test nullAnyThrows() {
+            var threw = false
+            try {
+                AnyTemplateTests.show(null)
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+            threw = false
+            var h = new TemplateHolder()
+            try {
+                h.describe()
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+
+        test nullablePrimitive() {
+            var n: Int? = 12
+            Assert.assertEquals("n=12", "n=${n}")
+            var threw = false
+            n = null
+            try {
+                var s = "n=${n}"
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+    }
+}
