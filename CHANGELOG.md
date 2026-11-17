@@ -38,9 +38,10 @@ New regression tests for compiler fixes, most of which also run through v2:
 - LambdaLocalTests: #367, #372.
 - From the AmigaOS examples: v2 miscompiles of catch and each variables, and interface wrapping.
 - Also: SuspendArcTests (#336), SuspendBlockExitTests (#298), SuspendTempTests (#35), InitOrderTests (#25) and RunAsyncTests (#299).
+- WhenValueTests (#192, 2026-11-17): `when` as a value without `else` over a fully covered enum (several members in one branch, a single-member enum), a call subject evaluated exactly once, not at all past a short-circuiting `&&`, and once per loop pass, property-chain subjects, Strings and objects as the value, a nested value `when`, a nullable subject with value and `null` branches, a statement `when` without `else` that matches nothing, and `when` as a name. Runs under v1 and v2.
 - Smaller ones: `!!` (#211, #239, #253), generic `T?` (#238), string templates (#179), bare calls after operators (#160), `this` in lambdas (#39), catch lines (#180) and a local named `primitive` (#181).
 
-Totals: linux-x64 326/326, and AmigaOS under amiberry 326/326.
+Totals: linux-x64 326/326, and AmigaOS under amiberry 326/326 (before WhenValueTests; with it linux-x64 338/338 under v1 and v2).
 
 ## [0.15.0] - 2026-11-07
 
