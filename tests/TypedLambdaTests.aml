@@ -1,0 +1,150 @@
+namespace Tests {
+
+    // A field holding a lambda with declared parameter types: untyped (the lambda
+    // gives it its function type) and typed (the declared types must match).
+    class TlHolder {
+        import Am.Lang
+        var triple = (x: Int) => x * 3
+        var plus: (x: Int) => Int = (x: Int) => x + 100
+        var later: (s: String) => String
+        init {
+            this.later = (s: String) => s + "!"
+        }
+    }
+
+    // Lambda parameters with declared types, `(x: Int) => x * 2` (#189). With no
+    // function type to take (an untyped local or field), the declared types and the
+    // body's result are the lambda's type. Where one is expected (a typed local, a
+    // parameter), the declared types must be the expected ones.
+    class TypedLambdaTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun apply(f: (x: Int) => Int, v: Int): Int {
+            return f(v)
+        }
+
+        static fun pick(f: (x: Int) => Int, v: Int): String {
+            return "int " + f(v).toString()
+        }
+
+        static fun pick(f: (s: String) => String, v: String): String {
+            return "string " + f(v)
+        }
+
+        test untypedLocalWithExpressionBody() {
+            var f = (x: Int) => x * 2
+            Assert.assertEquals(6, f(3))
+            Assert.assertEquals(8, f.run(4))
+            Assert.assertEquals("10", f(5).toString())
+        }
+
+        test untypedLocalWithBlockBodyAndTwoParameters() {
+            var g = (n: Int, s: String) => {
+                if (n > 1) {
+                    return s + n.toString()
+                }
+                return s
+            }
+            Assert.assertEquals("a2", g(2, "a"))
+            Assert.assertEquals("b", g.run(1, "b"))
+        }
+
+        test untypedLocalReturningNothing() {
+            var seen = new List<String>()
+            var add = (s: String) => {
+                seen.add(s)
+            }
+            var addExpr = (s: String) => seen.add(s + s)
+            add("x")
+            addExpr("y")
+            Assert.assertEquals(2, seen.getSize())
+            Assert.assertEquals("yy", seen.get(1))
+        }
+
+        test genericParameterType() {
+            var count = (l: List<String>) => l.getSize()
+            var words = new List<String>()
+            words.add("a")
+            words.add("b")
+            Assert.assertEquals(2, count(words))
+        }
+
+        // A nullable primitive (`(x: Int?) =>`) is left out: v2 doesn't keep the `?` of
+        // a function type's parameter (V2_PORT_PLAN, #189). It is checked in v1's
+        // TypedLambdaParamsTest.
+        test nullableParameterType() {
+            var isNull = (s: String?) => s == null
+            Assert.assertTrue(isNull(null))
+            Assert.assertFalse(isNull("x"))
+            var lengthOr = (s: String?, d: Int) => {
+                if (s == null) {
+                    return d
+                }
+                return s.length()
+            }
+            Assert.assertEquals(9, lengthOr(null, 9))
+            Assert.assertEquals(3, lengthOr("abc", 9))
+        }
+
+        test functionTypedParameter() {
+            var twice = (g: (n: Int) => Int, v: Int) => g(g(v))
+            Assert.assertEquals(50, twice((n: Int) => n * 5, 2))
+            var plusFive = (m: Int) => m + 5
+            Assert.assertEquals(12, twice(plusFive, 2))
+        }
+
+        test capturesLocals() {
+            var k = 7
+            var addK = (x: Int) => x + k
+            Assert.assertEquals(8, addK(1))
+            var outer = (a: Int) => {
+                var inner = (b: Int) => a * b + k
+                return inner(3)
+            }
+            Assert.assertEquals(22, outer(5))
+        }
+
+        test passedWhereAFunctionTypeIsExpected() {
+            Assert.assertEquals(15, TypedLambdaTests.apply((x: Int) => x + 10, 5))
+            var h: (x: Int) => Int = (x: Int) => x - 1
+            Assert.assertEquals(4, h(5))
+            // Mixed: the untyped parameter takes the expected type.
+            var m: (p: Int, q: Int) => Int = (p: Int, q) => p - q
+            Assert.assertEquals(7, m(10, 3))
+        }
+
+        test passedToExtensionFunctions() {
+            var words = new List<String>()
+            words.add("a")
+            words.add("bb")
+            var kept = words.filter((w: String) => w.length() > 1).toList()
+            Assert.assertEquals(1, kept.getSize())
+            Assert.assertEquals("bb", kept.get(0))
+            var nums = new List<Int>()
+            nums.add(4)
+            var strs = nums.map((i: Int) => "n" + i.toString()).toList()
+            Assert.assertEquals("n4", strs.get(0))
+        }
+
+        test passedToOverloads() {
+            Assert.assertEquals("string a!", TypedLambdaTests.pick((s: String) => s + "!", "a"))
+            Assert.assertEquals("int 42", TypedLambdaTests.pick((x: Int) => x + 41, 1))
+        }
+
+        test storedInFields() {
+            var h = new TlHolder()
+            Assert.assertEquals(12, h.triple(4))
+            Assert.assertEquals(101, h.plus(1))
+            Assert.assertEquals("hi!", h.later("hi"))
+        }
+
+        test parenthesesAreStillExpressions() {
+            var x = 2
+            var r = (x + 3) * 2
+            Assert.assertEquals(10, r)
+            Assert.assertEquals(4, (x) * 2)
+        }
+    }
+}
