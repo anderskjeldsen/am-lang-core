@@ -3,8 +3,8 @@ namespace Tests {
     // Redmine #237: nullable enums. Every enum here has a member whose value is
     // 0, so a null that read as its backing value would look like that member.
     // These run under v1 and v2. What v2 gets wrong for every nullable value
-    // type (Int? too: a null compared with a value, null == null, `when` on a
-    // null subject, `x!!.f()`, `?.`, getOrNull, List<Color?>, nullable arrays,
+    // type (Int? too: a null compared with a value, null == null,
+    // `x!!.f()`, `?.`, List<Color?>, nullable arrays,
     // statics, lambda captures, suspend) is in tests-v1-only/, which only v1
     // runs; see V2_PORT_PLAN.md.
 
@@ -239,6 +239,33 @@ namespace Tests {
                 else -> 3
             }
             Assert.assertEquals(1, r3)
+        }
+
+        // Moved from tests-v1-only: v2 passes it since #192.
+        test whenOnANullSubject() {
+            var w: NeColor? = null
+            var r = when (w) {
+                NeColor.black -> 1
+                NeColor.white -> 2
+                else -> 3
+            }
+            Assert.assertEquals(3, r)
+        }
+
+        // HashMap<K, Color>.getOrNull returns V?: v2 since #383 (its `return null` for
+        // V = Color was an object null, read as present).: a missing key is null, not black.
+        test hashMapGetOrNull() {
+            var m = new HashMap<String, NeColor>()
+            m.set("b", NeColor.black)
+            m.set("r", NeColor.red)
+            Assert.assertTrue(m.getOrNull("b") != null)
+            Assert.assertTrue(m.getOrNull("b") == NeColor.black)
+            Assert.assertTrue(m.getOrNull("missing") == null)
+            Assert.assertFalse(m.getOrNull("missing") == NeColor.black)
+            var got = m.getOrNull("r")
+            Assert.assertTrue(got == NeColor.red)
+            var none = m.getOrNull("missing")
+            Assert.assertTrue((none ?? NeColor.white) == NeColor.white)
         }
 
         test stringTemplates() {

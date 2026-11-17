@@ -98,15 +98,6 @@ namespace TestsV1 {
             Assert.assertTrue((b?.getValue() ?? 99UB) == 0UB)
         }
 
-        test whenOnANullSubject() {
-            var w: NvColor? = null
-            var r = when (w) {
-                NvColor.black -> 1
-                NvColor.white -> 2
-                else -> 3
-            }
-            Assert.assertEquals(3, r)
-        }
 
         test staticField() {
             NullableEnumV1Tests.shared = null
@@ -117,21 +108,6 @@ namespace TestsV1 {
             Assert.assertTrue(NullableEnumV1Tests.shared != null)
             NullableEnumV1Tests.shared = null
             Assert.assertTrue(NullableEnumV1Tests.shared == null)
-        }
-
-        // HashMap<K, Color>.getOrNull returns V?: a missing key is null, not black.
-        test hashMapGetOrNull() {
-            var m = new HashMap<String, NvColor>()
-            m.set("b", NvColor.black)
-            m.set("r", NvColor.red)
-            Assert.assertTrue(m.getOrNull("b") != null)
-            Assert.assertTrue(m.getOrNull("b") == NvColor.black)
-            Assert.assertTrue(m.getOrNull("missing") == null)
-            Assert.assertFalse(m.getOrNull("missing") == NvColor.black)
-            var got = m.getOrNull("r")
-            Assert.assertTrue(got == NvColor.red)
-            var none = m.getOrNull("missing")
-            Assert.assertTrue((none ?? NvColor.white) == NvColor.white)
         }
 
         test hashMapOfNullableEnums() {
