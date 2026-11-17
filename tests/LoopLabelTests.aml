@@ -39,6 +39,7 @@ namespace Tests {
         import Am.Tests
 
         static var pending: Continuation? = null
+        static var lastLog: String = ""
         var log: String = ""
         var finished: Bool = false
 
@@ -413,9 +414,35 @@ namespace Tests {
             this.finished = true
         }
 
-        private static fun driveSuspend(): String {
+        // The same with for loops (#384: their counters were lost across
+        // the suspension under v2).
+        suspend fun runFor() {
+            outer@ for (i = 1 to 4) {
+                inner@ for (j = 1 to 4) {
+                    var item = new LoopLabelItem()
+                    item.n = this.tick()
+                    if (j == 3) {
+                        continue@outer
+                    }
+                    if (i == 3) {
+                        break@outer
+                    }
+                    if (j == 1) {
+                        continue@inner
+                    }
+                    this.log = this.log + i.toString() + j.toString() + " "
+                }
+            }
+            this.finished = true
+        }
+
+        private static fun driveSuspend(useFor: Bool) {
             var t = new LoopLabelTests()
-            t.run()
+            if (useFor) {
+                t.runFor()
+            } else {
+                t.run()
+            }
             var guard = 0
             while (LoopLabelTests.pending != null && guard < 100) {
                 var c = LoopLabelTests.pending
@@ -426,15 +453,37 @@ namespace Tests {
                 guard++
             }
             Assert.assertTrue(t.finished)
-            return t.log
+            LoopLabelTests.lastLog = t.log
         }
 
-        // Labeled jumps across suspend points in a suspend function. No
-        // allocation count here: under the v2 compiler a suspend function
-        // that parks inside a loop leaks with or without labels.
+        // A function of its own, so nothing it reads outlives it.
+        private static fun assertLog(expected: String) {
+            Assert.assertEquals(expected, LoopLabelTests.lastLog)
+        }
+
+        // Labeled jumps across suspend points in a suspend function, and the
+        // objects of the loop bodies released (#385: v2 leaked them).
         test labeledJumpsInSuspendFunction() {
-            Assert.assertEquals("11 12 21 22 ", LoopLabelTests.driveSuspend())
-            Assert.assertEquals("11 12 21 22 ", LoopLabelTests.driveSuspend())
+            LoopLabelTests.driveSuspend(false)
+            LoopLabelTests.assertLog("11 12 21 22 ")
+            LoopLabelTests.driveSuspend(false)
+            LoopLabelTests.assertLog("11 12 21 22 ")
+            var before = Arc.getAllocationCount()
+            for (n = 0 until 5) {
+                LoopLabelTests.driveSuspend(false)
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        // The same with for loops (#384).
+        test labeledJumpsInSuspendFunctionWithForLoops() {
+            LoopLabelTests.driveSuspend(true)
+            LoopLabelTests.assertLog("12 22 ")
+            var before = Arc.getAllocationCount()
+            for (n = 0 until 5) {
+                LoopLabelTests.driveSuspend(true)
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
         }
     }
 }
