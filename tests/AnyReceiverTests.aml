@@ -1,0 +1,169 @@
+namespace Tests {
+
+    class AnyDog {
+        import Am.Lang
+
+        var name: String = "dog"
+
+        override fun toString(): String {
+            return "Dog " + this.name
+        }
+
+        override fun hash(): UInt {
+            return 77UI
+        }
+    }
+
+    class AnyHolder {
+        import Am.Lang
+
+        var value: Any = null
+
+        fun put(v: Any) {
+            this.value = v
+        }
+
+        fun describeOwn(): String {
+            return this.value.toString()
+        }
+    }
+
+    // Redmine #405: in v2 a call on an Any receiver (`a.toString()`,
+    // `a.hash()`) rendered `aobject * __varN = var_a;` where `var_a` is a
+    // nullable_value, a gcc error. The call dispatches on the boxed value now,
+    // as in v1. Each case checks the result for an object, a String, an Int, a
+    // Bool and a Double held in the Any, through a parameter, a local, a field
+    // and a `!!`, as a statement and as a value.
+    class AnyReceiverTests {
+        import Am.Lang
+        import Am.Tests
+
+        static var calls = 0
+
+        static fun describe(a: Any): String {
+            return a.toString()
+        }
+
+        static fun describeVar(a: Any): String {
+            var s = a.toString()
+            return s
+        }
+
+        static fun hashOf(a: Any): UInt {
+            return a.hash()
+        }
+
+        static fun bangString(a: Any): String {
+            return a!!.toString()
+        }
+
+        static fun echo(s: String): String {
+            AnyReceiverTests.calls = AnyReceiverTests.calls + 1
+            return s
+        }
+
+        static fun asArgument(a: Any): String {
+            return AnyReceiverTests.echo(a.toString())
+        }
+
+        static fun statementCalls(a: Any): Int {
+            a.toString()
+            a.hash()
+            return 1
+        }
+
+        test toStringOfEachKindThroughAParameter() {
+            Assert.assertEquals("Dog rex", AnyReceiverTests.describe(AnyReceiverTests.dog("rex")))
+            Assert.assertEquals("str", AnyReceiverTests.describe("str"))
+            Assert.assertEquals("42", AnyReceiverTests.describe(42))
+            Assert.assertEquals("-7", AnyReceiverTests.describe(0 - 7))
+            Assert.assertEquals("true", AnyReceiverTests.describe(true))
+            Assert.assertEquals("false", AnyReceiverTests.describe(false))
+            Assert.assertEquals("1.5", AnyReceiverTests.describe(1.5))
+            Assert.assertEquals("9", AnyReceiverTests.describe(9L))
+            Assert.assertEquals("8", AnyReceiverTests.describe(8UI))
+        }
+
+        test toStringAsAValue() {
+            Assert.assertEquals("42", AnyReceiverTests.describeVar(42))
+            Assert.assertEquals("Dog a", AnyReceiverTests.describeVar(AnyReceiverTests.dog("a")))
+            AnyReceiverTests.calls = 0
+            Assert.assertEquals("true", AnyReceiverTests.asArgument(true))
+            Assert.assertEquals("str", AnyReceiverTests.asArgument("str"))
+            Assert.assertEquals(2, AnyReceiverTests.calls)
+            var joined = AnyReceiverTests.describe(1) + AnyReceiverTests.describe("x")
+            Assert.assertEquals("1x", joined)
+        }
+
+        test hashOfEachKind() {
+            Assert.assertEquals(77UI, AnyReceiverTests.hashOf(AnyReceiverTests.dog("h")))
+            Assert.assertEquals("str".hash(), AnyReceiverTests.hashOf("str"))
+            var i = 42
+            Assert.assertEquals(i.hash(), AnyReceiverTests.hashOf(42))
+            var b = true
+            Assert.assertEquals(b.hash(), AnyReceiverTests.hashOf(true))
+        }
+
+        test statementCallsRunOnEveryKind() {
+            Assert.assertEquals(1, AnyReceiverTests.statementCalls(AnyReceiverTests.dog("s")))
+            Assert.assertEquals(1, AnyReceiverTests.statementCalls("s"))
+            Assert.assertEquals(1, AnyReceiverTests.statementCalls(5))
+            Assert.assertEquals(1, AnyReceiverTests.statementCalls(false))
+            Assert.assertEquals(1, AnyReceiverTests.statementCalls(2.25))
+        }
+
+        test anyLocalAsReceiver() {
+            var a: Any = 42
+            Assert.assertEquals("42", a.toString())
+            a = "now a string"
+            Assert.assertEquals("now a string", a.toString())
+            a = AnyReceiverTests.dog("local")
+            Assert.assertEquals("Dog local", a.toString())
+            Assert.assertEquals(77UI, a.hash())
+            a = 2.5
+            Assert.assertEquals("2.5", a.toString())
+        }
+
+        test anyFieldAsReceiver() {
+            var h = new AnyHolder()
+            h.put(13)
+            Assert.assertEquals("13", h.value.toString())
+            Assert.assertEquals("13", h.describeOwn())
+            h.put(true)
+            Assert.assertEquals("true", h.value.toString())
+            h.put(AnyReceiverTests.dog("field"))
+            Assert.assertEquals("Dog field", h.value.toString())
+            Assert.assertEquals("Dog field", h.describeOwn())
+            Assert.assertEquals(77UI, h.value.hash())
+            h.value.toString()
+        }
+
+        test nonNullAssertedAnyReceiver() {
+            Assert.assertEquals("42", AnyReceiverTests.bangString(42))
+            Assert.assertEquals("Dog b", AnyReceiverTests.bangString(AnyReceiverTests.dog("b")))
+            var threw = false
+            try {
+                AnyReceiverTests.bangString(null)
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+
+        test nullAnyReceiverThrows() {
+            var threw = false
+            try {
+                AnyReceiverTests.describe(null)
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+
+        static fun dog(name: String): AnyDog {
+            var d = new AnyDog()
+            d.name = name
+            return d
+        }
+    }
+}
