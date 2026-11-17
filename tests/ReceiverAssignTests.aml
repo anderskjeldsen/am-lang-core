@@ -1,0 +1,262 @@
+namespace Tests {
+
+    class RaBox<T> {
+        import Am.Lang
+        import Am.Collections
+
+        var v: T? = null
+        var n: T
+        var items: List<T> = new List<T>()
+        var named: HashMap<String, T> = new HashMap<String, T>()
+
+        fun setN(x: T) {
+            this.n = x
+        }
+    }
+
+    class RaOuter<T> {
+        import Am.Lang
+
+        var box: RaBox<T> = new RaBox<T>()
+    }
+
+    class RaThing {
+        import Am.Lang
+
+        var label: String = "thing"
+
+        override fun toString(): String {
+            return this.label
+        }
+    }
+
+    class RaHolder {
+        import Am.Lang
+
+        var value: Any = null
+        var w: Int? = 1
+        var box: RaBox<Int> = new RaBox<Int>()
+
+        fun putW(q: Int?) {
+            this.w = q
+        }
+
+        fun putDouble() {
+            this.value = 1.25
+        }
+
+        fun putLong() {
+            this.value = 5000000000L
+        }
+
+        static var sv: Any = null
+        static var sb: RaBox<Int> = new RaBox<Int>()
+        static var ss: RaBox<String> = new RaBox<String>()
+    }
+
+    // Redmine #416, #418, #411: in v2, an assignment through a receiver other
+    // than `this` boxed by the field's DECLARED type. `b.v = 4` on a Box<Int>
+    // with `v: T?` and `h.value = 13` on an `Any` field both rendered
+    // `.flags = 0, .value.object_value = 4` (a gcc error); and `b.items.get(0)`
+    // with `items: List<T>` dispatched on `List_ta_T`. The receiver's variant
+    // substitutes T now, and an `Any` slot is boxed by the value's type.
+    class ReceiverAssignTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        test genericNullableFieldOfInt() {
+            var b = new RaBox<Int>()
+            Assert.assertTrue(b.v == null)
+            b.v = 4
+            Assert.assertEquals(4, b.v!!)
+            var x = 7
+            b.v = x
+            Assert.assertEquals(7, b.v!!)
+            b.v = null
+            Assert.assertTrue(b.v == null)
+            b.v = -3
+            Assert.assertEquals(-3, b.v!!)
+        }
+
+        test genericNullableFieldFromNullableLocal() {
+            var b = new RaBox<Int>()
+            var q: Int? = null
+            b.v = 9
+            b.v = q
+            Assert.assertTrue(b.v == null)
+            q = 0
+            b.v = q
+            Assert.assertFalse(b.v == null)
+            Assert.assertEquals(0, b.v!!)
+        }
+
+        test genericNullableFieldOfString() {
+            var b = new RaBox<String>()
+            Assert.assertTrue(b.v == null)
+            b.v = "hi"
+            Assert.assertEquals("hi", b.v!!)
+            var s = "there"
+            b.v = s
+            Assert.assertEquals("there", b.v!!)
+            b.v = null
+            Assert.assertTrue(b.v == null)
+        }
+
+        test genericNullableFieldOfBool() {
+            var b = new RaBox<Bool>()
+            Assert.assertTrue(b.v == null)
+            b.v = true
+            Assert.assertTrue(b.v!!)
+            b.v = false
+            Assert.assertFalse(b.v!!)
+            Assert.assertFalse(b.v == null)
+            b.v = null
+            Assert.assertTrue(b.v == null)
+        }
+
+        test genericFieldCompound() {
+            var b = new RaBox<Int>()
+            b.n = 10
+            Assert.assertEquals(10, b.n)
+            b.n += 5
+            Assert.assertEquals(15, b.n)
+            b.n -= 1
+            Assert.assertEquals(14, b.n)
+            b.setN(2)
+            b.n = b.n * 3
+            Assert.assertEquals(6, b.n)
+            var s = new RaBox<String>()
+            s.n = "a"
+            s.n += "b"
+            Assert.assertEquals("ab", s.n)
+        }
+
+        test chainedReceiver() {
+            var h = new RaHolder()
+            h.box.v = 4
+            Assert.assertEquals(4, h.box.v!!)
+            h.box.v = null
+            Assert.assertTrue(h.box.v == null)
+            h.box.n = 3
+            h.box.n += 2
+            Assert.assertEquals(5, h.box.n)
+        }
+
+        test chainedReceiverThroughGenericOuter() {
+            var o = new RaOuter<Int>()
+            o.box.v = 4
+            Assert.assertEquals(4, o.box.v!!)
+            o.box.n = 8
+            Assert.assertEquals(8, o.box.n)
+            var os = new RaOuter<String>()
+            os.box.v = "deep"
+            Assert.assertEquals("deep", os.box.v!!)
+        }
+
+        test anyFieldFromOutside() {
+            var h = new RaHolder()
+            Assert.assertTrue(h.value == null)
+            h.value = 13
+            Assert.assertEquals(13, h.value as Int)
+            Assert.assertEquals("13", h.value.toString())
+            h.value = true
+            Assert.assertTrue(h.value as Bool)
+            Assert.assertEquals("true", h.value.toString())
+            h.value = 2.5
+            Assert.assertEquals("2.5", h.value.toString())
+            var d = 0.25
+            h.value = d
+            Assert.assertEquals("0.25", h.value.toString())
+            h.value = "str"
+            Assert.assertEquals("str", h.value as String)
+            var t = new RaThing()
+            h.value = t
+            Assert.assertEquals("thing", h.value.toString())
+            Assert.assertEquals("thing", (h.value as RaThing).label)
+            h.value = null
+            Assert.assertTrue(h.value == null)
+            var k = 21
+            h.value = k
+            Assert.assertEquals(21, h.value as Int)
+        }
+
+        test nullableFieldFromNullableLocal() {
+            var h = new RaHolder()
+            var q: Int? = null
+            h.w = q
+            Assert.assertTrue(h.w == null)
+            q = 6
+            h.w = q
+            Assert.assertEquals(6, h.w!!)
+            h.putW(null)
+            Assert.assertTrue(h.w == null)
+            h.putW(2)
+            Assert.assertEquals(2, h.w!!)
+        }
+
+        test numericLiteralsIntoAny() {
+            var h = new RaHolder()
+            h.value = 1.25
+            Assert.assertEquals("1.25", h.value.toString())
+            h.value = 5000000000L
+            Assert.assertEquals("5000000000", h.value.toString())
+            h.value = 7
+            h.putDouble()
+            Assert.assertEquals("1.25", h.value.toString())
+            h.putLong()
+            Assert.assertEquals("5000000000", h.value.toString())
+            var a: Any = 1
+            a = 0.5
+            Assert.assertEquals("0.5", a.toString())
+            a = 6000000000L
+            Assert.assertEquals("6000000000", a.toString())
+        }
+
+        test anyFieldFromNullableLocal() {
+            var h = new RaHolder()
+            var q: Int? = 5
+            h.value = q
+            Assert.assertEquals(5, h.value as Int)
+            q = null
+            h.value = q
+            Assert.assertTrue(h.value == null)
+        }
+
+        test staticFields() {
+            RaHolder.sv = 5
+            Assert.assertEquals(5, RaHolder.sv as Int)
+            Assert.assertEquals("5", RaHolder.sv.toString())
+            RaHolder.sv = "s"
+            Assert.assertEquals("s", RaHolder.sv as String)
+            RaHolder.sv = null
+            Assert.assertTrue(RaHolder.sv == null)
+            RaHolder.sb.v = 6
+            Assert.assertEquals(6, RaHolder.sb.v!!)
+            RaHolder.sb.v = null
+            Assert.assertTrue(RaHolder.sb.v == null)
+            RaHolder.ss.v = "st"
+            Assert.assertEquals("st", RaHolder.ss.v!!)
+        }
+
+        test genericCollectionFieldThroughReceiver() {
+            var b = new RaBox<Int>()
+            b.items.add(9)
+            b.items.add(10)
+            Assert.assertEquals(2, b.items.getSize())
+            Assert.assertEquals(9, b.items.get(0))
+            Assert.assertEquals(10, b.items.get(1))
+            b.named.set("a", 3)
+            Assert.assertTrue(b.named.containsKey("a"))
+            Assert.assertEquals(3, b.named.get("a"))
+            var s = new RaBox<String>()
+            s.items.add("x")
+            Assert.assertEquals("x", s.items.get(0))
+            s.named.set("k", "v")
+            Assert.assertEquals("v", s.named.get("k"))
+            var o = new RaOuter<Int>()
+            o.box.items.add(4)
+            Assert.assertEquals(4, o.box.items.get(0))
+        }
+    }
+}
