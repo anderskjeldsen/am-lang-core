@@ -1,0 +1,157 @@
+namespace Tests {
+
+    class GfBox<T> {
+        import Am.Lang
+        import Am.Collections
+
+        var items: List<T> = new List<T>()
+        var named: HashMap<String, T> = new HashMap<String, T>()
+        var label: String = "box"
+        var adds: Int = 0
+
+        fun add(item: T) {
+            this.items.add(item)
+            this.adds = this.adds + 1
+        }
+
+        fun at(i: Int): T {
+            return this.items.get(i)
+        }
+
+        fun put(k: String, v: T) {
+            this.named.set(k, v)
+        }
+
+        fun lookup(k: String): T {
+            return this.named.get(k)
+        }
+
+        fun has(k: String): Bool {
+            return this.named.containsKey(k)
+        }
+
+        fun count(): Int {
+            return this.items.getSize()
+        }
+    }
+
+    class GfBase<T> {
+        import Am.Lang
+        import Am.Collections
+
+        var baseItems: List<T> = new List<T>()
+        var baseCount: Int = 5
+    }
+
+    class GfSub<T> : GfBase<T> {
+        import Am.Lang
+        import Am.Collections
+
+        var subItems: List<T> = new List<T>()
+
+        fun add(item: T) {
+            this.baseItems.add(item)
+            this.subItems.add(item)
+            this.subItems.add(item)
+        }
+
+        fun baseSize(): Int {
+            return this.baseItems.getSize()
+        }
+
+        fun subSize(): Int {
+            return this.subItems.getSize()
+        }
+
+        fun firstBase(): T {
+            return this.baseItems.get(0)
+        }
+
+        fun lastSub(): T {
+            return this.subItems.get(this.subItems.getSize() - 1)
+        }
+    }
+
+    // Redmine #406: in v2, `var items: List<T> = new List<T>()` in a generic
+    // class rendered the unspecialised constructor (`Am_Collections_List_f_List_0`,
+    // an implicitly declared function, a gcc error) in the generic base
+    // class's __init_instance. Each variant renders it with T bound now, and a
+    // variant of a generic subclass renders its generic base's ones.
+    class GenericFieldInitTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        test listFieldOfInt() {
+            var b = new GfBox<Int>()
+            Assert.assertEquals(0, b.count())
+            b.add(3)
+            b.add(4)
+            Assert.assertEquals(2, b.count())
+            Assert.assertEquals(3, b.at(0))
+            Assert.assertEquals(4, b.at(1))
+            Assert.assertEquals(2, b.adds)
+            Assert.assertEquals("box", b.label)
+        }
+
+        test listFieldOfString() {
+            var b = new GfBox<String>()
+            Assert.assertEquals(0, b.count())
+            b.add("x")
+            b.add("y")
+            Assert.assertEquals(2, b.count())
+            Assert.assertEquals("x", b.at(0))
+            Assert.assertEquals("y", b.at(1))
+            Assert.assertEquals("box", b.label)
+        }
+
+        test eachInstanceHasItsOwnList() {
+            var a = new GfBox<Int>()
+            var b = new GfBox<Int>()
+            a.add(1)
+            Assert.assertEquals(1, a.count())
+            Assert.assertEquals(0, b.count())
+        }
+
+        test hashMapFieldOfInt() {
+            var b = new GfBox<Int>()
+            Assert.assertFalse(b.has("a"))
+            b.put("a", 7)
+            b.put("b", 8)
+            Assert.assertTrue(b.has("a"))
+            Assert.assertEquals(7, b.lookup("a"))
+            Assert.assertEquals(8, b.lookup("b"))
+        }
+
+        test hashMapFieldOfString() {
+            var b = new GfBox<String>()
+            b.put("k", "v")
+            Assert.assertTrue(b.has("k"))
+            Assert.assertFalse(b.has("v"))
+            Assert.assertEquals("v", b.lookup("k"))
+        }
+
+        test genericSubclassOfInt() {
+            var s = new GfSub<Int>()
+            Assert.assertEquals(0, s.baseSize())
+            Assert.assertEquals(0, s.subSize())
+            Assert.assertEquals(5, s.baseCount)
+            s.add(9)
+            s.add(10)
+            Assert.assertEquals(2, s.baseSize())
+            Assert.assertEquals(4, s.subSize())
+            Assert.assertEquals(9, s.firstBase())
+            Assert.assertEquals(10, s.lastSub())
+        }
+
+        test genericSubclassOfString() {
+            var s = new GfSub<String>()
+            s.add("p")
+            Assert.assertEquals(1, s.baseSize())
+            Assert.assertEquals(2, s.subSize())
+            Assert.assertEquals("p", s.firstBase())
+            Assert.assertEquals("p", s.lastSub())
+            Assert.assertEquals(5, s.baseCount)
+        }
+    }
+}
