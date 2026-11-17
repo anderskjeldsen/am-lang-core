@@ -1,0 +1,167 @@
+namespace Tests {
+
+    class NothrowInferenceNode {
+        import Am.Lang
+        var v: Int = 1
+        var n: Int? = null
+    }
+
+    // Redmine #420: v1 gives a function it infers can't throw a `__direct`
+    // entry point whose callers never look at the exception. Each function
+    // below does nothing but one thing the generated code guards with a
+    // runtime throw, which the inference used to miss (so the exception was
+    // dropped and the caller carried on). Every one must reach the caller's
+    // catch. NOTE: `amlc test` builds turn the inference off (mocks), so v1
+    // exercises this in run builds and RuntimeThrowSitesTest; the suite keeps
+    // the behaviour pinned for v2 and for a test mode that stops doing so.
+    // A property read through a null object, a method call on a null String?
+    // and `as` on a boxed Int don't throw under v2, so those are in
+    // tests-v1-only/NothrowInferenceV1Tests.aml.
+    class NothrowInferenceTests {
+        import Am.Lang
+        import Am.Tests
+
+        var anyField: Any = "set"
+        var count: Int? = null
+
+        fun anyFieldMember(): String {
+            return this.anyField.toString()
+        }
+
+        static fun anyParamMember(a: Any): String {
+            return a.toString()
+        }
+
+        static fun nullablePrimitiveMember(i: Int?): String {
+            return i.toString()
+        }
+
+        static fun compoundOnNullableLocal(i: Int?): Int? {
+            var j: Int? = i
+            j += 1
+            return j
+        }
+
+        fun compoundOnNullableField() {
+            this.count += 1
+        }
+
+        static fun compoundOnNullableProperty(node: NothrowInferenceNode) {
+            node.n += 1
+        }
+
+        static fun arrayRead(xs: Int[]): Int {
+            return xs[5]
+        }
+
+        static fun arrayWrite(xs: Int[]) {
+            xs[5] = 3
+        }
+
+        static fun bang(i: Int?): Int {
+            return i!!
+        }
+
+        static fun explicitThrow() {
+            throw new Exception("thrown")
+        }
+
+        static fun nonNullObjectMember(node: NothrowInferenceNode): Int {
+            return node.v
+        }
+
+        test memberAccessThroughANullAnyFieldReachesTheCaller() {
+            var t = new NothrowInferenceTests()
+            t.anyField = null
+            var caught = false
+            var after = false
+            try {
+                t.anyFieldMember()
+                after = true
+            } catch (e: Exception) {
+                caught = true
+            }
+            Assert.assertTrue(caught)
+            Assert.assertFalse(after)
+        }
+
+        test memberAccessThroughANullAnyParameterReachesTheCaller() {
+            var caught = false
+            try {
+                NothrowInferenceTests.anyParamMember(null)
+            } catch (e: Exception) {
+                caught = true
+            }
+            Assert.assertTrue(caught)
+            Assert.assertEquals("5", NothrowInferenceTests.anyParamMember(5))
+        }
+
+        test memberAccessThroughANullIntReachesTheCaller() {
+            var caught = 0
+            try {
+                NothrowInferenceTests.nullablePrimitiveMember(null)
+            } catch (e: Exception) {
+                caught++
+            }
+            Assert.assertEquals(1, caught)
+        }
+
+        test compoundAssignmentOnANullPrimitiveReachesTheCaller() {
+            var caught = 0
+            try {
+                NothrowInferenceTests.compoundOnNullableLocal(null)
+            } catch (e: Exception) {
+                caught++
+            }
+            var t = new NothrowInferenceTests()
+            try {
+                t.compoundOnNullableField()
+            } catch (e: Exception) {
+                caught++
+            }
+            try {
+                NothrowInferenceTests.compoundOnNullableProperty(new NothrowInferenceNode())
+            } catch (e: Exception) {
+                caught++
+            }
+            Assert.assertEquals(3, caught)
+            var r = NothrowInferenceTests.compoundOnNullableLocal(4)
+            Assert.assertTrue(r == 5)
+        }
+
+        test arrayIndexOutOfBoundsReachesTheCaller() {
+            var xs = new Int[2]
+            var caught = 0
+            try {
+                NothrowInferenceTests.arrayRead(xs)
+            } catch (e: Exception) {
+                caught++
+            }
+            try {
+                NothrowInferenceTests.arrayWrite(xs)
+            } catch (e: Exception) {
+                caught++
+            }
+            Assert.assertEquals(2, caught)
+        }
+
+        test nonNullAssertionAndThrowReachTheCaller() {
+            var caught = 0
+            try {
+                NothrowInferenceTests.bang(null)
+            } catch (e: Exception) {
+                caught++
+            }
+            try {
+                NothrowInferenceTests.explicitThrow()
+            } catch (e: Exception) {
+                caught++
+            }
+            Assert.assertEquals(2, caught)
+        }
+
+        test aFunctionWithoutRuntimeChecksStillReturnsItsValue() {
+            Assert.assertEquals(1, NothrowInferenceTests.nonNullObjectMember(new NothrowInferenceNode()))
+        }
+    }
+}
