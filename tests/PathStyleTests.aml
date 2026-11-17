@@ -1,0 +1,148 @@
+namespace Tests {
+
+    // File.convertPath and the fromXPath/toXPath helpers built on it (#380).
+    // The conversions are pure text, so every style is checked on every host;
+    // only the last tests touch the disk, through the host's own style.
+    class PathStyleTests {
+        import Am.Lang
+        import Am.IO
+        import Am.Tests
+
+        // Windows paths are written with "|" for "\" so the expectations don't
+        // depend on how a compiler reads backslash escapes.
+        static fun win(path: String): String {
+            var sb = new StringBuilder()
+            var i = 0UI
+            while (i < (path.getLength() as UInt)) {
+                var c = path.characterAt(i)
+                if (c == 124US) {
+                    sb.addChar(92US)
+                } else {
+                    sb.addChar(c)
+                }
+                i++
+            }
+            return sb.toString()
+        }
+
+        static fun check(expected: String?, actual: String?) {
+            if (expected == null) {
+                Assert.assertTrue(actual == null)
+            } else {
+                Assert.assertTrue(actual != null)
+                Assert.assertEquals(expected!!, actual!!)
+            }
+        }
+
+        static fun unixToAmiga(path: String): String? {
+            return File.convertPath(path, File.PathStyleUnix, File.PathStyleAmiga)
+        }
+
+        static fun amigaToUnix(path: String): String? {
+            return File.convertPath(path, File.PathStyleAmiga, File.PathStyleUnix)
+        }
+
+        static fun unixToWindows(path: String): String? {
+            return File.convertPath(path, File.PathStyleUnix, File.PathStyleWindows)
+        }
+
+        static fun windowsToUnix(path: String): String? {
+            return File.convertPath(path, File.PathStyleWindows, File.PathStyleUnix)
+        }
+
+        test unixToAmigaMapsDotsAndRoot() {
+            PathStyleTests.check("", PathStyleTests.unixToAmiga("."))
+            PathStyleTests.check("", PathStyleTests.unixToAmiga("./"))
+            PathStyleTests.check("a/b", PathStyleTests.unixToAmiga("./a/./b"))
+            PathStyleTests.check("a/b", PathStyleTests.unixToAmiga("a//b/"))
+            PathStyleTests.check("/", PathStyleTests.unixToAmiga(".."))
+            PathStyleTests.check("/a", PathStyleTests.unixToAmiga("../a"))
+            PathStyleTests.check("//a", PathStyleTests.unixToAmiga("../../a"))
+            PathStyleTests.check("a//b", PathStyleTests.unixToAmiga("a/../b"))
+            PathStyleTests.check("a//", PathStyleTests.unixToAmiga("a/.."))
+            PathStyleTests.check(":", PathStyleTests.unixToAmiga("/"))
+            PathStyleTests.check(":c/s", PathStyleTests.unixToAmiga("/c/s"))
+            PathStyleTests.check("file.txt", PathStyleTests.unixToAmiga("file.txt"))
+        }
+
+        test amigaToUnixMapsParentsAndVolumes() {
+            PathStyleTests.check(".", PathStyleTests.amigaToUnix(""))
+            PathStyleTests.check("a/b", PathStyleTests.amigaToUnix("a/b"))
+            PathStyleTests.check("a/b", PathStyleTests.amigaToUnix("a/b/"))
+            PathStyleTests.check("..", PathStyleTests.amigaToUnix("/"))
+            PathStyleTests.check("../a", PathStyleTests.amigaToUnix("/a"))
+            PathStyleTests.check("../../a", PathStyleTests.amigaToUnix("//a"))
+            PathStyleTests.check("a/../b", PathStyleTests.amigaToUnix("a//b"))
+            PathStyleTests.check("/", PathStyleTests.amigaToUnix(":"))
+            PathStyleTests.check("/c/s", PathStyleTests.amigaToUnix(":c/s"))
+            PathStyleTests.check(null, PathStyleTests.amigaToUnix("Work:x"))
+            PathStyleTests.check(null, PathStyleTests.amigaToUnix("RAM:"))
+        }
+
+        test unixToWindowsSwapsSeparators() {
+            PathStyleTests.check(".", PathStyleTests.unixToWindows("."))
+            PathStyleTests.check(PathStyleTests.win("a|b"), PathStyleTests.unixToWindows("./a/b"))
+            PathStyleTests.check(PathStyleTests.win("..|a"), PathStyleTests.unixToWindows("../a"))
+            PathStyleTests.check(PathStyleTests.win("|"), PathStyleTests.unixToWindows("/"))
+            PathStyleTests.check(PathStyleTests.win("|tmp|x"), PathStyleTests.unixToWindows("/tmp/x"))
+        }
+
+        test windowsToUnixMapsRootsAndRefusesDrives() {
+            PathStyleTests.check("a/b", PathStyleTests.windowsToUnix(PathStyleTests.win("a|b")))
+            PathStyleTests.check("a/b", PathStyleTests.windowsToUnix("a/b"))
+            PathStyleTests.check("../a", PathStyleTests.windowsToUnix(PathStyleTests.win(".|..|a")))
+            PathStyleTests.check("/x", PathStyleTests.windowsToUnix(PathStyleTests.win("|x")))
+            PathStyleTests.check(null, PathStyleTests.windowsToUnix(PathStyleTests.win("C:|x")))
+            PathStyleTests.check(null, PathStyleTests.windowsToUnix("C:x"))
+            PathStyleTests.check(null, PathStyleTests.windowsToUnix(PathStyleTests.win("||server|share|x")))
+        }
+
+        test windowsAndAmigaConvertDirectly() {
+            var w = File.PathStyleWindows
+            PathStyleTests.check(null, File.convertPath(PathStyleTests.win("C:|x"), w, File.PathStyleAmiga))
+            PathStyleTests.check(null, File.convertPath("Work:x", File.PathStyleAmiga, w))
+            PathStyleTests.check(PathStyleTests.win("..|a"), File.convertPath("/a", File.PathStyleAmiga, w))
+            PathStyleTests.check(PathStyleTests.win("|c"), File.convertPath(":c", File.PathStyleAmiga, w))
+            PathStyleTests.check("//a", File.convertPath(PathStyleTests.win("..|..|a"), w, File.PathStyleAmiga))
+        }
+
+        test sameStyleIsUntouched() {
+            PathStyleTests.check("./a//b", File.convertPath("./a//b", File.PathStyleUnix, File.PathStyleUnix))
+            PathStyleTests.check("Work:x", File.convertPath("Work:x", File.PathStyleAmiga, File.PathStyleAmiga))
+        }
+
+        test hostHelpersMatchTheHostStyle() {
+            var style = File.getPathStyle()
+            Assert.assertTrue(style == File.PathStyleUnix || style == File.PathStyleAmiga || style == File.PathStyleWindows)
+            PathStyleTests.check(File.convertPath("../a/./b", File.PathStyleUnix, style), File.fromUnixPath("../a/./b"))
+            PathStyleTests.check("a/b", File.toUnixPath(File.fromUnixPath("a/b")))
+            PathStyleTests.check("a/b", File.toUnixPath(File.fromAmigaPath("a/b")!!))
+            PathStyleTests.check("a/b", File.toUnixPath(File.fromWindowsPath(PathStyleTests.win("a|b"))!!))
+            PathStyleTests.check(File.toAmigaPath("x"), "x")
+            PathStyleTests.check(File.toWindowsPath("x"), "x")
+        }
+
+        // Real files through the host's own style: a directory made via a Unix
+        // path with "." and ".." in it is found again, listed and removed.
+        test unixPathsWorkOnDisk() {
+            File.createDirectories(File.fromUnixPath("./path_style_dir/sub"))
+            "x".writeToFile(File.fromUnixPath("path_style_dir/sub/../probe.txt"))
+            Assert.assertTrue(new File(File.fromUnixPath("./path_style_dir/probe.txt")).exists())
+            Assert.assertTrue(new File(File.fromUnixPath("path_style_dir/./sub")).isDirectory())
+            var found = false
+            each (name in new File(File.fromUnixPath("path_style_dir/sub/..")).listDirectoryNames()) {
+                if (name == "sub") { found = true }
+            }
+            var dotFound = false
+            each (e in new File(File.fromUnixPath(".")).listEntries()) {
+                if (e.name == "path_style_dir") { dotFound = true }
+            }
+            File.delete(File.fromUnixPath("path_style_dir/probe.txt"))
+            new File(File.fromUnixPath("path_style_dir/sub")).delete()
+            new File(File.fromUnixPath("path_style_dir")).delete()
+            Assert.assertTrue(found)
+            Assert.assertTrue(dotFound)
+            Assert.assertTrue(!new File(File.fromUnixPath("path_style_dir")).exists())
+        }
+    }
+}

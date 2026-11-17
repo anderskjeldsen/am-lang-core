@@ -50,3 +50,16 @@ function_result Am_IO_FileNativeHelper_getSystemTempFolder_0()
 __exit: ;
 	return __result;
 };
+
+/* AmigaDOS paths: "Volume:dir/file", and an empty part is the parent (File.PathStyleAmiga). */
+function_result Am_IO_FileNativeHelper_getPathStyle_0()
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+
+	__result.return_value.value.int_value = 2;
+	__returning = true;
+
+__exit: ;
+	return __result;
+};

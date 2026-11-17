@@ -26,5 +26,14 @@ namespace Am.IO
          */
         #noThrow
         static native fun getSystemTempFolder(): String
+
+        /**
+         * The host's path style: 1 Unix, 2 AmigaDOS, 3 Windows (File.PathStyleUnix and the
+         * others). Use File.getPathStyle() rather than calling this directly.
+         *
+         * @return The path style constant
+         */
+        #noThrow
+        static native fun getPathStyle(): Int
     }
 }

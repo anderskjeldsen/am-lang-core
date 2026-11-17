@@ -6,7 +6,10 @@ namespace Am.IO
      * disk — it just names a path, which may or may not exist. To read or write the contents, open
      * a FileStream on it. Paths are host-native, so use joinPath() rather than gluing strings
      * together with "/": on AmigaOS a volume root such as "RAM:" takes the name straight after the
-     * colon, and inserting a slash there would mean the parent directory instead of a child.
+     * colon, and inserting a slash there would mean the parent directory instead of a child. A path
+     * written in source in one style — "./assets/../data" — goes through fromUnixPath() (or
+     * fromAmigaPath(), fromWindowsPath()) first; toUnixPath() turns a host path back into one that
+     * reads the same everywhere, for a config file or a URL.
      * The recursive operations deliberately do not follow symbolic links — they reproduce or
      * unlink the link itself — because following one would take the operation outside the tree you
      * asked about.
@@ -146,16 +149,8 @@ namespace Am.IO
             var l = List.newList<String>()
             var l2 = List.newList<String>()
             this.listNative(this.filename, l)
-            var endsWithColon = (this.filename.endsWith(":"))
-            var endsWithSlash = (this.filename.endsWith("/"))
-            if (endsWithColon || endsWithSlash) {
-                each(l, name) {
-                    l2.add(this.filename + name)
-                }
-            } else {
-                each(l, name) {
-                    l2.add(this.filename + "/" + name)
-                }
+            each(l, name) {
+                l2.add(File.joinPath(this.filename, name))
             }
 
             return l2.toArray()
@@ -360,7 +355,296 @@ namespace Am.IO
             if (directory.endsWith(":") || directory.endsWith("/")) {
                 return directory + name
             }
+            if (File.getPathStyle() == File.PathStyleWindows && directory.endsWith(File.backslash())) {
+                return directory + name
+            }
             return directory + "/" + name
+        }
+
+        /** Path style of POSIX hosts: "/" separates, a leading "/" is the root, "." and ".." are entries. */
+        static const PathStyleUnix: Int = 1
+        /** Path style of AmigaOS, AROS and MorphOS: "Volume:" roots, "/" separates, an empty part ("a//b", a leading "/") is the parent. */
+        static const PathStyleAmiga: Int = 2
+        /** Path style of Windows and DOS: "\" or "/" separates, "C:\" and "\\server\share" roots, "." and ".." are entries. */
+        static const PathStyleWindows: Int = 3
+
+        /**
+         * The path style of the host this binary runs on: PathStyleUnix, PathStyleAmiga or
+         * PathStyleWindows. File and FileStream take paths in this style.
+         * @return One of the PathStyle constants
+         */
+        static fun getPathStyle(): Int {
+            return FileNativeHelper.getPathStyle()
+        }
+
+        /**
+         * Converts a Unix-style path to the host's style, so a path written once in source — a
+         * resource folder, a relative path from a config file — works on every target. On AmigaOS,
+         * AROS and MorphOS "." becomes "" (the current directory), ".." becomes a parent step
+         * ("../a" is "/a", "a/../b" is "a//b") and a leading "/" becomes ":" (the root of the
+         * current volume). On Windows the separators become "\". On a Unix host the path is
+         * returned unchanged. Every Unix path has a form on every host.
+         * @param path A path written with "/" separators
+         * @return The same path in the host's style
+         */
+        static fun fromUnixPath(path: String): String {
+            var converted = File.convertPath(path, File.PathStyleUnix, File.getPathStyle())
+            if (converted == null) {
+                return path
+            }
+            return converted!!
+        }
+
+        /**
+         * Converts a host path to Unix style, for storing in a file, a URL or anything else that
+         * must read the same on every host: the inverse of fromUnixPath.
+         * @param path A path in the host's style
+         * @return The path with "/" separators, or null when it has no Unix form (an AmigaDOS
+         *         volume such as "Work:x", a Windows drive such as "C:\x" or a UNC share)
+         */
+        static fun toUnixPath(path: String): String? {
+            return File.convertPath(path, File.getPathStyle(), File.PathStyleUnix)
+        }
+
+        /**
+         * Converts an AmigaDOS-style path to the host's style; unchanged on AmigaOS, AROS and
+         * MorphOS.
+         * @param path A path in AmigaDOS style
+         * @return The path in the host's style, or null when it names a volume the host has no
+         *         equivalent for
+         */
+        static fun fromAmigaPath(path: String): String? {
+            return File.convertPath(path, File.PathStyleAmiga, File.getPathStyle())
+        }
+
+        /**
+         * Converts a host path to AmigaDOS style; unchanged on AmigaOS, AROS and MorphOS.
+         * @param path A path in the host's style
+         * @return The path in AmigaDOS style, or null when it has none (a Windows drive or share)
+         */
+        static fun toAmigaPath(path: String): String? {
+            return File.convertPath(path, File.getPathStyle(), File.PathStyleAmiga)
+        }
+
+        /**
+         * Converts a Windows or DOS-style path ("dir\file", "C:\dir", "\\server\share\x") to the
+         * host's style; unchanged on Windows.
+         * @param path A path in Windows style
+         * @return The path in the host's style, or null when it names a drive or share the host
+         *         has no equivalent for
+         */
+        static fun fromWindowsPath(path: String): String? {
+            return File.convertPath(path, File.PathStyleWindows, File.getPathStyle())
+        }
+
+        /**
+         * Converts a host path to Windows style; unchanged on Windows.
+         * @param path A path in the host's style
+         * @return The path in Windows style, or null when it has none (an AmigaDOS volume)
+         */
+        static fun toWindowsPath(path: String): String? {
+            return File.convertPath(path, File.getPathStyle(), File.PathStyleWindows)
+        }
+
+        /**
+         * Converts a path between two styles, whatever the host: the engine behind fromUnixPath
+         * and the others, public so a program can handle paths of a system it is not running on.
+         * The conversion is purely textual — ".." is carried over as a parent step, never resolved
+         * against the name before it, so a symbolic link keeps its meaning. A path whose styles
+         * are the same is returned untouched.
+         * @param path The path to convert
+         * @param fromStyle The style path is written in (a PathStyle constant)
+         * @param toStyle The style wanted (a PathStyle constant)
+         * @return The converted path, or null when the root has no form in toStyle
+         */
+        static fun convertPath(path: String, fromStyle: Int, toStyle: Int): String? {
+            if (fromStyle == toStyle) {
+                return path
+            }
+            // parts[0] says where the path starts; the rest are names, with ".." for a
+            // parent step: the same list for every style.
+            var parts = List<String>.newList<String>()
+            if (fromStyle == File.PathStyleAmiga) {
+                File.parseAmigaPath(path, parts)
+            } else {
+                File.parseUnixOrWindowsPath(path, fromStyle == File.PathStyleWindows, parts)
+            }
+            if (toStyle == File.PathStyleAmiga) {
+                return File.formatAmigaPath(parts)
+            }
+            return File.formatUnixOrWindowsPath(parts, toStyle == File.PathStyleWindows)
+        }
+
+        // Roots, as parts[0]: "rel" relative; "root" the root ("/" on Unix, "\" — the current
+        // drive's — on Windows, ":" — the current volume's — on AmigaDOS); "vol:Name" an AmigaDOS
+        // volume; "drive:C:" a Windows drive's root; "driverel:C:" a drive's current directory;
+        // "unc:\\server\share" a Windows share.
+
+        private static fun isPathSeparator(c: UShort, windows: Bool): Bool {
+            return c == 47US || (windows && c == 92US)
+        }
+
+        private static fun addPathSegments(path: String, start: Int, windows: Bool, parts: List<String>) {
+            var sb = new StringBuilder()
+            var len = path.getLength()
+            var i = start
+            while (i <= len) {
+                if (i == len || File.isPathSeparator(path.characterAt(i as UInt), windows)) {
+                    var segment = sb.toString()
+                    if (segment != "" && segment != ".") {
+                        parts.add(segment)
+                    }
+                    sb.clear()
+                } else {
+                    sb.addChar(path.characterAt(i as UInt))
+                }
+                i++
+            }
+        }
+
+        private static fun parseUnixOrWindowsPath(path: String, windows: Bool, parts: List<String>) {
+            var len = path.getLength()
+            if (windows && len >= 2 && path.characterAt(1UI) == 58US) {
+                var drive = path.substring(0UI, 2UI)
+                if (len >= 3 && File.isPathSeparator(path.characterAt(2UI), true)) {
+                    parts.add("drive:" + drive)
+                } else {
+                    parts.add("driverel:" + drive)
+                }
+                File.addPathSegments(path, 2, true, parts)
+                return
+            }
+            if (windows && len >= 2 && File.isPathSeparator(path.characterAt(0UI), true) && File.isPathSeparator(path.characterAt(1UI), true)) {
+                // \\server\share\rest: the first two names belong to the root.
+                var names = List<String>.newList<String>()
+                File.addPathSegments(path, 2, true, names)
+                var bs = File.backslash()
+                var root = bs + bs
+                var i = 0
+                while (i < names.getSize()) {
+                    if (i == 0) {
+                        root = root + names.get(i)
+                    } else if (i == 1) {
+                        root = root + bs + names.get(i)
+                        parts.add("unc:" + root)
+                    } else {
+                        parts.add(names.get(i))
+                    }
+                    i++
+                }
+                if (names.getSize() < 2) {
+                    parts.add("unc:" + root)
+                }
+                return
+            }
+            if (len >= 1 && File.isPathSeparator(path.characterAt(0UI), windows)) {
+                parts.add("root")
+            } else {
+                parts.add("rel")
+            }
+            File.addPathSegments(path, 0, windows, parts)
+        }
+
+        private static fun parseAmigaPath(path: String, parts: List<String>) {
+            var len = path.getLength()
+            var i = 0
+            var colon = path.indexOf(":")
+            if (colon == 0) {
+                parts.add("root")
+                i = 1
+            } else if (colon > 0) {
+                parts.add("vol:" + path.substring(0UI, colon as UInt))
+                i = colon + 1
+            } else {
+                parts.add("rel")
+            }
+            // A "/" straight after a name only separates; every other "/" is a parent step.
+            var sb = new StringBuilder()
+            while (i < len) {
+                var c = path.characterAt(i as UInt)
+                if (c == 47US) {
+                    if (sb.getLength() > 0UI) {
+                        parts.add(sb.toString())
+                        sb.clear()
+                    } else {
+                        parts.add("..")
+                    }
+                } else {
+                    sb.addChar(c)
+                }
+                i++
+            }
+            if (sb.getLength() > 0UI) {
+                parts.add(sb.toString())
+            }
+        }
+
+        private static fun formatAmigaPath(parts: List<String>): String? {
+            var root = parts.get(0)
+            var sb = new StringBuilder()
+            if (root == "root") {
+                sb.add(":")
+            } else if (root.startsWith("vol:")) {
+                sb.add(root.substringToEnd(4UI)).add(":")
+            } else if (root != "rel") {
+                return null
+            }
+            var afterName = false
+            var i = 1
+            while (i < parts.getSize()) {
+                var part = parts.get(i)
+                if (afterName) {
+                    sb.add("/")
+                }
+                if (part == "..") {
+                    sb.add("/")
+                    afterName = false
+                } else {
+                    sb.add(part)
+                    afterName = true
+                }
+                i++
+            }
+            return sb.toString()
+        }
+
+        private static fun formatUnixOrWindowsPath(parts: List<String>, windows: Bool): String? {
+            var separator = "/"
+            if (windows) {
+                separator = File.backslash()
+            }
+            var root = parts.get(0)
+            var sb = new StringBuilder()
+            if (root == "root") {
+                sb.add(separator)
+            } else if (windows && root.startsWith("drive:")) {
+                sb.add(root.substringToEnd(6UI)).add(separator)
+            } else if (windows && root.startsWith("driverel:")) {
+                sb.add(root.substringToEnd(9UI))
+            } else if (windows && root.startsWith("unc:")) {
+                sb.add(root.substringToEnd(4UI))
+                if (parts.getSize() > 1) {
+                    sb.add(separator)
+                }
+            } else if (root != "rel") {
+                return null
+            }
+            if (root == "rel" && parts.getSize() == 1) {
+                return "."
+            }
+            var i = 1
+            while (i < parts.getSize()) {
+                if (i > 1) {
+                    sb.add(separator)
+                }
+                sb.add(parts.get(i))
+                i++
+            }
+            return sb.toString()
+        }
+
+        private static fun backslash(): String {
+            return new StringBuilder().addChar(92US).toString()
         }
 
         /**

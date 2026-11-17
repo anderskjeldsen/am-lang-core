@@ -52,3 +52,20 @@ function_result Am_IO_FileNativeHelper_getSystemTempFolder_0()
 __exit: ;
 	return __result;
 };
+
+/* POSIX paths (File.PathStyleUnix), or Windows ones (File.PathStyleWindows) when built for Windows. */
+function_result Am_IO_FileNativeHelper_getPathStyle_0()
+{
+	function_result __result = { .has_return_value = true };
+	bool __returning = false;
+
+#if defined(_WIN32)
+	__result.return_value.value.int_value = 3;
+#else
+	__result.return_value.value.int_value = 1;
+#endif
+	__returning = true;
+
+__exit: ;
+	return __result;
+};
