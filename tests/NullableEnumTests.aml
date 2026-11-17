@@ -4,7 +4,7 @@ namespace Tests {
     // 0, so a null that read as its backing value would look like that member.
     // These run under v1 and v2. What v2 gets wrong for every nullable value
     // type (Int? too: a null compared with a value, null == null,
-    // `x!!.f()`, `?.`, List<Color?>, nullable arrays,
+    // `?.`, List<Color?>, nullable arrays,
     // statics, lambda captures, suspend) is in tests-v1-only/, which only v1
     // runs; see V2_PORT_PLAN.md.
 
@@ -118,6 +118,45 @@ namespace Tests {
                 thrown = true
             }
             Assert.assertTrue(thrown)
+        }
+
+        static fun anyToString(a: Any): String {
+            if (a is String) {
+                return "S:" + (a as String)
+            }
+            return "not a String"
+        }
+
+        // Moved from tests-v1-only (#404): the chain's type follows each call.
+        test memberCallsThroughNonNullAssertion() {
+            var b: NeColor? = NeColor.white
+            Assert.assertTrue(b!!.getValue() == 7UB)
+            Assert.assertEquals("7", b!!.getValue().toString())
+            var s: NeSigned? = NeSigned.minus
+            Assert.assertTrue(s!!.getValue() == -3)
+            Assert.assertEquals("-3", s!!.getValue().toString())
+        }
+
+        // `c.getValue().toString()` was typed as the enum (an int) in v2 (#404):
+        // `int var_s = <String>`, and boxed into an Any as an int.
+        test enumValueChains() {
+            var c: NeColor = NeColor.white
+            var s: String = c.getValue().toString()
+            Assert.assertEquals("7", s)
+            var inferred = c.getValue().toString()
+            Assert.assertEquals("7", inferred)
+            Assert.assertEquals(1, c.getValue().toString().length())
+            var plusOne = c.getValue() + 1UB
+            Assert.assertTrue(plusOne == 8UB)
+            Assert.assertEquals("7", NeColor.white.getValue().toString())
+            Assert.assertEquals("12", NeSigned.plus.getValue().toString())
+            Assert.assertEquals("S:7", NullableEnumTests.anyToString(c.getValue().toString()))
+            var n: NeColor? = NeColor.red
+            var ns: String = n!!.getValue().toString()
+            Assert.assertEquals("1", ns)
+            Assert.assertEquals("S:1", NullableEnumTests.anyToString(n!!.getValue().toString()))
+            var lv: NeLevel = NeLevel.high
+            Assert.assertEquals("10", lv.getValue().toString())
         }
 
         test elvis() {

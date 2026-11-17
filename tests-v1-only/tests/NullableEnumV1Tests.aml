@@ -83,14 +83,6 @@ namespace TestsV1 {
             Assert.assertFalse(n == b)
         }
 
-        test memberCallsThroughNonNullAssertion() {
-            var b: NvColor? = NvColor.white
-            Assert.assertTrue(b!!.getValue() == 7UB)
-            Assert.assertEquals("7", b!!.getValue().toString())
-            var s: NvSigned? = NvSigned.minus
-            Assert.assertTrue(s!!.getValue() == -3)
-        }
-
         test safeCall() {
             var n: NvColor? = null
             var b: NvColor? = NvColor.black
