@@ -1,0 +1,288 @@
+namespace Tests {
+
+    class SuspendLoopItem {
+        import Am.Lang
+        var n: Int = 0
+    }
+
+    // Redmine #384 and #385: a suspend function that parks inside a loop. A
+    // resume is a fresh C call that jumps into the loop body, so everything the
+    // body reads after the suspension has to be saved with the suspend state:
+    // the for counter and bound, an each loop's index, iterator and item, and
+    // the locals declared in the body. Objects held across the suspension must
+    // be released exactly once. Each case runs once for its result, then five
+    // more times with an allocation count around them.
+    class SuspendLoopTests {
+        import Am.Lang
+        import Am.Lang.Diagnostics
+        import Am.Collections
+        import Am.Async
+        import Am.Tests
+
+        static var pending: Continuation? = null
+        static var lastResult: String = ""
+        var log: String = ""
+        var count: Int = 0
+
+        suspend fun tick(): Int {
+            suspend(cont) {
+                SuspendLoopTests.pending = cont
+            }
+            return 1
+        }
+
+        suspend fun tickText(s: String): String {
+            suspend(cont) {
+                SuspendLoopTests.pending = cont
+            }
+            return s
+        }
+
+        suspend fun nestedFor() {
+            for (i = 0 until 3) {
+                for (j = 0 to 1) {
+                    var k = this.tick()
+                    this.log = this.log + i.toString() + j.toString() + " "
+                }
+            }
+        }
+
+        // The bound is an expression (a C temporary before the loop), or a
+        // call.
+        suspend fun forComputedBound() {
+            var n = 2
+            for (i = 1 to n + 1) {
+                this.count = this.count + this.tick()
+                this.log = this.log + i.toString() + " "
+            }
+            var l = new List<String>()
+            l.add("x")
+            l.add("y")
+            for (j = 0 until l.getSize()) {
+                var k = this.tick()
+                this.log = this.log + l.get(j)
+            }
+        }
+
+        // Two loops reusing the counter's name, a suspension between them.
+        suspend fun forTwice() {
+            for (i = 0 until 2) {
+                var k = this.tick()
+                this.log = this.log + i.toString()
+            }
+            var m = this.tick()
+            for (i = 5 until 7) {
+                var k2 = this.tick()
+                this.log = this.log + i.toString()
+            }
+        }
+
+        suspend fun eachIntArray() {
+            var arr: Int[] = [5, 6, 7]
+            each (x in arr) {
+                var k = this.tick()
+                this.log = this.log + x.toString() + " "
+            }
+        }
+
+        suspend fun eachStringArray() {
+            var arr: String[] = ["p", "q"]
+            each (s in arr) {
+                var t = this.tickText(s + "!")
+                this.log = this.log + s + t + " "
+            }
+        }
+
+        suspend fun eachList() {
+            var l = new List<SuspendLoopItem>()
+            for (i = 1 to 3) {
+                var it = new SuspendLoopItem()
+                it.n = i * 10
+                l.add(it)
+            }
+            each (item in l) {
+                var k = this.tick()
+                this.log = this.log + item.n.toString() + " "
+            }
+        }
+
+        // A HashSet goes through iterator()/hasNext()/next().
+        suspend fun eachSet() {
+            var st = new HashSet<String>()
+            st.add("ab")
+            st.add("cde")
+            each (s in st) {
+                var k = this.tick()
+                this.count = this.count + s.length()
+            }
+            this.log = "set"
+        }
+
+        // each inside for: both loops' state across one suspension.
+        suspend fun eachInFor() {
+            var l = new List<String>()
+            l.add("a")
+            l.add("b")
+            for (i = 0 until 2) {
+                each (s in l) {
+                    var k = this.tick()
+                    this.log = this.log + s + i.toString() + " "
+                }
+            }
+        }
+
+        suspend fun loopWithLocals() {
+            var c = 0
+            loop {
+                var before = c * 10
+                var item = new SuspendLoopItem()
+                item.n = c
+                var k = this.tick()
+                c++
+                this.log = this.log + before.toString() + ":" + item.n.toString() + " "
+                if (c == 3) {
+                    break
+                }
+            }
+        }
+
+        suspend fun whileWithLocals() {
+            var i = 0
+            while (i < 3) {
+                var sq = i * i
+                var item = new SuspendLoopItem()
+                item.n = i + 100
+                var label = "w" + i.toString()
+                var k = this.tick()
+                this.log = this.log + label + "=" + sq.toString() + "/" + item.n.toString() + " "
+                i++
+            }
+        }
+
+        // The #385 shape: two nested while loops, six suspensions.
+        suspend fun nestedWhile() {
+            var i = 0
+            while (i < 2) {
+                i++
+                var j = 0
+                while (j < 3) {
+                    j++
+                    var item = new SuspendLoopItem()
+                    item.n = this.tick()
+                    this.count = this.count + item.n
+                }
+            }
+            this.log = "w" + this.count.toString()
+        }
+
+        suspend fun forBreakContinue() {
+            for (i = 0 until 5) {
+                var item = new SuspendLoopItem()
+                var k = this.tick()
+                if (i == 1) {
+                    continue
+                }
+                if (i == 3) {
+                    break
+                }
+                this.log = this.log + i.toString() + " "
+            }
+        }
+
+        private static fun drive(t: SuspendLoopTests) {
+            var guard = 0
+            while (SuspendLoopTests.pending != null && guard < 100) {
+                var c = SuspendLoopTests.pending
+                SuspendLoopTests.pending = null
+                if (c != null) {
+                    c.resume()
+                }
+                guard++
+            }
+        }
+
+        private static fun run(which: Int) {
+            var t = new SuspendLoopTests()
+            if (which == 0) { t.nestedFor() }
+            if (which == 1) { t.forComputedBound() }
+            if (which == 2) { t.forTwice() }
+            if (which == 3) { t.eachIntArray() }
+            if (which == 4) { t.eachStringArray() }
+            if (which == 5) { t.eachList() }
+            if (which == 6) { t.eachSet() }
+            if (which == 7) { t.eachInFor() }
+            if (which == 8) { t.loopWithLocals() }
+            if (which == 9) { t.whileWithLocals() }
+            if (which == 10) { t.nestedWhile() }
+            if (which == 11) { t.forBreakContinue() }
+            SuspendLoopTests.drive(t)
+            SuspendLoopTests.lastResult = t.log + "|" + t.count.toString()
+        }
+
+        // A function of its own, so nothing it reads outlives it.
+        private static fun assertResult(expected: String) {
+            Assert.assertEquals(expected, SuspendLoopTests.lastResult)
+        }
+
+        // The result, then no allocations left over by five more runs.
+        private static fun check(which: Int, expected: String) {
+            SuspendLoopTests.run(which)
+            SuspendLoopTests.assertResult(expected)
+            var before = Arc.getAllocationCount()
+            var n = 0
+            while (n < 5) {
+                SuspendLoopTests.run(which)
+                n++
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        static test nestedForLoops() {
+            SuspendLoopTests.check(0, "00 01 10 11 20 21 |0")
+        }
+
+        static test forWithComputedBound() {
+            SuspendLoopTests.check(1, "1 2 3 xy|3")
+        }
+
+        static test twoForLoopsWithTheSameCounterName() {
+            SuspendLoopTests.check(2, "0156|0")
+        }
+
+        static test eachOverIntArray() {
+            SuspendLoopTests.check(3, "5 6 7 |0")
+        }
+
+        static test eachOverStringArray() {
+            SuspendLoopTests.check(4, "pp! qq! |0")
+        }
+
+        static test eachOverList() {
+            SuspendLoopTests.check(5, "10 20 30 |0")
+        }
+
+        static test eachOverSet() {
+            SuspendLoopTests.check(6, "set|5")
+        }
+
+        static test eachInsideFor() {
+            SuspendLoopTests.check(7, "a0 b0 a1 b1 |0")
+        }
+
+        static test loopWithBodyLocals() {
+            SuspendLoopTests.check(8, "0:0 10:1 20:2 |0")
+        }
+
+        static test whileWithBodyLocals() {
+            SuspendLoopTests.check(9, "w0=0/100 w1=1/101 w2=4/102 |0")
+        }
+
+        static test nestedWhileLoops() {
+            SuspendLoopTests.check(10, "w6|6")
+        }
+
+        static test forWithBreakAndContinue() {
+            SuspendLoopTests.check(11, "0 2 |0")
+        }
+    }
+}
