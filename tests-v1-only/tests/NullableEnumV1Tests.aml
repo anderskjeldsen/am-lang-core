@@ -1,0 +1,262 @@
+namespace TestsV1 {
+
+    // Redmine #237: nullable enums, the cases v2 gets wrong for every nullable
+    // value type (Int? too), so they can't be in tests/ (v2 builds those). The
+    // rest is am-lang-core/tests/NullableEnumTests.aml. Every enum has a member
+    // whose value is 0, so a null that read as its backing value would look like
+    // that member.
+
+    enum NvColor<UByte> {
+        import Am.Lang
+
+        black = 0UB
+        red = 1UB
+        white = 7UB
+    }
+
+    enum NvSigned {
+        import Am.Lang
+
+        minus = -3
+        zero = 0
+        plus = 12
+    }
+
+    class NvBox<T> {
+        import Am.Lang
+
+        var v: T? = null
+
+        fun put(x: T) {
+            this.v = x
+        }
+
+        fun get(): T? {
+            return this.v
+        }
+
+        fun isEmpty(): Bool {
+            return this.v == null
+        }
+    }
+
+    class NullableEnumV1Tests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Async
+        import Am.Tests
+
+        static var shared: NvColor? = null
+        static var pending: Continuation? = null
+
+        var parkedResult: NvColor? = NvColor.white
+        var parkedValue: NvColor? = null
+        var localsKept = false
+        var finished = false
+
+        static fun ident<T>(x: T): T {
+            return x
+        }
+
+        // A null compared with the 0-valued member is not equal to it.
+        test nullIsNotTheZeroMember() {
+            var n: NvColor? = null
+            Assert.assertFalse(n == NvColor.black)
+            Assert.assertTrue(n != NvColor.black)
+            Assert.assertFalse(NvColor.black == n)
+            var s: NvSigned? = null
+            Assert.assertFalse(s == NvSigned.zero)
+            Assert.assertTrue(s != NvSigned.zero)
+        }
+
+        test nullableComparedWithNullable() {
+            var n: NvColor? = null
+            var b: NvColor? = NvColor.black
+            Assert.assertFalse(n == b)
+            Assert.assertTrue(n != b)
+            b = null
+            Assert.assertTrue(n == b)
+            n = NvColor.black
+            b = NvColor.black
+            Assert.assertTrue(n == b)
+            b = NvColor.white
+            Assert.assertFalse(n == b)
+        }
+
+        test memberCallsThroughNonNullAssertion() {
+            var b: NvColor? = NvColor.white
+            Assert.assertTrue(b!!.getValue() == 7UB)
+            Assert.assertEquals("7", b!!.getValue().toString())
+            var s: NvSigned? = NvSigned.minus
+            Assert.assertTrue(s!!.getValue() == -3)
+        }
+
+        test safeCall() {
+            var n: NvColor? = null
+            var b: NvColor? = NvColor.black
+            Assert.assertTrue((n?.getValue() ?? 99UB) == 99UB)
+            Assert.assertTrue((b?.getValue() ?? 99UB) == 0UB)
+        }
+
+        test whenOnANullSubject() {
+            var w: NvColor? = null
+            var r = when (w) {
+                NvColor.black -> 1
+                NvColor.white -> 2
+                else -> 3
+            }
+            Assert.assertEquals(3, r)
+        }
+
+        test staticField() {
+            NullableEnumV1Tests.shared = null
+            Assert.assertTrue(NullableEnumV1Tests.shared == null)
+            Assert.assertFalse(NullableEnumV1Tests.shared == NvColor.black)
+            NullableEnumV1Tests.shared = NvColor.black
+            Assert.assertTrue(NullableEnumV1Tests.shared == NvColor.black)
+            Assert.assertTrue(NullableEnumV1Tests.shared != null)
+            NullableEnumV1Tests.shared = null
+            Assert.assertTrue(NullableEnumV1Tests.shared == null)
+        }
+
+        // HashMap<K, Color>.getOrNull returns V?: a missing key is null, not black.
+        test hashMapGetOrNull() {
+            var m = new HashMap<String, NvColor>()
+            m.set("b", NvColor.black)
+            m.set("r", NvColor.red)
+            Assert.assertTrue(m.getOrNull("b") != null)
+            Assert.assertTrue(m.getOrNull("b") == NvColor.black)
+            Assert.assertTrue(m.getOrNull("missing") == null)
+            Assert.assertFalse(m.getOrNull("missing") == NvColor.black)
+            var got = m.getOrNull("r")
+            Assert.assertTrue(got == NvColor.red)
+            var none = m.getOrNull("missing")
+            Assert.assertTrue((none ?? NvColor.white) == NvColor.white)
+        }
+
+        test hashMapOfNullableEnums() {
+            var mn = new HashMap<String, NvColor?>()
+            mn.set("n", null)
+            mn.set("b", NvColor.black)
+            Assert.assertTrue(mn.containsKey("n"))
+            Assert.assertTrue(mn.get("n") == null)
+            Assert.assertTrue(mn.get("b") == NvColor.black)
+            Assert.assertTrue(mn.get("b") != null)
+        }
+
+        test listOfNullableEnums() {
+            var l = new List<NvColor?>()
+            l.add(null)
+            l.add(NvColor.black)
+            l.add(NvColor.white)
+            Assert.assertEquals(3, l.getSize())
+            Assert.assertTrue(l.get(0) == null)
+            Assert.assertTrue(l.get(1) != null)
+            Assert.assertTrue(l.get(1) == NvColor.black)
+            Assert.assertTrue(l.get(2) == NvColor.white)
+            // List<NvColor> in the same program is its own variant.
+            var plain = new List<NvColor>()
+            plain.add(NvColor.black)
+            Assert.assertTrue(plain.get(0) == NvColor.black)
+        }
+
+        // A fresh element of a nullable array is null, not the 0 member.
+        test nullableArrayOfEnums() {
+            var narr = new NvColor?[3]
+            Assert.assertTrue(narr[0] == null)
+            Assert.assertFalse(narr[0] == NvColor.black)
+            var first = narr[0]
+            Assert.assertTrue(first == null)
+            Assert.assertTrue((first ?? NvColor.red) == NvColor.red)
+            narr[1] = NvColor.black
+            Assert.assertTrue(narr[1] != null)
+            Assert.assertTrue(narr[1] == NvColor.black)
+            narr[1] = null
+            Assert.assertTrue(narr[1] == null)
+            var thrown = false
+            try {
+                var p: NvColor = narr[2]!!
+            } catch (e: Exception) {
+                thrown = true
+            }
+            Assert.assertTrue(thrown)
+        }
+
+        // The same for Int?: a fresh `new Int?[n]` element read as a non-null 0.
+        test freshNullableIntArrayElementsAreNull() {
+            var arr = new Int?[2]
+            Assert.assertTrue(arr[0] == null)
+            Assert.assertTrue(arr[0] != 0)
+            arr[1] = 0
+            Assert.assertTrue(arr[1] != null)
+            Assert.assertTrue(arr[1] == 0)
+        }
+
+        // Box<NvColor> and Box<NvColor?> in one program are separate variants.
+        test genericBoxOfNullableEnum() {
+            var a = new NvBox<NvColor>()
+            a.put(NvColor.black)
+            Assert.assertTrue(a.get() == NvColor.black)
+
+            var b = new NvBox<NvColor?>()
+            Assert.assertTrue(b.isEmpty())
+            b.put(null)
+            Assert.assertTrue(b.isEmpty())
+            b.put(NvColor.black)
+            Assert.assertFalse(b.isEmpty())
+            Assert.assertTrue(b.get() == NvColor.black)
+
+            Assert.assertTrue(NullableEnumV1Tests.ident<NvColor?>(NvColor.black) == NvColor.black)
+            var none: NvColor? = null
+            Assert.assertTrue(NullableEnumV1Tests.ident<NvColor?>(none) == null)
+        }
+
+        test lambdasCapture() {
+            var c: NvColor? = NvColor.black
+            var isBlack: () => Bool = () => c == NvColor.black
+            Assert.assertTrue(isBlack())
+            var n: NvColor? = null
+            var isNull: () => Bool = () => n == null
+            Assert.assertTrue(isNull())
+            var orRed: () => NvColor = () => n ?? NvColor.red
+            Assert.assertTrue(orRed() == NvColor.red)
+        }
+
+        suspend fun park(v: NvColor?): NvColor? {
+            suspend(cont) {
+                NullableEnumV1Tests.pending = cont
+            }
+            return v
+        }
+
+        suspend fun runParked() {
+            var keep: NvColor? = NvColor.black
+            var keepNull: NvColor? = null
+            this.parkedResult = this.park(null)
+            this.parkedValue = this.park(keep)
+            if (keep == NvColor.black && keepNull == null) {
+                this.localsKept = true
+            }
+            this.finished = true
+        }
+
+        // A nullable enum across a suspension: parameter, return and locals.
+        test suspendKeepsNullableEnums() {
+            var t = new NullableEnumV1Tests()
+            t.runParked()
+            var guard = 0
+            while (!t.finished && guard < 10) {
+                var c = NullableEnumV1Tests.pending
+                NullableEnumV1Tests.pending = null
+                if (c != null) {
+                    c.resume()
+                }
+                guard = guard + 1
+            }
+            Assert.assertTrue(t.finished)
+            Assert.assertTrue(t.parkedResult == null)
+            Assert.assertTrue(t.parkedValue == NvColor.black)
+            Assert.assertTrue(t.localsKept)
+        }
+    }
+}
