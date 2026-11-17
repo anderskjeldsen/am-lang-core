@@ -1,0 +1,241 @@
+namespace Tests {
+
+    // Redmine #383: a local without a type, initialised from a nullable primitive
+    // or nullable enum (a call returning Int?, an Int? property, parameter or
+    // local, HashMap<K, Int>.getOrNull, an `if`/`when` value with a null branch),
+    // is that nullable type. v2 typed it from the base type, so a null read as 0.
+    // Each case is checked with a null and with a 0, which must not look alike.
+
+    enum IlColor<UByte> {
+        import Am.Lang
+
+        black = 0UB
+        white = 7UB
+    }
+
+    class IlBox<T> {
+        import Am.Lang
+
+        var v: T? = null
+
+        fun put(x: T) {
+            this.v = x
+        }
+
+        // The local is a T?: for T = Int it must keep the null.
+        fun get(): T? {
+            var r = this.v
+            return r
+        }
+    }
+
+    class InferredNullableLocalTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Async
+        import Am.Tests
+
+        static var shared: Int? = null
+        static var pending: Continuation? = null
+        var held: Int? = null
+        var resumed = ""
+
+        static fun pass(x: Int?): Int? {
+            return x
+        }
+
+        static fun passColor(c: IlColor?): IlColor? {
+            return c
+        }
+
+        static fun plain(): Int {
+            return 4
+        }
+
+        // What an Int? parameter receives: "null" or the value.
+        static fun describe(x: Int?): String {
+            if (x == null) {
+                return "null"
+            }
+            var v = x!!
+            return v.toString()
+        }
+
+        static fun bangThrows(y: Int?): Bool {
+            var thrown = false
+            try {
+                var v = y!!
+            } catch (e: Exception) {
+                thrown = true
+            }
+            return thrown
+        }
+
+        test callReturningNullableInt() {
+            var y = InferredNullableLocalTests.pass(null)
+            Assert.assertTrue(y == null)
+            Assert.assertFalse(y != null)
+            Assert.assertEquals(7, y ?? 7)
+            Assert.assertEquals("null", InferredNullableLocalTests.describe(y))
+            Assert.assertTrue(InferredNullableLocalTests.bangThrows(y))
+
+            var z = InferredNullableLocalTests.pass(0)
+            Assert.assertFalse(z == null)
+            Assert.assertTrue(z != null)
+            Assert.assertEquals(0, z ?? 7)
+            Assert.assertEquals("0", InferredNullableLocalTests.describe(z))
+            Assert.assertFalse(InferredNullableLocalTests.bangThrows(z))
+            var n = z!!
+            Assert.assertEquals(1, n + 1)
+        }
+
+        test staticAndInstanceProperties() {
+            InferredNullableLocalTests.shared = null
+            var s = InferredNullableLocalTests.shared
+            Assert.assertTrue(s == null)
+            Assert.assertEquals(7, s ?? 7)
+            InferredNullableLocalTests.shared = 0
+            var s0 = InferredNullableLocalTests.shared
+            Assert.assertTrue(s0 != null)
+            Assert.assertEquals(0, s0 ?? 7)
+
+            var t = new InferredNullableLocalTests()
+            var h = t.held
+            Assert.assertTrue(h == null)
+            Assert.assertEquals("null", InferredNullableLocalTests.describe(h))
+            t.held = 0
+            var h0 = t.held
+            Assert.assertTrue(h0 != null)
+            Assert.assertEquals("0", InferredNullableLocalTests.describe(h0))
+        }
+
+        test parameterAndLocalCopies() {
+            this.copies(null, "null")
+            this.copies(0, "0")
+        }
+
+        fun copies(p: Int?, expected: String) {
+            var a = p
+            Assert.assertEquals(expected, InferredNullableLocalTests.describe(a))
+            var b = a
+            Assert.assertEquals(expected, InferredNullableLocalTests.describe(b))
+            var c: Int? = b
+            Assert.assertEquals(expected, InferredNullableLocalTests.describe(c))
+        }
+
+        test hashMapGetOrNull() {
+            var m = new HashMap<String, Int>()
+            m.set("zero", 0)
+            var missing = m.getOrNull("nope")
+            Assert.assertTrue(missing == null)
+            Assert.assertEquals(7, missing ?? 7)
+            Assert.assertTrue(m.getOrNull("nope") == null)
+            var zero = m.getOrNull("zero")
+            Assert.assertTrue(zero != null)
+            Assert.assertEquals(0, zero ?? 7)
+            Assert.assertTrue(m.getOrNull("zero") != null)
+        }
+
+        test genericSlot() {
+            var b = new IlBox<Int>()
+            var none = b.get()
+            Assert.assertTrue(none == null)
+            b.put(0)
+            var zero = b.get()
+            Assert.assertTrue(zero != null)
+            Assert.assertEquals(0, zero ?? 7)
+        }
+
+        test ifAndWhenValues() {
+            this.branches(null, "null")
+            this.branches(0, "0")
+        }
+
+        fun branches(q: Int?, expected: String) {
+            var yes = true
+            var a = if (yes) q else null
+            Assert.assertEquals(expected, InferredNullableLocalTests.describe(a))
+            var b = if (yes) null else q
+            Assert.assertTrue(b == null)
+            var c = if (yes) InferredNullableLocalTests.pass(q) else 5
+            Assert.assertEquals(expected, InferredNullableLocalTests.describe(c))
+            var w = when (yes) {
+                true -> q
+                else -> null
+            }
+            Assert.assertEquals(expected, InferredNullableLocalTests.describe(w))
+        }
+
+        test nullableEnum() {
+            var n = InferredNullableLocalTests.passColor(null)
+            Assert.assertTrue(n == null)
+            Assert.assertTrue((n ?? IlColor.white) == IlColor.white)
+            var b = InferredNullableLocalTests.passColor(IlColor.black)
+            Assert.assertTrue(b != null)
+            Assert.assertTrue((b ?? IlColor.white) == IlColor.black)
+        }
+
+        test reassignedAndInALoop() {
+            var r = InferredNullableLocalTests.pass(null)
+            r = 0
+            Assert.assertEquals("0", InferredNullableLocalTests.describe(r))
+            r = null
+            Assert.assertTrue(r == null)
+            var i = 0
+            var nulls = 0
+            while (i < 4) {
+                var x: Int? = null
+                if (i % 2 == 0) {
+                    x = 0
+                }
+                var l = InferredNullableLocalTests.pass(x)
+                if (l == null) {
+                    nulls++
+                }
+                i++
+            }
+            Assert.assertEquals(2, nulls)
+        }
+
+        // Values that aren't nullable stay plain: `q ?? 3`, `q == null`, `q!!`, f(): Int.
+        test nonNullableResultsStayPlain() {
+            var q = InferredNullableLocalTests.pass(null)
+            var d = q ?? 3
+            Assert.assertEquals(4, d + 1)
+            var isNull = q == null
+            Assert.assertTrue(isNull)
+            var p = InferredNullableLocalTests.plain()
+            Assert.assertEquals(5, p + 1)
+            var lit = 5
+            Assert.assertEquals(6, lit + 1)
+            var some = InferredNullableLocalTests.pass(2)
+            var v = some!!
+            Assert.assertEquals(3, v + 1)
+        }
+        suspend fun park() {
+            suspend(cont) {
+                InferredNullableLocalTests.pending = cont
+            }
+        }
+
+        suspend fun keepAcrossSuspension() {
+            var five = InferredNullableLocalTests.pass(5)
+            var none = InferredNullableLocalTests.pass(null)
+            var zero: Int? = InferredNullableLocalTests.pass(0)
+            this.park()
+            this.resumed = InferredNullableLocalTests.describe(five) + "," + InferredNullableLocalTests.describe(none) + "," + InferredNullableLocalTests.describe(zero)
+        }
+
+        // Int? locals are saved across a suspension (v2 restored only plain primitives).
+        test suspendKeepsNullableLocals() {
+            var t = new InferredNullableLocalTests()
+            t.keepAcrossSuspension()
+            var c = InferredNullableLocalTests.pending
+            InferredNullableLocalTests.pending = null
+            if (c != null) {
+                c.resume()
+            }
+            Assert.assertEquals("5,null,0", t.resumed)
+        }
+    }
+}
