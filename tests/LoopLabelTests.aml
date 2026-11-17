@@ -1,0 +1,383 @@
+namespace Tests {
+
+    class LoopLabelItem {
+        import Am.Lang
+        var n: Int = 0
+    }
+
+    // Redmine #164: labeled loops. `outer@ for (...)` names a loop;
+    // `break@outer` leaves it and `continue@outer` starts its next iteration,
+    // from inside nested loops. Every block left on the way runs its ARC
+    // cleanup and any finally.
+    class LoopLabelTests {
+        import Am.Lang
+        import Am.Lang.Diagnostics
+        import Am.Collections
+        import Am.Async
+        import Am.Tests
+
+        static var pending: Continuation? = null
+        var log: String = ""
+        var finished: Bool = false
+
+        static test breakOuterFromNestedFor() {
+            var found = -1
+            var visits = 0
+            outer@ for (i = 0 until 5) {
+                for (j = 0 until 5) {
+                    visits++
+                    if (i * 10 + j == 23) {
+                        found = i * 10 + j
+                        break@outer
+                    }
+                }
+            }
+            Assert.assertEquals(23, found)
+            // rows 0 and 1 fully (10), row 2 up to j = 3 (4)
+            Assert.assertEquals(14, visits)
+        }
+
+        // continue@outer must still run the outer for's increment: without it
+        // this loops forever.
+        static test continueOuterRunsTheIncrement() {
+            var log = ""
+            outer@ for (i = 0 until 4) {
+                for (j = 0 until 4) {
+                    if (j > i) {
+                        continue@outer
+                    }
+                    log = log + j.toString()
+                }
+                log = log + "|"
+            }
+            // the "|" is only reached when the inner loop ran to the end (i = 3)
+            Assert.assertEquals("0010120123|", log)
+        }
+
+        static test toRangeAndLoopLabels() {
+            var log = ""
+            rows@ for (i = 1 to 3) {
+                cols@ for (j = 1 to 3) {
+                    if (j == 2) {
+                        continue@cols
+                    }
+                    if (i == 2) {
+                        continue@rows
+                    }
+                    if (i == 3 && j == 3) {
+                        break@rows
+                    }
+                    log = log + i.toString() + j.toString() + " "
+                }
+            }
+            Assert.assertEquals("11 13 31 ", log)
+        }
+
+        static test whileOuterForInner() {
+            var i = 0
+            var sum = 0
+            outer@ while (i < 10) {
+                i++
+                for (j = 0 until 10) {
+                    if (j == i) {
+                        continue@outer
+                    }
+                    if (i == 6) {
+                        break@outer
+                    }
+                    sum = sum + 1
+                }
+            }
+            Assert.assertEquals(6, i)
+            // i = 1..5 add i each: 1+2+3+4+5
+            Assert.assertEquals(15, sum)
+        }
+
+        static test eachLoopsWithLabels() {
+            var rows = List.newList<String>()
+            rows.add("ab")
+            rows.add("cd")
+            rows.add("ef")
+            var letters = List.newList<String>()
+            letters.add("x")
+            letters.add("y")
+            letters.add("z")
+            var log = ""
+            outer@ each(r in rows) {
+                each(l in letters) {
+                    if (l.equals("y") && r.equals("ab")) {
+                        continue@outer
+                    }
+                    if (r.equals("ef")) {
+                        break@outer
+                    }
+                    log = log + r + l + " "
+                }
+            }
+            Assert.assertEquals("abx cdx cdy cdz ", log)
+
+            // old each(list, x) form, labeled; the inner loop is labeled too
+            var count = 0
+            outer2@ each(rows, r) {
+                inner@ each(letters, l) {
+                    if (l.equals("z")) {
+                        break@inner
+                    }
+                    count++
+                    if (r.equals("cd")) {
+                        break@outer2
+                    }
+                }
+            }
+            // "ab": x, y (2); "cd": x then break@outer2 (1)
+            Assert.assertEquals(3, count)
+        }
+
+        static test eachOverArrayBreakOuter() {
+            var arr: Int[] = new Int[4]
+            arr[0] = 1
+            arr[1] = 2
+            arr[2] = 3
+            arr[3] = 4
+            var pairs = 0
+            outer@ each(a in arr) {
+                each(b in arr) {
+                    if (a * b == 6) {
+                        break@outer
+                    }
+                    pairs++
+                }
+            }
+            // a = 1: 4 pairs; a = 2: b = 1, 2 then 2 * 3 = 6
+            Assert.assertEquals(6, pairs)
+        }
+
+        static test loopStatementWithLabel() {
+            var n = 0
+            var inner = 0
+            forever@ loop {
+                n++
+                var k = 0
+                while (k < 3) {
+                    k++
+                    inner++
+                    if (n == 4) {
+                        break@forever
+                    }
+                }
+            }
+            Assert.assertEquals(4, n)
+            Assert.assertEquals(10, inner)
+        }
+
+        static test threeLevels() {
+            var log = ""
+            top@ for (a = 0 until 3) {
+                middle@ for (b = 0 until 3) {
+                    for (c = 0 until 3) {
+                        if (c == 1) {
+                            continue@middle
+                        }
+                        if (b == 2) {
+                            break@middle
+                        }
+                        if (a == 2) {
+                            break@top
+                        }
+                        log = log + a.toString() + b.toString() + c.toString() + " "
+                    }
+                }
+                log = log + "/ "
+            }
+            Assert.assertEquals("000 010 / 100 110 / ", log)
+        }
+
+        static test labelOnInnermostLoopActsLikePlainJump() {
+            var log = ""
+            for (i = 0 until 2) {
+                inner@ for (j = 0 until 4) {
+                    if (j == 1) {
+                        continue@inner
+                    }
+                    if (j == 3) {
+                        break@inner
+                    }
+                    log = log + j.toString()
+                }
+            }
+            Assert.assertEquals("0202", log)
+        }
+
+        // A break@outer / continue@outer leaving a try runs its finally, as a
+        // plain break does.
+        static test jumpsOutOfTryRunFinally() {
+            var finallies = 0
+            var log = ""
+            outer@ for (i = 0 until 3) {
+                for (j = 0 until 3) {
+                    try {
+                        if (j == 1) {
+                            continue@outer
+                        }
+                        if (i == 2) {
+                            break@outer
+                        }
+                        log = log + i.toString() + j.toString() + " "
+                    } finally {
+                        finallies++
+                    }
+                }
+            }
+            Assert.assertEquals("00 10 ", log)
+            // i = 0: j = 0, 1; i = 1: j = 0, 1; i = 2: j = 0
+            Assert.assertEquals(5, finallies)
+        }
+
+        static test jumpsInsideSwitchAndWhen() {
+            var log = ""
+            outer@ for (i = 0 until 5) {
+                for (j = 0 until 5) {
+                    switch (j) {
+                        case 1:
+                            continue@outer
+                        default:
+                            log = log + i.toString()
+                    }
+                    when (i) {
+                        3 -> { break@outer }
+                        else -> { log = log + "." }
+                    }
+                }
+            }
+            Assert.assertEquals("0.1.2.3", log)
+        }
+
+        // A local named like the label, and a label named like the loop
+        // variable: labels live in their own namespace.
+        static test labelNamesDoNotClashWithLocals() {
+            var outer = 0
+            outer@ for (i = 0 until 3) {
+                i@ for (j = 0 until 3) {
+                    outer = outer + 1
+                    if (j == 1) {
+                        continue@outer
+                    }
+                }
+            }
+            Assert.assertEquals(6, outer)
+        }
+
+        static fun apply(f: (x: Int) => Int, v: Int): Int {
+            return f(v)
+        }
+
+        // A lambda inside a labeled loop may reuse the label for its own loop.
+        static test lambdaInsideLabeledLoop() {
+            var total = 0
+            outer@ for (i = 0 until 3) {
+                total = total + LoopLabelTests.apply((n) => {
+                    var s = 0
+                    outer@ for (k = 0 until 10) {
+                        for (m = 0 until 10) {
+                            if (k == n) {
+                                break@outer
+                            }
+                            s++
+                        }
+                    }
+                    return s
+                }, i)
+                if (i == 1) {
+                    break@outer
+                }
+            }
+            // f(0) = 0, f(1) = 10
+            Assert.assertEquals(10, total)
+        }
+
+        private static fun churn(): Int {
+            var kept = 0
+            outer@ for (i = 0 until 4) {
+                var a = new LoopLabelItem()
+                a.n = i
+                while (true) {
+                    var b = new LoopLabelItem()
+                    b.n = a.n + 1
+                    for (j = 0 until 3) {
+                        var c = new LoopLabelItem()
+                        c.n = b.n + j
+                        var s = "s" + c.n.toString()
+                        if (j == 1 && i < 2) {
+                            continue@outer
+                        }
+                        if (i == 3) {
+                            break@outer
+                        }
+                        kept = kept + c.n
+                    }
+                    break
+                }
+            }
+            return kept
+        }
+
+        // Objects created in the inner bodies are released when a labeled
+        // jump leaves two loops at once.
+        static test labeledJumpsReleaseInnerObjects() {
+            Assert.assertEquals(1 + 2 + 3 + 4 + 5, LoopLabelTests.churn())
+            var before = Arc.getAllocationCount()
+            for (n = 0 until 10) {
+                LoopLabelTests.churn()
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        suspend fun tick(): Int {
+            suspend(cont) {
+                LoopLabelTests.pending = cont
+            }
+            return 1
+        }
+
+        suspend fun run() {
+            outer@ for (i = 0 until 4) {
+                for (j = 0 until 4) {
+                    var item = new LoopLabelItem()
+                    item.n = this.tick()
+                    if (j == 2) {
+                        continue@outer
+                    }
+                    if (i == 2) {
+                        break@outer
+                    }
+                    this.log = this.log + i.toString() + j.toString() + " "
+                }
+            }
+            this.finished = true
+        }
+
+        private static fun driveSuspend(): String {
+            var t = new LoopLabelTests()
+            t.run()
+            var guard = 0
+            while (LoopLabelTests.pending != null && guard < 100) {
+                var c = LoopLabelTests.pending
+                LoopLabelTests.pending = null
+                c!!.resume()
+                guard++
+            }
+            Assert.assertTrue(t.finished)
+            return t.log
+        }
+
+        // Labeled jumps across suspend points in a suspend function.
+        test labeledJumpsInSuspendFunction() {
+            Assert.assertEquals("00 01 10 11 ", LoopLabelTests.driveSuspend())
+            var before = Arc.getAllocationCount()
+            for (n = 0 until 5) {
+                LoopLabelTests.driveSuspend()
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+    }
+}
