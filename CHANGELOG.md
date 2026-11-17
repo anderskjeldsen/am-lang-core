@@ -36,6 +36,7 @@ New regression tests for compiler fixes, most of which also run through v2:
 - BindingRegressionTests: #106, #148, #149, #150, #158.
 - LambdaTests: #33, #34, #188, #217, #222.
 - LambdaLocalTests: #367, #372.
+- TypedLambdaTests: #189 (2026-11-17), lambda parameters with declared types, `(x: Int) => x * 2`: untyped locals and fields typed by their lambda (expression and block bodies, void), `List<String>`, `String?` and function-typed parameters, captures and nested lambdas, passing to a parameter, to `filter`/`map` and to overloads. Passes under v1 and v2; a nullable primitive parameter (`(x: Int?) =>`) and a generic static callee are left out because v2 can't compile them yet.
 - From the AmigaOS examples: v2 miscompiles of catch and each variables, and interface wrapping.
 - Also: SuspendArcTests (#336), SuspendBlockExitTests (#298), SuspendTempTests (#35), InitOrderTests (#25) and RunAsyncTests (#299).
 - Smaller ones: `!!` (#211, #239, #253), generic `T?` (#238), string templates (#179), bare calls after operators (#160), `this` in lambdas (#39), catch lines (#180) and a local named `primitive` (#181).
