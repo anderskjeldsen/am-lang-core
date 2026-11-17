@@ -1,0 +1,216 @@
+namespace Tests {
+
+    enum NnColor<UByte> {
+        import Am.Lang
+
+        black = 0UB
+        red = 1UB
+        white = 7UB
+    }
+
+    class NnNode {
+        import Am.Lang
+
+        var count: Int = 0
+        var next: NnNode? = null
+        var label: String = "n"
+
+        fun bump(): Int {
+            this.count = this.count + 10
+            return 8
+        }
+
+        fun self(): NnNode? {
+            return this
+        }
+
+        fun nextOf(): NnNode? {
+            return this.next
+        }
+    }
+
+    class NnParker {
+        import Am.Lang
+        import Am.Async
+
+        static var pending: Continuation? = null
+        var done = false
+
+        suspend fun park() {
+            suspend(cont) {
+                NnParker.pending = cont
+            }
+            this.done = true
+        }
+    }
+
+    // Redmine #401: in v2 a statement whose receiver chain has a `!!` in it
+    // (`a.b!!.c.f()`, `a!!.f()`, `a.b!!.c++`) matched no statement handler: its
+    // tokens up to the `!!` were dropped and the rest rendered on a bare local
+    // (`var_count`, a gcc error) or on `this` (a silent miscompile for `i!!.f()`
+    // on an Int?). Each case checks the value or the side effect.
+    class NonNullChainTests {
+        import Am.Lang
+        import Am.Async
+        import Am.Tests
+
+        static var pending: NnNode? = null
+
+        static fun twice(i: Int): Int {
+            return i * 2
+        }
+
+        static fun makePair(): NnNode {
+            var a = new NnNode()
+            a.next = new NnNode()
+            return a
+        }
+
+        test propertyReadAfterAssertionAsStatementChain() {
+            var a = NonNullChainTests.makePair()
+            a.next!!.count = 3
+            a.next!!.count.toString().println()
+            Assert.assertEquals("3", a.next!!.count.toString())
+            Assert.assertEquals(1, a.next!!.count.toString().length())
+            var c = a.next!!.count
+            Assert.assertEquals(3, c)
+            Assert.assertEquals(6, NonNullChainTests.twice(a.next!!.count))
+        }
+
+        test writesThroughAssertion() {
+            var a = NonNullChainTests.makePair()
+            a.next!!.count = 5
+            Assert.assertEquals(5, a.next!!.count)
+            a.next!!.count++
+            Assert.assertEquals(6, a.next!!.count)
+            a.next!!.count--
+            a.next!!.count--
+            Assert.assertEquals(4, a.next!!.count)
+            a.next!!.count += 10
+            Assert.assertEquals(14, a.next!!.count)
+            a.next!!.label = "x"
+            a.next!!.label += "y"
+            Assert.assertEquals("xy", a.next!!.label)
+            // The outer node is untouched.
+            Assert.assertEquals(0, a.count)
+        }
+
+        test callsThroughAssertion() {
+            var a = NonNullChainTests.makePair()
+            a.next!!.bump()
+            Assert.assertEquals(10, a.next!!.count)
+            Assert.assertEquals(8, a.next!!.bump())
+            Assert.assertEquals(20, a.next!!.count)
+            Assert.assertEquals(16, NonNullChainTests.twice(a.next!!.bump()))
+            Assert.assertEquals(30, a.next!!.count)
+            Assert.assertEquals(0, a.count)
+        }
+
+        test assertionOnALocal() {
+            var a: NnNode? = NonNullChainTests.makePair()
+            a!!.bump()
+            Assert.assertEquals(10, a!!.count)
+            Assert.assertEquals(8, a!!.bump())
+            Assert.assertEquals(20, a!!.count)
+            a!!.count = 1
+            a!!.count++
+            Assert.assertEquals(2, a!!.count)
+            // Two assertions in one chain.
+            a!!.next!!.bump()
+            a!!.next!!.count++
+            Assert.assertEquals(11, a!!.next!!.count)
+            var n = a!!.next!!.count
+            Assert.assertEquals(11, n)
+        }
+
+        test assertionOnAnInferredNullableLocal() {
+            NonNullChainTests.pending = NonNullChainTests.makePair()
+            var p = NonNullChainTests.pending
+            p!!.bump()
+            p!!.next!!.bump()
+            Assert.assertEquals(10, p!!.count)
+            Assert.assertEquals(10, p!!.next!!.count)
+            NonNullChainTests.pending = null
+        }
+
+        // Redmine #386: `c!!.resume()` on an inferred Continuation? local
+        // rendered a bare `resume()` (gcc: implicit declaration).
+        test resumeThroughAssertion() {
+            var p = new NnParker()
+            p.park()
+            Assert.assertFalse(p.done)
+            var c = NnParker.pending
+            NnParker.pending = null
+            c!!.resume()
+            Assert.assertTrue(p.done)
+        }
+
+        test assertionAfterACall() {
+            var a = NonNullChainTests.makePair()
+            a.self()!!.bump()
+            a.nextOf()!!.bump()
+            a.self()!!.next!!.bump()
+            Assert.assertEquals(10, a.count)
+            Assert.assertEquals(20, a.next!!.count)
+            Assert.assertEquals(20, a.nextOf()!!.count)
+        }
+
+        test assertionOnNullablePrimitives() {
+            var i: Int? = 41
+            Assert.assertEquals("41", i!!.toString())
+            i!!.toString().println()
+            // A single call as a statement on `this` before: Object.hash(this).
+            i!!.toString()
+            i!!.hash()
+            Assert.assertEquals(41, i!!.hash().toInt())
+            Assert.assertEquals(2, i!!.toString().length())
+            var color: NnColor? = NnColor.white
+            Assert.assertTrue(color!!.getValue() == 7UB)
+            Assert.assertEquals(7, color!!.getValue().toInt())
+            Assert.assertEquals(1, color!!.getValue().toString().length())
+            color!!.getValue().toString().println()
+            color!!.getValue()
+        }
+
+        test assertionOnNullThrows() {
+            var none: NnNode? = null
+            var threw = false
+            try {
+                none!!.bump()
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+            var a = new NnNode()
+            threw = false
+            try {
+                a.next!!.bump()
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+            threw = false
+            try {
+                a.next!!.count++
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+            threw = false
+            try {
+                a.next!!.count = 4
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+            threw = false
+            try {
+                a.nextOf()!!.bump()
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+            Assert.assertEquals(0, a.count)
+        }
+    }
+}
