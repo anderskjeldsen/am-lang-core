@@ -1,0 +1,149 @@
+namespace Tests {
+
+    class AfdThing {
+        import Am.Lang
+
+        var n: Int = 3
+
+        override fun toString(): String {
+            return "thing " + this.n.toString()
+        }
+    }
+
+    // Each class holds one kind of default, so another field cannot force
+    // ___init_instance and hide a slot the property image gets wrong.
+    class AfdString {
+        import Am.Lang
+        var value: Any = "f"
+    }
+
+    class AfdStringAndInt {
+        import Am.Lang
+        var value: Any = "g"
+        var count: Int = 3
+    }
+
+    class AfdInt {
+        import Am.Lang
+        var value: Any = 5
+    }
+
+    class AfdBool {
+        import Am.Lang
+        var value: Any = true
+    }
+
+    class AfdDouble {
+        import Am.Lang
+        var value: Any = 1.5
+    }
+
+    class AfdObject {
+        import Am.Lang
+        var value: Any = new AfdThing()
+    }
+
+    class AfdNull {
+        import Am.Lang
+        var value: Any = null
+        var count: Int = 4
+    }
+
+    class AfdNullableObjects {
+        import Am.Lang
+        var thing: AfdThing? = new AfdThing()
+        var text: String? = "n"
+        var none: String? = null
+    }
+
+    class AfdBase {
+        import Am.Lang
+        var baseValue: Any = "base"
+    }
+
+    class AfdSub : AfdBase {
+        import Am.Lang
+        var subValue: Any = "sub"
+    }
+
+    class AfdBox<T> {
+        import Am.Lang
+        var value: Any = "box"
+        var item: T? = null
+    }
+
+    // Redmine #419: in v1 an Any field with a string default (`var value: Any
+    // = "f"`) read null right after construction. An Any slot is a
+    // nullable_value, the property image wrote PRIMITIVE_NULL for it, and the
+    // constructor copied that image instead of running ___init_instance.
+    class AnyFieldDefaultTests {
+        import Am.Lang
+        import Am.Tests
+
+        test stringDefault() {
+            var a = new AfdString()
+            Assert.assertTrue(a.value != null)
+            Assert.assertEquals("f", a.value.toString())
+        }
+
+        test stringDefaultBesideAnIntDefault() {
+            var a = new AfdStringAndInt()
+            Assert.assertTrue(a.value != null)
+            Assert.assertEquals("g", a.value.toString())
+            Assert.assertEquals(3, a.count)
+        }
+
+        test primitiveDefaults() {
+            Assert.assertEquals("5", new AfdInt().value.toString())
+            Assert.assertEquals("true", new AfdBool().value.toString())
+            Assert.assertEquals("1.5", new AfdDouble().value.toString())
+        }
+
+        test objectDefault() {
+            var a = new AfdObject()
+            Assert.assertTrue(a.value != null)
+            Assert.assertEquals("thing 3", a.value.toString())
+        }
+
+        test nullDefault() {
+            var a = new AfdNull()
+            Assert.assertTrue(a.value == null)
+            Assert.assertEquals(4, a.count)
+        }
+
+        test nullableObjectDefaults() {
+            var a = new AfdNullableObjects()
+            Assert.assertTrue(a.thing != null)
+            Assert.assertEquals(3, a.thing!!.n)
+            Assert.assertEquals("n", a.text!!)
+            Assert.assertTrue(a.none == null)
+        }
+
+        test subclassDefaults() {
+            var s = new AfdSub()
+            Assert.assertEquals("base", s.baseValue.toString())
+            Assert.assertEquals("sub", s.subValue.toString())
+        }
+
+        test subclassIntoABaseTypedVariable() {
+            var b: AfdBase = new AfdSub()
+            Assert.assertEquals("base", b.baseValue.toString())
+        }
+
+        test genericClassDefault() {
+            var bi = new AfdBox<Int>()
+            Assert.assertEquals("box", bi.value.toString())
+            var bs = new AfdBox<String>()
+            Assert.assertEquals("box", bs.value.toString())
+            Assert.assertTrue(bs.item == null)
+        }
+
+        test eachInstanceGetsTheDefault() {
+            var a = new AfdString()
+            a.value = 9
+            var b = new AfdString()
+            Assert.assertEquals("9", a.value.toString())
+            Assert.assertEquals("f", b.value.toString())
+        }
+    }
+}
