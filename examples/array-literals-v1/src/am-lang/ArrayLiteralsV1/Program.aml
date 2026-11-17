@@ -1,0 +1,110 @@
+namespace ArrayLiteralsV1 {
+
+    class Cell(var v: Int) {
+        import Am.Lang
+    }
+
+    class Program {
+        import Am.Lang
+        import Am.Lang.Diagnostics
+
+        static var checks: Int = 0
+
+        static fun check(ok: Bool, what: String) {
+            Program.checks = Program.checks + 1
+            if (!ok) {
+                throw new Exception("array-literals-v1 failed: " + what)
+            }
+        }
+
+        static fun total(g: Int[][]): Int {
+            var s = 0
+            each (g, row) {
+                each (row, x) {
+                    s = s + x
+                }
+            }
+            return s
+        }
+
+        static fun sumLong(xs: Long[]): Long {
+            var s = 0L
+            each (xs, x) {
+                s = s + x
+            }
+            return s
+        }
+
+        static fun join(xs: String[]): String {
+            var s = ""
+            each (xs, x) {
+                s = s + x
+            }
+            return s
+        }
+
+        static fun rows(a: Int): Int[][] {
+            return [[a], [a, a]]
+        }
+
+        static fun nested() {
+            var a = 1
+            var grid = [[a, 2], [3], [4, 5, 6]]
+            Program.check((grid.length() as Int) == 3, "grid has 3 rows")
+            Program.check((grid[0]!!.length() as Int) == 2, "row 0 has 2")
+            Program.check((grid[1]!!.length() as Int) == 1, "row 1 has 1")
+            Program.check(grid[0]!![1]!! == 2, "grid[0][1]")
+            Program.check(grid[2]!![2]!! == 6, "grid[2][2]")
+            Program.check(Program.total(grid) == 21, "total(grid)")
+            var declared: Array<Array<Long>> = [[1, 2], [a]]
+            Program.check(Program.sumLong(declared[0]!!) == 3L, "declared Long rows")
+            Program.check(Program.sumLong(declared[1]!!) == 1L, "declared Long row 1")
+            var words = [["a", "b"], ["c"]]
+            Program.check(Program.join(words[0]!!) == "ab", "string rows")
+            Program.check(Program.total([[a], [2, 3]]) == 6, "nested literal as an argument")
+            Program.check(Program.total(Program.rows(4)) == 12, "nested literal as a return value")
+        }
+
+        static fun typeSyntax() {
+            var g: Int[][] = new Int[][2]
+            g[0] = [7]
+            g[1] = [1, 2]
+            Program.check(Program.total(g) == 10, "Int[][] with new Int[][2]")
+            var h: Int[]?[] = [[1], null]
+            Program.check(h[1] == null, "Int[]?[] holds null")
+        }
+
+        static fun nullablePrimitives() {
+            var n = 4
+            var ints: Int?[] = [n, null]
+            Program.check(ints[1] == null, "Int?[] null element")
+            Program.check(ints[0]!! == 4, "Int?[] value element")
+        }
+
+        static fun churn() {
+            var c = new Cell(1)
+            var grid = [[new Cell(2)], [c, new Cell(3)]]
+            var s = "s"
+            var words = [[s + "1"], [s + "2", "lit"]]
+            Program.check((grid.length() as Int) == 2, "churn grid")
+            Program.check((words.length() as Int) == 2, "churn words")
+        }
+
+        static fun noLeaks() {
+            Program.churn()
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 10) {
+                Program.churn()
+            }
+            Program.check(before == Arc.getAllocationCount(), "nested literals leak nothing")
+        }
+
+        static fun main() {
+            Program.nested()
+            Program.typeSyntax()
+            Program.nullablePrimitives()
+            Program.noLeaks()
+            ("array-literals-v1: all passed (" + Program.checks.toString() + " checks)").println()
+        }
+    }
+}

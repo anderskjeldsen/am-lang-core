@@ -1,0 +1,275 @@
+namespace Tests {
+
+    enum AlColor {
+        import Am.Lang
+
+        red = 1
+        green = 2
+        blue = 3
+    }
+
+    class AlBox(var v: Int) {
+        import Am.Lang
+    }
+
+    open class AlBase {
+        import Am.Lang
+        open fun name(): String { return "base" }
+    }
+
+    class AlDerived : AlBase {
+        import Am.Lang
+        override fun name(): String { return "derived" }
+    }
+
+    class AlHolder {
+        import Am.Lang
+
+        static var seed: Int = 4
+        static var statics: Int[] = [AlHolder.seed, AlHolder.seed * 2]
+
+        var base: Int = 10
+        var fields: String[] = ["f" + "1", "f2"]
+        var boxes: AlBox[] = [new AlBox(1), new AlBox(2)]
+    }
+
+    // Redmine #193: array literals with non-constant elements (locals, parameters,
+    // calls, enum values, string concatenation, objects, null), typed from the
+    // declared type, the parameter or return type, or the elements. Nested
+    // literals (arrays of arrays) and nullable primitive elements (Int?[]) are
+    // v1-only for now and tested in examples/array-literals-v1, since v2 has
+    // neither arrays of arrays nor Int?[].
+    class ArrayLiteralTests {
+        import Am.Lang
+        import Am.Lang.Diagnostics
+        import Am.Async
+        import Am.Tests
+
+        static var log: String = ""
+        static var pending: Continuation? = null
+        var finished: Bool = false
+        var got: Int[] = new Int[0]
+
+        static fun tag(s: String, v: Int): Int {
+            ArrayLiteralTests.log = ArrayLiteralTests.log + s
+            return v
+        }
+
+        static fun times10(x: Int): Int {
+            return x * 10
+        }
+
+        static fun sum(xs: Int[]): Int {
+            var s = 0
+            each (xs, x) {
+                s = s + x
+            }
+            return s
+        }
+
+        static fun sumLong(xs: Long[]): Long {
+            var s = 0L
+            each (xs, x) {
+                s = s + x
+            }
+            return s
+        }
+
+        static fun pair(a: Int, b: Int): Int[] {
+            return [a, b]
+        }
+
+        static fun join(xs: String[]): String {
+            var s = ""
+            each (xs, x) {
+                s = s + x
+            }
+            return s
+        }
+
+        static fun withParams(p: Int, q: String): String {
+            var a = [p, p + 1]
+            var b = [q, q + "!"]
+            return a[1]!!.toString() + b[1]!!
+        }
+
+        test localsCallsAndExpressions() {
+            var a = 5
+            var arr = [a, 2, ArrayLiteralTests.times10(3), a * a]
+            Assert.assertEquals(4, (arr.length() as Int))
+            Assert.assertEquals(5, arr[0]!!)
+            Assert.assertEquals(2, arr[1]!!)
+            Assert.assertEquals(30, arr[2]!!)
+            Assert.assertEquals(25, arr[3]!!)
+            var declared: Int[] = [a, 1]
+            Assert.assertEquals(6, ArrayLiteralTests.sum(declared))
+        }
+
+        test parameters() {
+            Assert.assertEquals("8x!", ArrayLiteralTests.withParams(7, "x"))
+        }
+
+        test constantsStillWork() {
+            var c = [1, 2, 3]
+            Assert.assertEquals(6, ArrayLiteralTests.sum(c))
+            var d: Long[] = [1, 2, 3]
+            Assert.assertEquals(6L, ArrayLiteralTests.sumLong(d))
+        }
+
+        test evaluatesLeftToRightOnce() {
+            ArrayLiteralTests.log = ""
+            var arr = [ArrayLiteralTests.tag("a", 1), ArrayLiteralTests.tag("b", 2), ArrayLiteralTests.tag("c", 3)]
+            Assert.assertEquals("abc", ArrayLiteralTests.log)
+            Assert.assertEquals(6, ArrayLiteralTests.sum(arr))
+        }
+
+        test enumValues() {
+            var cs = [AlColor.red, AlColor.blue]
+            Assert.assertEquals(2, (cs.length() as Int))
+            Assert.assertTrue(cs[1]!! == AlColor.blue)
+            var declared: AlColor[] = [AlColor.green]
+            Assert.assertTrue(declared[0]!! == AlColor.green)
+        }
+
+        test strings() {
+            var n = 3
+            var s = ["a" + n.toString(), "b", n.toString() + "c"]
+            Assert.assertEquals("a3b3c", ArrayLiteralTests.join(s))
+        }
+
+        test objects() {
+            var b = new AlBox(7)
+            var boxes = [b, new AlBox(8)]
+            Assert.assertEquals(7, boxes[0]!!.v)
+            Assert.assertEquals(8, boxes[1]!!.v)
+        }
+
+        test commonBaseClass() {
+            var items = [new AlDerived(), new AlBase()]
+            Assert.assertEquals("derived", items[0]!!.name())
+            Assert.assertEquals("base", items[1]!!.name())
+        }
+
+        test integerWidening() {
+            var i = 2
+            var arr = [i, 3L]
+            Assert.assertEquals(5L, ArrayLiteralTests.sumLong(arr))
+        }
+
+        test nullableElements() {
+            var s: String? = null
+            var arr = ["x", s]
+            Assert.assertEquals(2, (arr.length() as Int))
+            Assert.assertTrue(arr[1] == null)
+            var withNull = ["y", null]
+            Assert.assertTrue(withNull[1] == null)
+            Assert.assertEquals("y", withNull[0]!!)
+        }
+
+        test asArgumentAndReturnValue() {
+            var a = 4
+            Assert.assertEquals(9, ArrayLiteralTests.sum([a, 5]))
+            Assert.assertEquals(11L, ArrayLiteralTests.sumLong([a, 7]))
+            var p = ArrayLiteralTests.pair(a, 6)
+            Assert.assertEquals(6, p[1]!!)
+        }
+
+        test fieldAndStaticInitializers() {
+            var h = new AlHolder()
+            Assert.assertEquals("f1f2", ArrayLiteralTests.join(h.fields))
+            Assert.assertEquals(2, h.boxes[1]!!.v)
+            Assert.assertEquals(4, AlHolder.statics[0]!!)
+            Assert.assertEquals(8, AlHolder.statics[1]!!)
+        }
+
+        test insideALambda() {
+            var base = 3
+            var f: (x: Int) => Int = (x) => {
+                var arr = [x, base]
+                return ArrayLiteralTests.sum(arr)
+            }
+            Assert.assertEquals(10, f(7))
+        }
+
+        test emptyWithDeclaredType() {
+            var e: Int[] = []
+            Assert.assertEquals(0, (e.length() as Int))
+        }
+
+        // An identifier spelled like the internal operator name still works.
+        test identifiersUnaffected() {
+            var init_array = 3
+            var arr = [init_array]
+            Assert.assertEquals(3, arr[0]!!)
+        }
+
+        private static fun churn() {
+            var s = "s"
+            var b = new AlBox(1)
+            var arr = [s + "1", s + "2", "lit"]
+            var boxes = [b, new AlBox(2), new AlBox(3)]
+            var mixed = [s + "x", null]
+            var total = ArrayLiteralTests.sum([b.v, 2]) + (ArrayLiteralTests.makeBoxes(1).length() as Int)
+            var joined = ArrayLiteralTests.join([s, s + "y"])
+            var h = new AlHolder()
+            Assert.assertEquals(3, (arr.length() as Int))
+            Assert.assertEquals(3, (boxes.length() as Int))
+            Assert.assertEquals(2, (mixed.length() as Int))
+        }
+
+        test noLeaks() {
+            ArrayLiteralTests.churn()
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 10) {
+                ArrayLiteralTests.churn()
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test elementsOutliveTheirTemporaries() {
+            var boxes = ArrayLiteralTests.makeBoxes(5)
+            Assert.assertEquals(5, boxes[0]!!.v)
+            Assert.assertEquals(6, boxes[1]!!.v)
+            var strs = ArrayLiteralTests.makeStrings("q")
+            Assert.assertEquals("q1", strs[0]!!)
+        }
+
+        private static fun makeBoxes(n: Int): AlBox[] {
+            return [new AlBox(n), new AlBox(n + 1)]
+        }
+
+        private static fun makeStrings(p: String): String[] {
+            return [p + "1", p + "2"]
+        }
+
+        suspend fun park(v: Int): Int {
+            suspend(cont) {
+                ArrayLiteralTests.pending = cont
+            }
+            return v
+        }
+
+        suspend fun run() {
+            var a = 2
+            var arr = [a, this.park(3), a + 2]
+            this.got = arr
+            this.finished = true
+        }
+
+        test inASuspendFunction() {
+            var t = new ArrayLiteralTests()
+            t.run()
+            var guard = 0
+            while (!t.finished && guard < 10) {
+                var c = ArrayLiteralTests.pending
+                ArrayLiteralTests.pending = null
+                if (c != null) {
+                    c.resume()
+                }
+                guard = guard + 1
+            }
+            Assert.assertTrue(t.finished)
+            Assert.assertEquals(9, ArrayLiteralTests.sum(t.got))
+        }
+    }
+}

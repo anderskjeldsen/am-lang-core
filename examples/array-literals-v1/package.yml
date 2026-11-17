@@ -1,0 +1,21 @@
+id: array-literals-v1
+version: 0.1.0
+type: application
+dependencies:
+  - id: am-lang-core
+    type: local
+    path: ../..
+platforms:
+  - id: libc
+    abstract: true
+  - id: macos-arm
+    extends: libc
+    gccCommand: gcc -O1 -g
+  - id: linux-x64
+    extends: libc
+    gccCommand: gcc -O1 -g
+buildTargets:
+  - id: macos-arm
+    platform: macos-arm
+  - id: linux-x64
+    platform: linux-x64
