@@ -1,0 +1,169 @@
+namespace Tests {
+
+    open class ParenBase {
+        import Am.Lang
+        var hits: Int = 0
+
+        open fun f(): Int {
+            this.hits = this.hits + 1
+            return 7
+        }
+
+        // Inherited, not overridden: a call through a group must use the
+        // declaring class's function.
+        fun inherited(): String {
+            this.hits = this.hits + 1000
+            return "base"
+        }
+    }
+
+    class ParenChild : ParenBase {
+        import Am.Lang
+        var count: Int = 0
+        var field: Int = 0
+        var child: ParenChild? = null
+        var log: String = ""
+
+        override fun f(): Int {
+            this.hits = this.hits + 10
+            return 8
+        }
+
+        fun g(): ParenChild {
+            this.count = this.count + 100
+            return this
+        }
+
+        fun name(): String {
+            this.count = this.count + 1
+            return "c"
+        }
+
+        fun note(s: String): Bool {
+            this.log = this.log + s
+            return true
+        }
+    }
+
+    // Redmine #398: a statement that starts with a parenthesised receiver,
+    // `(new X()).f()` or `(p).f()`, dispatched on the call's RETURN type in v2
+    // (`Am_Lang_Int_f_f_0_T`, a gcc error) when f returns something other
+    // than its receiver's class. The same call as an argument worked. Each
+    // case checks that the call ran (its side effect), not only that it
+    // compiled.
+    class ParenReceiverTests {
+        import Am.Lang
+        import Am.Tests
+
+        static var made: Int = 0
+        var x: Int = 0
+        var b: ParenChild = new ParenChild()
+
+        init {
+            ParenReceiverTests.made = ParenReceiverTests.made + 1
+        }
+
+        fun bump(): Int {
+            this.x = this.x + 3
+            return 7
+        }
+
+        test newReceiverStatement() {
+            var before = ParenReceiverTests.made
+            (new ParenReceiverTests()).bump()
+            Assert.assertEquals(before + 1, ParenReceiverTests.made)
+            // As an argument it worked before.
+            Assert.assertEquals(7, (new ParenReceiverTests()).bump())
+        }
+
+        test localReceiverStatement() {
+            var p = new ParenReceiverTests()
+            (p).bump()
+            (p).bump()
+            Assert.assertEquals(6, p.x)
+        }
+
+        test castReceiverStatement() {
+            var c = new ParenChild()
+            var asBase: ParenBase = c
+            (asBase as ParenChild).f()
+            Assert.assertEquals(10, c.hits)
+            // Through the base type the override still runs (virtual).
+            (c as ParenBase).f()
+            Assert.assertEquals(20, c.hits)
+            (asBase).f()
+            Assert.assertEquals(30, c.hits)
+            (c as ParenChild).inherited()
+            Assert.assertEquals(1030, c.hits)
+        }
+
+        test memberReceiverStatement() {
+            var p = new ParenReceiverTests()
+            (p.b).g()
+            (p.b).name()
+            Assert.assertEquals(101, p.b.count)
+            (p.b).note("a")
+            (p.b).note("b")
+            Assert.assertEquals("ab", p.b.log)
+        }
+
+        test chainStatement() {
+            (new ParenChild()).g().f()
+            var c = new ParenChild()
+            (c).g().f()
+            Assert.assertEquals(100, c.count)
+            Assert.assertEquals(10, c.hits)
+            (c).g().g().name()
+            Assert.assertEquals(301, c.count)
+        }
+
+        test groupedAssignment() {
+            var c = new ParenChild()
+            (c).field = 5
+            Assert.assertEquals(5, c.field)
+            var asBase: ParenBase = c
+            (asBase as ParenChild).field = 6
+            Assert.assertEquals(6, c.field)
+            c.child = new ParenChild()
+            (c.child!!).count = 4
+            (c.child!!).count++
+            Assert.assertEquals(5, c.child!!.count)
+            (c).field += 10
+            Assert.assertEquals(16, c.field)
+        }
+
+        // #18: a `(` on the next line starts a new statement, it doesn't
+        // continue the call on the line before.
+        test nextLineParenIsANewStatement() {
+            var p = new ParenReceiverTests()
+            p.bump()
+            (p).bump()
+            Assert.assertEquals(6, p.x)
+            var c = new ParenChild()
+            c.g()
+            (c).field = 3
+            Assert.assertEquals(100, c.count)
+            Assert.assertEquals(3, c.field)
+        }
+
+        test stringReceiverStatement() {
+            var c = new ParenChild()
+            var s = "abc"
+            (s).length()
+            ("x" + s).length()
+            (c).note((s).substring(1, 1))
+            Assert.assertEquals("b", c.log)
+        }
+
+        test arithmeticReceiverStatement() {
+            var c = new ParenChild()
+            var a = 2
+            var b = 3
+            (a + b).toString()
+            (a * b).toString().length()
+            (c).note((a + b).toString())
+            (c).note((a * b - 1).toString())
+            Assert.assertEquals("55", c.log)
+        }
+    }
+}
