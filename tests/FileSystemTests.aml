@@ -3,6 +3,7 @@ namespace Tests {
     class FileSystemTests {
         import Am.Lang
         import Am.IO
+        import Am.Tests
 
         test testFileExists() {
             // Create a test file
@@ -26,6 +27,31 @@ namespace Tests {
             if (file.exists()) {
                 throw new Exception("File should not exist after deletion")
             }
+        }
+
+        // "." is the current directory for listing on every platform; AmigaDOS
+        // has no "." entry, so the natives map it to "" there (#260).
+        test listingDotFindsTheCurrentDirectory() {
+            "x".writeToFile("list_dot_probe.txt")
+            File.createDirectory("list_dot_dir")
+            var foundFile = false
+            var foundDir = false
+            each (e in new File(".").listEntries()) {
+                if (e.name == "list_dot_probe.txt" && (e.kind == DirEntry.KindFile || e.kind == DirEntry.KindUnknown)) { foundFile = true }
+                if (e.name == "list_dot_dir" && (e.kind == DirEntry.KindDir || e.kind == DirEntry.KindUnknown)) { foundDir = true }
+            }
+            var dirNamed = false
+            each (n in new File(".").listDirectoryNames()) {
+                if (n == "list_dot_dir") { dirNamed = true }
+            }
+            var st = new Long[3UI]
+            var statted = File.statEntry(".", "list_dot_dir", st)
+            File.delete("list_dot_probe.txt")
+            new File("list_dot_dir").delete()
+            Assert.assertTrue(foundFile)
+            Assert.assertTrue(foundDir)
+            Assert.assertTrue(dirNamed)
+            Assert.assertTrue(statted)
         }
 
         test testFileMetadata() {

@@ -71,6 +71,36 @@ static void am_file_quiet_end(void * old)
 #include <dos/dosextens.h>
 #endif
 
+// AmigaDOS has no "." entry: the current directory is the empty path, and
+// "dir/name" is only right when dir doesn't already end in ':' or '/'
+// ("DH0:" + "x" is "DH0:x", not "DH0:/x", which names the parent). These map
+// a directory path to what dos.library and libnix expect, and join a name onto
+// it (Redmine #260). Elsewhere they are the plain POSIX forms.
+static const char * am_file_dir_path(const char * dir)
+{
+#if defined(PLATFORM_AMIGAOS)
+	if (dir[0] == '.' && dir[1] == '\0') {
+		return "";
+	}
+	while (dir[0] == '.' && dir[1] == '/') {
+		dir += 2;
+	}
+#endif
+	return dir;
+}
+
+static int am_file_join(char * out, size_t size, const char * dir, const char * name)
+{
+	dir = am_file_dir_path(dir);
+#if defined(PLATFORM_AMIGAOS)
+	size_t len = strlen(dir);
+	if (len == 0 || dir[len - 1] == ':' || dir[len - 1] == '/') {
+		return snprintf(out, size, "%s%s", dir, name);
+	}
+#endif
+	return snprintf(out, size, "%s/%s", dir, name);
+}
+
 // AmigaOS and MorphOS have no POSIX symbolic links, and their C libraries
 // don't ship lstat() at all — so every "does this follow a link?" question
 // collapses to plain stat() there, and the link accessors below are inert.
@@ -156,7 +186,7 @@ function_result Am_IO_File_listNative_0(aobject * const this, aobject * folderFi
 
 	DIR *d;
 	struct dirent *dir;
-	d = opendir(filename_string_holder->string_value);
+	d = opendir(am_file_dir_path(filename_string_holder->string_value));
 	if (!d) {
 		char msg[1024];
 		snprintf(msg, sizeof(msg), "Failed to open directory '%s': %s", filename_string_holder->string_value, strerror(errno));
@@ -214,7 +244,7 @@ function_result Am_IO_File_listEntriesNative_0(aobject * const this, aobject * f
 	bool __returning = false;
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
 	string_holder *filename_string_holder = (string_holder *) ((char *) filename + sizeof(aobject));
-	const char *dir_path = filename_string_holder->string_value;
+	const char *dir_path = am_file_dir_path(filename_string_holder->string_value);
 #ifdef __amigaos__
 	BPTR lock = Lock((CONST_STRPTR) dir_path, ACCESS_READ);
 	if (lock == (BPTR) NULL) {
@@ -274,7 +304,7 @@ function_result Am_IO_File_listDirsNative_0(aobject * const this, aobject * fold
 
 	aobject *filename = this->object_properties.class_object_properties.properties[Am_IO_File_P_filename].nullable_value.value.object_value;
 	string_holder *filename_string_holder = (string_holder *) ((char *) filename + sizeof(aobject));
-	const char *dir_path = filename_string_holder->string_value;
+	const char *dir_path = am_file_dir_path(filename_string_holder->string_value);
 
 #ifdef __amigaos__
 	// dos.library walk: Lock + Examine + ExNext gives every entry's
@@ -340,7 +370,7 @@ function_result Am_IO_File_listDirsNative_0(aobject * const this, aobject * fold
 			// Listing didn't report the type (no d_type, or the
 			// filesystem returns DT_UNKNOWN) — one stat for this entry.
 			char full[PATH_MAX];
-			int n = snprintf(full, sizeof(full), "%s/%s", dir_path, dir->d_name);
+			int n = am_file_join(full, sizeof(full), dir_path, dir->d_name);
 			struct stat s;
 			is_dir = (n > 0 && n < (int) sizeof(full)
 				&& stat(full, &s) == 0 && S_ISDIR(s.st_mode));
@@ -432,7 +462,7 @@ function_result Am_IO_File_statEntry_0(aobject * dirPath, aobject * name, aobjec
 		return __result;
 	}
 	char path[4096];
-	int n = snprintf(path, sizeof(path), "%s/%s", dir_string_holder->string_value, name_string_holder->string_value);
+	int n = am_file_join(path, sizeof(path), dir_string_holder->string_value, name_string_holder->string_value);
 	if (n < 0 || n >= (int) sizeof(path)) {
 		return __result;
 	}
