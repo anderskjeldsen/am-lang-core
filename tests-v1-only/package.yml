@@ -1,0 +1,36 @@
+# Core tests that only the v1 compiler (amlc.jar) passes. The self-hosted v2
+# compiler builds am-lang-core's tests/ too, and one test it can't compile
+# fails that whole run, so these live outside tests/. Run them with:
+#   amlc test am-lang-core/tests-v1-only -bt linux-x64 -lpp <folder with am-lang-core and am-tests>
+# (-bt macos-arm on a Mac). Move a test into tests/ once v2 passes it; the
+# gaps are listed in am-lang-compiler-code-v2/V2_PORT_PLAN.md.
+id: am-lang-core-v1-only-tests
+version: 0.16.0
+type: library
+dependencies:
+  - id: am-lang-core
+    type: local
+    path: ..
+    features: ["floatingPoint"]
+  - id: am-tests
+    testOnly: true
+    type: local
+    path: ../../am-tests
+platforms:
+  - id: libc
+    abstract: true
+  - id: linux-x64
+    extends: libc
+    gccCommand: gcc -O1
+    gccAdditionalOptions:
+      - -pthread
+  - id: macos-arm
+    extends: libc
+    gccCommand: gcc -O1
+buildTargets:
+  - id: linux-x64
+    platform: linux-x64
+    features: ["floatingPoint"]
+  - id: macos-arm
+    platform: macos-arm
+    features: ["floatingPoint"]

@@ -1,0 +1,260 @@
+namespace Tests {
+
+    // Redmine #237: nullable enums. Every enum here has a member whose value is
+    // 0, so a null that read as its backing value would look like that member.
+    // These run under v1 and v2. What v2 gets wrong for every nullable value
+    // type (Int? too: a null compared with a value, null == null, `when` on a
+    // null subject, `x!!.f()`, `?.`, getOrNull, List<Color?>, nullable arrays,
+    // statics, lambda captures, suspend) is in tests-v1-only/, which only v1
+    // runs; see V2_PORT_PLAN.md.
+
+    enum NeColor<UByte> {
+        import Am.Lang
+
+        black = 0UB
+        red = 1UB
+        white = 7UB
+    }
+
+    // Default (Int) backing, a negative member, zero not first.
+    enum NeSigned {
+        import Am.Lang
+
+        minus = -3
+        zero = 0
+        plus = 12
+    }
+
+    // Short backing that doesn't start at 0.
+    enum NeLevel<Short> {
+        import Am.Lang
+
+        low = 5S
+        high = 10S
+    }
+
+    class NeHolder {
+        import Am.Lang
+
+        var unset: NeColor?
+        var colour: NeColor? = null
+        var plain: NeColor = NeColor.red
+    }
+
+    data class NePixel(var x: Int, var colour: NeColor?)
+
+    class NeBox<T> {
+        import Am.Lang
+
+        var v: T? = null
+
+        fun put(x: T) {
+            this.v = x
+        }
+
+        fun get(): T? {
+            return this.v
+        }
+
+        fun isEmpty(): Bool {
+            return this.v == null
+        }
+    }
+
+    class NullableEnumTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun pick(n: Int): NeColor? {
+            if (n == 0) {
+                return null
+            }
+            if (n == 1) {
+                return NeColor.black
+            }
+            return NeColor.white
+        }
+
+        static fun describe(c: NeColor?): String {
+            if (c == null) {
+                return "none"
+            }
+            var v: NeColor = c!!
+            return v.getValue().toString()
+        }
+
+        static fun ident<T>(x: T): T {
+            return x
+        }
+
+        // Null vs the 0-valued member, in a local.
+        test localTellsNullFromZeroMember() {
+            var n: NeColor? = null
+            var b: NeColor? = NeColor.black
+            Assert.assertTrue(n == null)
+            Assert.assertFalse(n != null)
+            Assert.assertTrue(b != null)
+            Assert.assertFalse(b == null)
+            Assert.assertTrue(b == NeColor.black)
+            Assert.assertFalse(b == NeColor.white)
+            b = null
+            Assert.assertTrue(b == null)
+            n = NeColor.white
+            Assert.assertTrue(n == NeColor.white)
+            Assert.assertTrue(n != null)
+        }
+
+        test nonNullAssertion() {
+            var b: NeColor? = NeColor.black
+            var plain: NeColor = b!!
+            Assert.assertTrue(plain == NeColor.black)
+            Assert.assertTrue(plain.getValue() == 0UB)
+            var n: NeColor? = null
+            var thrown = false
+            try {
+                var p: NeColor = n!!
+            } catch (e: Exception) {
+                thrown = true
+            }
+            Assert.assertTrue(thrown)
+        }
+
+        test elvis() {
+            var n: NeColor? = null
+            var b: NeColor? = NeColor.black
+            Assert.assertTrue((n ?? NeColor.white) == NeColor.white)
+            Assert.assertTrue((b ?? NeColor.white) == NeColor.black)
+            n = n ?? NeColor.red
+            Assert.assertTrue(n == NeColor.red)
+        }
+
+        test fieldsParametersAndReturns() {
+            var h = new NeHolder()
+            Assert.assertTrue(h.unset == null)
+            Assert.assertTrue(h.colour == null)
+            Assert.assertFalse(h.colour == NeColor.black)
+            h.colour = NeColor.black
+            Assert.assertTrue(h.colour != null)
+            Assert.assertTrue(h.colour == NeColor.black)
+            h.colour = null
+            Assert.assertTrue(h.colour == null)
+            Assert.assertTrue(h.plain == NeColor.red)
+
+            Assert.assertTrue(NullableEnumTests.pick(0) == null)
+            Assert.assertTrue(NullableEnumTests.pick(1) != null)
+            Assert.assertTrue(NullableEnumTests.pick(1) == NeColor.black)
+            Assert.assertTrue(NullableEnumTests.pick(2) == NeColor.white)
+            Assert.assertEquals("none", NullableEnumTests.describe(null))
+            Assert.assertEquals("0", NullableEnumTests.describe(NeColor.black))
+            Assert.assertEquals("0", NullableEnumTests.describe(NullableEnumTests.pick(1)))
+            Assert.assertEquals("none", NullableEnumTests.describe(NullableEnumTests.pick(0)))
+        }
+
+        test otherBackingTypes() {
+            var s: NeSigned? = NeSigned.minus
+            Assert.assertTrue(s == NeSigned.minus)
+            var sv: NeSigned = s!!
+            Assert.assertTrue(sv.getValue() == -3)
+            s = NeSigned.zero
+            Assert.assertTrue(s != null)
+            Assert.assertTrue(s == NeSigned.zero)
+            s = null
+            Assert.assertTrue(s == null)
+
+            var l: NeLevel? = null
+            Assert.assertTrue(l == null)
+            l = NeLevel.low
+            Assert.assertTrue(l == NeLevel.low)
+            var lv: NeLevel = l!!
+            Assert.assertTrue(lv.getValue() == 5S)
+            var orHigh = l ?? NeLevel.high
+            Assert.assertTrue(orHigh == NeLevel.low)
+            l = null
+            orHigh = l ?? NeLevel.high
+            Assert.assertTrue(orHigh.getValue() == 10S)
+        }
+
+        test hashMapOfEnums() {
+            var m = new HashMap<String, NeColor>()
+            m.set("b", NeColor.black)
+            m.set("r", NeColor.red)
+            Assert.assertTrue(m.get("b") == NeColor.black)
+            Assert.assertTrue(m.get("r") == NeColor.red)
+            Assert.assertTrue(m.containsKey("b"))
+            Assert.assertFalse(m.containsKey("missing"))
+        }
+
+        test listOfEnums() {
+            var plain = new List<NeColor>()
+            plain.add(NeColor.white)
+            plain.add(NeColor.black)
+            Assert.assertTrue(plain.get(0) == NeColor.white)
+            Assert.assertTrue(plain.get(1) == NeColor.black)
+        }
+
+        test arraysOfEnums() {
+            var arr = new NeColor[3]
+            arr[0] = NeColor.red
+            arr[1] = NeColor.white
+            Assert.assertTrue(arr[0] == NeColor.red)
+            Assert.assertTrue(arr[1] == NeColor.white)
+            Assert.assertTrue(arr[2] == NeColor.black)
+        }
+
+        // A generic T? slot holding an enum keeps its null, as Box<Int>'s does (#238).
+        test genericSlotOfAnEnum() {
+            var a = new NeBox<NeColor>()
+            Assert.assertTrue(a.isEmpty())
+            Assert.assertTrue(a.get() == null)
+            a.put(NeColor.black)
+            Assert.assertFalse(a.isEmpty())
+            Assert.assertTrue(a.get() == NeColor.black)
+
+            Assert.assertTrue(NullableEnumTests.ident<NeColor>(NeColor.white) == NeColor.white)
+        }
+
+        test dataClassField() {
+            var p = new NePixel(1, null)
+            Assert.assertTrue(p.colour == null)
+            var q = new NePixel(1, NeColor.black)
+            Assert.assertTrue(q.colour == NeColor.black)
+            Assert.assertTrue(q.colour != null)
+            q.colour = null
+            Assert.assertTrue(q.colour == null)
+        }
+
+        test whenOnNullableEnum() {
+            var w: NeColor? = NeColor.white
+            var r1 = when (w) {
+                NeColor.black -> 1
+                NeColor.white -> 2
+                else -> 3
+            }
+            Assert.assertEquals(2, r1)
+            w = NeColor.black
+            var r3 = when (w) {
+                NeColor.black -> 1
+                NeColor.white -> 2
+                else -> 3
+            }
+            Assert.assertEquals(1, r3)
+        }
+
+        test stringTemplates() {
+            var c: NeColor? = NeColor.white
+            Assert.assertEquals("c=7", "c=$c")
+            var plain = NeColor.red
+            Assert.assertEquals("p=1", "p=$plain")
+        }
+
+        test anyHoldsANullableEnum() {
+            var b: NeColor? = NeColor.black
+            var a: Any = b
+            Assert.assertTrue(a != null)
+            var n: NeColor? = null
+            var a2: Any = n
+            Assert.assertTrue(a2 == null)
+        }
+    }
+}
