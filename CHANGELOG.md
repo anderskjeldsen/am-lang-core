@@ -39,8 +39,9 @@ New regression tests for compiler fixes, most of which also run through v2:
 - From the AmigaOS examples: v2 miscompiles of catch and each variables, and interface wrapping.
 - Also: SuspendArcTests (#336), SuspendBlockExitTests (#298), SuspendTempTests (#35), InitOrderTests (#25) and RunAsyncTests (#299).
 - Smaller ones: `!!` (#211, #239, #253), generic `T?` (#238), string templates (#179), bare calls after operators (#160), `this` in lambdas (#39), catch lines (#180) and a local named `primitive` (#181).
+- ArrayLiteralTests (#193): array literals with locals, parameters, calls, enum values, objects, string concatenation and null, as arguments, return values, field and static initializers, in a lambda and a suspend function, evaluation order and a live-object count; v1 and v2. The v1-only cases (nested literals, `Int[][]`, `Int?[]`) are a separate program, `examples/array-literals-v1` (`amlc run`).
 
-Totals: linux-x64 326/326, and AmigaOS under amiberry 326/326.
+Totals: linux-x64 344/344 (v1 and v2); AmigaOS under amiberry 326/326 before #193 (not rerun since).
 
 ## [0.15.0] - 2026-11-07
 
