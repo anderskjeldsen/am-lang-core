@@ -1,0 +1,131 @@
+namespace Tests {
+
+    class PbObj {
+        import Am.Lang
+
+        var n: Int = 5
+    }
+
+    class PbHolder {
+        import Am.Lang
+
+        var v: Int? = null
+        var l: Long? = null
+        var b: Bool? = null
+        var d: Double? = null
+        var o: PbObj? = null
+        static var sv: Int? = null
+
+        fun getV(): Int { return this.v!! }
+        fun getVBare(): Int { return v!! }
+        fun getL(): Long { return this.l!! }
+        fun getLBare(): Long { return l!! }
+        fun getB(): Bool { return this.b!! }
+        fun getD(): Double { return this.d!! }
+        fun getO(): PbObj { return this.o!! }
+        fun getOBare(): PbObj { return o!! }
+        fun getVNullable(): Int? { return this.v!! }
+        fun getSv(): Int { return PbHolder.sv!! }
+        fun plusOne(): Int { return this.v!! + 1 }
+        fun plusOneBare(): Int { return v!! + 1 }
+        fun twice(x: Int): Int { return x * 2 }
+        fun asArg(): Int { return this.twice(this.v!!) }
+        fun asArgBare(): Int { return twice(v!!) }
+        fun guarded(): Bool { return this.v != null && this.v!! > 2 }
+        fun viaVar(): Int {
+            var x = this.v!!
+            return x
+        }
+    }
+
+    class PbBox<T> {
+        import Am.Lang
+
+        var v: T? = null
+
+        fun get(): T { return this.v!! }
+        fun getBare(): T { return v!! }
+        fun put(x: T) { this.v = x }
+    }
+
+    // Redmine #403: in v2 `return this.v!!` on an `Int?` property (or a `T?` one
+    // with T = Int) returned the whole nullable_value slot as the int (a gcc
+    // error), with no null check; `v!!` on the bare name, `this.v!! + 1` and
+    // `f(this.v!!)` the same, and `return this.o!!` on an object property did
+    // not check for null. Each form returns the value, and throws on null.
+    class PropertyBangTests {
+        import Am.Lang
+        import Am.Tests
+
+        test returnsTheValue() {
+            var h = new PbHolder()
+            h.v = 3
+            h.l = 7000000000L
+            h.b = true
+            h.d = 1.5
+            h.o = new PbObj()
+            PbHolder.sv = 9
+            Assert.assertEquals(3, h.getV())
+            Assert.assertEquals(3, h.getVBare())
+            Assert.assertTrue(h.getL() == 7000000000L)
+            Assert.assertTrue(h.getLBare() == 7000000000L)
+            Assert.assertTrue(h.getB())
+            Assert.assertTrue(h.getD() == 1.5)
+            Assert.assertEquals(5, h.getO().n)
+            Assert.assertEquals(5, h.getOBare().n)
+            Assert.assertEquals(3, h.getVNullable() ?? 0)
+            Assert.assertEquals(9, h.getSv())
+            Assert.assertEquals(4, h.plusOne())
+            Assert.assertEquals(4, h.plusOneBare())
+            Assert.assertEquals(6, h.asArg())
+            Assert.assertEquals(6, h.asArgBare())
+            Assert.assertTrue(h.guarded())
+            Assert.assertEquals(3, h.viaVar())
+            PbHolder.sv = null
+        }
+
+        test genericSlot() {
+            var bi = new PbBox<Int>()
+            bi.put(4)
+            Assert.assertEquals(4, bi.get())
+            Assert.assertEquals(4, bi.getBare())
+            var bs = new PbBox<String>()
+            bs.put("s")
+            Assert.assertEquals("s", bs.get())
+            Assert.assertEquals("s", bs.getBare())
+        }
+
+        test throwsOnNull() {
+            var h = new PbHolder()
+            var count = 0
+            try { h.getV() } catch (e: Exception) { count++ }
+            try { h.getVBare() } catch (e: Exception) { count++ }
+            try { h.getL() } catch (e: Exception) { count++ }
+            try { h.getLBare() } catch (e: Exception) { count++ }
+            try { h.getB() } catch (e: Exception) { count++ }
+            try { h.getD() } catch (e: Exception) { count++ }
+            try { h.getO() } catch (e: Exception) { count++ }
+            try { h.getOBare() } catch (e: Exception) { count++ }
+            try { h.getVNullable() } catch (e: Exception) { count++ }
+            try { h.getSv() } catch (e: Exception) { count++ }
+            try { h.plusOne() } catch (e: Exception) { count++ }
+            try { h.plusOneBare() } catch (e: Exception) { count++ }
+            try { h.asArg() } catch (e: Exception) { count++ }
+            try { h.asArgBare() } catch (e: Exception) { count++ }
+            try { h.viaVar() } catch (e: Exception) { count++ }
+            Assert.assertEquals(15, count)
+            Assert.assertFalse(h.guarded())
+        }
+
+        test genericSlotThrowsOnNull() {
+            var count = 0
+            var bi = new PbBox<Int>()
+            try { bi.get() } catch (e: Exception) { count++ }
+            try { bi.getBare() } catch (e: Exception) { count++ }
+            var bs = new PbBox<String>()
+            try { bs.get() } catch (e: Exception) { count++ }
+            try { bs.getBare() } catch (e: Exception) { count++ }
+            Assert.assertEquals(4, count)
+        }
+    }
+}
