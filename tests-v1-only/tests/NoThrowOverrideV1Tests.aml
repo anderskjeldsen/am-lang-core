@@ -1,0 +1,92 @@
+namespace Tests {
+
+    // Redmine #420b, the null-member-access cases: an override of a #noThrow
+    // function (toString, hash, equals) that reads through a nullable member
+    // must catch the null check itself. Here because v2 emits no null check
+    // for a method call through a null object (it segfaults;
+    // V2_PORT_PLAN.md); the explicit-throw cases are in
+    // tests/NoThrowOverrideTests.aml.
+    class NoThrowOverrideV1Node {
+        import Am.Lang
+        var next: NoThrowOverrideV1Node? = null
+
+        override fun toString(): String {
+            try {
+                return this.next.toString() + "!"
+            } catch (e: Exception) {
+                return "end"
+            }
+        }
+
+        override fun hash(): UInt {
+            try {
+                return this.next.hash() + 7UI
+            } catch (e: Exception) {
+            }
+            return 1UI
+        }
+
+        override fun equals(other: Object): Bool {
+            try {
+                return this.next.equals(other)
+            } catch (e: Exception) {
+            }
+            return false
+        }
+    }
+
+    class NoThrowOverrideV1Tests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun describe(a: Any): String {
+            return a.toString()
+        }
+
+        static fun hashOf(a: Any): UInt {
+            return a.hash()
+        }
+
+        static fun same(a: Object, b: Object): Bool {
+            return a.equals(b)
+        }
+
+        test aNullMemberIsCaughtByTheOverride() {
+            var escaped = false
+            var n = new NoThrowOverrideV1Node()
+            var text = "unset"
+            var h = 0UI
+            var r = true
+            try {
+                text = NoThrowOverrideV1Tests.describe(n)
+                h = NoThrowOverrideV1Tests.hashOf(n)
+                r = NoThrowOverrideV1Tests.same(n, n)
+            } catch (e: Exception) {
+                escaped = true
+            }
+            Assert.assertFalse(escaped)
+            Assert.assertEquals("end", text)
+            Assert.assertTrue(h == 1UI)
+            Assert.assertFalse(r)
+        }
+
+        test aChainFallsBackAtItsEnd() {
+            var b = new NoThrowOverrideV1Node()
+            b.next = new NoThrowOverrideV1Node()
+            b.next.next = new NoThrowOverrideV1Node()
+            Assert.assertEquals("end!!", NoThrowOverrideV1Tests.describe(b))
+            Assert.assertTrue(NoThrowOverrideV1Tests.hashOf(b) == 15UI)
+        }
+
+        test repeatedCatchesDoNotPileUp() {
+            var n = new NoThrowOverrideV1Node()
+            var total = 0UI
+            for (i = 0 until 1000) {
+                total = total + n.hash()
+                n.toString()
+                n.equals(n)
+            }
+            Assert.assertTrue(total == 1000UI)
+        }
+    }
+}
