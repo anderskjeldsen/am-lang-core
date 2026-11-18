@@ -2019,7 +2019,10 @@ static pthread_mutex_t __amlc_global_mutex = PTHREAD_MUTEX_INITIALIZER;
 // thread holds it must not longjmp out (the lock would stay taken).
 static volatile bool __amlc_global_held = false;
 static pthread_t __amlc_global_holder;
-void __amlc_global_lock(void)   { pthread_mutex_lock(&__amlc_global_mutex); __amlc_global_holder = pthread_self(); __amlc_global_held = true; }
+// holder is written before held (with a barrier), and read after it, so a
+// thread that sees held never pairs it with a stale holder.
+static void __amlc_global_mark_held(void) { __amlc_global_holder = pthread_self(); __sync_synchronize(); __amlc_global_held = true; }
+void __amlc_global_lock(void)   { pthread_mutex_lock(&__amlc_global_mutex); __amlc_global_mark_held(); }
 void __amlc_global_unlock(void) { __amlc_global_held = false; pthread_mutex_unlock(&__amlc_global_mutex); }
 #endif
 // A condition on the global lock, broadcast whenever an isolate is done or a
@@ -2444,6 +2447,7 @@ aisolate * __amlc_isolate_create(void) {
     return iso;
 }
 
+static void __amlc_mark_main_booted(void);
 void __amlc_isolate_run_static_inits(void) {
     for (unsigned int i = 0; i < __amlc_static_init_count; i++) {
         function_result r = __amlc_static_init_table[i]();
@@ -2452,6 +2456,7 @@ void __amlc_isolate_run_static_inits(void) {
             __decrease_reference_count(r.exception);
         }
     }
+    __amlc_mark_main_booted();
 }
 
 void __amlc_isolate_retain(aisolate * const iso) {
@@ -2532,6 +2537,11 @@ volatile int __amlc_shutdown_requested = 0;
 // 0 running, 1 main is shutting down (exit hooks), 2 out of memory during
 // that shutdown: only the sweep, class shutdowns and exit are left.
 static volatile int __amlc_shutdown_phase = 0;
+// Main has told the other threads to stop and waited for them.
+static volatile bool __amlc_workers_stopped = false;
+// Main's static initializers have run; before that a jump would land in a
+// shutdown of a half-built program, so out of memory just exits.
+static volatile bool __amlc_main_booted = false;
 // Set when main registers its jump target (only generated startup code
 // that renders the setjmp does); workers only arm theirs when it is set, so
 // a program without the startup support keeps the old behaviour throughout.
@@ -2579,6 +2589,9 @@ bool __amlc_should_stop(void) {
 static void __amlc_jump(aisolate * const iso, int const value) {
     jmp_buf * const j = (jmp_buf *) iso->oom_jump;
     if (iso != __amlc_main_isolate) iso->oom_jump = NULL;
+    // The skipped frames' scratch/fast blocks and no-jump sections are over.
+    iso->fast_depth = 0;
+    iso->oom_no_jump = 0;
     longjmp(*j, value);
 }
 #endif
@@ -2594,7 +2607,7 @@ bool __amlc_join_give_up(void) {
     AMLC_STOP_POINT();
     // Main's shutdown has already waited for the stopping threads; a join
     // from an exit hook must not wait again for one that never stopped.
-    return __amlc_shutdown_requested && __amlc_shutdown_phase > 0 && __amlc_isolate() == __amlc_main_isolate;
+    return __amlc_workers_stopped && __amlc_isolate() == __amlc_main_isolate;
 }
 
 #ifndef AMLC_AMIGA_FAMILY
@@ -2607,10 +2620,14 @@ bool __amlc_join_wait_done(aisolate * const target) {
             __amlc_global_lock();
             if (target->done) break;
         }
+        if (__amlc_should_stop()) {   // told to stop between the check above and here
+            __amlc_global_unlock();
+            AMLC_STOP_POINT();
+            return target->done;
+        }
         __amlc_global_held = false;
         pthread_cond_wait(&__amlc_global_cond, &__amlc_global_mutex);
-        __amlc_global_holder = pthread_self();
-        __amlc_global_held = true;
+        __amlc_global_mark_held();
     }
     __amlc_global_unlock();
     return true;
@@ -2627,6 +2644,10 @@ static void __amlc_request_shutdown(void) {
     __amlc_global_unlock();
 }
 
+static void __amlc_mark_main_booted(void) {
+    if (__amlc_isolate() == __amlc_main_isolate) __amlc_main_booted = true;
+}
+
 void __amlc_oom_arm_main(void * const jump) {
     __amlc_oom_fatal_mode = true;
     __amlc_isolate()->oom_jump = jump;
@@ -2641,7 +2662,9 @@ static bool __amlc_in_critical_section(aisolate * const iso) {
     return SysBase->TDNestCnt >= 0 || SysBase->IDNestCnt >= 0;
 #else
     (void) iso;
-    return __amlc_global_held && pthread_equal(__amlc_global_holder, pthread_self());
+    if (!__amlc_global_held) return false;
+    __sync_synchronize();
+    return pthread_equal(__amlc_global_holder, pthread_self());
 #endif
 }
 
@@ -2650,7 +2673,10 @@ static void __amlc_oom_fatal_at(void * const site_class, unsigned int const line
 // Every failed object allocation comes here (generated code and natives
 // alike, so a native that would not check NULL never sees one).
 static void __amlc_allocation_failed(aisolate * const iso, aclass * const cls) {
-    if (iso == NULL || iso->oom_jump == NULL || __amlc_in_critical_section(iso)) return;
+    if (iso == NULL) return;
+    if (iso->oom_no_jump > 0) { iso->oom_suppressed = true; return; }
+    if (__amlc_in_critical_section(iso)) return;
+    if (iso->oom_jump == NULL && !__amlc_oom_fatal_mode) return;
     __amlc_oom_fatal_at(NULL, 0, NULL, cls);
 }
 
@@ -2661,8 +2687,13 @@ void __amlc_oom_fatal(void * const site_class, unsigned int const line_kind, con
 static void __amlc_oom_fatal_at(void * const site_class, unsigned int const line_kind, const char * const text, aclass * const alloc_class) {
 #ifdef AMLC_OOM_SHUTDOWN
     aisolate * const iso = __amlc_isolate();
-    if (iso == NULL || iso->oom_jump == NULL) return;   // no target: the caller throws as before
-    if (__amlc_in_critical_section(iso)) return;
+    if (iso == NULL || __amlc_in_critical_section(iso)) return;
+    // No target (code from a compiler without the setjmp): the caller throws
+    // as before. But in a program that has one, code built for it treats
+    // allocation as unable to throw, so an exception here (worker teardown,
+    // main still booting) would be dropped: exit instead.
+    bool const exit_now = __amlc_oom_fatal_mode && (iso->oom_jump == NULL || (iso == __amlc_main_isolate && !__amlc_main_booted));
+    if (iso->oom_jump == NULL && !exit_now) return;
     // Breathing room for the shutdown handlers.
     __amlc_global_lock();
     void * reserve = __oom_report_reserve;
@@ -2682,6 +2713,11 @@ static void __amlc_oom_fatal_at(void * const site_class, unsigned int const line
     }
     fprintf(AMLC_OOM_OUT, "\n");
     fflush(AMLC_OOM_OUT);
+    if (exit_now) {
+        fprintf(AMLC_OOM_OUT, "Out of memory with no orderly shutdown possible here: exiting\n");
+        fflush(AMLC_OOM_OUT);
+        exit(AMLC_EXIT_FAIL);
+    }
     if (iso == __amlc_main_isolate) {
         if (__amlc_shutdown_phase == 0) {
             __amlc_shutdown_requested = 1;
@@ -2765,6 +2801,7 @@ static void __amlc_stop_workers(void) {
         fprintf(AMLC_OOM_OUT, "%d thread(s) did not stop within %d ms; exiting without them\n", n, AMLC_OOM_JOIN_TIMEOUT_MS);
         fflush(AMLC_OOM_OUT);
     }
+    __amlc_workers_stopped = true;
 }
 
 int __amlc_shutdown_begin(void) {
@@ -2923,11 +2960,16 @@ amessage * __amlc_message_create(aobject * const payload, function_result * cons
     // this isolate's fast-lane arena, whatever block we are inside.
     int const saved_fast_depth = iso->fast_depth;
     iso->fast_depth = 0;
+    // A jump out of the copy would leave first_object swapped for the
+    // partial chain: let a failed allocation return NULL (handled below).
+    iso->oom_no_jump++;
+    iso->oom_suppressed = false;
 
     __amlc_copy_ctx ctx = { .tab = NULL, .cap = 0, .count = 0, .failed_class = NULL };
     aobject * copy = __amlc_copy_object(&ctx, payload);
     free(ctx.tab);
     iso->fast_depth = saved_fast_depth;
+    iso->oom_no_jump--;
 
     if (ctx.failed_class != NULL || copy == NULL) {
         // Undo: put the partial chain back where a release can reach it,
@@ -2936,6 +2978,13 @@ amessage * __amlc_message_create(aobject * const payload, function_result * cons
         iso->first_object = saved_first;
         __amlc_splice_chain(chain);
         if (copy != NULL) __decrease_reference_count(copy);
+        if (iso->oom_suppressed) {
+            // The copy ran out of memory: now that the lists are back, take
+            // the out-of-memory path (jumps when the isolate has a target).
+            iso->oom_suppressed = false;
+            __throw_out_of_memory_exception(result, "in Thread.send");
+            return NULL;
+        }
         char msg[256];
         snprintf(msg, sizeof(msg), "Object of type %s is not sendable between threads (native class without a copy hook)",
                  ctx.failed_class != NULL ? ctx.failed_class : (payload != NULL ? payload->class_ptr->name : "null"));

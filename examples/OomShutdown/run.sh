@@ -37,6 +37,8 @@ CASES=(
     "worker yes yes|on thread 'oomer'|not reached"
     "worker-main-receive yes yes|on thread 'oomer'|not reached"
     "worker-main-busy yes yes|on thread 'oomer'|not reached"
+    "send yes yes|Out of memory|not reached"
+    "late yes yes|slow: finished|not reached"
 )
 
 if [[ "${1:-}" == "--amiga" ]]; then
@@ -64,7 +66,7 @@ if [[ "${1:-}" == "--amiga" ]]; then
         spec=${c%%|*}; rest=${c#*|}; has=${rest%%|*}; hasnot=${rest#*|}
         read -r m first second <<< "$spec"
         rc=$(grep "^$m " "$RUN/rc.log" | head -1 | awk '{print $2}' | tr -d '\r')
-        want=20; [[ "$m" == normal ]] && want=0
+        want=20; [[ "$m" == normal || "$m" == late ]] && want=0
         check "$m" "${rc:-none}" "$want" "$first" "$second" "$RUN" "$RUN/out-$m.log" "$has" "$hasnot"
     done
 else
@@ -77,7 +79,7 @@ else
         spec=${c%%|*}; rest=${c#*|}; has=${rest%%|*}; hasnot=${rest#*|}
         read -r m first second <<< "$spec"
         ( cd "$RUN" && timeout 20 "$HERE/builds/linux-x64/bin/app" "$m" > "out-$m.log" 2>&1 ); rc=$?
-        want=1; [[ "$m" == normal ]] && want=0
+        want=1; [[ "$m" == normal || "$m" == late ]] && want=0
         check "$m" "$rc" "$want" "$first" "$second" "$RUN" "$RUN/out-$m.log" "$has" "$hasnot"
     done
 fi

@@ -508,6 +508,8 @@ struct _aisolate {
     void * oom_jump;
     volatile bool stop_requested;   // set by main's out-of-memory shutdown
     aisolate * live_next;           // every isolate not yet freed (global lock)
+    int oom_no_jump;                // > 0: runtime code that must see NULL (deep copy)
+    bool oom_suppressed;            // an allocation failed while oom_no_jump > 0
     int fail_alloc_after;           // test hook: fail the allocation after this many (-1 = off)
     bool fail_alloc_sticky;         // test hook: keep failing once the first one failed
 };
