@@ -1,0 +1,71 @@
+namespace Tests {
+
+    // Redmine #446: out of memory is fatal (the program shuts down) rather
+    // than an exception, so allocating is no longer a reason a function can
+    // throw. A #noThrow override (toString, hash, equals, or an interface
+    // member marked #noThrow) may now build strings, objects and arrays
+    // without a try/catch; before, each of these was a compile error.
+    interface NoThrowAllocationLabelled {
+        import Am.Lang
+        #noThrow
+        fun label(): String
+    }
+
+    class NoThrowAllocationPart(var name: String) {
+        import Am.Lang
+    }
+
+    class NoThrowAllocationNode(var name: String, var count: Int) : NoThrowAllocationLabelled {
+        import Am.Lang
+
+        override fun toString(): String {
+            return "node ${this.name} (${this.count})"
+        }
+
+        override fun hash(): UInt {
+            var parts = [this.name, "x"]
+            var holder = new NoThrowAllocationPart(this.name)
+            var buffer = new UByte[16]
+            return 7UI
+        }
+
+        fun label(): String {
+            var p = new NoThrowAllocationPart(this.name)
+            return "label ${p.name}"
+        }
+    }
+
+    class NoThrowAllocationTests {
+        import Am.Lang
+        import Am.Tests
+
+        test testToStringWithATemplate() {
+            var n = new NoThrowAllocationNode("a", 3)
+            Assert.assertEquals("node a (3)", n.toString())
+            var o: Object = n
+            Assert.assertEquals("node a (3)", o.toString())
+        }
+
+        test testHashThatAllocates() {
+            var n = new NoThrowAllocationNode("b", 1)
+            Assert.assertEquals(7UI, n.hash())
+        }
+
+        test testInterfaceMemberThatAllocates() {
+            var l: NoThrowAllocationLabelled = new NoThrowAllocationNode("c", 0)
+            Assert.assertEquals("label c", l.label())
+        }
+
+        // The class stays for source compatibility; throwing it by hand is an
+        // ordinary exception.
+        test testOutOfMemoryExceptionStillExists() {
+            var caught = false
+            try {
+                throw new OutOfMemoryException()
+            } catch (e: OutOfMemoryException) {
+                caught = true
+            }
+            Assert.assertTrue(caught)
+        }
+    }
+}

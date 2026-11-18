@@ -82,3 +82,11 @@ function_result Am_Lang_Diagnostics_Arc_getResidentMemoryKb_0()
 	return __result;
 };
 
+
+// Test hook for the out-of-memory shutdown (#446): see core.c.
+function_result Am_Lang_Diagnostics_Arc_failAllocationsAfter_0(int count, bool sticky)
+{
+	function_result __result = { .has_return_value = false };
+	__amlc_fail_allocations_after(count, sticky);
+	return __result;
+};

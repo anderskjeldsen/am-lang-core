@@ -118,13 +118,10 @@ aobject * Am_Threading_Thread__native_copy_0(aobject * const src, void * const c
     return dst;
 }
 
-// Worker entry: become the isolate, initialise its statics, open the copied
-// Runnable, run it, run the finalizers registered on this thread's own
-// handle, tear the heap down, and drop the running thread's handle.
-static void * Am_Threading_Thread__pthread_entry(void *arg)
+// The part of a worker's life that out of memory or a stop request can cut
+// short (see __amlc_worker_run): its statics, then the copied Runnable.
+static void Am_Threading_Thread__run_body(aisolate * const iso)
 {
-    aisolate * const iso = (aisolate *) arg;
-    __amlc_isolate_enter(iso);
     __amlc_isolate_run_static_inits();
 
     amessage * boot = iso->boot;
@@ -143,6 +140,16 @@ static void * Am_Threading_Thread__pthread_entry(void *arg)
         }
         __decrease_reference_count(runnable);
     }
+}
+
+// Worker entry: become the isolate, initialise its statics, open the copied
+// Runnable, run it, run the finalizers registered on this thread's own
+// handle, tear the heap down, and drop the running thread's handle.
+static void * Am_Threading_Thread__pthread_entry(void *arg)
+{
+    aisolate * const iso = (aisolate *) arg;
+    __amlc_isolate_enter(iso);
+    __amlc_worker_run(iso, Am_Threading_Thread__run_body);
 
     if (iso->self_handle != NULL) {
 #ifdef Am_Threading_Thread_f_runFinalizers_0__DIRECT_NOTHROW_ABI
@@ -277,13 +284,25 @@ function_result Am_Threading_Thread_join_0(aobject * const this)
     if (do_join) n->joined = true;
     __amlc_global_unlock();
     if (do_join) {
-        pthread_join(n->thread_id, NULL);
+        // Wait for the worker's teardown (or a stop request for this thread)
+        // first, so a shutdown can interrupt the wait; then reap it.
+        if (__amlc_join_wait_done(iso)) {
+            pthread_join(n->thread_id, NULL);
+            AMLC_STOP_POINT();   // the thread joined may have stopped because this one should too
+        } else {
+            // Giving up during main's shutdown: leave it to the exit.
+            __amlc_global_lock();
+            n->joined = false;
+            __amlc_global_unlock();
+        }
     } else {
         // Someone else joins, or the worker already detached: wait for done.
         while (!iso->done) {
+            if (__amlc_join_give_up()) break;
             struct timespec ts = { 0, 1000000L };
             nanosleep(&ts, NULL);
         }
+        AMLC_STOP_POINT();
     }
     return __result;
 }
@@ -356,8 +375,17 @@ function_result Am_Threading_Thread_sleep_0(long long milliseconds)
         // EINTR-safe spin: nanosleep returns -1/EINTR with `rem` set
         // to the remaining duration if interrupted by a signal.
         struct timespec rem;
-        while (nanosleep(&ts, &rem) == -1) {
-            ts = rem;
+        // In slices of at most 50 ms, so a stop request is seen.
+        long long left = milliseconds;
+        while (left > 0) {
+            long long slice = left > 50 ? 50 : left;
+            ts.tv_sec  = (time_t) (slice / 1000LL);
+            ts.tv_nsec = (long)   ((slice % 1000LL) * 1000000L);
+            while (nanosleep(&ts, &rem) == -1) {
+                ts = rem;
+            }
+            left -= slice;
+            AMLC_STOP_POINT();
         }
     }
     return __result;
