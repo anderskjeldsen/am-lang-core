@@ -22,9 +22,11 @@
     #include <exec/execbase.h>
     #include <exec/tasks.h>
     #include <proto/exec.h>
+    #include <proto/dos.h>
 #else
     #include <pthread.h>
 #endif
+#include <time.h>
 #include <Am/Lang/Exception.h>
 #include <Am/Lang/Object.h>
 #include <Am/Lang/PropertyInfo.h>
@@ -618,11 +620,22 @@ void __amlc_watch_check(const char * where, const char * cls, void * site) {
     __amlc_watch_reported = 0;
 }
 
+static void __amlc_allocation_failed(aisolate * const iso, aclass * const cls);
+
 aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra_size) {
     __amlc_watch_probe("allocate", __class != NULL ? __class->name : NULL, __builtin_return_address(0));
     // One thread-local lookup per allocation: on macOS __thread access is a
     // call (_tlv_get_addr), and this path is the hottest in the runtime.
     aisolate * const __iso = __amlc_isolate();
+    // Test hook (Arc.failAllocationsAfter): pretend the allocation failed.
+    if (__builtin_expect(__iso->fail_alloc_after >= 0, 0)) {
+        if (__iso->fail_alloc_after == 0) {
+            if (!__iso->fail_alloc_sticky) __iso->fail_alloc_after = -1;
+            __amlc_allocation_failed(__iso, __class);
+            return NULL;
+        }
+        __iso->fail_alloc_after--;
+    }
     __iso->allocation_count++;
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
@@ -734,6 +747,12 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
         }
         #endif
         #endif
+        // Undo the counts taken above for an object that does not exist.
+        __iso->allocation_count--;
+        #ifdef TRACKOBJECTS
+        if (__class != NULL) __class->instance_count--;
+        #endif
+        __amlc_allocation_failed(__iso, __class);   // jumps when the isolate has a target
     }
 
     return __obj;
@@ -1538,6 +1557,7 @@ aobject * __create_exception(aobject * const message) {
         // accurate: the reason `message` couldn't be attached is that
         // we're out of memory. `__decrease_reference_count(ex)` in the
         // caller is safe on the immortal singleton — its rc just churns.
+        __amlc_oom_fatal(NULL, 0, "creating an exception");
         __oom_begin();
         __increase_reference_count(__oom_singleton); // caller owns the returned reference
         return __oom_singleton;
@@ -1636,6 +1656,7 @@ void __throw_negative_size_site(function_result * const result, void * const sit
 }
 
 void __throw_out_of_memory_exception_site(function_result * const result, void * const site_class, unsigned int line_kind) {
+    __amlc_oom_fatal(site_class, line_kind, NULL);   // does not return when the isolate has a jump target
     if (__oom_singleton == NULL) {
         fprintf(stderr, "AmLang: OOM before OutOfMemoryException singleton initialised; aborting (at %s line %u)\n",
                 site_class != NULL ? ((aclass *) site_class)->name : "?", line_kind >> 3);
@@ -1647,6 +1668,7 @@ void __throw_out_of_memory_exception_site(function_result * const result, void *
 }
 
 void __throw_out_of_memory_exception(function_result * const result, const char * const stack_trace_item_text) {
+    __amlc_oom_fatal(NULL, 0, stack_trace_item_text);   // does not return when the isolate has a jump target
     if (__oom_singleton == NULL) {
         fprintf(stderr, "AmLang: OOM before emergency diagnostics initialised (%s)\n",
                 stack_trace_item_text ? stack_trace_item_text : "unknown site");
@@ -1911,6 +1933,7 @@ aobject * __concatenate_strings(int count, ...) {
     result_obj = __allocate_object_with_extra_size(&__string_class_alias, sizeof(string_holder) + total_length + 1);
     if (result_obj == NULL) {
         va_end(args);
+        __amlc_oom_fatal(NULL, 0, "in a string template");
         return NULL;
     }
     
@@ -1992,8 +2015,22 @@ void __amlc_global_lock(void)   { Forbid(); }
 void __amlc_global_unlock(void) { Permit(); }
 #else
 static pthread_mutex_t __amlc_global_mutex = PTHREAD_MUTEX_INITIALIZER;
-void __amlc_global_lock(void)   { pthread_mutex_lock(&__amlc_global_mutex); }
-void __amlc_global_unlock(void) { pthread_mutex_unlock(&__amlc_global_mutex); }
+// Which isolate holds the lock: an allocation that fails while its own
+// thread holds it must not longjmp out (the lock would stay taken).
+static volatile bool __amlc_global_held = false;
+static pthread_t __amlc_global_holder;
+void __amlc_global_lock(void)   { pthread_mutex_lock(&__amlc_global_mutex); __amlc_global_holder = pthread_self(); __amlc_global_held = true; }
+void __amlc_global_unlock(void) { __amlc_global_held = false; pthread_mutex_unlock(&__amlc_global_mutex); }
+#endif
+// A condition on the global lock, broadcast whenever an isolate is done or a
+// shutdown is requested (joiners wait on it). Initialised at boot. The Amiga
+// family polls instead.
+#ifdef AMLC_AMIGA_FAMILY
+static void __amlc_global_broadcast(void) { }
+#else
+static pthread_cond_t __amlc_global_cond;
+static bool __amlc_global_cond_ready = false;
+static void __amlc_global_broadcast(void) { if (__amlc_global_cond_ready) pthread_cond_broadcast(&__amlc_global_cond); }
 #endif
 
 // ---- current-isolate binding ----------------------------------------------
@@ -2151,11 +2188,12 @@ static amessage * __amlc_mailbox_take(amailbox * const mb, bool const wait) {
         ULONG mask = mb->sigmask;
         Permit();
         if (m != NULL || !wait || closed || mask == 0) return m;
+        if (__amlc_should_stop()) return NULL;
         Wait(mask);
     }
 #else
     pthread_mutex_lock(&mb->lock);
-    while (wait && mb->head == NULL && !mb->closed) {
+    while (wait && mb->head == NULL && !mb->closed && !__amlc_should_stop()) {
         pthread_cond_wait(&mb->cond, &mb->lock);
     }
     amessage * m = __amlc_mailbox_pop_locked(mb);
@@ -2292,6 +2330,7 @@ void __amlc_arenas_free_all(aisolate * const iso) {
 
 // ---- isolate lifecycle ----------------------------------------------------
 static aisolate * __amlc_main_isolate = NULL;
+static aisolate * __amlc_live_isolates = NULL;   // every isolate not yet freed (global lock)
 
 static void __amlc_isolate_alloc_statics(aisolate * const iso) {
     free(iso->statics);
@@ -2361,6 +2400,11 @@ static aisolate * __amlc_isolate_alloc(void) {
     }
     iso->handle_count = 1;
     iso->stack_size = __amlc_thread_stack_size();
+    iso->fail_alloc_after = -1;
+    __amlc_global_lock();
+    iso->live_next = __amlc_live_isolates;
+    __amlc_live_isolates = iso;
+    __amlc_global_unlock();
     return iso;
 }
 
@@ -2378,6 +2422,12 @@ void __amlc_isolate_enter(aisolate * const iso) {
 }
 
 void __amlc_isolate_boot_main(void) {
+#ifndef AMLC_AMIGA_FAMILY
+    if (!__amlc_global_cond_ready) {
+        pthread_cond_init(&__amlc_global_cond, NULL);
+        __amlc_global_cond_ready = true;
+    }
+#endif
     aisolate * iso = __amlc_isolate_alloc();
     __amlc_main_isolate = iso;
     __amlc_main_isolate_ptr = iso;
@@ -2423,6 +2473,11 @@ static void __amlc_isolate_free(aisolate * const iso) {
         __amlc_message_discard(iso->boot);
         iso->boot = NULL;
     }
+    __amlc_global_lock();
+    for (aisolate ** p = &__amlc_live_isolates; *p != NULL; p = &(*p)->live_next) {
+        if (*p == iso) { *p = iso->live_next; break; }
+    }
+    __amlc_global_unlock();
     __amlc_mailbox_destroy(iso->mailbox);
     free(iso->statics);
     free(iso->name);
@@ -2466,7 +2521,263 @@ void __amlc_isolate_teardown(aisolate * const iso) {
     __amlc_arenas_free_all(iso);
     __amlc_global_lock();
     iso->done = true;
+    __amlc_global_broadcast();   // wakes joiners waiting in __amlc_join_wait_done
     __amlc_global_unlock();
+}
+
+// ---- out-of-memory shutdown (#446) ----------------------------------------
+// See core.h. Nothing on these paths allocates: the messages go straight to
+// the console, the wake-ups are a condvar broadcast or an Exec Signal.
+volatile int __amlc_shutdown_requested = 0;
+// 0 running, 1 main is shutting down (exit hooks), 2 out of memory during
+// that shutdown: only the sweep, class shutdowns and exit are left.
+static volatile int __amlc_shutdown_phase = 0;
+// Set when main registers its jump target (only generated startup code
+// that renders the setjmp does); workers only arm theirs when it is set, so
+// a program without the startup support keeps the old behaviour throughout.
+static bool __amlc_oom_fatal_mode = false;
+#ifndef AMLC_OOM_JOIN_TIMEOUT_MS
+#define AMLC_OOM_JOIN_TIMEOUT_MS 3000
+#endif
+
+// The console the emergency messages go to: stdout on the Amiga family (the
+// OS 3 Shell cannot redirect stderr), stderr elsewhere.
+#ifdef AMLC_AMIGA_FAMILY
+#define AMLC_OOM_OUT stdout
+#else
+#define AMLC_OOM_OUT stderr
+#endif
+
+static void __amlc_mailbox_wake(amailbox * const mb) {
+    if (mb == NULL) return;
+#ifdef AMLC_AMIGA_FAMILY
+    Forbid();
+    struct Task * owner = mb->owner;
+    ULONG mask = mb->sigmask;
+    Permit();
+    if (owner != NULL && mask != 0) Signal(owner, mask);
+#else
+    pthread_mutex_lock(&mb->lock);
+    pthread_cond_broadcast(&mb->cond);
+    pthread_mutex_unlock(&mb->lock);
+#endif
+}
+
+static bool __amlc_should_stop_iso(aisolate * const iso) {
+    if (!__amlc_shutdown_requested || iso == NULL || iso->oom_jump == NULL) return false;
+    if (iso == __amlc_main_isolate) return __amlc_shutdown_phase == 0;
+    return iso->stop_requested;
+}
+
+bool __amlc_should_stop(void) {
+    return __amlc_shutdown_requested && __amlc_should_stop_iso(__amlc_isolate());
+}
+
+#ifdef AMLC_OOM_SHUTDOWN
+// Jumps to iso's target. A worker's target is used once: its teardown runs
+// with none, so a failure there falls back to the old exception path.
+static void __amlc_jump(aisolate * const iso, int const value) {
+    jmp_buf * const j = (jmp_buf *) iso->oom_jump;
+    if (iso != __amlc_main_isolate) iso->oom_jump = NULL;
+    longjmp(*j, value);
+}
+#endif
+
+void __amlc_stop_point_slow(void) {
+#ifdef AMLC_OOM_SHUTDOWN
+    aisolate * const iso = __amlc_isolate();
+    if (__amlc_should_stop_iso(iso)) __amlc_jump(iso, AMLC_JUMP_SHUTDOWN);
+#endif
+}
+
+bool __amlc_join_give_up(void) {
+    AMLC_STOP_POINT();
+    // Main's shutdown has already waited for the stopping threads; a join
+    // from an exit hook must not wait again for one that never stopped.
+    return __amlc_shutdown_requested && __amlc_shutdown_phase > 0 && __amlc_isolate() == __amlc_main_isolate;
+}
+
+#ifndef AMLC_AMIGA_FAMILY
+bool __amlc_join_wait_done(aisolate * const target) {
+    __amlc_global_lock();
+    while (!target->done) {
+        if (__amlc_shutdown_requested) {
+            __amlc_global_unlock();
+            if (__amlc_join_give_up()) return target->done;
+            __amlc_global_lock();
+            if (target->done) break;
+        }
+        __amlc_global_held = false;
+        pthread_cond_wait(&__amlc_global_cond, &__amlc_global_mutex);
+        __amlc_global_holder = pthread_self();
+        __amlc_global_held = true;
+    }
+    __amlc_global_unlock();
+    return true;
+}
+#endif
+
+// A worker asks main to shut down. Called from the worker's out-of-memory
+// path, so: no allocation, one lock, one wake-up.
+static void __amlc_request_shutdown(void) {
+    __amlc_global_lock();
+    __amlc_shutdown_requested = 1;
+    if (__amlc_main_isolate != NULL) __amlc_mailbox_wake(__amlc_main_isolate->mailbox);
+    __amlc_global_broadcast();
+    __amlc_global_unlock();
+}
+
+void __amlc_oom_arm_main(void * const jump) {
+    __amlc_oom_fatal_mode = true;
+    __amlc_isolate()->oom_jump = jump;
+}
+
+// Inside the runtime's global lock (or Forbid/Disable on the Amiga family)
+// a jump would leave it held, so a failure there returns NULL to its caller
+// as before; that caller is runtime code that handles it.
+static bool __amlc_in_critical_section(aisolate * const iso) {
+#ifdef AMLC_AMIGA_FAMILY
+    (void) iso;
+    return SysBase->TDNestCnt >= 0 || SysBase->IDNestCnt >= 0;
+#else
+    (void) iso;
+    return __amlc_global_held && pthread_equal(__amlc_global_holder, pthread_self());
+#endif
+}
+
+static void __amlc_oom_fatal_at(void * const site_class, unsigned int const line_kind, const char * const text, aclass * const alloc_class);
+
+// Every failed object allocation comes here (generated code and natives
+// alike, so a native that would not check NULL never sees one).
+static void __amlc_allocation_failed(aisolate * const iso, aclass * const cls) {
+    if (iso == NULL || iso->oom_jump == NULL || __amlc_in_critical_section(iso)) return;
+    __amlc_oom_fatal_at(NULL, 0, NULL, cls);
+}
+
+void __amlc_oom_fatal(void * const site_class, unsigned int const line_kind, const char * const text) {
+    __amlc_oom_fatal_at(site_class, line_kind, text, NULL);
+}
+
+static void __amlc_oom_fatal_at(void * const site_class, unsigned int const line_kind, const char * const text, aclass * const alloc_class) {
+#ifdef AMLC_OOM_SHUTDOWN
+    aisolate * const iso = __amlc_isolate();
+    if (iso == NULL || iso->oom_jump == NULL) return;   // no target: the caller throws as before
+    if (__amlc_in_critical_section(iso)) return;
+    // Breathing room for the shutdown handlers.
+    __amlc_global_lock();
+    void * reserve = __oom_report_reserve;
+    __oom_report_reserve = NULL;
+    __amlc_global_unlock();
+    free(reserve);
+    fflush(stdout);
+    if (site_class != NULL) {
+        fprintf(AMLC_OOM_OUT, "Out of memory at %s line %u", ((aclass *) site_class)->name, line_kind >> 3);
+    } else if (alloc_class != NULL) {
+        fprintf(AMLC_OOM_OUT, "Out of memory allocating %s", alloc_class->name != NULL ? alloc_class->name : "an object");
+    } else {
+        fprintf(AMLC_OOM_OUT, "Out of memory (%s)", text != NULL ? text : "unknown site");
+    }
+    if (iso != __amlc_main_isolate) {
+        fprintf(AMLC_OOM_OUT, " on thread '%s'", iso->name != NULL ? iso->name : "thread");
+    }
+    fprintf(AMLC_OOM_OUT, "\n");
+    fflush(AMLC_OOM_OUT);
+    if (iso == __amlc_main_isolate) {
+        if (__amlc_shutdown_phase == 0) {
+            __amlc_shutdown_requested = 1;
+            __amlc_jump(iso, AMLC_JUMP_SHUTDOWN);
+        }
+        if (__amlc_shutdown_phase == 1) {
+            __amlc_shutdown_phase = 2;
+            fprintf(AMLC_OOM_OUT, "Out of memory during shutdown: skipping the remaining exit handlers\n");
+            fflush(AMLC_OOM_OUT);
+            __amlc_jump(iso, AMLC_JUMP_EMERGENCY);
+        }
+        fprintf(AMLC_OOM_OUT, "Out of memory during emergency shutdown: exiting\n");
+        fflush(AMLC_OOM_OUT);
+        exit(AMLC_EXIT_FAIL);
+    }
+    __amlc_request_shutdown();
+    __amlc_jump(iso, AMLC_JUMP_SHUTDOWN);
+#else
+    (void) site_class; (void) line_kind; (void) text; (void) alloc_class;
+#endif
+}
+
+// Worker thread entry: runs body (static inits + the Runnable) with a jump
+// target, so running out of memory or a stop request lands back here and
+// the caller's teardown runs. The frames skipped by the jump never release
+// their references: teardown's sweep frees what statics and properties held,
+// but an object only a skipped frame's local held is on no list and is left
+// to the process exit (a TRACKOBJECTS build reports it).
+void __amlc_worker_run(aisolate * const iso, void (* const body)(aisolate * const)) {
+#ifdef AMLC_OOM_SHUTDOWN
+    jmp_buf jump;
+    if (setjmp(jump) != 0) {
+        iso->oom_jump = NULL;
+        return;
+    }
+    if (__amlc_oom_fatal_mode) iso->oom_jump = &jump;
+    // Told to stop before it got going (main is already shutting down).
+    if (!(iso->oom_jump != NULL && iso->stop_requested)) body(iso);
+    iso->oom_jump = NULL;
+#else
+    body(iso);
+#endif
+}
+
+// Main's out-of-memory shutdown: tell every other thread to stop and wait
+// for them, at most AMLC_OOM_JOIN_TIMEOUT_MS. A thread stuck in an OS call
+// never sees the request; the program exits without it.
+static int __amlc_running_workers_locked(void) {
+    int n = 0;
+    for (aisolate * i = __amlc_live_isolates; i != NULL; i = i->live_next) {
+        if (i != __amlc_main_isolate && i->native != NULL && !i->done) n++;
+    }
+    return n;
+}
+
+static void __amlc_stop_workers(void) {
+    __amlc_global_lock();
+    for (aisolate * i = __amlc_live_isolates; i != NULL; i = i->live_next) {
+        if (i == __amlc_main_isolate) continue;
+        i->stop_requested = true;
+        __amlc_mailbox_wake(i->mailbox);
+    }
+    __amlc_global_broadcast();
+    int n = __amlc_running_workers_locked();
+    __amlc_global_unlock();
+    int waited = 0;
+    while (n > 0 && waited < AMLC_OOM_JOIN_TIMEOUT_MS) {
+#ifdef AMLC_AMIGA_FAMILY
+        Delay(1);   // one tick, 20 ms
+        waited += 20;
+#else
+        struct timespec ts = { 0, 10 * 1000000L };
+        nanosleep(&ts, NULL);
+        waited += 10;
+#endif
+        __amlc_global_lock();
+        n = __amlc_running_workers_locked();
+        __amlc_global_unlock();
+    }
+    if (n > 0) {
+        fprintf(AMLC_OOM_OUT, "%d thread(s) did not stop within %d ms; exiting without them\n", n, AMLC_OOM_JOIN_TIMEOUT_MS);
+        fflush(AMLC_OOM_OUT);
+    }
+}
+
+int __amlc_shutdown_begin(void) {
+    if (__amlc_shutdown_phase == 0) __amlc_shutdown_phase = 1;
+    if (!__amlc_shutdown_requested) return 0;
+    __amlc_stop_workers();
+    return 1;
+}
+
+void __amlc_fail_allocations_after(int const count, bool const sticky) {
+    aisolate * const iso = __amlc_isolate();
+    iso->fail_alloc_after = count < 0 ? -1 : count;
+    iso->fail_alloc_sticky = sticky;
 }
 
 // ---- deep copy ------------------------------------------------------------
@@ -2638,7 +2949,7 @@ amessage * __amlc_message_create(aobject * const payload, function_result * cons
         iso->first_object = saved_first;
         __amlc_splice_chain(chain);
         __decrease_reference_count(copy);
-        __throw_simple_exception("Out of memory while sending a message", "in Thread.send", result);
+        __throw_out_of_memory_exception(result, "in Thread.send");
         return NULL;
     }
     m->next = NULL;
@@ -2680,7 +2991,12 @@ bool __amlc_send(aisolate * const target, aobject * const payload, function_resu
 }
 
 aobject * __amlc_receive(bool const wait) {
+    AMLC_STOP_POINT();
     amessage * m = __amlc_mailbox_take(__amlc_isolate()->mailbox, wait);
-    if (m == NULL) return NULL;
+    if (m == NULL) {
+        // A blocking take also returns empty-handed when told to stop.
+        AMLC_STOP_POINT();
+        return NULL;
+    }
     return __amlc_message_open(m);
 }

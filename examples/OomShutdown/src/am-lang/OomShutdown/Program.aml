@@ -1,0 +1,164 @@
+namespace OomShutdown {
+
+    // Out of memory shuts the program down (Redmine #446). Each mode runs out
+    // of memory somewhere, through the test hook Arc.failAllocationsAfter, and
+    // run.sh checks the exit code, the message, and which #runOnExit hooks
+    // wrote their marker file (oom-first-<mode>.txt, oom-second-<mode>.txt):
+    //   normal               no failure: exit 0, both hooks
+    //   main                 main runs out: exit 1 (20 on AmigaOS), both hooks
+    //   main-sticky          main runs out and keeps failing: the shutdown runs
+    //                        out too, so the hooks are skipped
+    //   shutdown             the first exit hook runs out: the second is skipped
+    //   worker               a worker runs out while main waits in join() and
+    //                        other workers sleep, wait in receive() and join()
+    //   worker-main-receive  ... while main waits in receive()
+    //   worker-main-busy     ... while main allocates in a loop
+    //   busy                 ... while another worker spins without a stop
+    //                        point: main gives up on it after the join timeout
+
+    class Box(var n: Int) {
+        import Am.Lang
+    }
+
+    class Settings {
+        import Am.Lang
+        static var mode: String = "normal"
+    }
+
+    // Exit hooks: the normal shutdown sequence must run after out of memory.
+    class Hooks {
+        import Am.Lang
+        import Am.IO
+        import Am.Lang.Diagnostics
+
+        static fun writeMarker(name: String, text: String) {
+            var stream = new FileStream(new File(name), FileAccess.writeOnly)
+            var ts = new TextStream(stream)
+            ts.writeString(text)
+            stream.close()
+        }
+
+        #runOnExit
+        static fun first() {
+            Hooks.writeMarker("oom-first-${Settings.mode}.txt", "first hook ran in mode ${Settings.mode}")
+            if (Settings.mode == "shutdown") {
+                // Out of memory inside the shutdown itself: every allocation from here fails.
+                Arc.failAllocationsAfter(0, true)
+                var b = new Box(1)
+                "not reached ${b.n}".println()
+            }
+        }
+
+        #runOnExit(10)
+        static fun second() {
+            Hooks.writeMarker("oom-second-${Settings.mode}.txt", "second hook ran in mode ${Settings.mode}")
+        }
+    }
+
+    class Sleeper : Runnable {
+        import Am.Lang
+        import Am.Threading
+        override fun run() {
+            while (true) {
+                Thread.sleep(100L)
+            }
+        }
+    }
+
+    class Receiver : Runnable {
+        import Am.Lang
+        import Am.Threading
+        override fun run() {
+            var m = Thread.receive()
+            "receiver got a message".println()
+        }
+    }
+
+    class Joiner(var other: Thread) : Runnable {
+        import Am.Lang
+        import Am.Threading
+        override fun run() {
+            this.other.join()
+            "joiner: join returned".println()
+        }
+    }
+
+    class Busy : Runnable {
+        import Am.Lang
+        override fun run() {
+            var i = 0
+            while (true) {
+                i = i + 1
+            }
+        }
+    }
+
+    class Oomer(var sticky: Bool) : Runnable {
+        import Am.Lang
+        import Am.Threading
+        import Am.Lang.Diagnostics
+        override fun run() {
+            Thread.sleep(300L)
+            "oomer: failing allocations".println()
+            Arc.failAllocationsAfter(0, this.sticky)
+            var b = new Box(2)
+            "oomer: not reached ${b.n}".println()
+        }
+    }
+
+    class Program {
+        import Am.Lang
+        import Am.Threading
+        import Am.Lang.Diagnostics
+
+        static fun start(r: Runnable, name: String): Thread {
+            var t = new Thread(r)
+            t.name = name
+            t.start()
+            return t
+        }
+
+        static fun main(args: String[]) {
+            if (args.length() > 0) {
+                Settings.mode = args[0]
+            }
+            var mode = Settings.mode
+            "mode ${mode}".println()
+            if (mode == "main" || mode == "main-sticky") {
+                var list = new Box(0)
+                Arc.failAllocationsAfter(3, mode == "main-sticky")
+                for (i = 0 to 10) {
+                    list = new Box(i)
+                    "allocated ${i}".println()
+                }
+                "main: not reached".println()
+            } else if (mode == "worker" || mode == "busy") {
+                var sleeper = Program.start(new Sleeper(), "sleeper")
+                var receiver = Program.start(new Receiver(), "receiver")
+                var joiner = Program.start(new Joiner(receiver), "joiner")
+                if (mode == "busy") {
+                    Program.start(new Busy(), "busy")
+                }
+                Program.start(new Oomer(false), "oomer")
+                "main: joining the receiver".println()
+                receiver.join()
+                "main: not reached".println()
+            } else if (mode == "worker-main-receive") {
+                var sleeper = Program.start(new Sleeper(), "sleeper")
+                Program.start(new Oomer(true), "oomer")
+                var m = Thread.receive()
+                "main: not reached".println()
+            } else if (mode == "worker-main-busy") {
+                // Main never blocks: it sees the request at its next allocation.
+                Program.start(new Oomer(false), "oomer")
+                var n = 0
+                while (true) {
+                    var b = new Box(n)
+                    n = n + 1
+                }
+            } else {
+                "normal run".println()
+            }
+        }
+    }
+}

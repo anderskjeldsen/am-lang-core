@@ -500,6 +500,16 @@ struct _aisolate {
     aarena * arenas;            // every arena this isolate owns
     aarena * free_arenas;       // empty arenas kept for reuse
     unsigned int free_arena_count;
+    // Out-of-memory shutdown (#446). oom_jump is the jmp_buf this isolate
+    // jumps to when it runs out of memory or is told to stop: main's
+    // shutdown block in startup.c, a worker's teardown in its thread entry.
+    // NULL means no target (code from a compiler without the setjmp, e.g.
+    // v2): out of memory then throws OutOfMemoryException as before.
+    void * oom_jump;
+    volatile bool stop_requested;   // set by main's out-of-memory shutdown
+    aisolate * live_next;           // every isolate not yet freed (global lock)
+    int fail_alloc_after;           // test hook: fail the allocation after this many (-1 = off)
+    bool fail_alloc_sticky;         // test hook: keep failing once the first one failed
 };
 
 // Default arena size and how many empty arenas an isolate keeps around
@@ -605,6 +615,43 @@ int  __amlc_stdout_is_held(void);
 int  __amlc_stdout_held_write(const char *text, size_t n);
 void __amlc_global_lock(void);
 void __amlc_global_unlock(void);
+
+// ---------------------------------------------------------------------------
+// Out of memory is fatal (#446). It is not a catchable exception: the
+// isolate that runs out prints the site and longjmps to its cleanup.
+//   * main: the shutdown block of the generated startup.c, which stops the
+//     other threads, waits for them (AMLC_OOM_JOIN_TIMEOUT_MS), runs the
+//     normal exit sequence and exits with AMLC_EXIT_FAIL;
+//   * a worker: its own teardown (__amlc_worker_run, from Thread.c); it sets
+//     __amlc_shutdown_requested and wakes main, without allocating.
+// Threads see a stop request at the runtime's blocking points (receive,
+// join, sleep) and at every `new` in generated code (AMLC_STOP_POINT).
+// An isolate without a jump target keeps the old behaviour (throws
+// OutOfMemoryException); that is what code from a compiler that renders no
+// setjmp gets. A build can opt out with -DAMLC_NO_OOM_SHUTDOWN.
+// ---------------------------------------------------------------------------
+#ifndef AMLC_NO_OOM_SHUTDOWN
+#include <setjmp.h>
+#define AMLC_OOM_SHUTDOWN 1
+#endif
+#if defined(__MORPHOS__) || defined(__AMIGA__) || defined(AMIGA) || defined(PLATFORM_AMIGAOS) || defined(__AROS__)
+#define AMLC_EXIT_FAIL 20       // RETURN_FAIL
+#else
+#define AMLC_EXIT_FAIL 1
+#endif
+#define AMLC_JUMP_SHUTDOWN 1    // out of memory or a stop request: orderly shutdown
+#define AMLC_JUMP_EMERGENCY 2   // out of memory during the shutdown itself
+extern volatile int __amlc_shutdown_requested;
+void __amlc_oom_arm_main(void * const jump);   // startup.c, right after its setjmp
+int  __amlc_shutdown_begin(void);              // startup.c, before the exit hooks; 1 = failed run
+void __amlc_stop_point_slow(void);
+#define AMLC_STOP_POINT() do { if (__amlc_shutdown_requested) __amlc_stop_point_slow(); } while (0)
+bool __amlc_should_stop(void);                 // the calling isolate has been told to stop
+bool __amlc_join_give_up(void);                // a stop point for join loops; true = stop waiting
+void __amlc_worker_run(aisolate * const iso, void (* const body)(aisolate * const));
+void __amlc_oom_fatal(void * const site_class, unsigned int const line_kind, const char * const text);
+void __amlc_fail_allocations_after(int const count, bool const sticky); // test hook (Arc.failAllocationsAfter)
+bool __amlc_join_wait_done(aisolate * const target); // join: true once target is done, false when giving up
 
 // Isolate lifecycle.
 void __amlc_isolate_boot_main(void);              // first thing in main(), before any allocation

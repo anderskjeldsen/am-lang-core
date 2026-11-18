@@ -113,22 +113,10 @@ aobject * Am_Threading_Thread__native_copy_0(aobject * const src, void * const c
 	return dst;
 }
 
-// Worker process entry. The creator stores the aisolate in our tc_UserData
-// right after CreateNewProc returns; we may be scheduled before that, so
-// poll one tick at a time until it is there.
-void Am_Threading_Thread__InitTask()
+// The part of a worker's life that out of memory or a stop request can cut
+// short (see __amlc_worker_run): its statics, then the copied Runnable.
+static void Am_Threading_Thread__run_body(aisolate * const iso)
 {
-	struct Task *own_task = FindTask(NULL);
-	if (own_task == NULL) {
-		printf("Thread: FindTask failed\n");
-		return;
-	}
-	while (own_task->tc_UserData == NULL) {
-		Delay(1);
-	}
-	aisolate * const iso = (aisolate *) own_task->tc_UserData;
-
-	__amlc_isolate_enter(iso);
 	__amlc_isolate_run_static_inits();
 
 	amessage * boot = iso->boot;
@@ -145,6 +133,25 @@ void Am_Threading_Thread__InitTask()
 		}
 		__decrease_reference_count(runnable);
 	}
+}
+
+// Worker process entry. The creator stores the aisolate in our tc_UserData
+// right after CreateNewProc returns; we may be scheduled before that, so
+// poll one tick at a time until it is there.
+void Am_Threading_Thread__InitTask()
+{
+	struct Task *own_task = FindTask(NULL);
+	if (own_task == NULL) {
+		printf("Thread: FindTask failed\n");
+		return;
+	}
+	while (own_task->tc_UserData == NULL) {
+		Delay(1);
+	}
+	aisolate * const iso = (aisolate *) own_task->tc_UserData;
+
+	__amlc_isolate_enter(iso);
+	__amlc_worker_run(iso, Am_Threading_Thread__run_body);
 
 	// Finalizers registered on this task's own handle — the per-task
 	// bsdsocket / amissl CloseLibrary case — run on this task.
@@ -275,8 +282,10 @@ function_result Am_Threading_Thread_join_0(aobject * const this)
 	// One Exec tick (20 ms) per poll: a real Wait(), so a same-priority
 	// worker gets the CPU. `done` is set by the worker's teardown.
 	while (!iso->done) {
+		if (__amlc_join_give_up()) break;
 		Delay(1);
 	}
+	AMLC_STOP_POINT();
 	return __result;
 };
 
@@ -349,7 +358,13 @@ function_result Am_Threading_Thread_sleep_0(long long milliseconds)
 	if (milliseconds > 0 && ticks < 1) {
 		ticks = 1;
 	}
-	Delay(ticks); // Ticks (50 per second)
+	// At most 5 ticks (100 ms) at a time, so a stop request is seen.
+	while (ticks > 0) {
+		int slice = ticks > 5 ? 5 : ticks;
+		Delay(slice);
+		ticks -= slice;
+		AMLC_STOP_POINT();
+	}
 	return __result;
 };
 

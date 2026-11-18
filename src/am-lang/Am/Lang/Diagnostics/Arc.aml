@@ -41,5 +41,17 @@ namespace Am.Lang.Diagnostics
          */
         #noThrow
         native static fun getResidentMemoryKb(): Long
+
+        /**
+         * For testing a program's out-of-memory shutdown: makes the calling thread's allocation
+         * after the next `count` ones fail as if the system had no memory left (0 fails the very
+         * next one). With `sticky` every allocation after that fails as well. The failure takes
+         * the normal out-of-memory path: the thread stops and the program shuts down. Pass a
+         * negative count to switch it off. Not for production code.
+         * @param count How many allocations still succeed
+         * @param sticky Whether allocations keep failing after the first failure
+         */
+        #noThrow
+        native static fun failAllocationsAfter(count: Int, sticky: Bool)
     }
 }
