@@ -102,8 +102,17 @@ void __debug_print_string_if_string(aobject * const obj, const char * prefix) {
 #endif 
 
 
-void __mark_root_objects() {
-    // Roots are the calling isolate's static properties.
+// Adds delta to the code count of every implementation a listed interface
+// wrapper holds.
+static void __amlc_adjust_iface_counts(aisolate * const iso, int const delta) {
+    for (aobject * o = iso->first_object; o != NULL; o = o->next) {
+        if (o->immortal || o->class_ptr->statics->type != interface) continue;
+        aobject * const impl = o->object_properties.iface_reference.implementation_object;
+        if (impl != NULL && !impl->immortal) impl->reference_count += delta;
+    }
+}
+
+static void __amlc_mark_statics(void) {
     class_static *current = __first_class_static;
     while(current != NULL) {
         if (current->type == class) {
@@ -113,53 +122,92 @@ void __mark_root_objects() {
     }
 }
 
-void __mark_object(aobject * const obj) {
-    if (obj != NULL) {
-        #ifdef DEBUG
-        #ifdef CONDLOG 
-        if (__conditional_logging_on) {
-        #endif
-        printf("Mark object of type %s...%p, refs, ref: %d, prop ref: %d\n", obj->class_ptr->name, obj, obj->reference_count, obj->property_reference_count);
-        printf("Mark object...%p\n", obj->class_ptr->name);    
-        #ifdef CONDLOG 
-        }
-        #endif        
-        #endif
+void __mark_root_objects() {
+    // Roots are the calling isolate's static properties and every object
+    // code still holds (reference_count > 0), with what they reach: the
+    // sweep may only take what nothing but other garbage holds. Before #447
+    // the code-held objects were not on the list, so what they held by
+    // property was swept from under them.
+    // An interface wrapper's reference to its implementation is a code
+    // count but an edge of the heap graph (garbage cycles run through
+    // them, e.g. TaskRunner -> Thread -> Runnable wrapper -> TaskRunner):
+    // left out while deciding what code holds.
+    aisolate * const iso = __amlc_isolate();
+    __amlc_mark_statics();
+    __amlc_adjust_iface_counts(iso, -1);
+    for (aobject * o = iso->first_object; o != NULL; o = o->next) {
+        if (o->reference_count > 0 && !o->marked) __mark_object(o);
+    }
+    __amlc_adjust_iface_counts(iso, 1);
+}
 
-        obj->marked = true;
-        if (obj->class_ptr->mark_children != NULL) {
-            ((__mark_children_T) obj->class_ptr->mark_children)(obj);
-        }
-
-        #ifdef DEBUG
-        #ifdef CONDLOG 
-        if (__conditional_logging_on) {
-        #endif
-        printf("Mark properties for %s\n", obj->class_ptr->name);
-        #ifdef CONDLOG 
-        }
-        #endif        
-        #endif
-
-        if (obj->class_ptr->object_property_count > 0) {
-            for(int i = 0; i < obj->class_ptr->properties_count; i++) {
-                property * const __prop = &obj->object_properties.class_object_properties.properties[i];
-                if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
-                    __mark_object(__prop->nullable_value.value.object_value);
-                }
+// What a marked object holds: its interface implementation (a wrapper's
+// code reference), what its native mark_children reaches (array elements),
+// its object properties. Children go through __mark_object, which only
+// queues them while a mark is running.
+static void __amlc_mark_children_of(aobject * const obj) {
+    if (obj->class_ptr->statics->type == interface) {
+        __mark_object(obj->object_properties.iface_reference.implementation_object);
+        return;
+    }
+    if (obj->class_ptr->mark_children != NULL) {
+        ((__mark_children_T) obj->class_ptr->mark_children)(obj);
+    }
+    if (obj->class_ptr->object_property_count > 0) {
+        for(int i = 0; i < obj->class_ptr->properties_count; i++) {
+            property * const __prop = &obj->object_properties.class_object_properties.properties[i];
+            if (!__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL) {
+                __mark_object(__prop->nullable_value.value.object_value);
             }
         }
-
-        #ifdef DEBUG
-        #ifdef CONDLOG 
-        if (__conditional_logging_on) {
-        #endif
-        printf("Object marked %s\n", obj->class_ptr->name);
-        #ifdef CONDLOG 
-        }
-        #endif
-        #endif
     }
+}
+
+// Marks obj and everything it reaches. Iterative, with a work stack on the
+// isolate: since #447 marking starts from every object code holds, which can
+// be the head of a long list, and a recursion that deep would overflow the C
+// stack (an AmigaOS task has a few KB to spare). If the stack can't grow
+// (out of memory) the child is traversed recursively instead.
+void __mark_object(aobject * const obj) {
+    if (obj == NULL) {
+        return;
+    }
+    #ifdef DEBUG
+    #ifdef CONDLOG
+    if (__conditional_logging_on) {
+    #endif
+    printf("Mark object of type %s...%p, refs, ref: %d, prop ref: %d\n", obj->class_ptr->name, obj, obj->reference_count, obj->property_reference_count);
+    #ifdef CONDLOG
+    }
+    #endif
+    #endif
+    // Marked already (a cycle), or process-global: immortal objects hold
+    // only immortal children, and other isolates read them concurrently.
+    if (obj->marked || obj->immortal) {
+        return;
+    }
+    obj->marked = true;
+    aisolate * const iso = __amlc_isolate();
+    if (iso->marking) {
+        if (iso->mark_count == iso->mark_capacity) {
+            unsigned int const ncap = iso->mark_capacity == 0 ? 256 : iso->mark_capacity * 2;
+            aobject ** const nstack = (aobject **) realloc(iso->mark_stack, sizeof(aobject *) * ncap);
+            if (nstack == NULL) {
+                __amlc_mark_children_of(obj);
+                return;
+            }
+            iso->mark_stack = nstack;
+            iso->mark_capacity = ncap;
+        }
+        iso->mark_stack[iso->mark_count++] = obj;
+        return;
+    }
+    iso->marking = true;
+    __amlc_mark_children_of(obj);
+    while (iso->mark_count > 0) {
+        __amlc_mark_children_of(iso->mark_stack[--iso->mark_count]);
+    }
+    iso->marking = false;   // the stack is kept for the next root; __clear_marks frees it
 }
 
 void __sweep_unmarked_objects() {
@@ -214,13 +262,18 @@ void __clear_marks() {
     #endif
     #endif
 
-    aobject * current = __amlc_isolate()->first_object;
+    aisolate * const iso = __amlc_isolate();
+    aobject * current = iso->first_object;
     while(current != NULL) {
         if (current->marked) {
             current->marked = false;
         }   
         current = current->next;
     }
+    free(iso->mark_stack);
+    iso->mark_stack = NULL;
+    iso->mark_count = 0;
+    iso->mark_capacity = 0;
     #ifdef DEBUG
     #ifdef CONDLOG 
     if (__conditional_logging_on) {
@@ -714,6 +767,7 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
 
         __obj->class_ptr = __class;
         __obj->reference_count = 1;
+        __amlc_heap_link(__iso, __obj);
 
         #if defined(DEBUG) || defined(TRACKOBJECTS)
         // Debug registry is a FIXED array — saturate instead of writing
@@ -792,19 +846,9 @@ sweep_result __detach_object_from_sweep(aobject * const __obj) {
     __detach_object(__obj);
 
     aisolate * const __iso = __amlc_isolate();
-    if (__obj == __iso->first_object) {
-        __set_first_object(__obj->next, "detach_object_from_sweep");
-        if (__iso->first_object != NULL) {
-            __iso->first_object->prev = NULL;
-        }
-    } else {
-        __obj->prev->next = __obj->next;
-        if (__obj->next != NULL) {
-            __obj->next->prev = __obj->prev;
-        }
-    }
-
+    // Read after the detach: objects it freed have unlinked themselves.
     aobject *next_to_sweep = __obj->next;
+    __amlc_heap_unlink(__iso, __obj);
 
     if (__iso->first_detached_object == NULL) {
         __iso->first_detached_object = __obj;
@@ -918,6 +962,7 @@ void __deallocate_object(aobject * const __obj) {
     printf("Reference counts: ref=%d, prop_ref=%d\n", __obj->reference_count, __obj->property_reference_count);
     #endif
 
+    __amlc_heap_unlink(__iso, __obj);
     __amlc_free_object_in(__iso, __obj);
 
     #ifdef DEBUG
@@ -948,29 +993,23 @@ void __decrease_property_reference_count(aobject * const __obj) {
         #endif
         #endif
 
-        if (__obj->property_reference_count == 0 && !__obj->pending_deallocation) {
+        // The object stays on its isolate's list (every object is, #447);
+        // __deallocate_object unlinks it.
+        if (__obj->property_reference_count == 0 && !__obj->pending_deallocation && __obj->reference_count == 0) {
             aisolate * const __iso = __amlc_isolate();
-            if (__obj == __iso->first_object) {
-                __set_first_object(__obj->next, "decrease_property_reference_count");
-                __obj->next = NULL;
-                if (__iso->first_object != NULL) {
-                    __iso->first_object->prev = NULL;
-                }
-            } else {
-                __obj->prev->next = __obj->next;
-                if (__obj->next != NULL) {
-                    __obj->next->prev = __obj->prev;
-                }
-                __obj->prev = NULL;
-                __obj->next = NULL;
+            if (__iso->releasing_heap) {
+                // __amlc_release_heap drains the queue: one death at a time
+                // instead of a recursion as deep as the structure (#447).
+                __amlc_heap_unlink(__iso, __obj);
+                __obj->next = __iso->release_queue;
+                __iso->release_queue = __obj;
+                return;
             }
-
-            if (__obj->reference_count == 0) {
-                __deallocate_object(__obj);
-            }
+            __deallocate_object(__obj);
         }
     }
 }
+static void __amlc_drop_edges(aobject * const __obj);
 void __detach_object(aobject * const __obj) {
     #ifdef DEBUG
     #ifdef CONDLOG 
@@ -1002,6 +1041,13 @@ void __detach_object(aobject * const __obj) {
 
     }
 
+    __amlc_drop_edges(__obj);
+}
+
+// The second half of a detach: drop what the object holds (its interface
+// implementation, its object properties). Separate so the end-of-heap
+// release (#447) can run every release hook before any edge is dropped.
+static void __amlc_drop_edges(aobject * const __obj) {
     if (__obj->class_ptr->statics->type == interface) {
         iface_reference const *ref = &__obj->object_properties.iface_reference;
         #ifdef DEBUG
@@ -1055,6 +1101,175 @@ void __detach_object(aobject * const __obj) {
         #endif
         #endif
     }
+}
+
+// ---- end-of-isolate release (#447) -----------------------------------------
+// reference_count counts references from code only; references from
+// properties are property_reference_count. Once an isolate's code has
+// finished (main returned and the exit hooks ran, or a worker's Runnable
+// returned) and its statics are dereferenced, no code holds anything, so
+// every code count still standing is a leak or a reference a frame never
+// released because an out-of-memory jump (#446) skipped it. Such objects
+// used to stay allocated with their native resources open (an open
+// FileStream, an AmigaOS file lock). __amlc_release_heap frees them:
+//   1. the normal mark/sweep (cycles, as before);
+//   2. the TRACKOBJECTS leak report, BEFORE any count is zeroed, so ARC
+//      leaks after a normal end stay visible;
+//   3. zero the code count of every object left (immortals and objects
+//      still reachable from statics - the emergency path skips the
+//      dereference - are kept), giving back the one code reference each
+//      remaining interface wrapper holds on its implementation;
+//   4. release the objects nothing else holds (property count 0) through
+//      the normal ARC death, so a holder's release hook runs before its
+//      children go (a stream wrapping a stream, TempFile and its File),
+//      until none is left;
+//   5. what remains is held only by other remaining objects (cycles):
+//      mark them all pending, run every release hook while the whole graph
+//      is still intact, then drop the edges, then free the memory.
+// The orphan-continuation cancellation is skipped during steps 3-5
+// (releasing_heap): it would resume a suspended frame whose locals this
+// pass frees.
+static int __amlc_count_releasable(aisolate * const iso) {
+    int n = 0;
+    for (aobject * o = iso->first_object; o != NULL; o = o->next) {
+        if (!o->immortal && !o->marked && !o->pending_deallocation) n++;
+    }
+    return n;
+}
+
+static void __amlc_drain_release_queue(aisolate * const iso) {
+    while (iso->release_queue != NULL) {
+        aobject * const o = iso->release_queue;
+        iso->release_queue = o->next;
+        o->next = NULL;
+        o->prev = NULL;
+        __deallocate_object(o);
+    }
+}
+
+static bool __amlc_releasable_root(aobject * const o) {
+    return !o->immortal && !o->marked && !o->pending_deallocation
+        && o->property_reference_count <= 0 && o->reference_count <= 0;
+}
+
+void __amlc_release_heap(void) {
+    aisolate * const iso = __amlc_isolate();
+    __mark_root_objects();
+    __sweep_unmarked_objects();
+
+    // Keep whatever the statics still reach (they are only still set when
+    // an out-of-memory during the shutdown jumped past the dereference).
+    __amlc_mark_statics();
+    int const left = __amlc_count_releasable(iso);
+    #ifdef TRACKOBJECTS
+    if (left > 0) {
+        if (iso->parent != NULL) {   // a worker (main has no parent)
+            printf("Thread '%s' exited with %d objects still allocated\n", iso->name != NULL ? iso->name : "thread", left);
+        } else {
+            printf("Main thread exited with %d objects still allocated\n", left);
+        }
+        int shown = 0;
+        for (aobject * o = iso->first_object; o != NULL && shown < 20; o = o->next) {
+            if (o->immortal || o->marked || o->pending_deallocation) continue;
+            printf("  still allocated: %s (refs: %d, property refs: %d)\n", o->class_ptr->name, o->reference_count, o->property_reference_count);
+            shown++;
+        }
+        if (left > shown) printf("  ... and %d more\n", left - shown);
+    }
+    #endif
+    if (left == 0) {
+        __clear_marks();
+        return;
+    }
+    iso->releasing_heap = true;
+
+    // 3. No code holds anything any more.
+    for (aobject * o = iso->first_object; o != NULL; o = o->next) {
+        if (!o->immortal && !o->marked && !o->pending_deallocation) o->reference_count = 0;
+    }
+    for (aobject * o = iso->first_object; o != NULL; o = o->next) {
+        if (o->immortal || o->marked || o->pending_deallocation) continue;
+        if (o->class_ptr->statics->type != interface) continue;
+        aobject * const impl = o->object_properties.iface_reference.implementation_object;
+        if (impl != NULL && !impl->immortal && !impl->marked) impl->reference_count++;
+    }
+
+    // 4. Roots first, through the ordinary ARC death. The next object is
+    // pinned across the death: the cascade (and any code a release hook
+    // runs) may free others, but not that one, so the walk can go on.
+    bool progress = true;
+    while (progress) {
+        progress = false;
+        aobject * p = iso->first_object;
+        while (p != NULL) {
+            if (!__amlc_releasable_root(p)) {
+                p = p->next;
+                continue;
+            }
+            aobject * const n = p->next;
+            if (n != NULL) n->reference_count++;
+            p->reference_count = 0;
+            p->property_reference_count = 0;
+            __deallocate_object(p);
+            __amlc_drain_release_queue(iso);
+            if (n != NULL) n->reference_count--;
+            p = n;
+            progress = true;
+        }
+    }
+
+    // 5. Cycles. Pending first, so no ARC death frees a member while the
+    // hooks run (__deallocate_object returns early on a pending object).
+    for (aobject * o = iso->first_object; o != NULL; o = o->next) {
+        if (!o->immortal && !o->marked && !o->pending_deallocation) o->pending_deallocation = true;
+        else if (o->pending_deallocation) o->marked = true;   // pending before this step: not ours
+    }
+    // Objects a hook allocates go in at the head, behind the walk; they are
+    // not pending, so ARC frees them as usual.
+    for (aobject * o = iso->first_object; o != NULL; o = o->next) {
+        if (!o->pending_deallocation || o->marked || o->class_ptr->release == NULL) continue;
+        function_result r = ((__release_T) o->class_ptr->release)(o);
+        if (r.exception != NULL) {
+            printf("Exception in release method for : %s\n", o->class_ptr->name);
+            __decrease_reference_count(r.exception);
+        }
+    }
+    __amlc_drain_release_queue(iso);
+    aobject * p = iso->first_object;
+    while (p != NULL) {
+        if (!p->pending_deallocation || p->marked) {
+            p = p->next;
+            continue;
+        }
+        aobject * const n = p->next;
+        __amlc_heap_unlink(iso, p);
+        p->next = iso->first_detached_object;
+        if (iso->first_detached_object != NULL) iso->first_detached_object->prev = p;
+        iso->first_detached_object = p;
+        if (n != NULL) n->reference_count++;   // a non-pending object p holds could die here
+        __amlc_drop_edges(p);
+        __amlc_drain_release_queue(iso);
+        if (n != NULL) n->reference_count--;
+        p = n;
+    }
+    p = iso->first_detached_object;
+    while (p != NULL) {
+        aobject * const n = p->next;
+        __deallocate_detached_object(p);
+        p = n;
+    }
+    iso->first_detached_object = NULL;
+    iso->releasing_heap = false;
+    __clear_marks();
+
+    #ifdef TRACKOBJECTS
+    __amlc_mark_statics();
+    int const after = __amlc_count_releasable(iso);
+    __clear_marks();
+    if (after > 0) {
+        printf("%d objects could not be released\n", after);
+    }
+    #endif
 }
 
 void __dereference_static_properties() {
@@ -1644,6 +1859,10 @@ void __init_oom_singleton(void) {
         abort();
     }
     __oom_singleton = ex;
+    // Process-global (any isolate may throw it): immortal, so no isolate's
+    // end-of-heap release (#447) frees it under another thread.
+    __amlc_make_immortal(__oom_message);
+    __amlc_make_immortal(ex);
     __oom_report_reserve = malloc(65536);
 }
 
@@ -1757,6 +1976,10 @@ aclass * __amlc_find_reflected_class(const char * const name) {
 }
 
 void __amlc_make_immortal(aobject * const obj) {
+    // Process-global from here on: off the creating isolate's list, so no
+    // isolate's release (#447) or list surgery touches it. Called by the
+    // creating isolate right after the allocation.
+    if (!obj->immortal) __amlc_heap_unlink(__amlc_isolate(), obj);
     obj->immortal = true;
     obj->reference_count = 0x40000000;
 }
@@ -2513,13 +2736,9 @@ void __amlc_isolate_teardown(aisolate * const iso) {
         __amlc_message_discard(m);
     }
     __dereference_static_properties();
-    __mark_root_objects();
-    __sweep_unmarked_objects();
-    #ifdef TRACKOBJECTS
-    if (iso->allocation_count != 0) {
-        printf("Thread '%s' exited with %d objects still allocated\n", iso->name != NULL ? iso->name : "thread", iso->allocation_count);
-    }
-    #endif
+    // Frees everything left, including what frames an out-of-memory jump
+    // skipped still held (#447); reports leaks under TRACKOBJECTS first.
+    __amlc_release_heap();
     free(iso->statics);
     iso->statics = NULL;
     iso->statics_count = 0;
@@ -2743,9 +2962,8 @@ static void __amlc_oom_fatal_at(void * const site_class, unsigned int const line
 // Worker thread entry: runs body (static inits + the Runnable) with a jump
 // target, so running out of memory or a stop request lands back here and
 // the caller's teardown runs. The frames skipped by the jump never release
-// their references: teardown's sweep frees what statics and properties held,
-// but an object only a skipped frame's local held is on no list and is left
-// to the process exit (a TRACKOBJECTS build reports it).
+// their references; teardown's __amlc_release_heap frees what they held
+// (#447).
 void __amlc_worker_run(aisolate * const iso, void (* const body)(aisolate * const)) {
 #ifdef AMLC_OOM_SHUTDOWN
     jmp_buf jump;
@@ -2950,7 +3168,7 @@ static void __amlc_splice_chain(aobject * const chain) {
 
 amessage * __amlc_message_create(aobject * const payload, function_result * const result) {
     aisolate * const iso = __amlc_isolate();
-    // Stage: every property-referenced object the copy creates lands on an
+    // Stage: every object the copy creates lands on an
     // empty list that becomes the message's chain, so the receiver can
     // adopt the whole graph in O(1) and the sender's own list is untouched.
     aobject * const saved_first = iso->first_object;

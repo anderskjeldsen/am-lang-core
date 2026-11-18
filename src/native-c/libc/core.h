@@ -458,8 +458,8 @@ typedef function_result (*__amlc_static_init_fn)(void);
 typedef aobject * (*__amlc_native_copy_T)(aobject * const src, void * const copy_ctx);
 
 // A message in flight: the deep-copied payload graph. `payload` carries one
-// owned reference; `chain` is the list of the graph's property-referenced
-// objects (what would have gone on the sender's first_object list), spliced
+// owned reference; `chain` is the list of the graph's objects
+// (what would have gone on the sender's first_object list), spliced
 // into the receiver's list when the message is opened.
 struct _amessage {
     amessage * next;
@@ -475,7 +475,9 @@ struct _aisolate {
     property * statics;
     unsigned int statics_count;
     // Per-isolate heap bookkeeping (was the process-global __first_object):
-    // objects held by a property, for the exit-time cycle sweep + leak report.
+    // every object of the isolate, linked from allocation to free (#447;
+    // before, only property-referenced ones), for the exit-time sweep, the
+    // final release and the leak report.
     aobject * first_object;
     aobject * first_detached_object;
     int allocation_count;
@@ -512,6 +514,13 @@ struct _aisolate {
     bool oom_suppressed;            // an allocation failed while oom_no_jump > 0
     int fail_alloc_after;           // test hook: fail the allocation after this many (-1 = off)
     bool fail_alloc_sticky;         // test hook: keep failing once the first one failed
+    bool releasing_heap;            // inside __amlc_release_heap's zeroed-count passes (#447)
+    aobject * release_queue;        // deaths deferred during them, so a long list is not a deep recursion
+    // __mark_object's work stack (iterative marking, #447).
+    bool marking;
+    aobject ** mark_stack;
+    unsigned int mark_count;
+    unsigned int mark_capacity;
 };
 
 // Default arena size and how many empty arenas an isolate keeps around
@@ -663,7 +672,11 @@ aisolate * __amlc_isolate_create(void);           // new isolate (statics + mail
 void __amlc_isolate_retain(aisolate * const iso);
 void __amlc_isolate_release(aisolate * const iso); // frees once no handles remain and the isolate is done
 void __amlc_isolate_enter(aisolate * const iso);   // binds iso to the calling OS thread
-void __amlc_isolate_teardown(aisolate * const iso); // statics deref + sweep + mailbox close; call from iso's own thread
+void __amlc_isolate_teardown(aisolate * const iso); // statics deref + heap release + mailbox close; call from iso's own thread
+// After the statics are dereferenced: mark/sweep, TRACKOBJECTS leak report,
+// then frees every object left whatever its code count (#447). Worker
+// teardown and main's generated shutdown call it.
+void __amlc_release_heap(void);
 
 // Messaging. A send deep-copies `payload` (Object graph → fresh objects) and
 // posts it; the receiver gets an owned reference into its own heap. Objects
