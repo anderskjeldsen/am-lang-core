@@ -1,0 +1,148 @@
+namespace Tests {
+
+    // Redmine #420b: toString, hash and equals are #noThrow (AnyInterface,
+    // Object), and so is an interface member marked #noThrow. An override
+    // that can throw must catch it itself (the compiler rejects it otherwise,
+    // see NoThrowOverrideTest in the compiler). Called through the base type,
+    // the caught exception doesn't escape and the override's own fallback is
+    // returned. The null-member-access cases are in
+    // tests-v1-only/tests/NoThrowOverrideV1Tests.aml (v2 has no null check on
+    // a method call through a null object yet).
+    interface NoThrowOverrideLabelled {
+        import Am.Lang
+        #noThrow
+        fun label(): String
+    }
+
+    open class NoThrowOverrideNode {
+        import Am.Lang
+        var name: String = "node"
+        var fail: Bool = true
+
+        static fun risky(fail: Bool): Int {
+            if (fail) {
+                throw new Exception("risky")
+            }
+            return 5
+        }
+
+        open override fun toString(): String {
+            try {
+                var n = NoThrowOverrideNode.risky(this.fail)
+                return this.name + " " + n.toString()
+            } catch (e: Exception) {
+                return "fallback " + this.name
+            }
+        }
+
+        open override fun hash(): UInt {
+            try {
+                return NoThrowOverrideNode.risky(this.fail).toUInt()
+            } catch (e: Exception) {
+            }
+            return 11UI
+        }
+
+        open override fun equals(other: Object): Bool {
+            var local = "held by the frame"
+            try {
+                return NoThrowOverrideNode.risky(this.fail) == 5
+            } catch (e: Exception) {
+            }
+            return false
+        }
+    }
+
+    // Two levels down: the contract is inherited through NoThrowOverrideNode.
+    class NoThrowOverrideLeaf : NoThrowOverrideNode {
+        import Am.Lang
+
+        override fun toString(): String {
+            try {
+                throw new Exception("leaf")
+            } catch (e: Exception) {
+                return "leaf caught"
+            }
+            return "unreached"
+        }
+    }
+
+    class NoThrowOverrideTag : NoThrowOverrideLabelled {
+        import Am.Lang
+
+        fun label(): String {
+            try {
+                throw new Exception("no label")
+            } catch (e: Exception) {
+                return "tag"
+            }
+            return "unreached"
+        }
+    }
+
+    class NoThrowOverrideTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun describe(a: Any): String {
+            return a.toString()
+        }
+
+        static fun hashOf(a: Any): UInt {
+            return a.hash()
+        }
+
+        static fun same(a: Object, b: Object): Bool {
+            return a.equals(b)
+        }
+
+        static fun labelOf(l: NoThrowOverrideLabelled): String {
+            return l.label()
+        }
+
+        test caughtExceptionsDoNotEscapeThroughTheBaseType() {
+            var escaped = false
+            var n = new NoThrowOverrideNode()
+            var text = "unset"
+            var h = 0UI
+            var same = true
+            try {
+                text = NoThrowOverrideTests.describe(n)
+                h = NoThrowOverrideTests.hashOf(n)
+                same = NoThrowOverrideTests.same(n, n)
+            } catch (e: Exception) {
+                escaped = true
+            }
+            Assert.assertFalse(escaped)
+            Assert.assertEquals("fallback node", text)
+            Assert.assertTrue(h == 11UI)
+            Assert.assertFalse(same)
+        }
+
+        test theNormalPathIsUnchanged() {
+            var n = new NoThrowOverrideNode()
+            n.fail = false
+            Assert.assertEquals("node 5", NoThrowOverrideTests.describe(n))
+            Assert.assertTrue(NoThrowOverrideTests.hashOf(n) == 5UI)
+            Assert.assertTrue(NoThrowOverrideTests.same(n, n))
+        }
+
+        test anOverrideTwoLevelsDownAndAnInterfaceImplementationCatch() {
+            var leaf: NoThrowOverrideNode = new NoThrowOverrideLeaf()
+            Assert.assertEquals("leaf caught", NoThrowOverrideTests.describe(leaf))
+            Assert.assertTrue(NoThrowOverrideTests.hashOf(leaf) == 11UI)
+            Assert.assertEquals("tag", NoThrowOverrideTests.labelOf(new NoThrowOverrideTag()))
+        }
+
+        test repeatedCatchesDoNotPileUp() {
+            var n = new NoThrowOverrideNode()
+            var total = 0UI
+            for (i = 0 until 1000) {
+                total = total + n.hash()
+                n.toString()
+                n.equals(n)
+            }
+            Assert.assertTrue(total == 11000UI)
+        }
+    }
+}
