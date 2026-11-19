@@ -5,7 +5,9 @@
 #                      then with AddressSanitizer + TRACKOBJECTS builds with
 #                      the feature on and off (ASAN=0 skips them)
 #   ./run.sh --amiga   build for AmigaOS (amiga-gcc docker image) and check
-#                      under the amlang-amiberry image
+#                      under the amlang-amiberry image; busy (a worker that
+#                      never stops) is removed after 10 s, then the shell
+#                      runs the program again, Avail, Dir and waits 30 s
 # The *-file modes (#447) also check that the files left open in the skipped
 # frames were flushed and closed: their data is on disk, the worker's can be
 # read back by an exit hook, and on AmigaOS (releaseHeapOnExit always on) they
@@ -74,6 +76,9 @@ if [[ "${1:-}" == "--amiga" ]]; then
     RUN="$HERE/amiga-run"
     rm -rf "$RUN"; mkdir -p "$RUN"
     cp builds/amigaos-docker/bin/app "$RUN/app"
+    # busy: a worker that never reaches a stop point is removed (RemTask)
+    # after the 10 s join timeout; the shell must keep working afterwards.
+    CASES+=("busy yes yes|Thread 'busy' did not stop within 10 s; removed|not reached")
     {
         echo "cd DH1:"
         echo "Stack 200000"
@@ -81,9 +86,18 @@ if [[ "${1:-}" == "--amiga" ]]; then
         echo "Echo \"start\" >DH1:rc.log"
         for c in "${CASES[@]}"; do
             m=${c%% *}
+            [[ $m == busy ]] && echo "Date >DH1:busy-time.log"
             echo "DH1:app $m >DH1:out-$m.log"
             echo "Echo \"$m \$RC\" >>DH1:rc.log"
+            [[ $m == busy ]] && echo "Date >>DH1:busy-time.log"
         done
+        # After the removal: another run, a few commands and a 30 s wait.
+        echo "DH1:app normal >DH1:out-after-busy.log"
+        echo "Echo \"after-busy \$RC\" >>DH1:rc.log"
+        echo "Avail >DH1:avail.log"
+        echo "Dir DH1: >DH1:dir.log"
+        echo "Wait 30"
+        echo "Echo \"after-wait \$RC\" >>DH1:rc.log"
         # A file still locked by the exited program cannot be deleted (copy
         # first: the host checks the data).
         for m in $FILE_MODES; do
@@ -104,6 +118,16 @@ if [[ "${1:-}" == "--amiga" ]]; then
         want=20; [[ "$m" == normal || "$m" == late ]] && want=0
         check "$m" "${rc:-none}" "$want" "$first" "$second" "$RUN" "$RUN/out-$m.log" "$has" "$hasnot"
     done
+    sed 's/^/  busy timing | /' "$RUN/busy-time.log" 2>/dev/null | tr -d '\r'
+    ok=1
+    for step in after-busy after-wait; do
+        rc=$(grep "^$step " "$RUN/rc.log" | head -1 | awk '{print $2}' | tr -d '\r')
+        [[ "$rc" == 0 ]] || { echo "  $step: RC ${rc:-none} (the shell did not get there?)"; ok=0; }
+    done
+    grep -q "normal run" "$RUN/out-after-busy.log" 2>/dev/null || { echo "  the run after busy printed no 'normal run'"; ok=0; }
+    [[ -s "$RUN/avail.log" && -s "$RUN/dir.log" ]] || { echo "  Avail or Dir printed nothing"; ok=0; }
+    grep -qi "guru\|software failure" "$RUN/emulator.log" && { echo "  emulator log mentions a guru"; ok=0; }
+    if (( ok )); then echo "PASS after busy"; else echo "FAIL after busy"; fail=1; fi
     for m in $FILE_MODES; do
         ok=1
         for n in 1 2; do
