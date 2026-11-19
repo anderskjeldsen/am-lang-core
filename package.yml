@@ -7,6 +7,16 @@ features:
     global: true
     additionalLibraries:
       - m
+  # Redmine #447: when a thread or the program ends, release every object
+  # still allocated, whatever its reference count, so frames an out-of-memory
+  # jump skipped still have their FileStreams closed. Costs a list link per
+  # allocation (about 3% in an allocation-heavy loop). Always on for AmigaOS,
+  # MorphOS and AROS, whose exit doesn't reclaim files and locks (core.h);
+  # enable it elsewhere with `features: ["releaseHeapOnExit"]` on a build
+  # target. Global: the define must reach every C file, since the generated
+  # code's inline allocators link the objects.
+  - name: releaseHeapOnExit
+    global: true
 dependencies:
   - id: am-tests
     testOnly: true
@@ -494,6 +504,10 @@ buildTargets:
   - id: linux-x64
     platform: linux-x64
     features: ["floatingPoint"]
+  # The suite with releaseHeapOnExit (#447), as the Amiga family always has it.
+  - id: linux-x64-release-heap
+    platform: linux-x64
+    features: ["floatingPoint", "releaseHeapOnExit"]
   - id: windows-x64
     platform: windows-x64
     features: ["floatingPoint"]

@@ -85,7 +85,10 @@ function_result Am_Async_Continuation__native_release_0(aobject * const this)
                 memory_order_acq_rel, memory_order_acquire))
         {
             suspend_state *state_to_fire = (suspend_state *) data->state;
-            if (state_to_fire != NULL && state_to_fire->function != NULL) {
+            // Not while the isolate's heap is being released at its end
+            // (#447): the suspended frame's locals are freed by that same
+            // pass, and nothing would run the resumed code to completion.
+            if (state_to_fire != NULL && state_to_fire->function != NULL && !__amlc_isolate()->releasing_heap) {
                 aobject *ex = __allocate_object(&Am_Async_ContinuationCancelledException);
 #ifdef Am_Async_ContinuationCancelledException_f_ContinuationCancelledException_0__DIRECT_NOTHROW_ABI
                 Am_Async_ContinuationCancelledException_f_ContinuationCancelledException_0__direct(ex);

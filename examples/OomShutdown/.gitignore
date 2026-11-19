@@ -1,3 +1,4 @@
 linux-run/
 amiga-run/
 build-*.log
+run-linux-x64-asan*/

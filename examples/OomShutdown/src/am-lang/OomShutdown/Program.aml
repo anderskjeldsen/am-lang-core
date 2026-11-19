@@ -22,9 +22,75 @@ namespace OomShutdown {
     //                        while an exit hook joins another, healthy worker:
     //                        the join still waits for it (exit 0: main's own
     //                        run had succeeded)
+    // Open files in the frames the jump skips (Redmine #447). Files.openAndFail
+    // writes through a nested stream (TextStream over BinaryStream over a
+    // FileStream) held only by locals, and through a FileStream in a cycle of
+    // two Holders, builds a 20000-node list, then runs out of memory without
+    // closing either:
+    //   main-file            main runs out: its final heap release closes them
+    //                        (run.sh checks the data reached the files; on
+    //                        AmigaOS that they can be deleted, i.e. no lock)
+    //   main-sticky-file     ... and every allocation fails from then on
+    //   worker-file          a worker runs out: its teardown closes them, so
+    //                        the first exit hook can read them back
 
     class Box(var n: Int) {
         import Am.Lang
+    }
+
+    class Holder(var name: String, var stream: Stream?, var other: Holder?) {
+        import Am.Lang
+        import Am.IO
+    }
+
+    class Files {
+        import Am.Lang
+        import Am.IO
+        import Am.Lang.Diagnostics
+
+        static fun name(mode: String, n: Int): String {
+            return "oom-data-${mode}-${n}.txt"
+        }
+
+        static fun openAndFail(mode: String, sticky: Bool) {
+            var fs = new FileStream(new File(Files.name(mode, 1)), FileAccess.writeOnly)
+            var nested = new TextStream(new BinaryStream(fs))
+            nested.writeString("nested ${mode}")
+            var a = new Holder("a", null, null)
+            var b = new Holder("b", new FileStream(new File(Files.name(mode, 2)), FileAccess.writeOnly), a)
+            a.other = b
+            var inCycle = new TextStream(b.stream!!)
+            inCycle.writeString("cycle ${mode}")
+            // A long list a local holds: marking it and releasing it must not
+            // recurse as deep as it is long (an AmigaOS stack is small).
+            var head = new Chain(0, null)
+            var tail = head
+            for (i = 1 until 20000) {
+                var c = new Chain(i, null)
+                tail.next = c
+                tail = c
+            }
+            Arc.failAllocationsAfter(0, sticky)
+            var x = new Box(4)
+            "files: not reached ${x.n}".println()
+        }
+
+        static fun readBack(mode: String, n: Int) {
+            var stream = new FileStream(new File(Files.name(mode, n)), FileAccess.readOnly)
+            var ts = new TextStream(stream)
+            var text = ts.readString()
+            stream.close()
+            "read back ${n}: ${text}".println()
+        }
+    }
+
+    class FileOomer : Runnable {
+        import Am.Lang
+        import Am.Threading
+        override fun run() {
+            Thread.sleep(300L)
+            Files.openAndFail("worker-file", false)
+        }
     }
 
     class Settings {
@@ -76,6 +142,11 @@ namespace OomShutdown {
         #runOnExit
         static fun first() {
             Hooks.writeMarker("oom-first-${Settings.mode}.txt", "first hook ran in mode ${Settings.mode}")
+            if (Settings.mode == "worker-file") {
+                // The worker's teardown has closed the files it left open.
+                Files.readBack("worker-file", 1)
+                Files.readBack("worker-file", 2)
+            }
             if (Settings.mode == "late") {
                 "hook: joining slow".println()
                 Settings.slow!!.join()
@@ -202,6 +273,13 @@ namespace OomShutdown {
                 Settings.keep = new Chain(9, null)
                 Arc.failAllocationsAfter(1, false)
                 receiver.send(g)
+                "main: not reached".println()
+            } else if (mode == "main-file" || mode == "main-sticky-file") {
+                Files.openAndFail(mode, mode == "main-sticky-file")
+            } else if (mode == "worker-file") {
+                var sleeper = Program.start(new Sleeper(), "sleeper")
+                var t = Program.start(new FileOomer(), "file-oomer")
+                t.join()
                 "main: not reached".println()
             } else if (mode == "late") {
                 Settings.slow = Program.start(new Slow(), "slow")

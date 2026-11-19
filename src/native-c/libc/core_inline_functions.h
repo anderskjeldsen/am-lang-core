@@ -74,6 +74,39 @@ static inline void __set_first_object(aobject *v, const char *site) {
     __amlc_isolate()->first_object = v;
 }
 
+// An isolate's first_object list. With releaseHeapOnExit (#447, see core.h)
+// every object is on it from allocation to free, so the end-of-isolate
+// release (__amlc_release_heap) reaches objects only a local held when an
+// out-of-memory jump skipped the frame that would have released them;
+// without it, only objects with a property reference are. Only the owning
+// isolate's thread links or unlinks, so no lock. An unlinked object has
+// prev == next == NULL and is not the head, which makes unlinking twice
+// harmless.
+static inline void __amlc_heap_link(aisolate * const iso, aobject * const obj) {
+    aobject * const head = iso->first_object;
+    obj->prev = NULL;
+    obj->next = head;
+    if (head != NULL) {
+        head->prev = obj;
+    }
+    iso->first_object = obj;
+}
+
+static inline void __amlc_heap_unlink(aisolate * const iso, aobject * const obj) {
+    aobject * const prev = obj->prev;
+    aobject * const next = obj->next;
+    if (prev != NULL) {
+        prev->next = next;
+    } else if (iso->first_object == obj) {
+        __set_first_object(next, "heap_unlink");
+    }
+    if (next != NULL) {
+        next->prev = prev;
+    }
+    obj->prev = NULL;
+    obj->next = NULL;
+}
+
 static inline void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null) {
     unsigned char f = nullable_value->flags;
     f &= ~PRIMITIVE_NULL;
@@ -126,8 +159,12 @@ static inline aobject * __allocate_object_prepared(aclass * const __class) {
             __obj->pending_deallocation = false;
             __obj->immortal = false;
             __obj->chunked = true;
+#ifdef AMLC_RELEASE_HEAP_ON_EXIT
+            __amlc_heap_link(__iso, __obj);
+#else
             __obj->prev = NULL;
             __obj->next = NULL;
+#endif
             return __obj;
         }
     }
@@ -159,6 +196,9 @@ static inline aobject * __allocate_object(aclass * const __class) {
             __obj->class_ptr = __class;
             __obj->reference_count = 1;
             __obj->chunked = true;
+#ifdef AMLC_RELEASE_HEAP_ON_EXIT
+            __amlc_heap_link(__iso, __obj);
+#endif
             return __obj;
         }
     }
@@ -223,6 +263,9 @@ static inline void __decrease_reference_count(aobject * const __obj) {
             if (__obj->chunked && !__obj->pending_deallocation
                     && __cls->release == NULL && __cls->object_property_count == 0 && __cls->statics->type == class) {
                 aisolate * const __iso = __amlc_isolate();
+#ifdef AMLC_RELEASE_HEAP_ON_EXIT
+                __amlc_heap_unlink(__iso, __obj);
+#endif
                 __iso->allocation_count--;
                 aarena * const __a = ((aarena **) __obj)[-1];
                 if (--__a->live == 0) {
@@ -388,21 +431,19 @@ static inline void __increase_property_reference_count(aobject * const __obj) {
         fflush(stdout);
         exit(0);
     }
-    // Immortal (process-global) objects stay off the per-isolate lists —
-    // see aobject.immortal.
+    // Immortal (process-global) objects are not counted — see aobject.immortal.
     if (__obj->immortal) {
         return;
     }
-    // The property-referenced list is per isolate, and only the owning
-    // isolate ever links into it, so no lock.
+#ifndef AMLC_RELEASE_HEAP_ON_EXIT
+    // Without releaseHeapOnExit the list holds property-referenced objects
+    // only: link on the first property reference. Per isolate, owning
+    // thread only, so no lock.
     if (__obj->property_reference_count == 0) {
-        aisolate * const __iso = __amlc_isolate();
-        __obj->next = __iso->first_object;
-        if (__iso->first_object != NULL) {
-            __iso->first_object->prev = __obj;
-        }
-        __set_first_object(__obj, "increase_property_reference_count");
+        __amlc_heap_link(__amlc_isolate(), __obj);
     }
+#endif
+    // (With releaseHeapOnExit the object is listed from its allocation.)
     __obj->property_reference_count++;
     #if defined(DEBUG) && defined(ARCLOG)
     #ifdef CONDLOG
