@@ -1,0 +1,31 @@
+namespace TestsV1 {
+
+    // Redmine #447: the GC.collect count assertion from tests/HeapReleaseTests.
+    // Under v2's test runner GC.collect reclaims fewer than 2 objects here
+    // (a standalone v2-built program reclaims the cycle), so it lives in the
+    // v1-only suite until that is fixed.
+
+    class HrV1Node(var n: Int, var other: HrV1Node?) {
+        import Am.Lang
+    }
+
+    class HeapReleaseV1Tests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun dropACycle() {
+            var a = new HrV1Node(20, null)
+            var b = new HrV1Node(21, a)
+            a.other = b
+        }
+
+        test testCollectReclaimsACycleDroppedByAHelper() {
+            var keep = new HrV1Node(10, new HrV1Node(11, null))
+            HeapReleaseV1Tests.dropACycle()
+            var reclaimed = GC.collect()
+            Assert.assertTrue(reclaimed >= 2L)
+            Assert.assertEquals(10, keep.n)
+            Assert.assertEquals(11, keep.other!!.n)
+        }
+    }
+}
