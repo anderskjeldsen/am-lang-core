@@ -509,6 +509,7 @@ struct _aisolate {
     // v2): out of memory then throws OutOfMemoryException as before.
     void * oom_jump;
     volatile bool stop_requested;   // set by main's out-of-memory shutdown
+    bool removed;                   // Amiga family: its task was removed after the join timeout (never done)
     aisolate * live_next;           // every isolate not yet freed (global lock)
     int oom_no_jump;                // > 0: runtime code that must see NULL (deep copy)
     bool oom_suppressed;            // an allocation failed while oom_no_jump > 0
@@ -637,6 +638,9 @@ void __amlc_global_unlock(void);
 //     __amlc_shutdown_requested and wakes main, without allocating.
 // Threads see a stop request at the runtime's blocking points (receive,
 // join, sleep) and at every `new` in generated code (AMLC_STOP_POINT).
+// One that doesn't within the timeout (3 s; 10 s on AmigaOS/MorphOS) is left
+// to the process exit, or on AmigaOS/MorphOS has its Exec task removed
+// (RemTask) first, leaking what it held (__amlc_remove_stuck_workers).
 // An isolate without a jump target keeps the old behaviour (throws
 // OutOfMemoryException); that is what code from a compiler that renders no
 // setjmp gets. A build can opt out with -DAMLC_NO_OOM_SHUTDOWN.

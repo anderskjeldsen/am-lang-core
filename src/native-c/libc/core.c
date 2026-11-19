@@ -2794,8 +2794,15 @@ static volatile bool __amlc_main_booted = false;
 // that renders the setjmp does); workers only arm theirs when it is set, so
 // a program without the startup support keeps the old behaviour throughout.
 static bool __amlc_oom_fatal_mode = false;
+// How long main's out-of-memory shutdown waits for the other threads. The
+// Amiga family waits longer (a 68k is slow, and what follows is drastic: the
+// threads still running are removed, see __amlc_remove_stuck_workers).
 #ifndef AMLC_OOM_JOIN_TIMEOUT_MS
+#ifdef AMLC_AMIGA_FAMILY
+#define AMLC_OOM_JOIN_TIMEOUT_MS 10000
+#else
 #define AMLC_OOM_JOIN_TIMEOUT_MS 3000
+#endif
 #endif
 
 // The console the emergency messages go to: stdout on the Amiga family (the
@@ -3020,6 +3027,73 @@ static int __amlc_running_workers_locked(void) {
     return n;
 }
 
+#ifdef AMLC_AMIGA_FAMILY
+// The Exec task running iso: the one in the ready or wait list whose
+// tc_UserData is iso (Thread.start sets it right after CreateNewProc, and the
+// main task, the caller, is in neither list). NULL if it has already gone.
+// Call under Forbid; Disable keeps interrupts (Signal) from moving a task
+// between the lists while they are walked.
+static struct Task * __amlc_find_isolate_task(aisolate * const iso) {
+    struct List * const lists[2] = { &SysBase->TaskReady, &SysBase->TaskWait };
+    struct Task * found = NULL;
+    Disable();
+    for (int l = 0; l < 2 && found == NULL; l++) {
+        for (struct Node * nd = lists[l]->lh_Head; nd->ln_Succ != NULL; nd = nd->ln_Succ) {
+            if (((struct Task *) nd)->tc_UserData == (APTR) iso) { found = (struct Task *) nd; break; }
+        }
+    }
+    Enable();
+    return found;
+}
+
+// After the join timeout an Exec task that never reached a stop point would
+// keep running inside the program's code after the exit unloads it (a guru),
+// so the shutdown removes it. Under Forbid, so it cannot run (or finish)
+// between the check and the RemTask. What the removed task owned is leaked,
+// never freed from here (it may have been in the middle of using it):
+//   * its Process structure and stack: tc_MemEntry is emptied first, because
+//     a DOS packet it had sent may still be replied to its pr_MsgPort and
+//     written into its stack frame;
+//   * what DOS frees at a normal process exit: its current-directory lock;
+//   * its isolate: heap, statics, mailbox and queued messages (the running
+//     task's own handle is never dropped, so nothing frees the aisolate),
+//     and with them its open files and libraries (a file it had open stays
+//     locked until reboot).
+// Its mailbox is closed and unbound, so no Signal() goes to the removed task;
+// a join on it gives up (main has stopped waiting) and it is never `done`.
+static void __amlc_remove_stuck_workers(void) {
+    for (;;) {
+        aisolate * stuck = NULL;
+        bool removed = false;
+        Forbid();
+        for (aisolate * i = __amlc_live_isolates; i != NULL; i = i->live_next) {
+            if (i != __amlc_main_isolate && i->native != NULL && !i->done && !i->removed) { stuck = i; break; }
+        }
+        if (stuck != NULL) {
+            stuck->removed = true;
+            struct Task * const task = __amlc_find_isolate_task(stuck);
+            if (task != NULL && !stuck->done) {
+                struct List * const mem = &task->tc_MemEntry;   // NewList, without amiga.lib
+                mem->lh_Head = (struct Node *) &mem->lh_Tail;
+                mem->lh_Tail = NULL;
+                mem->lh_TailPred = (struct Node *) &mem->lh_Head;
+                RemTask(task);
+                removed = true;
+            }
+            stuck->mailbox->closed = true;
+            stuck->mailbox->owner = NULL;
+            stuck->mailbox->sigmask = 0;
+        }
+        Permit();
+        if (stuck == NULL) break;
+        // The task is gone, so its name (freed only with the isolate) is safe to read.
+        fprintf(AMLC_OOM_OUT, removed ? "Thread '%s' did not stop within %d s; removed\n" : "Thread '%s' did not stop within %d s; its task has gone\n",
+            stuck->name != NULL ? stuck->name : "thread", AMLC_OOM_JOIN_TIMEOUT_MS / 1000);
+        fflush(AMLC_OOM_OUT);
+    }
+}
+#endif
+
 static void __amlc_stop_workers(void) {
     __amlc_global_lock();
     for (aisolate * i = __amlc_live_isolates; i != NULL; i = i->live_next) {
@@ -3031,10 +3105,21 @@ static void __amlc_stop_workers(void) {
     int n = __amlc_running_workers_locked();
     __amlc_global_unlock();
     int waited = 0;
+#ifdef AMLC_AMIGA_FAMILY
+    // Wall-clock time, not a count of Delay(1)s: a busy worker at the same
+    // priority holds the CPU for its whole quantum, so a poll takes longer
+    // than its one tick.
+    struct DateStamp start;
+    DateStamp(&start);
+#endif
     while (n > 0 && waited < AMLC_OOM_JOIN_TIMEOUT_MS) {
 #ifdef AMLC_AMIGA_FAMILY
         Delay(1);   // one tick, 20 ms
-        waited += 20;
+        struct DateStamp now;
+        DateStamp(&now);
+        long ticks = ((now.ds_Days - start.ds_Days) * 1440L + (now.ds_Minute - start.ds_Minute)) * 60L * TICKS_PER_SECOND
+            + (now.ds_Tick - start.ds_Tick);
+        waited = (int) (ticks * (1000 / TICKS_PER_SECOND));
 #else
         struct timespec ts = { 0, 10 * 1000000L };
         nanosleep(&ts, NULL);
@@ -3045,8 +3130,12 @@ static void __amlc_stop_workers(void) {
         __amlc_global_unlock();
     }
     if (n > 0) {
+#ifdef AMLC_AMIGA_FAMILY
+        __amlc_remove_stuck_workers();
+#else
         fprintf(AMLC_OOM_OUT, "%d thread(s) did not stop within %d ms; exiting without them\n", n, AMLC_OOM_JOIN_TIMEOUT_MS);
         fflush(AMLC_OOM_OUT);
+#endif
     }
     __amlc_workers_stopped = true;
 }

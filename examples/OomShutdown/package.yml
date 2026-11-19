@@ -38,6 +38,13 @@ platforms:
       - -noixemul
     additionalLinkerFlags:
       - -noixemul
+  - id: morphos-ppc
+    extends: libc
+    gccCommand: ppc-morphos-gcc -O2
+    gccAdditionalOptions:
+      - -noixemul
+    additionalLinkerFlags:
+      - -noixemul
 buildTargets:
   - id: linux-x64
     platform: linux-x64
@@ -53,3 +60,10 @@ buildTargets:
     dockerBuild:
       image: amiga-gcc:latest
       buildPath: /host
+  # Builds only (no MorphOS emulator here): checks the Exec-task removal
+  # (#446) compiles and links for MorphOS.
+  - id: morphos-ppc-docker
+    platform: morphos-ppc
+    dockerBuild:
+      image: amigadev/crosstools:ppc-morphos
+      buildPath: /work
