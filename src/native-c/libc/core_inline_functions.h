@@ -74,13 +74,14 @@ static inline void __set_first_object(aobject *v, const char *site) {
     __amlc_isolate()->first_object = v;
 }
 
-// Every object of an isolate is on its first_object list from allocation to
-// free (#447): the end-of-isolate release (__amlc_release_heap) has to reach
-// objects that only a local held when an out-of-memory jump skipped the frame
-// that would have released them. Before #447 only property-referenced objects
-// were listed, so those were on no list at all. Only the owning isolate's
-// thread links or unlinks, so no lock. An unlinked object has prev == next ==
-// NULL and is not the head, which makes unlinking twice harmless.
+// An isolate's first_object list. With releaseHeapOnExit (#447, see core.h)
+// every object is on it from allocation to free, so the end-of-isolate
+// release (__amlc_release_heap) reaches objects only a local held when an
+// out-of-memory jump skipped the frame that would have released them;
+// without it, only objects with a property reference are. Only the owning
+// isolate's thread links or unlinks, so no lock. An unlinked object has
+// prev == next == NULL and is not the head, which makes unlinking twice
+// harmless.
 static inline void __amlc_heap_link(aisolate * const iso, aobject * const obj) {
     aobject * const head = iso->first_object;
     obj->prev = NULL;
@@ -158,7 +159,12 @@ static inline aobject * __allocate_object_prepared(aclass * const __class) {
             __obj->pending_deallocation = false;
             __obj->immortal = false;
             __obj->chunked = true;
+#ifdef AMLC_RELEASE_HEAP_ON_EXIT
             __amlc_heap_link(__iso, __obj);
+#else
+            __obj->prev = NULL;
+            __obj->next = NULL;
+#endif
             return __obj;
         }
     }
@@ -190,7 +196,9 @@ static inline aobject * __allocate_object(aclass * const __class) {
             __obj->class_ptr = __class;
             __obj->reference_count = 1;
             __obj->chunked = true;
+#ifdef AMLC_RELEASE_HEAP_ON_EXIT
             __amlc_heap_link(__iso, __obj);
+#endif
             return __obj;
         }
     }
@@ -255,7 +263,9 @@ static inline void __decrease_reference_count(aobject * const __obj) {
             if (__obj->chunked && !__obj->pending_deallocation
                     && __cls->release == NULL && __cls->object_property_count == 0 && __cls->statics->type == class) {
                 aisolate * const __iso = __amlc_isolate();
+#ifdef AMLC_RELEASE_HEAP_ON_EXIT
                 __amlc_heap_unlink(__iso, __obj);
+#endif
                 __iso->allocation_count--;
                 aarena * const __a = ((aarena **) __obj)[-1];
                 if (--__a->live == 0) {
@@ -425,7 +435,15 @@ static inline void __increase_property_reference_count(aobject * const __obj) {
     if (__obj->immortal) {
         return;
     }
-    // The object is already on its isolate's list (every object is, #447).
+#ifndef AMLC_RELEASE_HEAP_ON_EXIT
+    // Without releaseHeapOnExit the list holds property-referenced objects
+    // only: link on the first property reference. Per isolate, owning
+    // thread only, so no lock.
+    if (__obj->property_reference_count == 0) {
+        __amlc_heap_link(__amlc_isolate(), __obj);
+    }
+#endif
+    // (With releaseHeapOnExit the object is listed from its allocation.)
     __obj->property_reference_count++;
     #if defined(DEBUG) && defined(ARCLOG)
     #ifdef CONDLOG

@@ -767,7 +767,9 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
 
         __obj->class_ptr = __class;
         __obj->reference_count = 1;
+#ifdef AMLC_RELEASE_HEAP_ON_EXIT
         __amlc_heap_link(__iso, __obj);
+#endif
 
         #if defined(DEBUG) || defined(TRACKOBJECTS)
         // Debug registry is a FIXED array — saturate instead of writing
@@ -962,7 +964,9 @@ void __deallocate_object(aobject * const __obj) {
     printf("Reference counts: ref=%d, prop_ref=%d\n", __obj->reference_count, __obj->property_reference_count);
     #endif
 
+#ifdef AMLC_RELEASE_HEAP_ON_EXIT
     __amlc_heap_unlink(__iso, __obj);
+#endif
     __amlc_free_object_in(__iso, __obj);
 
     #ifdef DEBUG
@@ -993,6 +997,15 @@ void __decrease_property_reference_count(aobject * const __obj) {
         #endif
         #endif
 
+#ifndef AMLC_RELEASE_HEAP_ON_EXIT
+        // Only property-referenced objects are listed: off the list now.
+        if (__obj->property_reference_count == 0 && !__obj->pending_deallocation) {
+            __amlc_heap_unlink(__amlc_isolate(), __obj);
+            if (__obj->reference_count == 0) {
+                __deallocate_object(__obj);
+            }
+        }
+#else
         // The object stays on its isolate's list (every object is, #447);
         // __deallocate_object unlinks it.
         if (__obj->property_reference_count == 0 && !__obj->pending_deallocation && __obj->reference_count == 0) {
@@ -1007,6 +1020,7 @@ void __decrease_property_reference_count(aobject * const __obj) {
             }
             __deallocate_object(__obj);
         }
+#endif
     }
 }
 static void __amlc_drop_edges(aobject * const __obj);
@@ -1111,7 +1125,9 @@ static void __amlc_drop_edges(aobject * const __obj) {
 // every code count still standing is a leak or a reference a frame never
 // released because an out-of-memory jump (#446) skipped it. Such objects
 // used to stay allocated with their native resources open (an open
-// FileStream, an AmigaOS file lock). __amlc_release_heap frees them:
+// FileStream, an AmigaOS file lock). With releaseHeapOnExit (core.h; on by
+// default on AmigaOS, MorphOS and AROS) __amlc_release_heap frees them;
+// without it, it is steps 1 and 2 only (the worker's leak line as before):
 //   1. the normal mark/sweep (cycles, as before);
 //   2. the TRACKOBJECTS leak report, BEFORE any count is zeroed, so ARC
 //      leaks after a normal end stay visible;
@@ -1129,6 +1145,7 @@ static void __amlc_drop_edges(aobject * const __obj) {
 // The orphan-continuation cancellation is skipped during steps 3-5
 // (releasing_heap): it would resume a suspended frame whose locals this
 // pass frees.
+#ifdef AMLC_RELEASE_HEAP_ON_EXIT
 static int __amlc_count_releasable(aisolate * const iso) {
     int n = 0;
     for (aobject * o = iso->first_object; o != NULL; o = o->next) {
@@ -1152,10 +1169,21 @@ static bool __amlc_releasable_root(aobject * const o) {
         && o->property_reference_count <= 0 && o->reference_count <= 0;
 }
 
+#endif
+
 void __amlc_release_heap(void) {
     aisolate * const iso = __amlc_isolate();
     __mark_root_objects();
     __sweep_unmarked_objects();
+#ifndef AMLC_RELEASE_HEAP_ON_EXIT
+    // Without releaseHeapOnExit (see core.h): the mark/sweep is all, and
+    // what code still held stays allocated (the process exit reclaims it).
+    #ifdef TRACKOBJECTS
+    if (iso->parent != NULL && iso->allocation_count != 0) {
+        printf("Thread '%s' exited with %d objects still allocated\n", iso->name != NULL ? iso->name : "thread", iso->allocation_count);
+    }
+    #endif
+#else
 
     // Keep whatever the statics still reach (they are only still set when
     // an out-of-memory during the shutdown jumped past the dereference).
@@ -1270,6 +1298,7 @@ void __amlc_release_heap(void) {
         printf("%d objects could not be released\n", after);
     }
     #endif
+#endif
 }
 
 void __dereference_static_properties() {

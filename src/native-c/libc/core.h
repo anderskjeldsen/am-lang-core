@@ -641,6 +641,24 @@ void __amlc_global_unlock(void);
 // OutOfMemoryException); that is what code from a compiler that renders no
 // setjmp gets. A build can opt out with -DAMLC_NO_OOM_SHUTDOWN.
 // ---------------------------------------------------------------------------
+// releaseHeapOnExit (#447): every object is linked into its isolate's
+// first_object list from allocation to free, and __amlc_release_heap frees
+// what is left when an isolate ends whatever its code count, so frames an
+// out-of-memory jump skipped still get their release hooks run (an open
+// FileStream is closed). It costs a list link per allocation and an unlink
+// per free (about 3% in an allocation-heavy loop), so it is on by default
+// only where the OS does not reclaim a program's files, locks and other
+// resources at exit: AmigaOS, MorphOS and AROS (AROS has no per-task
+// resource tracking either). Elsewhere the process exit closes them; a
+// build target enables it with the am-lang-core feature `releaseHeapOnExit`
+// (FEATURE_RELEASE_HEAP_ON_EXIT). -DAMLC_NO_RELEASE_HEAP_ON_EXIT turns it
+// off everywhere. Without it only property-referenced objects are listed and
+// the exit sequence is the mark/sweep it always was.
+#if !defined(AMLC_NO_RELEASE_HEAP_ON_EXIT) && (defined(FEATURE_RELEASE_HEAP_ON_EXIT) \
+    || defined(__AROS__) || defined(__MORPHOS__) || defined(__AMIGA__) || defined(AMIGA) || defined(PLATFORM_AMIGAOS))
+#define AMLC_RELEASE_HEAP_ON_EXIT 1
+#endif
+
 #ifndef AMLC_NO_OOM_SHUTDOWN
 #include <setjmp.h>
 #define AMLC_OOM_SHUTDOWN 1

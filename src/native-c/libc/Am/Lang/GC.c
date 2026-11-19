@@ -66,9 +66,10 @@ function_result Am_Lang_GC_collect_0() {
     for(aobject *obj=iso->first_object;obj;obj=obj->next)
         if(obj->pending_deallocation) return result;
     cycle_graph graph;
-    // first_object lists every object of the isolate (#447), so
-    // allocation_count bounds the candidates; objects held by code are
-    // roots through their reference_count.
+    // allocation_count bounds the candidates. With releaseHeapOnExit (#447)
+    // first_object lists every object, and objects held by code are roots
+    // through their reference_count; without it, implementations held only
+    // through interface wrappers are added below.
     if(!cycle_init(&graph,(size_t)iso->allocation_count)) { cycle_dispose(&graph); return result; }
     graph.count=0;
     size_t i=0;

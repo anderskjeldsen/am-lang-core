@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Out-of-memory shutdown (Redmine #446) as real programs. See
 # src/am-lang/OomShutdown/Program.aml for the modes.
-#   ./run.sh           build and check on linux-x64, then again with an
-#                      AddressSanitizer + TRACKOBJECTS build (ASAN=0 skips it)
+#   ./run.sh           build and check on linux-x64 (releaseHeapOnExit off),
+#                      then with AddressSanitizer + TRACKOBJECTS builds with
+#                      the feature on and off (ASAN=0 skips them)
 #   ./run.sh --amiga   build for AmigaOS (amiga-gcc docker image) and check
 #                      under the amlang-amiberry image
 # The *-file modes (#447) also check that the files left open in the skipped
 # frames were flushed and closed: their data is on disk, the worker's can be
-# read back by an exit hook, and on AmigaOS they can be deleted after exit.
+# read back by an exit hook, and on AmigaOS (releaseHeapOnExit always on) they
+# can be deleted after exit. On linux-x64 FileStream flushes every write and
+# the exit closes the files, so these pass with the feature off as well; the
+# ASan build's object count is what shows the release.
 # AMLC_JAR overrides the compiler jar (default: the workspace's amlc.jar);
 # AMLC overrides the whole command (e.g. a v2 build of amlc).
 set -uo pipefail
@@ -126,31 +130,40 @@ else
     for m in $FILE_MODES; do check_files "$m" "$RUN"; done
 
     if [[ "${ASAN:-1}" != 0 ]]; then
-        # AddressSanitizer + TRACKOBJECTS: the end-of-heap release (#447)
-        # frees everything a skipped frame held without a use-after-free or
-        # a leak. "Allocated objects 2" is what is left: the immortal
-        # out-of-memory exception and its message. The emergency modes skip
-        # the statics' dereference, so what the statics hold stays.
-        $AMLC build . -bt linux-x64-asan > build-linux-x64-asan.log 2>&1
-        grep -q "Build complete" build-linux-x64-asan.log || { tail -20 build-linux-x64-asan.log; exit 1; }
-        RUN="$HERE/linux-asan-run"
-        rm -rf "$RUN"; mkdir -p "$RUN"
-        for c in "${CASES[@]}"; do
-            spec=${c%%|*}
-            read -r m first second <<< "$spec"
-            ( cd "$RUN" && ASAN_OPTIONS=detect_leaks=1 timeout 60 "$HERE/builds/linux-x64-asan/bin/app" "$m" > "out-$m.log" 2>&1 ); rc=$?
-            want=1; [[ "$m" == normal || "$m" == late ]] && want=0
-            ok=1
-            [[ "$rc" == "$want" ]] || { echo "  exit code $rc, expected $want"; ok=0; }
-            if grep -q "Sanitizer" "$RUN/out-$m.log"; then echo "  AddressSanitizer report"; ok=0; fi
-            if grep -q "could not be released" "$RUN/out-$m.log"; then echo "  objects left unreleased"; ok=0; fi
-            case "$m" in
-                main-sticky|shutdown|main-sticky-file) ;;
-                *) grep -q "^Allocated objects 2$" "$RUN/out-$m.log" || { echo "  not every object was released"; ok=0; } ;;
-            esac
-            if (( ok )); then echo "PASS asan $m"; else echo "FAIL asan $m"; grep -v "^Dereference static" "$RUN/out-$m.log" | sed 's/^/    | /' | head -60; fail=1; fi
+        # AddressSanitizer + TRACKOBJECTS, with and without releaseHeapOnExit
+        # (#447). With it (linux-x64-asan), the end-of-heap release frees
+        # everything a skipped frame held without a use-after-free or a leak:
+        # "Allocated objects 2" is what is left, the immortal out-of-memory
+        # exception and its message. The emergency modes skip the statics'
+        # dereference, so what the statics hold stays. Without it
+        # (linux-x64-asan-off, the default off the Amiga family), what skipped
+        # frames held stays allocated until the process exits (a higher count,
+        # leak checking off); only the absence of a sanitizer report is checked.
+        for target in linux-x64-asan linux-x64-asan-off; do
+            $AMLC build . -bt $target > build-$target.log 2>&1
+            grep -q "Build complete" build-$target.log || { tail -20 build-$target.log; exit 1; }
+            RUN="$HERE/run-$target"
+            rm -rf "$RUN"; mkdir -p "$RUN"
+            leaks=1; [[ $target == linux-x64-asan-off ]] && leaks=0
+            for c in "${CASES[@]}"; do
+                spec=${c%%|*}
+                read -r m first second <<< "$spec"
+                ( cd "$RUN" && ASAN_OPTIONS=detect_leaks=$leaks timeout 60 "$HERE/builds/$target/bin/app" "$m" > "out-$m.log" 2>&1 ); rc=$?
+                want=1; [[ "$m" == normal || "$m" == late ]] && want=0
+                ok=1
+                [[ "$rc" == "$want" ]] || { echo "  exit code $rc, expected $want"; ok=0; }
+                if grep -q "Sanitizer" "$RUN/out-$m.log"; then echo "  AddressSanitizer report"; ok=0; fi
+                if grep -q "could not be released" "$RUN/out-$m.log"; then echo "  objects left unreleased"; ok=0; fi
+                if (( leaks )); then
+                    case "$m" in
+                        main-sticky|shutdown|main-sticky-file) ;;
+                        *) grep -q "^Allocated objects 2$" "$RUN/out-$m.log" || { echo "  not every object was released"; ok=0; } ;;
+                    esac
+                fi
+                if (( ok )); then echo "PASS $target $m"; else echo "FAIL $target $m"; grep -v "^Dereference static" "$RUN/out-$m.log" | sed 's/^/    | /' | head -60; fail=1; fi
+            done
+            for m in $FILE_MODES; do check_files "$m" "$RUN"; done
         done
-        for m in $FILE_MODES; do check_files "$m" "$RUN"; done
     fi
 fi
 if (( fail )); then echo "OOM SHUTDOWN FAILED"; exit 1; fi

@@ -19,10 +19,11 @@ platforms:
     gccCommand: gcc -O1
     gccAdditionalOptions:
       - -pthread
-  # The same with AddressSanitizer and TRACKOBJECTS (run.sh, #447): no
-  # use-after-free from the end-of-heap release, no leak, and every object
-  # released ("Allocated objects 2": the immortal out-of-memory exception and
-  # its message).
+  # The same with AddressSanitizer and TRACKOBJECTS (run.sh, #447). With
+  # releaseHeapOnExit: no use-after-free from the end-of-heap release, no
+  # leak, and every object released ("Allocated objects 2": the immortal
+  # out-of-memory exception and its message). Without (-off): no
+  # use-after-free; what skipped frames held stays allocated.
   - id: linux-x64-asan
     extends: linux-x64
     gccCommand: gcc -O1 -g -fno-omit-frame-pointer -fsanitize=address -DTRACKOBJECTS
@@ -40,7 +41,12 @@ platforms:
 buildTargets:
   - id: linux-x64
     platform: linux-x64
+  # releaseHeapOnExit (#447) is always on for AmigaOS; elsewhere a target
+  # asks for it.
   - id: linux-x64-asan
+    platform: linux-x64-asan
+    features: ["releaseHeapOnExit"]
+  - id: linux-x64-asan-off
     platform: linux-x64-asan
   - id: amigaos-docker
     platform: amigaos
