@@ -1,0 +1,84 @@
+namespace Tests {
+    // #468: __concatenate_strings (string templates) copies each part by its
+    // byte length, so a part holding a NUL survives whole. Results are compared
+    // against strings built another way (fromBytes), which hash and count from
+    // scratch.
+    class StringTemplateTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun nulPart(): String {
+            var b = new UByte[2UI]
+            b[0UI] = 97UB
+            b[1UI] = 0UB
+            return String.fromBytes(b, "UTF-8")
+        }
+
+        static fun rebuilt(s: String): String {
+            return String.fromBytes(s.toBytes("UTF-8"), "UTF-8")
+        }
+
+        test templateKeepsAPartWithANul() {
+            var n = StringTemplateTests.nulPart()
+            var s = "[$n|$n]"
+            // [ a NUL | a NUL ]
+            Assert.assertEquals(7, s.length())
+            var b = new UByte[7UI]
+            b[0UI] = 91UB
+            b[1UI] = 97UB
+            b[2UI] = 0UB
+            b[3UI] = 124UB
+            b[4UI] = 97UB
+            b[5UI] = 0UB
+            b[6UI] = 93UB
+            var expect = String.fromBytes(b, "UTF-8")
+            Assert.assertTrue(s.equals(expect))
+            Assert.assertTrue(s.hash() == expect.hash())
+            Assert.assertEquals(7, s.byteLength())
+            var bytes = s.toBytes("UTF-8")
+            Assert.assertTrue(bytes[5UI] == 0UB)
+            Assert.assertTrue(bytes[6UI] == 93UB)
+        }
+
+        test templateWithNulPartAtTheEndHasNoGarbage() {
+            var n = StringTemplateTests.nulPart()
+            var s = "x$n"
+            Assert.assertEquals(3, s.length())
+            var r = StringTemplateTests.rebuilt(s)
+            Assert.assertTrue(s.equals(r))
+            Assert.assertTrue(s.hash() == r.hash())
+            var bytes = s.toBytes("UTF-8")
+            Assert.assertTrue(bytes[0UI] == 120UB)
+            Assert.assertTrue(bytes[1UI] == 97UB)
+            Assert.assertTrue(bytes[2UI] == 0UB)
+        }
+
+        test templateWithManyParts() {
+            var a = "alpha"
+            var b = "ø"
+            var c = "𝄞"
+            var d = "7"
+            var s = "$a-$b-$c-$d-$a-$b-$c-$d-$a-$b-$c-$d-$a$b$c$d"
+            var expect = "alpha-ø-𝄞-7-alpha-ø-𝄞-7-alpha-ø-𝄞-7-alphaø𝄞7"
+            Assert.assertTrue(s.equals(expect))
+            Assert.assertTrue(s.hash() == expect.hash())
+            Assert.assertEquals(expect.length(), s.length())
+            Assert.assertEquals(expect.byteLength(), s.byteLength())
+            var r = StringTemplateTests.rebuilt(s)
+            Assert.assertTrue(s.hash() == r.hash())
+            Assert.assertTrue(s.length() == r.length())
+        }
+
+        test templateWithEmptyParts() {
+            var e = ""
+            var a = "a"
+            var s = "$e$a$e$e-$e"
+            Assert.assertTrue(s.equals("a-"))
+            Assert.assertTrue(s.hash() == "a-".hash())
+            var only = "$e$e"
+            Assert.assertEquals(0, only.length())
+            Assert.assertTrue(only.equals(""))
+            Assert.assertTrue(only.hash() == "".hash())
+        }
+    }
+}
