@@ -783,6 +783,7 @@ aobject * __allocate_object_with_extra_size(aclass * const __class, size_t extra
         // isolates may lose entries — again diagnostic only.)
         if (allocation_index < MAX_ALLOCATIONS) {
             allocations[allocation_index] = __obj;
+            __obj->object_properties.class_object_properties.registry_slot = allocation_index + 1;
         } else if (allocation_index == MAX_ALLOCATIONS) {
             printf("TRACKOBJECTS: allocation registry full (%d) — further objects untracked\n", MAX_ALLOCATIONS);
         }
@@ -865,6 +866,19 @@ sweep_result __detach_object_from_sweep(aobject * const __obj) {
     return (sweep_result) { .next = next_to_sweep, .is_swept = true };
 }
 
+#if defined(DEBUG) || defined(TRACKOBJECTS)
+// O(1) removal from the debug registry: the slot is stored in the object.
+// Objects that were never registered (registry full, other allocation
+// paths) have registry_slot 0 (allocation zeroes the object) and are not scanned for.
+static void __amlc_unregister_object(aobject * const obj) {
+    int const s = obj->object_properties.class_object_properties.registry_slot - 1;
+    if (s >= 0 && s < MAX_ALLOCATIONS && allocations[s] == obj) {
+        allocations[s] = NULL;
+    }
+    obj->object_properties.class_object_properties.registry_slot = 0;
+}
+#endif
+
 void __deallocate_detached_object(aobject * const __obj) {
     #ifdef DEBUG
     #ifdef CONDLOG 
@@ -879,11 +893,7 @@ void __deallocate_detached_object(aobject * const __obj) {
     __allocation_count--;
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
-    for(int i = 0; i < MAX_ALLOCATIONS; i++) {
-        if ( allocations[i] == __obj) {
-            allocations[i] = NULL;
-        }
-    }
+    __amlc_unregister_object(__obj);
     #endif
 
     __amlc_free_object(__obj);
@@ -952,11 +962,7 @@ void __deallocate_object(aobject * const __obj) {
     __iso->allocation_count--;
 
     #if defined(DEBUG) || defined(TRACKOBJECTS)
-    for(int i = 0; i < MAX_ALLOCATIONS; i++) {
-        if ( allocations[i] == __obj) {
-            allocations[i] = NULL;
-        }
-    }
+    __amlc_unregister_object(__obj);
     #endif
 
     #ifdef DEBUG
