@@ -348,6 +348,7 @@ struct _class_object_properties {
     nullable_value object_data;
     #if defined(DEBUG) || defined(TRACKOBJECTS)
     int object_id;
+    int registry_slot;   // 1 + index in the allocations[] debug registry, 0 = not registered
     #endif
     property * properties;
 };
