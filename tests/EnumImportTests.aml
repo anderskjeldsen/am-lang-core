@@ -1,0 +1,50 @@
+namespace Tests {
+
+    // v2 read `import Am.Lang` in an enum body as the members `Am` and `Lang`
+    // (#412). Members here carry explicit values (v1 requires them); the
+    // exhaustive `when` has no `else`, so a bogus member fails to compile, and
+    // the values show whether any were shifted.
+    enum EiTone {
+        import Am.Lang
+        import Am.Collections
+
+        // a comment between the imports and the members
+        low = 1
+        mid = 2
+        high = 10
+    }
+
+    enum EiPlain {
+        red = 0
+        green = 1
+    }
+
+    class EnumImportTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun nameOf(t: EiTone): String = when (t) {
+            EiTone.low -> "low"
+            EiTone.mid -> "mid"
+            EiTone.high -> "high"
+        }
+
+        test exhaustiveWhenOverEnumWithImports() {
+            Assert.assertEquals("low", EnumImportTests.nameOf(EiTone.low))
+            Assert.assertEquals("mid", EnumImportTests.nameOf(EiTone.mid))
+            Assert.assertEquals("high", EnumImportTests.nameOf(EiTone.high))
+        }
+
+        test memberValuesAreTheDeclaredOnes() {
+            Assert.assertEquals(1, EiTone.low.getValue())
+            Assert.assertEquals(2, EiTone.mid.getValue())
+            Assert.assertEquals(10, EiTone.high.getValue())
+            Assert.assertEquals(0, EiPlain.red.getValue())
+            Assert.assertEquals(1, EiPlain.green.getValue())
+        }
+
+        test importedNamespaceIsVisibleInTheEnumBody() {
+            Assert.assertTrue(EiTone.low != EiTone.high)
+        }
+    }
+}
