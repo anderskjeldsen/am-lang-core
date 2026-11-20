@@ -1,0 +1,90 @@
+namespace Tests {
+    // #469: lastIndexOf is a backwards scan that sees past a NUL and counts
+    // UTF-16 units like indexOf and indexOfAfter.
+    class StringLastIndexOfTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun nulPart(): String {
+            var b = new UByte[2UI]
+            b[0UI] = 97UB
+            b[1UI] = 0UB
+            return String.fromBytes(b, "UTF-8")
+        }
+
+        test lastIndexOfRepeatedPatterns() {
+            Assert.assertEquals(2, "aaaa".lastIndexOf("aa"))
+            Assert.assertEquals(3, "aaaa".lastIndexOf("a"))
+            Assert.assertEquals(0, "aaaa".lastIndexOf("aaaa"))
+            Assert.assertEquals(4, "abababab".lastIndexOf("abab"))
+            Assert.assertEquals(-1, "aaaa".lastIndexOf("aaaaa"))
+            Assert.assertEquals(-1, "abc".lastIndexOf("zz"))
+            Assert.assertEquals(-1, "".lastIndexOf("a"))
+        }
+
+        test lastIndexOfAtTheEdges() {
+            Assert.assertEquals(0, "abcdef".lastIndexOf("abc"))
+            Assert.assertEquals(3, "abcdef".lastIndexOf("def"))
+            Assert.assertEquals(5, "abcdef".lastIndexOf("f"))
+            Assert.assertEquals(0, "abcdef".lastIndexOf("a"))
+            Assert.assertEquals(0, "a".lastIndexOf("a"))
+        }
+
+        // An empty needle keeps its old answer: the last character's index.
+        test lastIndexOfEmptyNeedle() {
+            Assert.assertEquals(2, "abc".lastIndexOf(""))
+            Assert.assertEquals(-1, "".lastIndexOf(""))
+        }
+
+        test lastIndexOfNonAsciiUsesUnits() {
+            // ø = 1 unit, 𝄞 = 2 units
+            var s = "øa𝄞bøa𝄞b"
+            Assert.assertEquals(10, s.length())
+            Assert.assertEquals(9, s.lastIndexOf("b"))
+            Assert.assertEquals(6, s.lastIndexOf("a"))
+            Assert.assertEquals(7, s.lastIndexOf("𝄞"))
+            Assert.assertEquals(5, s.lastIndexOf("øa"))
+            Assert.assertEquals(7, s.lastIndexOf("𝄞b"))
+            Assert.assertEquals(6, s.lastIndexOf("a𝄞b"))
+            Assert.assertEquals(4, s.lastIndexOf("bø"))
+            Assert.assertEquals(0, s.lastIndexOf("øa𝄞bøa𝄞b"))
+            Assert.assertEquals(-1, s.lastIndexOf("𝄞𝄞"))
+            Assert.assertEquals(-1, "abc".lastIndexOf("ø"))
+            // agrees with indexOf / indexOfAfter on a unique match
+            Assert.assertEquals("xø𝄞y".indexOf("y"), "xø𝄞y".lastIndexOf("y"))
+            Assert.assertEquals("xø𝄞y".indexOf("𝄞"), "xø𝄞y".lastIndexOf("𝄞"))
+            Assert.assertEquals("xø𝄞y".indexOfAfter("y", 0), "xø𝄞y".lastIndexOf("y"))
+            // ASCII needle in non-ASCII haystack and the reverse
+            Assert.assertEquals(4, "øøaøa".lastIndexOf("a"))
+            Assert.assertEquals(2, "øøa".lastIndexOf("a"))
+        }
+
+        test lastIndexOfPastANul() {
+            var n = StringLastIndexOfTests.nulPart()
+            var s = n + "bcbc"
+            Assert.assertEquals(6, s.length())
+            Assert.assertEquals(4, s.lastIndexOf("bc"))
+            Assert.assertEquals(5, s.lastIndexOf("c"))
+            Assert.assertEquals(0, s.lastIndexOf("a"))
+            Assert.assertEquals(0, s.lastIndexOf(n))
+            var two = "x" + n + "y" + n
+            Assert.assertEquals(6, two.length())
+            Assert.assertEquals(4, two.lastIndexOf(n))
+            Assert.assertEquals(1, two.lastIndexOf(n + "y"))
+        }
+
+        test lastIndexOfLongRepeatedString() {
+            var sb = new StringBuilder()
+            var i = 0
+            while (i < 20000) {
+                sb.add("a")
+                i++
+            }
+            var s = sb.toString()
+            Assert.assertEquals(19998, s.lastIndexOf("aa"))
+            var t = s + "b"
+            Assert.assertEquals(19999, t.lastIndexOf("ab"))
+            Assert.assertEquals(-1, s.lastIndexOf("aab"))
+        }
+    }
+}

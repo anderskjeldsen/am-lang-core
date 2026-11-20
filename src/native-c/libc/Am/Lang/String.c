@@ -429,31 +429,72 @@ __exit: ;
 	return __result;
 };
 
+// lastIndexOf: the last match of `s`, as a character (UTF-16 unit) index, the
+// same units indexOf and indexOfAfter use; -1 when there is none. It used to
+// call strstr again from every match onwards: quadratic on "aaaa...a" / "aa",
+// and blind to anything after a NUL (#469). Now one backwards scan: memcmp from
+// the last possible start when both strings are ASCII (byte index == character
+// index), a unit-by-unit comparison otherwise (surrogate halves match exactly
+// as in indexOfAfter). Overlapping matches count ("aaaa" / "aa" is 2).
+// An empty needle keeps its old answer: the index of the last character
+// (-1 for an empty string).
 function_result Am_Lang_String_lastIndexOf_0(aobject * const this, aobject * s)
 {
 	function_result __result = { .has_return_value = true };
-	bool __returning = false;
+	string_holder *h = this->object_properties.class_object_properties.object_data.value.custom_value;
+	string_holder *n = s != NULL ? s->object_properties.class_object_properties.object_data.value.custom_value : NULL;
+	int found = -1;
 
-	int last_index = -1;
-
-	string_holder *sh1 = this->object_properties.class_object_properties.object_data.value.custom_value;
-	string_holder *sh2 = s->object_properties.class_object_properties.object_data.value.custom_value;
-
-	// Scan in BYTES -- this walks the raw buffer -- then convert the winning
-	// offset to a character index on the way out.
-	for(unsigned int i = 0; i < sh1->length; i++) {
-		char *strpos = strstr(&sh1->string_value[i], sh2->string_value);
-		if (strpos != NULL) {
-			last_index = (int) (strpos - sh1->string_value);
-			i = (unsigned int) last_index;
-		} else {
-			break;
+	if (h == NULL || n == NULL) {
+		goto __exit;
+	}
+	if (n->length == 0) {
+		if (h->length > 0) {
+			found = (int) __string_byte_to_unit(h, h->length - 1);
+		}
+		goto __exit;
+	}
+	if (n->char_length > h->char_length) {
+		goto __exit;
+	}
+	if (h->char_length == h->length && n->char_length == n->length) {
+		unsigned int nlen = n->length;
+		unsigned int i = h->length - nlen + 1;
+		char first = n->string_value[0];
+		while (i > 0) {
+			i--;
+			if (h->string_value[i] == first && memcmp(h->string_value + i, n->string_value, nlen) == 0) {
+				found = (int) i;
+				break;
+			}
+		}
+	} else {
+		unsigned int hlen = h->char_length;
+		unsigned int nlen = n->char_length;
+		unsigned short *hw = __string_wide(h);
+		unsigned short *nw = __string_wide(n);
+		unsigned short first = __string_unit_at(s, n, nw, 0);
+		unsigned int i = hlen - nlen + 1;
+		unsigned int j;
+		while (i > 0) {
+			i--;
+			if (__string_unit_at(this, h, hw, i) != first) {
+				continue;
+			}
+			for (j = 1; j < nlen; j++) {
+				if (__string_unit_at(this, h, hw, i + j) != __string_unit_at(s, n, nw, j)) {
+					break;
+				}
+			}
+			if (j == nlen) {
+				found = (int) i;
+				break;
+			}
 		}
 	}
-	__result.return_value.value.int_value =
-		(last_index < 0) ? -1 : (int) __string_byte_to_unit(sh1, (unsigned int) last_index);
 
 __exit: ;
+	__result.return_value.value.int_value = found;
 	return __result;
 };
 
