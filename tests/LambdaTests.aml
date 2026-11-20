@@ -176,6 +176,19 @@ namespace Tests {
             Assert.assertEquals(103, r)
         }
 
+        // #470: values forwarded through lambdas that don't use them (m, n and
+        // `this` reach only the innermost of four), and a property initializer's
+        // nested lambda. v2 discovers again only the inner classes that gained a
+        // forwarded capture and the code that allocates them.
+        test fourLevelsForwardLocalsAndThis() {
+            var box = new LambdaForwardBox()
+            Assert.assertEquals(1114, box.fourLevels(3))
+            Assert.assertEquals(1115, box.fourLevels(4))
+            Assert.assertEquals(8, box.cb())
+            box.base = 2000
+            Assert.assertEquals(2114, box.fourLevels(3))
+        }
+
         test thisInsideLambdaIsTheEnclosingInstance() {
             var b = new LambdaThisBox()
             Assert.assertEquals(8, b.viaLambda())
@@ -216,6 +229,35 @@ namespace Tests {
     }
 
     // #39: `this` inside a lambda is the enclosing instance (v2 used the lambda object).
+    class LambdaForwardBox {
+        import Am.Lang
+
+        var base: Int = 1000
+        var cb: () => Int = () => {
+            var k = 7
+            return LambdaForwardBox.apply((x) => {
+                return LambdaForwardBox.apply((y) => y + k, x)
+            }, 1)
+        }
+
+        static fun apply(f: (x: Int) => Int, v: Int): Int {
+            return f(v)
+        }
+
+        fun fourLevels(start: Int): Int {
+            var m = 1
+            var n = 10
+            return LambdaForwardBox.apply((a) => {
+                var p = 100
+                return LambdaForwardBox.apply((b) => {
+                    return LambdaForwardBox.apply((c) => {
+                        return LambdaForwardBox.apply((d) => d + m + n + p + this.base, c)
+                    }, b)
+                }, a)
+            }, start)
+        }
+    }
+
     class LambdaThisBox {
         import Am.Lang
 
