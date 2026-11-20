@@ -4,10 +4,28 @@ namespace Tests {
     // (isolate) model: a worker runs on a deep COPY of its Runnable and can
     // only talk to other threads through messages. So every test here has
     // the worker send its observations back to the parent, and the parent
-    // reads them with Thread.receive() after join(). A regression in the
+    // reads them with TtMail.afterJoin() (Thread.tryReceive) after join(). A regression in the
     // Runnable copy, the message copy, the mailbox or the isolate startup
     // shows up as a missing or wrong message — never as a silently "correct"
     // zero, which is why the assertions check for specific non-zero values.
+
+    // Reads the message a worker sent before the join that just returned. Not
+    // Thread.receive(): a worker that throws before it sends would leave that
+    // waiting forever (a 55-minute hang of the v2 suite, 2026-11-20); this
+    // fails the test instead.
+    class TtMail {
+        import Am.Lang
+        import Am.Threading
+        import Am.Tests
+
+        static fun afterJoin(): Object {
+            var m = Thread.tryReceive()
+            if (m == null) {
+                Assert.fail("The worker sent no message before it ended (its exception, if any, is printed above)")
+            }
+            return m!!
+        }
+    }
 
     // The message a worker sends back.
     class TtResult(var label: String, var number: Int, var runCount: Int) {
@@ -52,6 +70,15 @@ namespace Tests {
         override fun run() {
             var parent = Thread.getParent()
             parent.send(new TtResult("add", this.amount, 1))
+        }
+    }
+
+    // Throws before it sends anything: its parent gets no message.
+    class TtThrowingWorker() : Runnable {
+        import Am.Lang
+
+        override fun run() {
+            throw new Exception("TtThrowingWorker fails on purpose (expected in the test output)")
         }
     }
 
@@ -114,7 +141,7 @@ namespace Tests {
             t.start()
             t.join()
 
-            var r = Thread.receive() as TtResult
+            var r = TtMail.afterJoin() as TtResult
             Assert.assertEquals(1, r.runCount)
         }
 
@@ -127,7 +154,7 @@ namespace Tests {
             t.start()
             t.join()
 
-            var r = Thread.receive() as TtResult
+            var r = TtMail.afterJoin() as TtResult
             Assert.assertEquals("cross-thread-string", r.label)
         }
 
@@ -140,7 +167,7 @@ namespace Tests {
             t.start()
             t.join()
 
-            var r = Thread.receive() as TtResult
+            var r = TtMail.afterJoin() as TtResult
             Assert.assertEquals(12345, r.number)
         }
 
@@ -160,8 +187,8 @@ namespace Tests {
             ta.join()
             tb.join()
 
-            var r1 = Thread.receive() as TtResult
-            var r2 = Thread.receive() as TtResult
+            var r1 = TtMail.afterJoin() as TtResult
+            var r2 = TtMail.afterJoin() as TtResult
             // Arrival order is unspecified; the total is not.
             Assert.assertEquals(30, r1.number + r2.number)
         }
@@ -179,7 +206,7 @@ namespace Tests {
             }
             var total = 0
             for (i = 0 until iterations) {
-                var r = Thread.receive() as TtResult
+                var r = TtMail.afterJoin() as TtResult
                 total = total + r.runCount
             }
             Assert.assertEquals(iterations, total)
@@ -195,7 +222,7 @@ namespace Tests {
             t.send(new TtResult("ping", 21, 0))
             t.join()
 
-            var r = Thread.receive() as TtResult
+            var r = TtMail.afterJoin() as TtResult
             Assert.assertEquals("ping!", r.label)
             Assert.assertEquals(42, r.number)
         }
@@ -210,7 +237,7 @@ namespace Tests {
             t.start()
             t.join()
 
-            var r = Thread.receive() as TtResult
+            var r = TtMail.afterJoin() as TtResult
             Assert.assertEquals(99, r.number)
             // Share-nothing: the worker changed its copy, not this one.
             Assert.assertEquals(0, holder.value)
@@ -225,14 +252,14 @@ namespace Tests {
             t.start()
             t.join()
 
-            var pair = Thread.receive() as TtPair
+            var pair = TtMail.afterJoin() as TtPair
             Assert.assertEquals(7, pair.a.value)
             Assert.assertEquals(7, pair.b.value)
             // One node referenced twice on the sender must be ONE node here too.
             pair.a.value = 8
             Assert.assertEquals(8, pair.b.value)
 
-            var names = Thread.receive() as List<String>
+            var names = TtMail.afterJoin() as List<String>
             Assert.assertEquals(3, names.getSize())
             Assert.assertEquals("beta", names.get(1))
         }
@@ -257,6 +284,25 @@ namespace Tests {
             Assert.assertTrue(threw)
             var m = Thread.tryReceive()
             Assert.assertTrue(m == null)
+        }
+
+        // ---- A worker that throws -------------------------------------------
+
+        // Its exception is printed, its teardown runs and join returns; the
+        // parent's mailbox stays empty, so afterJoin fails rather than hangs.
+        test testAWorkerThatThrowsSendsNothing() {
+            var t = new Thread(new TtThrowingWorker())
+            t.name = "tt-throws"
+            t.start()
+            t.join()
+            Assert.assertTrue(Thread.tryReceive() == null)
+            var failed = false
+            try {
+                TtMail.afterJoin()
+            } catch (e: AssertException) {
+                failed = true
+            }
+            Assert.assertTrue(failed)
         }
 
         // ---- A handle to self round-trips through the mailbox --------------

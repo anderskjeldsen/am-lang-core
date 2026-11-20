@@ -79,8 +79,8 @@ namespace Tests {
             var path = "heap-release-cycle.txt"
             var t = new Thread(new HrCycleWriter(path))
             t.start()
-            var m = Thread.receive() as HrNode
             t.join()
+            var m = TtMail.afterJoin() as HrNode
             Assert.assertEquals(1, m.n)
             var stream = new FileStream(new File(path), FileAccess.readOnly)
             var reader = new TextStream(stream)
@@ -93,9 +93,28 @@ namespace Tests {
         test testThreadEndReleasesACycleThroughAnInterface() {
             var t = new Thread(new HrInterfaceCycleWorker())
             t.start()
-            var m = Thread.receive() as HrNode
             t.join()
+            var m = TtMail.afterJoin() as HrNode
             Assert.assertEquals(2, m.n)
+        }
+
+        // Many threads in a row, each ending with a cycle (through an
+        // interface wrapper) and a stream in a cycle left for its teardown.
+        test testManyThreadsEndWithCycles() {
+            var path = "heap-release-many.txt"
+            var total = 0
+            for (i = 0 until 40) {
+                var t = new Thread(new HrInterfaceCycleWorker())
+                t.start()
+                var w = new Thread(new HrCycleWriter(path))
+                w.start()
+                t.join()
+                w.join()
+                total = total + (TtMail.afterJoin() as HrNode).n
+                total = total + (TtMail.afterJoin() as HrNode).n
+            }
+            Assert.assertEquals(120, total)
+            Assert.assertTrue(new File(path).delete())
         }
 
         // GC.collect sees objects held only by locals too now: they must stay
