@@ -216,10 +216,10 @@ function_result Am_Lang_String__op__plus_0(aobject * const this, aobject * s)
 	new_str[holder1->length + holder2->length] = 0;
 	unsigned int units = 0;
 	unsigned int total = holder1->length + holder2->length;
-	// Recount rather than adding the two counts: if one operand ends in a
-	// malformed tail and the other starts with continuation bytes, the join
-	// decodes differently than either side did alone.
-	unsigned int hash = __string_hash_and_units(new_str, total, &units);
+	// From the operands' own hash and unit count, walking only the right
+	// operand's bytes (#466); it recounts the join itself in the one case
+	// where the counts don't add up (a continuation byte at the seam).
+	unsigned int hash = __string_hash_and_units_joined(holder1, holder2, new_str, total, &units);
 	*holder = (string_holder) { .is_string_constant = false, .length = total, .string_value = new_str, .hash = hash, .char_length = units };
 
 	__result.return_value.value.object_value = str_obj;
@@ -351,6 +351,81 @@ function_result Am_Lang_String_indexOf_0(aobject * const this, aobject * s)
 	}
 
 __exit: ;
+	return __result;
+};
+
+// One UTF-16 code unit of a string: the byte itself for ASCII, else the cached
+// UTF-16 view, else (no memory for a view) characterAtNative's scan.
+static unsigned short __string_unit_at(aobject * const str, string_holder * const h, unsigned short * const wide, unsigned int const i)
+{
+	if (h->char_length == h->length) {
+		return (unsigned char) h->string_value[i];
+	}
+	if (wide != NULL) {
+		return wide[i];
+	}
+	return Am_Lang_String_characterAtNative_0(str, i).return_value.value.ushort_value;
+}
+
+// indexOfAfter: the first match of `s` at or after character `startIndex`, as
+// a character (UTF-16 unit) index; -1 when there is none, when s is empty or
+// when startIndex is out of range. It was AmLang, comparing two characterAt()
+// calls per step, each a checked call: scanning a megabyte of generated C was
+// a measurable part of a v2 self-build (#466). Same results, in C: a byte
+// search with memchr + memcmp when both strings are ASCII (byte index ==
+// character index), and a unit-by-unit comparison otherwise, so surrogate
+// halves match exactly as they did.
+function_result Am_Lang_String_indexOfAfter_0(aobject * const this, aobject * s, int startIndex)
+{
+	function_result __result = { .has_return_value = true };
+	string_holder *h = this->object_properties.class_object_properties.object_data.value.custom_value;
+	string_holder *n = s != NULL ? s->object_properties.class_object_properties.object_data.value.custom_value : NULL;
+	unsigned int hlen = h != NULL ? h->char_length : 0;
+	unsigned int nlen = n != NULL ? n->char_length : 0;
+	int found = -1;
+
+	if (startIndex < 0 || (unsigned int) startIndex >= hlen || nlen == 0 || nlen > hlen) {
+		goto __exit;
+	}
+	if (h->char_length == h->length && n->char_length == n->length) {
+		const char *base = h->string_value;
+		const char *p = base + startIndex;
+		const char *last = base + (hlen - nlen);
+		char first = n->string_value[0];
+		while (p <= last) {
+			const char *q = (const char *) memchr(p, first, (size_t) (last - p) + 1);
+			if (q == NULL) {
+				break;
+			}
+			if (memcmp(q, n->string_value, nlen) == 0) {
+				found = (int) (q - base);
+				break;
+			}
+			p = q + 1;
+		}
+	} else {
+		unsigned short *hw = __string_wide(h);
+		unsigned short *nw = __string_wide(n);
+		unsigned short first = __string_unit_at(s, n, nw, 0);
+		unsigned int i, j;
+		for (i = (unsigned int) startIndex; i <= hlen - nlen; i++) {
+			if (__string_unit_at(this, h, hw, i) != first) {
+				continue;
+			}
+			for (j = 1; j < nlen; j++) {
+				if (__string_unit_at(this, h, hw, i + j) != __string_unit_at(s, n, nw, j)) {
+					break;
+				}
+			}
+			if (j == nlen) {
+				found = (int) i;
+				break;
+			}
+		}
+	}
+
+__exit: ;
+	__result.return_value.value.int_value = found;
 	return __result;
 };
 

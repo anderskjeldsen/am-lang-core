@@ -1,0 +1,147 @@
+namespace Tests {
+    // #466: `a + b` takes its hash and character count from the operands
+    // instead of re-walking the joined bytes, and indexOfAfter is native. Each
+    // test checks the fast result against one computed the slow way: a String
+    // built from the same bytes by fromBytes, which hashes and counts from
+    // scratch.
+    class StringConcatSearchTests {
+        import Am.Lang
+        import Am.Tests
+        import Am.Collections
+
+        static fun bytes1(a: UByte): String {
+            var b = new UByte[1UI]
+            b[0UI] = a
+            return String.fromBytes(b, "UTF-8")
+        }
+
+        static fun bytes2(a: UByte, c: UByte): String {
+            var b = new UByte[2UI]
+            b[0UI] = a
+            b[1UI] = c
+            return String.fromBytes(b, "UTF-8")
+        }
+
+        // The same text as `s`, rebuilt from its bytes: hashed and counted afresh.
+        static fun rebuilt(s: String): String {
+            return String.fromBytes(s.toBytes("UTF-8"), "UTF-8")
+        }
+
+        static fun assertSameAsRebuilt(s: String) {
+            var r = StringConcatSearchTests.rebuilt(s)
+            Assert.assertTrue(s.hash() == r.hash())
+            Assert.assertTrue(s.length() == r.length())
+            Assert.assertTrue(s.equals(r))
+        }
+
+        test asciiJoinHashesAsFromScratch() {
+            var s = "hello" + " world"
+            StringConcatSearchTests.assertSameAsRebuilt(s)
+            Assert.assertTrue(s.hash() == "hello world".hash())
+            Assert.assertTrue(s == "hello world")
+        }
+
+        test emptyOperands() {
+            var e = ""
+            StringConcatSearchTests.assertSameAsRebuilt(e + "abc")
+            StringConcatSearchTests.assertSameAsRebuilt("abc" + e)
+            StringConcatSearchTests.assertSameAsRebuilt(e + e)
+            Assert.assertTrue((e + "abc").hash() == "abc".hash())
+            Assert.assertTrue((e + e).hash() == "".hash())
+        }
+
+        test nonAsciiJoin() {
+            var s = "blåbær " + "𝄞 ø"
+            StringConcatSearchTests.assertSameAsRebuilt(s)
+            Assert.assertTrue(s.length() == 11)
+            Assert.assertTrue(s == "blåbær 𝄞 ø")
+        }
+
+        // The seam case: the left operand ends in a lone lead byte (E2) and the
+        // right starts with the two continuation bytes of "€" (E2 82 AC). Alone
+        // each side is malformed (1 and 2 characters); joined it is one "€".
+        test sequenceSplitAcrossTheSeamIsRecounted() {
+            var left = StringConcatSearchTests.bytes1(226UB)
+            var right = StringConcatSearchTests.bytes2(130UB, 172UB)
+            Assert.assertTrue(left.length() == 1)
+            Assert.assertTrue(right.length() == 2)
+            var joined = left + right
+            Assert.assertTrue(joined.length() == 1)
+            Assert.assertTrue(joined == "€")
+            Assert.assertTrue(joined.hash() == "€".hash())
+            StringConcatSearchTests.assertSameAsRebuilt(joined)
+        }
+
+        // A NUL in the left operand: the hash covers the bytes before it.
+        test nulInLeftOperand() {
+            var left = StringConcatSearchTests.bytes2(97UB, 0UB)
+            var joined = left + "bc"
+            Assert.assertTrue(joined.length() == 4)
+            StringConcatSearchTests.assertSameAsRebuilt(joined)
+            var other = left + "xy"
+            Assert.assertTrue(!joined.equals(other))
+        }
+
+        test longLoopBuiltStringIsAUsableKey() {
+            var s = ""
+            var sb = new StringBuilder()
+            var i = 0
+            while (i < 2000) {
+                s = s + "k" + i.toString() + "é"
+                sb.add("k").add(i.toString()).add("é")
+                i++
+            }
+            var t = sb.toString()
+            Assert.assertTrue(s.hash() == t.hash())
+            Assert.assertTrue(s.length() == t.length())
+            Assert.assertTrue(s == t)
+            var map = new HashMap<String, Int>()
+            map.set(s, 7)
+            Assert.assertTrue(map.get(t) == 7)
+        }
+
+        test indexOfAfterAscii() {
+            var s = "abcabcab"
+            Assert.assertEquals(0, s.indexOfAfter("abc", 0))
+            Assert.assertEquals(3, s.indexOfAfter("abc", 1))
+            Assert.assertEquals(3, s.indexOfAfter("abc", 3))
+            Assert.assertEquals(-1, s.indexOfAfter("abc", 4))
+            Assert.assertEquals(6, s.indexOfAfter("ab", 4))
+            Assert.assertEquals(7, s.indexOfAfter("b", 7))
+            Assert.assertEquals(-1, s.indexOfAfter("x", 0))
+            Assert.assertEquals(-1, s.indexOfAfter("abcabcabc", 0))
+            Assert.assertEquals(0, s.indexOfAfter("abcabcab", 0))
+        }
+
+        test indexOfAfterOutOfRange() {
+            var s = "abc"
+            Assert.assertEquals(-1, s.indexOfAfter("", 0))
+            Assert.assertEquals(-1, s.indexOfAfter("a", -1))
+            Assert.assertEquals(-1, s.indexOfAfter("a", 3))
+            Assert.assertEquals(-1, s.indexOfAfter("a", 100))
+            Assert.assertEquals(-1, "".indexOfAfter("a", 0))
+        }
+
+        // Character (UTF-16 unit) indexes, whatever the bytes: "ø" is 2 bytes,
+        // "𝄞" is 4 bytes and 2 units.
+        test indexOfAfterNonAscii() {
+            var s = "øa𝄞bøa"
+            Assert.assertEquals(1, s.indexOfAfter("a", 0))
+            Assert.assertEquals(6, s.indexOfAfter("a", 2))
+            Assert.assertEquals(4, s.indexOfAfter("b", 0))
+            Assert.assertEquals(2, s.indexOfAfter("𝄞", 0))
+            Assert.assertEquals(-1, s.indexOfAfter("𝄞", 3))
+            Assert.assertEquals(4, s.indexOfAfter("bøa", 1))
+            Assert.assertEquals(0, s.indexOfAfter("ø", 0))
+            Assert.assertEquals(5, s.indexOfAfter("øa", 1))
+            Assert.assertEquals(-1, "abc".indexOfAfter("ø", 0))
+        }
+
+        // A NUL inside the searched text doesn't end the search.
+        test indexOfAfterPastNul() {
+            var s = StringConcatSearchTests.bytes2(97UB, 0UB) + "bc"
+            Assert.assertEquals(2, s.indexOfAfter("bc", 0))
+            Assert.assertEquals(3, s.indexOfAfter("c", 1))
+        }
+    }
+}

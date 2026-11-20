@@ -177,33 +177,8 @@ namespace Am.Lang
          * @param startIndex Zero-based index to start searching from
          * @return The index of the first match, or -1 if there is none or the arguments are out of range
          */
-        fun indexOfAfter(s: String, startIndex: Int): Int {
-            var searchText = this
-            var searchLen = searchText.getLength()
-            var patternLen = s.getLength()
-            
-            if (startIndex < 0 || startIndex >= searchLen || patternLen == 0) {
-                return -1
-            }
-            
-            var i = startIndex
-            while (i <= (searchLen - patternLen)) {
-                var found = true
-                var j = 0
-                while (j < patternLen) {
-                    if (searchText.characterAt(((i + j) as UInt)) != s.characterAt((j as UInt))) {
-                        found = false
-                        break
-                    }
-                    j++
-                }
-                if (found) {
-                    return i
-                }
-                i++
-            }
-            return -1
-        }
+        #noThrow
+        native fun indexOfAfter(s: String, startIndex: Int): Int
 
         /**
          * Unchecked character read used by characterAt() once the index has been validated.
