@@ -840,6 +840,11 @@ unsigned int __utf8_utf16_length(const char * const s, unsigned int const len);
 // what __string_hash returns -- construction already walked every byte, so the
 // unit count rides along for free rather than costing a second pass.
 unsigned int __string_hash_and_units(const char * const str, unsigned int const byte_len, unsigned int * const out_units);
+// The same two values for a concatenation, from the operands' own hash and unit
+// count: only the right operand's bytes are walked (#466). `joined` holds
+// left's bytes then right's, NUL-terminated, `total` bytes long.
+unsigned int __string_hash_and_units_joined(string_holder * const left, string_holder * const right,
+        const char * const joined, unsigned int const total, unsigned int * const out_units);
 // Returns the holder's UTF-16 view, building it on first use. NULL when the
 // string is pure ASCII (the caller should index string_value directly) or when
 // the allocation failed -- callers must handle NULL by falling back to a scan

@@ -416,6 +416,13 @@ unsigned int __utf8_decode(const char * const s, unsigned int const len, unsigne
 unsigned int __utf8_utf16_length(const char * const s, unsigned int const len) {
     unsigned int i = 0, units = 0, cp = 0;
     while (i < len) {
+        // ASCII inline: one byte, one unit, no decoder call (#466 -- every
+        // string built walks its bytes here, so this loop is on every concat).
+        if ((unsigned char) s[i] < 0x80) {
+            i++;
+            units++;
+            continue;
+        }
         i += __utf8_decode(s, len, i, &cp);
         units += (cp >= 0x10000) ? 2 : 1;   // astral = surrogate pair
     }
@@ -584,11 +591,75 @@ static inline unsigned int __amlc_hash_bytes(const char * const str) {
     return hash;
 }
 
+static inline unsigned int __amlc_hash_fmix(unsigned int hash) {
+    hash ^= hash >> 16;
+    hash *= 0x85ebca6bu;
+    hash ^= hash >> 13;
+    hash *= 0xc2b2ae35u;
+    hash ^= hash >> 16;
+    return hash;
+}
+
+// The exact inverse of __amlc_hash_fmix (each step of fmix32 is a bijection:
+// the multipliers are odd, so they have inverses mod 2^32, and x ^= x >> k is
+// undone by applying it again with every multiple of k). It recovers the raw
+// FNV-1a state behind a stored hash, so a concatenation can continue hashing
+// from the left operand instead of re-walking its bytes.
+static inline unsigned int __amlc_hash_unfmix(unsigned int hash) {
+    hash ^= hash >> 16;
+    hash *= 0x7ed1b41du;            // inverse of 0xc2b2ae35
+    hash ^= (hash >> 13) ^ (hash >> 26);
+    hash *= 0xa5cb9243u;            // inverse of 0x85ebca6b
+    hash ^= hash >> 16;
+    return hash;
+}
+
+// FNV-1a over bytes from `p` up to the first NUL, continuing from `state`
+// (2166136261 for a fresh string). No avalanche: __amlc_hash_fmix finishes it.
+static inline unsigned int __amlc_hash_continue(unsigned int state, const char * const p0) {
+    const unsigned char *p = (const unsigned char *) p0;
+    while (*p != 0) {
+        state ^= (unsigned int) *p++;
+        state *= 16777619u;
+    }
+    return state;
+}
+
 unsigned int __string_hash_and_units(const char * const str, unsigned int const byte_len, unsigned int * const out_units) {
     if (out_units != NULL) {
         *out_units = __utf8_utf16_length(str, byte_len);
     }
     return __amlc_hash_bytes(str);
+}
+
+// Hash and unit count of left + right (byte buffers of the two operands,
+// already copied to `joined`), reusing what each operand already knows. A
+// String's hash and unit count are computed when it is built, so `s = s + x`
+// in a loop used to re-walk all of `s` every round -- the hashing, not the
+// copy, made such loops slow (#466). The result is bit-for-bit what
+// __string_hash_and_units(joined, ...) returns:
+//   * hash: FNV-1a stops at the first NUL. If `left` holds one, the join hashes
+//     exactly like `left`. Otherwise un-avalanche left's hash back to its FNV
+//     state and continue over `right`'s bytes.
+//   * units: UTF-8 is self-synchronising, so the join decodes as left then
+//     right unless right STARTS with a continuation byte (it could complete a
+//     truncated sequence at left's end); only then is the join recounted.
+unsigned int __string_hash_and_units_joined(string_holder * const left, string_holder * const right,
+        const char * const joined, unsigned int const total, unsigned int * const out_units) {
+    unsigned int hash;
+    if (right->length == 0) {
+        *out_units = left->char_length;
+    } else if ((((unsigned char) right->string_value[0]) & 0xc0) != 0x80) {
+        *out_units = left->char_length + right->char_length;
+    } else {
+        *out_units = __utf8_utf16_length(joined, total);
+    }
+    if (left->length > 0 && memchr(left->string_value, 0, left->length) != NULL) {
+        hash = left->hash;
+    } else {
+        hash = __amlc_hash_fmix(__amlc_hash_continue(__amlc_hash_unfmix(left->hash), joined + left->length));
+    }
+    return hash;
 }
 
 unsigned int __string_hash(const char * const str) {
