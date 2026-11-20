@@ -15,3 +15,6 @@ src/native-c/linux-arm64v8/*
 
 # Packages amlc fetches (git-repo dependencies, e.g. am-tests for `amlc test`).
 dependencies/
+
+# written by the core test run (tests/File*Tests)
+/test_*.txt
