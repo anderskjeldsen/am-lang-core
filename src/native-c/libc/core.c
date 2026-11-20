@@ -2239,6 +2239,7 @@ aobject * __concatenate_strings(int count, ...) {
     aobject* result_obj;
     string_holder* result_holder;
     char* result_str;
+    size_t offset;
     int i;
     
     va_start(args, count);
@@ -2271,20 +2272,23 @@ aobject * __concatenate_strings(int count, ...) {
     result_str = (char*)((char *) result_holder + sizeof(string_holder));
     result_obj->object_properties.class_object_properties.object_data.value.custom_value = result_holder;
     
-    /* Initialize the result string buffer */
-    result_str[0] = '\0';
-    
-    /* Concatenate all strings */
+    /* Copy each part at a running offset by its byte length (#468): strcat cut
+       a part at its first NUL while total_length counted all of it, leaving
+       uninitialised bytes, and rescanned the result for every part. */
+    offset = 0;
     for (i = 0; i < count; i++) {
         aobject* str_obj = va_arg(args, aobject*);
         if (str_obj != NULL) {
             string_holder* holder = (string_holder*)str_obj->object_properties.class_object_properties.object_data.value.custom_value;
-            if (holder != NULL && holder->string_value != NULL) {
-                strcat(result_str, holder->string_value);
+            if (holder != NULL && holder->string_value != NULL && holder->length > 0) {
+                memcpy(result_str + offset, holder->string_value, holder->length);
+                offset += holder->length;
             }
         }
     }
     va_end(args);
+    result_str[offset] = '\0';
+    total_length = offset;
     
     /* Set up the string holder fields */
     result_holder->is_string_constant = 0; /* false */
