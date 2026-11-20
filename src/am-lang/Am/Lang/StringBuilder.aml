@@ -21,7 +21,13 @@ namespace Am.Lang
         /**
          * The accumulated bytes, in append order.
          */
-        private var buffer: List<UByte> = List<UByte>.newList<UByte>()
+        private var buffer: UByte[] = new UByte[32UI]
+        /**
+         * How many bytes of `buffer` are in use. The array grows by doubling, so appending is
+         * amortised O(1) per byte and a whole string is appended with one native copy (#466: the
+         * List<UByte> this replaces took one checked call per byte).
+         */
+        private var count: UInt = 0UI
         /**
          * A high surrogate that arrived without its partner yet. UTF-8 has no encoding for half a
          * character, so addChar() holds one here until the low surrogate follows and the pair can
@@ -44,7 +50,11 @@ namespace Am.Lang
                     this.pendingHigh = 0
                     this.appendUtf8CodePoint(0xfffd)
                 }
-                var byteArray = this.buffer.toArray()
+                var n = this.count
+                var byteArray = new UByte[n]
+                if (n > 0UI) {
+                    this.buffer.copyTo(byteArray, 0UI, 0UI, n)
+                }
                 return String.fromBytes(byteArray, this.encoding)
             } catch (e: Exception) {
                 return ""
@@ -57,7 +67,56 @@ namespace Am.Lang
          * @return The buffered byte count
          */
         fun getLength(): UInt {
-            return (this.buffer.getSize() as UInt)
+            return this.count
+        }
+
+        /**
+         * Makes room for `extra` more bytes, doubling the array until they fit.
+         * @param extra The number of bytes about to be appended
+         */
+        private fun ensureRoom(extra: UInt) {
+            var need = this.count + extra
+            var cap = this.buffer.length()
+            if (need <= cap) {
+                return
+            }
+            if (cap == 0UI) {
+                cap = 32UI
+            }
+            while (cap < need) {
+                cap = cap * 2UI
+            }
+            var grown = new UByte[cap]
+            if (this.count > 0UI) {
+                this.buffer.copyTo(grown, 0UI, 0UI, this.count)
+            }
+            this.buffer = grown
+        }
+
+        /**
+         * Appends the bytes of a string with one native copy.
+         * @param s The string to append
+         */
+        private fun appendBytesOf(s: String) {
+            var bytes = s.toBytes(this.encoding)
+            var len = bytes.length()
+            if (len == 0UI) {
+                return
+            }
+            this.ensureRoom(len)
+            bytes.copyTo(this.buffer, this.count, 0UI, len)
+            this.count = this.count + len
+        }
+
+        /**
+         * Appends one byte.
+         * @param b The byte
+         */
+        private fun appendByte(b: UByte) {
+            this.ensureRoom(1UI)
+            var buf = this.buffer
+            buf[this.count] = b
+            this.count = this.count + 1UI
         }
 
 //        native fun getLength(): Int
@@ -67,14 +126,7 @@ namespace Am.Lang
          * @return This builder, for chaining
          */
         op + (s: String): StringBuilder {
-            var bytes = s.toBytes(this.encoding)
-            var i = 0
-            var len = bytes.length()
-            var buf = this.buffer
-            while(i < len) {
-                buf.add(bytes[i])
-                i++
-            }
+            this.appendBytesOf(s)
             return this
         }
 
@@ -84,14 +136,7 @@ namespace Am.Lang
          * @return This builder, for chaining
          */
         fun add(s: String): StringBuilder {
-            var bytes = s.toBytes(this.encoding)
-            var i = 0
-            var len = bytes.length()
-            var buf = this.buffer
-            while(i < len) {
-                buf.add(bytes[i])
-                i++
-            }
+            this.appendBytesOf(s)
             return this
         }
 
@@ -165,21 +210,20 @@ namespace Am.Lang
             if (v < 0 || v > 0x10ffff) {
                 v = 0xfffd
             }
-            var buf = this.buffer
             if (v < 0x80) {
-                buf.add((v as UByte))
+                this.appendByte((v as UByte))
             } else if (v < 0x800) {
-                buf.add(((0xc0 | (v >> 6)) as UByte))
-                buf.add(((0x80 | (v & 0x3f)) as UByte))
+                this.appendByte(((0xc0 | (v >> 6)) as UByte))
+                this.appendByte(((0x80 | (v & 0x3f)) as UByte))
             } else if (v < 0x10000) {
-                buf.add(((0xe0 | (v >> 12)) as UByte))
-                buf.add(((0x80 | ((v >> 6) & 0x3f)) as UByte))
-                buf.add(((0x80 | (v & 0x3f)) as UByte))
+                this.appendByte(((0xe0 | (v >> 12)) as UByte))
+                this.appendByte(((0x80 | ((v >> 6) & 0x3f)) as UByte))
+                this.appendByte(((0x80 | (v & 0x3f)) as UByte))
             } else {
-                buf.add(((0xf0 | (v >> 18)) as UByte))
-                buf.add(((0x80 | ((v >> 12) & 0x3f)) as UByte))
-                buf.add(((0x80 | ((v >> 6) & 0x3f)) as UByte))
-                buf.add(((0x80 | (v & 0x3f)) as UByte))
+                this.appendByte(((0xf0 | (v >> 18)) as UByte))
+                this.appendByte(((0x80 | ((v >> 12) & 0x3f)) as UByte))
+                this.appendByte(((0x80 | ((v >> 6) & 0x3f)) as UByte))
+                this.appendByte(((0x80 | (v & 0x3f)) as UByte))
             }
         }
 
@@ -191,8 +235,7 @@ namespace Am.Lang
          * @return This builder, for chaining
          */
         fun addCharAt(index: UInt, c: UShort) : StringBuilder {
-            // Insert character at specific index using List's insertAt method
-            if (index >= (this.buffer.getSize() as UInt)) {
+            if (index >= this.count) {
                 // If index is at or beyond end, just append
                 this.addChar(c)
             } else {
@@ -204,7 +247,12 @@ namespace Am.Lang
                 if ((c as Int) > 0x7f) {
                     throw new Exception("addCharAt can only insert ASCII; use addChar to append")
                 }
-                this.buffer.insertAt((index as Int), (c as UByte))
+                // Shift the tail up one byte (copyTo is a memmove, overlap is safe), then write.
+                this.ensureRoom(1UI)
+                var buf = this.buffer
+                buf.copyTo(buf, index + 1UI, index, this.count - index)
+                buf[index] = (c as UByte)
+                this.count = this.count + 1UI
             }
             return this
         }
@@ -213,7 +261,8 @@ namespace Am.Lang
          * Discards the buffered bytes so the builder can be reused.
          */
         fun clear() {
-            this.buffer.clear()
+            // Keeps the array: a builder reused in a loop doesn't grow it again.
+            this.count = 0UI
             this.pendingHigh = 0
         }
 

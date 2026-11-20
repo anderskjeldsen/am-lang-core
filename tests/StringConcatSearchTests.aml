@@ -143,5 +143,73 @@ namespace Tests {
             Assert.assertEquals(2, s.indexOfAfter("bc", 0))
             Assert.assertEquals(3, s.indexOfAfter("c", 1))
         }
+
+        // StringBuilder keeps a doubling UByte[] (#466); these cover growth,
+        // insertion, reuse and the multi-byte paths against plain strings.
+        test builderGrowsPastItsInitialArray() {
+            var sb = new StringBuilder()
+            Assert.assertTrue(sb.toString() == "")
+            Assert.assertTrue(sb.getLength() == 0UI)
+            var expect = ""
+            var i = 0
+            while (i < 300) {
+                sb.add("ab").add(i.toString())
+                expect = expect + "ab" + i.toString()
+                i++
+            }
+            Assert.assertTrue(sb.toString() == expect)
+            Assert.assertTrue(sb.getLength() == (expect.byteLength() as UInt))
+            var big = new StringBuilder()
+            big.add(expect).add(expect)
+            Assert.assertTrue(big.toString() == expect + expect)
+        }
+
+        test builderAddCharAtInsertsAndAppends() {
+            var sb = new StringBuilder()
+            sb.add("acd")
+            sb.addCharAt(1UI, 98US)
+            Assert.assertTrue(sb.toString() == "abcd")
+            sb.addCharAt(0UI, 62US)
+            Assert.assertTrue(sb.toString() == ">abcd")
+            sb.addCharAt(5UI, 33US)
+            Assert.assertTrue(sb.toString() == ">abcd!")
+            sb.addCharAt(99UI, 63US)
+            Assert.assertTrue(sb.toString() == ">abcd!?")
+            Assert.assertTrue(sb.getLength() == 7UI)
+            // An insertion that has to grow the array.
+            var wide = new StringBuilder()
+            var j = 0
+            while (j < 32) {
+                wide.add("x")
+                j++
+            }
+            wide.addCharAt(16UI, 45US)
+            Assert.assertTrue(wide.getLength() == 33UI)
+            Assert.assertTrue(wide.toString().indexOf("-") == 16)
+        }
+
+        test builderClearKeepsWorking() {
+            var sb = new StringBuilder()
+            sb.add("first round, long enough to have grown the array once")
+            sb.clear()
+            Assert.assertTrue(sb.getLength() == 0UI)
+            Assert.assertTrue(sb.toString() == "")
+            sb.add("second")
+            Assert.assertTrue(sb.toString() == "second")
+        }
+
+        test builderMultiByteCharacters() {
+            var sb = new StringBuilder()
+            sb.addChar(248US)               // ø
+            sb.addChar(55348US)             // high surrogate of 𝄞 (U+1D11E)
+            sb.addChar(56606US)             // low surrogate
+            sb.addCodePoint(8364)           // €
+            var same = sb + "å" + "z"
+            Assert.assertTrue(same.getLength() == 12UI)
+            var s = sb.toString()
+            Assert.assertTrue(s == "ø𝄞€åz")
+            Assert.assertTrue(sb.getLength() == 12UI)
+            StringConcatSearchTests.assertSameAsRebuilt(s)
+        }
     }
 }
