@@ -1,0 +1,82 @@
+namespace Tests {
+
+    class NtEcho {
+        import Am.Lang
+
+        static fun echo(s: String): String {
+            return s
+        }
+
+        static fun wrap(s: String, n: Int): String {
+            return "[" + s + n.toString() + "]"
+        }
+    }
+
+    // Redmine #425: a quoted string inside a `${...}` fragment ends the template
+    // under v2 (`"a ${f("m")} b"` printed `)} b`). The fragment is an expression,
+    // so its strings may hold `}`, `"` (escaped) and nested templates.
+    class NestedTemplateTests {
+        import Am.Lang
+        import Am.Tests
+
+        test callWithStringArgument() {
+            Assert.assertEquals("a m b", "a ${NtEcho.echo("m")} b")
+            Assert.assertEquals("m", "${NtEcho.echo("m")}")
+            Assert.assertEquals("a [x7] b", "a ${NtEcho.wrap("x", 7)} b")
+        }
+
+        test nestedTemplate() {
+            var n = 5
+            Assert.assertEquals("x y 5 z", "x ${"y ${n}"} z")
+            Assert.assertEquals("x y 5 z", "x ${NtEcho.echo("y ${n}")} z")
+        }
+
+        test braceInsideNestedString() {
+            Assert.assertEquals("}", "${NtEcho.echo("}")}")
+            Assert.assertEquals("a } b", "a ${NtEcho.echo("}")} b")
+            Assert.assertEquals("{x", "${NtEcho.echo("{x")}")
+            Assert.assertEquals("a }} b {", "a ${NtEcho.echo("}")}${NtEcho.echo("}")} b ${NtEcho.echo("{")}")
+        }
+
+        test braceInsideDeeplyNestedTemplate() {
+            Assert.assertEquals("<}>", "${NtEcho.echo("<${NtEcho.echo("}")}>")}")
+        }
+
+        test escapedQuoteInsideFragmentString() {
+            Assert.assertEquals("a q\"q b", "a ${NtEcho.echo("q\"q")} b")
+            Assert.assertEquals("\"", "${NtEcho.echo("\"")}")
+            Assert.assertEquals("a\\b", "${NtEcho.echo("a\\b")}")
+        }
+
+        test escapesInsideAFragmentString() {
+            Assert.assertEquals(1, "${NtEcho.echo("\n")}".length())
+            Assert.assertEquals("a\tb", "${NtEcho.echo("a\tb")}")
+        }
+
+        test dollarEscapes() {
+            var n = 3
+            Assert.assertEquals("$3", "\$$n")
+            Assert.assertEquals("\${n}", "\${n}")
+            Assert.assertEquals("a $ b", "a \$ b")
+            Assert.assertEquals("\$m", "\$${NtEcho.echo("m")}")
+            Assert.assertEquals("$", "${NtEcho.echo("\$")}")
+        }
+
+        test fragmentsAndTextInterleaved() {
+            var n = 2
+            Assert.assertEquals("a m b 2 c n d", "a ${NtEcho.echo("m")} b $n c ${NtEcho.echo("n")} d")
+            Assert.assertEquals("m-n", "${NtEcho.echo("m")}-${NtEcho.echo("n")}")
+            Assert.assertEquals("(m) 2", "(${NtEcho.echo("m")}) ${n}")
+        }
+
+        test charLiteralInsideAFragment() {
+            var c = '}'
+            Assert.assertEquals("125", "${c}")
+        }
+
+        test inAnExpressionContext() {
+            var s = "<" + "${NtEcho.echo("m")}" + ">" + "${NtEcho.echo("}")}"
+            Assert.assertEquals("<m>}", s)
+        }
+    }
+}
