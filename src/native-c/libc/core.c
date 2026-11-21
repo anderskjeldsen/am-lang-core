@@ -3339,7 +3339,14 @@ static aobject * __amlc_copy_object(__amlc_copy_ctx * const ctx, aobject * const
             continue;
         }
         aobject * child = __amlc_copy_object(ctx, nv.value.object_value);
-        if (child == NULL) return NULL;   // failed (partial graph is released by the caller)
+        if (child == NULL) {
+            // Failed: the whole copy is abandoned (every later call returns
+            // NULL at once), so drop this partial object here with the
+            // children it already holds; the caller only gets NULL and
+            // nothing else would release it.
+            __decrease_reference_count(dst);
+            return NULL;
+        }
         slot->nullable_value.flags = 0;
         slot->nullable_value.value.object_value = child;
         __increase_property_reference_count(child);
@@ -3419,6 +3426,7 @@ amessage * __amlc_message_create(aobject * const payload, function_result * cons
         return NULL;
     }
     m->next = NULL;
+    m->failure = false;
     m->payload = copy;
     m->chain = iso->first_object;
     iso->first_object = saved_first;
@@ -3465,4 +3473,47 @@ aobject * __amlc_receive(bool const wait) {
         return NULL;
     }
     return __amlc_message_open(m);
+}
+
+// ---- worker failure notices (#467) ----------------------------------------
+// A worker whose run() ends with an uncaught exception posts a notice (a
+// ThreadFailedException built on the worker, deep-copied like any message)
+// to its parent's mailbox, behind whatever it sent before. Thread.receive
+// and tryReceive throw it when they take it, so a parent waiting for a reply
+// from a dead worker gets an exception instead of waiting forever.
+aobject * __amlc_receive_checked(bool const wait, function_result * const result) {
+    AMLC_STOP_POINT();
+    amessage * m = __amlc_mailbox_take(__amlc_isolate()->mailbox, wait);
+    if (m == NULL) {
+        AMLC_STOP_POINT();
+        return NULL;
+    }
+    bool const failure = m->failure;
+    aobject * p = __amlc_message_open(m);
+    if (failure) {
+        result->exception = p;   // the message's owned reference passes to the throw
+        return NULL;
+    }
+    return p;
+}
+
+bool __amlc_failure_notice_wanted(aisolate * const iso, aobject * const exception) {
+    if (iso == NULL || iso->parent == NULL || exception == NULL) return false;
+    // Out of memory or an out-of-memory shutdown: nothing may allocate.
+    if (__amlc_shutdown_requested || __amlc_shutdown_phase != 0 || iso->stop_requested) return false;
+    for (aclass * c = exception->class_ptr; c != NULL; c = c->base) {
+        if (c->name != NULL && strcmp(c->name, "Am.Lang.OutOfMemoryException") == 0) return false;
+    }
+    return true;
+}
+
+bool __amlc_post_failure_notice(aisolate * const iso, aobject * const notice, function_result * const result) {
+    amessage * m = __amlc_message_create(notice, result);
+    if (m == NULL) return false;
+    m->failure = true;
+    if (!__amlc_mailbox_post(iso->parent->mailbox, m)) {
+        // The parent has finished: nobody is left to tell.
+        __amlc_message_discard(m);
+    }
+    return true;
 }

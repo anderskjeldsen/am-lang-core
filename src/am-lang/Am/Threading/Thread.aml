@@ -13,8 +13,11 @@ namespace Am.Threading {
      * mailbox. Only sendable objects can travel: plain classes (copied field by field), String, Array,
      * collections built from them, and Thread handles; objects of native classes that own OS handles
      * (files, sockets, mutexes) are not sendable and send() throws. Always set the name before
-     * starting. An exception that escapes run() is printed on the worker and does not reach the thread
-     * that started the work.
+     * starting. An exception that escapes run() is printed on the worker, and the worker's parent is
+     * told: a "thread failed" notice goes into the parent's mailbox, after any messages the worker
+     * sent, and the parent's receive() or tryReceive() throws a ThreadFailedException when it takes
+     * that notice, so a parent waiting for a reply from a worker that died does not wait forever. A
+     * worker that ends normally posts nothing.
      *
      * A Thread object is a handle: copies of it (including the one a message carries) name the same
      * underlying thread, so a worker can hand its parent a handle to itself, or reply through
@@ -98,17 +101,36 @@ namespace Am.Threading {
 
         /**
          * Takes the oldest message out of the calling thread's mailbox, waiting until one arrives. The
-         * returned object belongs to the calling thread; cast it to the type you expect.
+         * returned object belongs to the calling thread; cast it to the type you expect. When the
+         * oldest entry is the notice of a worker started by this thread that ended with an uncaught
+         * exception, the notice is taken and a ThreadFailedException is thrown instead; the next call
+         * goes on with the rest of the mailbox.
          * @return The next message
          */
         native static fun receive(): Object
 
         /**
          * Takes the oldest message out of the calling thread's mailbox if there is one, without waiting.
+         * Like receive(), it throws a ThreadFailedException when the oldest entry is the notice of a
+         * worker started by this thread that died with an uncaught exception.
          * @return The next message, or null when the mailbox is empty
          */
-        #noThrow
         native static fun tryReceive(): Object?
+
+        /**
+         * Builds the notice a worker posts to its parent when its run() ended with an uncaught
+         * exception. Called by the native thread entry on the dying worker, which then deep-copies the
+         * result into the parent's mailbox; with a null cause when the original exception could not
+         * be copied (it references something not sendable).
+         * @param causeClassName The class of the exception that escaped run()
+         * @param causeMessage Its message
+         * @param cause The exception itself, or null
+         * @return The notice the parent's receive() throws
+         */
+        #nativeEntry
+        private static fun failureNotice(causeClassName: String, causeMessage: String, cause: Exception?): Exception {
+            return new ThreadFailedException(Thread.getCurrent().name, causeClassName, causeMessage, cause)
+        }
 
         /**
          * Returns a handle to the thread the calling code is running on, the main thread included.
@@ -157,6 +179,17 @@ namespace Am.Threading {
          * default. Nonzero values must be at least 16 KiB. pthread targets round
          * up to a system page. This does not change the main process stack. */
         var stackSize: Int = 0
+    }
+
+    /**
+     * Thrown by Thread.receive() and Thread.tryReceive() in the thread that started a worker when that
+     * worker's run() ended with an uncaught exception. Its message is "Thread '<name>' failed: <the
+     * original message>". The worker's notice waits in the parent's mailbox behind any messages the
+     * worker sent before it failed, so those are received first; a worker already joined still leaves
+     * its notice there for the next receive. No notice is sent for a worker that ran out of memory or
+     * was stopped by an out-of-memory shutdown, nor when the parent has already finished.
+     */
+    class ThreadFailedException(var threadName: String, var causeClassName: String, var causeMessage: String, var cause: Exception?) : Exception("Thread '" + threadName + "' failed: " + causeMessage) {
     }
 
     /**

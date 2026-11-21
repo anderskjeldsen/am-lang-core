@@ -10,9 +10,9 @@ namespace Tests {
     // zero, which is why the assertions check for specific non-zero values.
 
     // Reads the message a worker sent before the join that just returned. Not
-    // Thread.receive(): a worker that throws before it sends would leave that
-    // waiting forever (a 55-minute hang of the v2 suite, 2026-11-20); this
-    // fails the test instead.
+    // Thread.receive(): before #467 a worker that threw before it sent left
+    // that waiting forever (a 55-minute hang of the v2 suite, 2026-11-20), and
+    // a regression there would again; this fails the test instead.
     class TtMail {
         import Am.Lang
         import Am.Threading
@@ -73,7 +73,7 @@ namespace Tests {
         }
     }
 
-    // Throws before it sends anything: its parent gets no message.
+    // Throws before it sends anything: its parent gets only the failure notice.
     class TtThrowingWorker() : Runnable {
         import Am.Lang
 
@@ -124,6 +124,78 @@ namespace Tests {
             names.add("gamma")
             parent.send(names)
         }
+    }
+
+    // Sends one result, then throws: the parent receives the result first,
+    // then the failure notice (#467).
+    class TtSendThenThrowWorker() : Runnable {
+        import Am.Lang
+        import Am.Threading
+
+        override fun run() {
+            Thread.getParent().send(new TtResult("before-failure", 3, 1))
+            throw new Exception("TtSendThenThrowWorker fails on purpose (expected in the test output)")
+        }
+    }
+
+    // A custom exception type, to check the cause's class name and copy.
+    class TtFailure(var code: Int) : Exception("TtFailure code " + code.toString()) {
+        import Am.Lang
+    }
+
+    class TtCustomThrowWorker() : Runnable {
+        import Am.Lang
+
+        override fun run() {
+            throw new TtFailure(17)
+        }
+    }
+
+    // An exception that holds something not sendable (a Mutex): the notice
+    // still arrives, without the cause.
+    class TtUnsendableFailure(var lock: Mutex) : Exception("TtUnsendableFailure on purpose") {
+        import Am.Lang
+        import Am.Threading
+    }
+
+    class TtUnsendableThrowWorker() : Runnable {
+        import Am.Lang
+        import Am.Threading
+
+        override fun run() {
+            throw new TtUnsendableFailure(new Mutex())
+        }
+    }
+
+    // Starts a TtThrowingWorker of its own, joins it and reports to ITS
+    // parent what its tryReceive threw: nested workers notify their own
+    // parent, not main.
+    class TtNestedParentWorker() : Runnable {
+        import Am.Lang
+        import Am.Threading
+
+        override fun run() {
+            var child = new Thread(new TtThrowingWorker())
+            child.name = "tt-nested-child"
+            child.start()
+            child.join()
+            var report = "no notice"
+            try {
+                var m = Thread.tryReceive()
+                if (m != null) {
+                    report = "a message"
+                }
+            } catch (e: ThreadFailedException) {
+                report = e.message
+            }
+            Thread.getParent().send(new TtResult(report, 0, 1))
+        }
+    }
+
+    // A sentinel the parent sends itself after a join, so that a missing
+    // failure notice makes receive() return the sentinel instead of hanging.
+    class TtSentinel() {
+        import Am.Lang
     }
 
     class ThreadTests {
@@ -286,23 +358,176 @@ namespace Tests {
             Assert.assertTrue(m == null)
         }
 
-        // ---- A worker that throws -------------------------------------------
+        // A send that fails on a nested child that is not sendable leaves no
+        // partial copy behind (it used to stay alive until the thread ended).
+        test testFailedNestedSendLeavesNoPartialCopy() {
+            var failure = new TtUnsendableFailure(new Mutex())
+            var before = instances(TtUnsendableFailure)
+            var threw = false
+            try {
+                Thread.getCurrent().send(failure)
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+            Assert.assertEquals(before, instances(TtUnsendableFailure))
+            Assert.assertTrue(Thread.tryReceive() == null)
+        }
 
-        // Its exception is printed, its teardown runs and join returns; the
-        // parent's mailbox stays empty, so afterJoin fails rather than hangs.
-        test testAWorkerThatThrowsSendsNothing() {
+        // ---- A worker that throws: the parent's receive throws (#467) -------
+
+        // tryReceive after the join: the notice is there, deterministically.
+        test testAWorkerThatThrowsFailsTryReceive() {
             var t = new Thread(new TtThrowingWorker())
             t.name = "tt-throws"
             t.start()
             t.join()
-            Assert.assertTrue(Thread.tryReceive() == null)
-            var failed = false
+            var message = "no exception"
+            var threadName = ""
+            var causeClass = ""
+            var causeMessage = ""
             try {
-                TtMail.afterJoin()
-            } catch (e: AssertException) {
-                failed = true
+                Thread.tryReceive()
+            } catch (e: ThreadFailedException) {
+                message = e.message
+                threadName = e.threadName
+                causeClass = e.causeClassName
+                causeMessage = e.causeMessage
+                var cause = e.cause
+                if (cause != null) {
+                    Assert.assertEquals(causeMessage, cause.message)
+                } else {
+                    Assert.fail("The notice lost its cause")
+                }
             }
-            Assert.assertTrue(failed)
+            Assert.assertEquals("Thread 'tt-throws' failed: TtThrowingWorker fails on purpose (expected in the test output)", message)
+            Assert.assertEquals("tt-throws", threadName)
+            Assert.assertEquals("Am.Lang.Exception", causeClass)
+            Assert.assertEquals("TtThrowingWorker fails on purpose (expected in the test output)", causeMessage)
+            // The notice was taken: the mailbox is empty again.
+            Assert.assertTrue(Thread.tryReceive() == null)
+        }
+
+        // receive() throws too. The sentinel sent after the join makes a
+        // missing notice a failure, not a hang.
+        test testAWorkerThatThrowsFailsReceive() {
+            var t = new Thread(new TtThrowingWorker())
+            t.name = "tt-throws-receive"
+            t.start()
+            t.join()
+            Thread.getCurrent().send(new TtSentinel())
+            var message = "no exception"
+            try {
+                Thread.receive()
+            } catch (e: ThreadFailedException) {
+                message = e.message
+            }
+            Assert.assertEquals("Thread 'tt-throws-receive' failed: TtThrowingWorker fails on purpose (expected in the test output)", message)
+            Assert.assertTrue(Thread.receive() is TtSentinel)
+        }
+
+        // A plain catch (e: Exception) sees it as well.
+        test testThreadFailedIsAnException() {
+            var t = new Thread(new TtThrowingWorker())
+            t.name = "tt-throws-plain"
+            t.start()
+            t.join()
+            var caught = false
+            try {
+                Thread.tryReceive()
+            } catch (e: Exception) {
+                caught = e is ThreadFailedException
+            }
+            Assert.assertTrue(caught)
+        }
+
+        // Messages sent before the failure come first, then the notice.
+        test testSendThenThrowDeliversMessageThenFails() {
+            var t = new Thread(new TtSendThenThrowWorker())
+            t.name = "tt-send-throw"
+            t.start()
+            t.join()
+            Thread.getCurrent().send(new TtSentinel())
+            var first = Thread.receive()
+            Assert.assertTrue(first is TtResult)
+            Assert.assertEquals("before-failure", (first as TtResult).label)
+            var message = "no exception"
+            try {
+                Thread.receive()
+            } catch (e: ThreadFailedException) {
+                message = e.message
+            }
+            Assert.assertEquals("Thread 'tt-send-throw' failed: TtSendThenThrowWorker fails on purpose (expected in the test output)", message)
+            Assert.assertTrue(Thread.receive() is TtSentinel)
+        }
+
+        // A worker that ends normally posts nothing beyond what it sent.
+        test testANormalWorkerPostsNoNotice() {
+            var t = new Thread(new TtBasicWorker("normal", 4) as Runnable)
+            t.name = "tt-normal"
+            t.start()
+            t.join()
+            var r = TtMail.afterJoin() as TtResult
+            Assert.assertEquals(4, r.number)
+            Assert.assertTrue(Thread.tryReceive() == null)
+        }
+
+        // The cause keeps its class and fields across the copy.
+        test testCustomExceptionCause() {
+            var t = new Thread(new TtCustomThrowWorker())
+            t.name = "tt-custom"
+            t.start()
+            t.join()
+            var causeClass = ""
+            var code = 0
+            var message = ""
+            try {
+                Thread.tryReceive()
+            } catch (e: ThreadFailedException) {
+                causeClass = e.causeClassName
+                message = e.message
+                var cause = e.cause
+                if (cause != null && cause is TtFailure) {
+                    code = (cause as TtFailure).code
+                }
+            }
+            Assert.assertEquals("Tests.TtFailure", causeClass)
+            Assert.assertEquals("Thread 'tt-custom' failed: TtFailure code 17", message)
+            Assert.assertEquals(17, code)
+        }
+
+        // A cause that cannot be copied is left out; the notice still comes.
+        test testUnsendableCauseIsLeftOut() {
+            var t = new Thread(new TtUnsendableThrowWorker())
+            t.name = "tt-unsendable"
+            t.start()
+            t.join()
+            var message = "no exception"
+            var causeClass = ""
+            var hasCause = true
+            try {
+                Thread.tryReceive()
+            } catch (e: ThreadFailedException) {
+                message = e.message
+                causeClass = e.causeClassName
+                hasCause = e.cause != null
+            }
+            Assert.assertEquals("Thread 'tt-unsendable' failed: TtUnsendableFailure on purpose", message)
+            Assert.assertEquals("Tests.TtUnsendableFailure", causeClass)
+            Assert.assertFalse(hasCause)
+            Assert.assertTrue(Thread.tryReceive() == null)
+        }
+
+        // A nested worker's failure goes to the worker that started it.
+        test testNestedWorkerFailureReachesItsParentWorker() {
+            var t = new Thread(new TtNestedParentWorker())
+            t.name = "tt-nested-parent"
+            t.start()
+            t.join()
+            var r = TtMail.afterJoin() as TtResult
+            Assert.assertEquals("Thread 'tt-nested-child' failed: TtThrowingWorker fails on purpose (expected in the test output)", r.label)
+            // Main got nothing from the grandchild.
+            Assert.assertTrue(Thread.tryReceive() == null)
         }
 
         // ---- A handle to self round-trips through the mailbox --------------
