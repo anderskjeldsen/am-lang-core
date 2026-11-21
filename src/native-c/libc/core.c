@@ -2757,6 +2757,22 @@ void __amlc_isolate_enter(aisolate * const iso) {
     iso->started = true;
 }
 
+#ifdef AMLC_AMIGA_FAMILY
+// The signal bit main's mailbox took from the main task. Main is the Shell's
+// own process (a CLI runs a program in its process), so a bit not freed at
+// exit is lost to that Shell for good: after about 15 runs AllocSignal
+// failed, the mailbox got no signal and main's Thread.receive() threw "the
+// mailbox is closed" at once. Freed by an atexit handler; it touches no
+// malloc'd memory, which libnix may already have released.
+static BYTE __amlc_main_signal = -1;
+static void __amlc_free_main_signal(void) {
+    if (__amlc_main_signal >= 0) {
+        FreeSignal(__amlc_main_signal);
+        __amlc_main_signal = -1;
+    }
+}
+#endif
+
 void __amlc_isolate_boot_main(void) {
 #ifndef AMLC_AMIGA_FAMILY
     if (!__amlc_global_cond_ready) {
@@ -2768,6 +2784,15 @@ void __amlc_isolate_boot_main(void) {
     __amlc_main_isolate = iso;
     __amlc_main_isolate_ptr = iso;
     __amlc_isolate_enter(iso);
+#ifdef AMLC_AMIGA_FAMILY
+    ULONG const mask = iso->mailbox->sigmask;
+    if (mask != 0) {
+        BYTE bit = 0;
+        while (((1UL << bit) & mask) == 0) bit++;
+        __amlc_main_signal = bit;
+        atexit(__amlc_free_main_signal);
+    }
+#endif
 }
 
 aisolate * __amlc_isolate_create(void) {
