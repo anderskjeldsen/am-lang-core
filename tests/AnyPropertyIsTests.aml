@@ -1,0 +1,231 @@
+namespace Tests {
+
+    // Redmine #430: `h.value is RaThing` with `value: Any` rendered the object
+    // test (`x != NULL && is_descendant_of(x->class_ptr, ...)`) on the Any's
+    // nullable_value in v2, a gcc error. `is` on an Any field, a field of
+    // another receiver, a static, a chain and a call result takes the same
+    // test as `is` on an Any local.
+
+    class ApThing {
+        import Am.Lang
+
+        var n: Int = 1
+    }
+
+    class ApSub : ApThing {
+        import Am.Lang
+    }
+
+    enum ApColor {
+        import Am.Lang
+
+        red = 1
+        blue = 2
+    }
+
+    class ApHolder {
+        import Am.Lang
+
+        var value: Any = null
+        static var shared: Any = null
+
+        fun ownIsThing(): Bool {
+            return this.value is ApThing
+        }
+
+        fun ownIsBare(): Bool {
+            return value is ApThing
+        }
+
+        fun ownNotThing(): Bool {
+            return !(this.value is ApThing)
+        }
+
+        fun whenKind(): String {
+            return when (this.value) {
+                is ApSub -> "sub"
+                is ApThing -> "thing"
+                is ApColor -> "color"
+                is Int -> "int"
+                else -> "other"
+            }
+        }
+
+        static fun sharedIsThing(): Bool {
+            return shared is ApThing
+        }
+
+        static fun sharedIsInt(): Bool {
+            return shared is Int
+        }
+
+        fun get(): Any {
+            return this.value
+        }
+
+        static fun make(v: Any): Any {
+            return v
+        }
+    }
+
+    class ApOuter {
+        import Am.Lang
+
+        var inner: ApHolder = new ApHolder()
+    }
+
+    class AnyPropertyIsTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun holder(v: Any): ApHolder {
+            var h = new ApHolder()
+            h.value = v
+            return h
+        }
+
+        test objectInAField() {
+            var h = AnyPropertyIsTests.holder(new ApThing())
+            Assert.assertTrue(h.value is ApThing)
+            Assert.assertFalse(h.value is ApSub)
+            Assert.assertFalse(h.value is Int)
+            Assert.assertFalse(h.value is String)
+            Assert.assertFalse(h.value is ApColor)
+        }
+
+        test subclassInAField() {
+            var h = AnyPropertyIsTests.holder(new ApSub())
+            Assert.assertTrue(h.value is ApThing)
+            Assert.assertTrue(h.value is ApSub)
+        }
+
+        test intInAField() {
+            var h = AnyPropertyIsTests.holder(5)
+            Assert.assertTrue(h.value is Int)
+            Assert.assertFalse(h.value is ApThing)
+            Assert.assertFalse(h.value is String)
+            Assert.assertFalse(h.value is ApColor)
+        }
+
+        test stringInAField() {
+            var h = AnyPropertyIsTests.holder("hi")
+            Assert.assertTrue(h.value is String)
+            Assert.assertFalse(h.value is Int)
+            Assert.assertFalse(h.value is ApThing)
+        }
+
+        test enumInAField() {
+            var h = AnyPropertyIsTests.holder(ApColor.blue)
+            Assert.assertTrue(h.value is ApColor)
+            Assert.assertFalse(h.value is ApThing)
+        }
+
+        test nullInAField() {
+            var h = AnyPropertyIsTests.holder(null)
+            Assert.assertFalse(h.value is ApThing)
+            Assert.assertFalse(h.value is Int)
+            Assert.assertFalse(h.value is String)
+            Assert.assertFalse(h.value is ApColor)
+        }
+
+        test throughThis() {
+            var h = AnyPropertyIsTests.holder(new ApThing())
+            Assert.assertTrue(h.ownIsThing())
+            Assert.assertTrue(h.ownIsBare())
+            Assert.assertFalse(h.ownNotThing())
+            h.value = 3
+            Assert.assertFalse(h.ownIsThing())
+            Assert.assertFalse(h.ownIsBare())
+            Assert.assertTrue(h.ownNotThing())
+            h.value = null
+            Assert.assertFalse(h.ownIsThing())
+            Assert.assertTrue(h.ownNotThing())
+        }
+
+        test negation() {
+            var h = AnyPropertyIsTests.holder(new ApThing())
+            Assert.assertFalse(!(h.value is ApThing))
+            Assert.assertTrue(!(h.value is Int))
+            h.value = null
+            Assert.assertTrue(!(h.value is ApThing))
+        }
+
+        test staticField() {
+            ApHolder.shared = new ApSub()
+            Assert.assertTrue(ApHolder.shared is ApThing)
+            Assert.assertTrue(ApHolder.shared is ApSub)
+            Assert.assertFalse(ApHolder.shared is Int)
+            ApHolder.shared = 9
+            Assert.assertTrue(ApHolder.shared is Int)
+            Assert.assertFalse(ApHolder.shared is ApThing)
+            ApHolder.shared = null
+            Assert.assertFalse(ApHolder.shared is ApThing)
+            Assert.assertFalse(ApHolder.shared is Int)
+        }
+
+        test bareStatic() {
+            ApHolder.shared = new ApThing()
+            Assert.assertTrue(ApHolder.sharedIsThing())
+            Assert.assertFalse(ApHolder.sharedIsInt())
+            ApHolder.shared = 5
+            Assert.assertFalse(ApHolder.sharedIsThing())
+            Assert.assertTrue(ApHolder.sharedIsInt())
+            ApHolder.shared = null
+            Assert.assertFalse(ApHolder.sharedIsThing())
+            Assert.assertFalse(ApHolder.sharedIsInt())
+        }
+
+        test chain() {
+            var o = new ApOuter()
+            o.inner.value = new ApThing()
+            Assert.assertTrue(o.inner.value is ApThing)
+            Assert.assertFalse(o.inner.value is Int)
+            o.inner.value = 4
+            Assert.assertTrue(o.inner.value is Int)
+            Assert.assertFalse(o.inner.value is ApThing)
+            o.inner.value = null
+            Assert.assertFalse(o.inner.value is ApThing)
+        }
+
+        test callResult() {
+            var h = AnyPropertyIsTests.holder(new ApSub())
+            Assert.assertTrue(h.get() is ApThing)
+            Assert.assertTrue(h.get() is ApSub)
+            Assert.assertFalse(h.get() is Int)
+            Assert.assertTrue(ApHolder.make(7) is Int)
+            Assert.assertFalse(ApHolder.make(7) is ApThing)
+            Assert.assertTrue(ApHolder.make(ApColor.red) is ApColor)
+            Assert.assertFalse(ApHolder.make(null) is ApThing)
+            Assert.assertFalse(ApHolder.make(null) is Int)
+        }
+
+        test isInsideWhen() {
+            var h = AnyPropertyIsTests.holder(new ApSub())
+            Assert.assertEquals("sub", h.whenKind())
+            h.value = new ApThing()
+            Assert.assertEquals("thing", h.whenKind())
+            h.value = 1
+            Assert.assertEquals("int", h.whenKind())
+            h.value = ApColor.red
+            Assert.assertEquals("color", h.whenKind())
+            h.value = "s"
+            Assert.assertEquals("other", h.whenKind())
+            h.value = null
+            Assert.assertEquals("other", h.whenKind())
+        }
+
+        test isInConditions() {
+            var h = AnyPropertyIsTests.holder(new ApThing())
+            var r = "no"
+            if (h.value is ApThing && h.value != null) {
+                r = "yes"
+            }
+            Assert.assertEquals("yes", r)
+            h.value = 2
+            if (h.value is ApThing || h.value is String) {
+                r = "wrong"
+            }
+            Assert.assertEquals("yes", r)
+        }
+    }
+}
