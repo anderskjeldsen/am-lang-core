@@ -1,0 +1,70 @@
+namespace Tests {
+
+    struct BsPoint {
+        import Am.Lang
+        var x: Int
+        var y: Int
+    }
+
+    class BsStructHolder {
+        import Am.Lang
+
+        static var pt: BsPoint
+        var ipt: BsPoint
+
+        static fun storePt(x: Int, y: Int) {
+            var p: BsPoint
+            p.x = x
+            p.y = y
+            pt = p
+        }
+
+        static fun readPt(): Int {
+            return BsStructHolder.pt.x * 100 + BsStructHolder.pt.y
+        }
+
+        fun storeIpt(x: Int, y: Int) {
+            var p: BsPoint
+            p.x = x
+            p.y = y
+            ipt = p
+        }
+
+        fun readIpt(): Int {
+            return this.ipt.x * 100 + this.ipt.y
+        }
+
+        fun qualifiedStoreIpt(x: Int, y: Int) {
+            var p: BsPoint
+            p.x = x
+            p.y = y
+            this.ipt = p
+        }
+    }
+
+    class BareStructStoreTests {
+        import Am.Lang
+        import Am.Tests
+
+        test bareStructStaticStore() {
+            BsStructHolder.storePt(3, 4)
+            Assert.assertEquals(304, BsStructHolder.readPt())
+            BsStructHolder.storePt(7, 8)
+            Assert.assertEquals(708, BsStructHolder.readPt())
+        }
+
+        test qualifiedStructFieldStore() {
+            var h = new BsStructHolder()
+            h.qualifiedStoreIpt(3, 4)
+            Assert.assertEquals(304, h.readIpt())
+        }
+
+        test bareStructFieldStore() {
+            var h = new BsStructHolder()
+            h.storeIpt(3, 4)
+            Assert.assertEquals(304, h.readIpt())
+            h.storeIpt(7, 8)
+            Assert.assertEquals(708, h.readIpt())
+        }
+    }
+}

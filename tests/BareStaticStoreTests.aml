@@ -1,0 +1,169 @@
+namespace Tests {
+
+    // Redmine #502: a bare store to a static field (`obj = new X()` inside the
+    // class, no `Owner.`) keeps a reference like `Owner.obj = new X()`: the
+    // object survives the function that stored it, and the old value is
+    // released on reassignment.
+
+    class BssItem(var v: Int) {
+        import Am.Lang
+    }
+
+
+    class BssHolder {
+        import Am.Lang
+
+        static var obj: BssItem? = null
+        static var other: BssItem? = null
+        static var anyv: Any = null
+        static var num: Int = 0
+        static var nn: Int? = null
+        static var name: String = "a"
+
+        var inst: BssItem? = null
+
+        // Bare stores, static functions.
+        static fun storeNew(v: Int) {
+            obj = new BssItem(v)
+        }
+
+        static fun storeParam(i: BssItem) {
+            other = i
+        }
+
+        static fun storeNull() {
+            obj = null
+        }
+
+        static fun storeAny(v: Int) {
+            anyv = new BssItem(v)
+        }
+
+        static fun storeNum(v: Int) {
+            num = v
+        }
+
+        static fun storeNn(v: Int) {
+            nn = v
+        }
+
+        static fun storeName(s: String) {
+            name = s
+        }
+
+        static fun readObj(): Int {
+            return obj!!.v
+        }
+
+        static fun readOther(): Int {
+            return other!!.v
+        }
+
+        static fun readAny(): Int {
+            return (anyv as BssItem).v
+        }
+
+        // Bare stores, instance function.
+        fun instStoreNew(v: Int) {
+            obj = new BssItem(v)
+        }
+
+        fun instStoreInst(v: Int) {
+            inst = new BssItem(v)
+        }
+
+        fun instStoreNum(v: Int) {
+            num = v
+        }
+
+        // The qualified store, for comparison.
+        static fun qualifiedStoreNew(v: Int) {
+            BssHolder.obj = new BssItem(v)
+        }
+
+        static fun clear() {
+            obj = null
+            other = null
+            anyv = null
+        }
+    }
+
+    class BareStaticStoreTests {
+        import Am.Lang
+        import Am.Tests
+
+        test bareStoreOfNewSurvivesReturn() {
+            BssHolder.storeNew(7)
+            Assert.assertEquals(1, instances(BssItem))
+            Assert.assertEquals(7, BssHolder.readObj())
+            BssHolder.clear()
+            Assert.assertEquals(0, instances(BssItem))
+        }
+
+        test qualifiedStoreOfNewSurvivesReturn() {
+            BssHolder.qualifiedStoreNew(8)
+            Assert.assertEquals(1, instances(BssItem))
+            Assert.assertEquals(8, BssHolder.readObj())
+            BssHolder.clear()
+            Assert.assertEquals(0, instances(BssItem))
+        }
+
+        test bareReassignReleasesOld() {
+            BssHolder.storeNew(1)
+            BssHolder.storeNew(2)
+            BssHolder.storeNew(3)
+            Assert.assertEquals(1, instances(BssItem))
+            Assert.assertEquals(3, BssHolder.readObj())
+            BssHolder.storeNull()
+            Assert.assertEquals(0, instances(BssItem))
+        }
+
+        test bareStoreOfParameter() {
+            var i = new BssItem(11)
+            BssHolder.storeParam(i)
+            i = new BssItem(12)
+            Assert.assertEquals(2, instances(BssItem))
+            Assert.assertEquals(11, BssHolder.readOther())
+            BssHolder.clear()
+            Assert.assertEquals(1, instances(BssItem))
+        }
+
+        test bareStoreIntoAny() {
+            BssHolder.storeAny(21)
+            Assert.assertEquals(1, instances(BssItem))
+            Assert.assertEquals(21, BssHolder.readAny())
+            BssHolder.storeAny(22)
+            Assert.assertEquals(1, instances(BssItem))
+            BssHolder.clear()
+            Assert.assertEquals(0, instances(BssItem))
+        }
+
+        test barePrimitiveStatics() {
+            BssHolder.storeNum(5)
+            Assert.assertEquals(5, BssHolder.num)
+            BssHolder.storeNn(6)
+            Assert.assertEquals(6, BssHolder.nn!!)
+            BssHolder.storeName("hello")
+            Assert.assertEquals("hello", BssHolder.name)
+        }
+
+        test bareStaticStoreFromInstanceFunction() {
+            var h = new BssHolder()
+            h.instStoreNew(31)
+            Assert.assertEquals(1, instances(BssItem))
+            Assert.assertEquals(31, BssHolder.readObj())
+            h.instStoreNum(9)
+            Assert.assertEquals(9, BssHolder.num)
+            BssHolder.clear()
+            Assert.assertEquals(0, instances(BssItem))
+        }
+
+        test bareInstanceFieldStore() {
+            var h = new BssHolder()
+            h.instStoreInst(41)
+            h.instStoreInst(42)
+            Assert.assertEquals(1, instances(BssItem))
+            Assert.assertEquals(42, h.inst!!.v)
+        }
+    }
+}
