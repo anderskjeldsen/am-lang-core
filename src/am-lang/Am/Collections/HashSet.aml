@@ -242,6 +242,10 @@ namespace Am.Collections {
          * Removes every value, keeping the allocated capacity.
          */
         fun clear() {
+            // Drop the values the used slots hold, as HashMap.clear does.
+            if (this.currentValueIndex > 0) {
+                this.values.clearRange(0UI, this.currentValueIndex as UInt)
+            }
             this.size = 0
             this.currentValueIndex = 0
             this.currentIndex = this.bucketSize

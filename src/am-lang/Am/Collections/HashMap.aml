@@ -310,6 +310,13 @@ namespace Am.Collections {
          * stops reallocating.
          */
         fun clear() {
+            // Drop the keys and values the used slots hold: without this a
+            // cleared map kept every object it had held alive until its slot
+            // was reused.
+            if (this.currentEntryIndex > 0) {
+                this.keys.clearRange(0UI, this.currentEntryIndex as UInt)
+                this.values.clearRange(0UI, this.currentEntryIndex as UInt)
+            }
             this.size = 0
             this.currentEntryIndex = 0
             this.currentIndex = this.bucketSize
