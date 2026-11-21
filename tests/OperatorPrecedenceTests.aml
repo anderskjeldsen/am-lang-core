@@ -1,0 +1,163 @@
+namespace Tests {
+
+    // Mixed binary operators without parentheses, evaluated (Redmine #394:
+    // v2 bound `==` and `!=` tighter than `+` and `-`). Runs under v1 and v2;
+    // both group as v1 does. The values come through a call so nothing folds
+    // to a constant.
+    class OperatorPrecedenceTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun n(x: Int): Int {
+            return x
+        }
+
+        static fun s(x: String): String {
+            return x
+        }
+
+        static fun ns(x: String?): String? {
+            return x
+        }
+
+        static test multiplicativeBeforeAdditive() {
+            var a = OperatorPrecedenceTests.n(1)
+            var b = OperatorPrecedenceTests.n(2)
+            var c = OperatorPrecedenceTests.n(3)
+            var five = OperatorPrecedenceTests.n(5)
+            Assert.assertEquals(7, a + b * c)
+            Assert.assertEquals(5, a * b + c)
+            Assert.assertEquals(3, a + five % c)
+            Assert.assertEquals(9, five * b - a)
+        }
+
+        static test sameLevelGroupsLeft() {
+            var a = OperatorPrecedenceTests.n(1)
+            var b = OperatorPrecedenceTests.n(2)
+            var four = OperatorPrecedenceTests.n(4)
+            var five = OperatorPrecedenceTests.n(5)
+            var hundred = OperatorPrecedenceTests.n(100)
+            var c = OperatorPrecedenceTests.n(3)
+            Assert.assertEquals(2, five - b - a)
+            Assert.assertEquals(4, five - b + a)
+            Assert.assertEquals(10, hundred / five / b)
+            Assert.assertEquals(2, four * five % c)
+            Assert.assertEquals(8, five % c * four)
+        }
+
+        static test shiftsAfterArithmeticBeforeComparison() {
+            var a = OperatorPrecedenceTests.n(1)
+            var b = OperatorPrecedenceTests.n(2)
+            var c = OperatorPrecedenceTests.n(3)
+            var five = OperatorPrecedenceTests.n(5)
+            var sixtyFour = OperatorPrecedenceTests.n(64)
+            Assert.assertEquals(24, a + b << c)
+            Assert.assertEquals(32, a << b + c)
+            Assert.assertEquals(8, sixtyFour >> b >> a)
+            Assert.assertEquals(12, b * c << a)
+            Assert.assertTrue(a << b < five)
+            Assert.assertTrue(five < a << c)
+            Assert.assertFalse(a << c < five)
+        }
+
+        static test equalityAfterArithmetic() {
+            var a = OperatorPrecedenceTests.n(1)
+            var b = OperatorPrecedenceTests.n(2)
+            var c = OperatorPrecedenceTests.n(3)
+            var x = OperatorPrecedenceTests.n(3)
+            var y = a == 1
+            Assert.assertTrue(1 + 2 == 3)
+            Assert.assertTrue(a + b == c)
+            Assert.assertFalse(a + b != c)
+            Assert.assertFalse(c - a != b)
+            Assert.assertTrue(a == c - b)
+            Assert.assertTrue(x * 2 + 1 == 7 && y)
+            Assert.assertTrue(c - b < b)
+            Assert.assertFalse(a - b > 0)
+            var sum = a + b == c
+            Assert.assertTrue(sum)
+            if (a + b != c) {
+                Assert.fail("a + b != c with 1, 2, 3")
+            }
+        }
+
+        static test relationalBeforeEquality() {
+            var a = OperatorPrecedenceTests.n(1)
+            var b = OperatorPrecedenceTests.n(2)
+            var c = OperatorPrecedenceTests.n(3)
+            var d = OperatorPrecedenceTests.n(4)
+            var f = a == 2
+            Assert.assertTrue(a < b == c < d)
+            Assert.assertFalse(a > b != c > d)
+            Assert.assertTrue(a == b == f)
+            Assert.assertTrue(a + b <= c)
+            Assert.assertTrue(a + b >= c && c - a >= b)
+        }
+
+        // Strings are objects: `+` and `==` are calls, so the grouping decides
+        // what is concatenated and what is compared.
+        static test stringConcatenationThenComparison() {
+            var w = OperatorPrecedenceTests.s("Int")
+            var full = OperatorPrecedenceTests.s("Am.Lang.Int")
+            var b = OperatorPrecedenceTests.s("b")
+            Assert.assertTrue("a" + "b" == "ab")
+            Assert.assertTrue("a" + b == "ab")
+            Assert.assertFalse("a" + b != "ab")
+            Assert.assertFalse("Am.Lang." + w != full)
+            Assert.assertTrue("Am.Lang." + w == full && w != full)
+            Assert.assertTrue("a" + b + "c" == "abc")
+            var eq = "a" + b == "ab"
+            Assert.assertTrue(eq)
+            Assert.assertEquals("xabc", "x" + "a" + b + "c")
+        }
+
+        static test elvisWithComparison() {
+            var s = OperatorPrecedenceTests.ns("a")
+            var none = OperatorPrecedenceTests.ns(null)
+            Assert.assertTrue((s ?? "x") == "a")
+            Assert.assertTrue((none ?? "x") == "x")
+            Assert.assertTrue("p" + (none ?? "x") == "px")
+            // v1 has no precedence check for `??`: its right operand is the
+            // rest of the expression, `s ?? ("x" + "y")`.
+            Assert.assertEquals("a", s ?? "x" + "y")
+            Assert.assertEquals("xy", none ?? "x" + "y")
+        }
+
+        static test prefixOperatorsAndLogic() {
+            var a = OperatorPrecedenceTests.n(1)
+            var b = OperatorPrecedenceTests.n(2)
+            var c = OperatorPrecedenceTests.n(3)
+            var d = OperatorPrecedenceTests.n(4)
+            var t = a == 1
+            var f = a == 2
+            Assert.assertTrue(-a * b == 0 - 2)
+            Assert.assertTrue(!f == t)
+            Assert.assertTrue(a < b && c < d)
+            Assert.assertTrue(a + b > d || t)
+            Assert.assertTrue(a == a && t)
+            Assert.assertTrue(t || f && f)
+            Assert.assertFalse(a + b > d || f)
+        }
+
+        // These pin v1's grouping, which differs from C and Kotlin: `&&` and
+        // `||` nest to the right (`f && f || t` is `f && (f || t)`), and `&`,
+        // `|`, `^` take the rest of the expression (`6 + 3 & 1` is
+        // `6 + (3 & 1)`, `f == f & f` is `f == (f & f)`). v2 groups the same.
+        static test andOrAndBitwiseGroupAsV1() {
+            var a = OperatorPrecedenceTests.n(1)
+            var b = OperatorPrecedenceTests.n(2)
+            var c = OperatorPrecedenceTests.n(3)
+            var six = OperatorPrecedenceTests.n(6)
+            var t = a == 1
+            var f = a == 2
+            Assert.assertFalse(f && f || t)
+            Assert.assertFalse(a == b && f || t)
+            Assert.assertEquals(7, six + c & a)
+            Assert.assertEquals(4, six & c + a)
+            Assert.assertEquals(1, a | c ^ b)
+            Assert.assertEquals(4, six ^ c & b)
+            Assert.assertTrue(f == f & f)
+            Assert.assertFalse(f & f == f)
+        }
+    }
+}
