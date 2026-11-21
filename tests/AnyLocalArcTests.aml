@@ -1,0 +1,383 @@
+namespace Tests {
+
+    // Redmine #501: an Any local, or the temporary holding a call's Any
+    // result, owns the +1 the callee returns (__retain_function_return) and
+    // releases it on every way out of its scope: block end, return, break,
+    // continue, an exception, a suspend fun's end. v2 declared such a local
+    // inline and never released it, so each call result leaked its object.
+    // Redmine #479: a try body is a scope of its own, so what a throwing call's
+    // arguments and receiver hold is released before the catch runs.
+    // Temporaries live until their block ends, so most counts are taken after
+    // a helper returns.
+
+    class AlaThing(var n: Int) {
+        import Am.Lang
+
+        fun boomOn(): Int {
+            throw new AlaBoomException()
+        }
+    }
+
+    // An Any field initialised from a call, and an Any local in init { }.
+    class AlaHolder {
+        import Am.Lang
+        var held: Any = AnyLocalArcTests.make(1)
+        var n: Int = 0
+
+        init {
+            var r = AnyLocalArcTests.make(2)
+            this.n = (r as AlaThing).n
+        }
+    }
+
+    class AlaBoomException() : Exception("boom") {
+        import Am.Lang
+    }
+
+    class AnyLocalArcTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Async
+        import Am.Tests
+
+        static var pending: Continuation? = null
+        static var seen: Int = 0
+
+        static fun give(t: Any): Any {
+            return t
+        }
+
+        static fun make(n: Int): Any {
+            return new AlaThing(n)
+        }
+
+        static fun localFromCall() {
+            var t = new AlaThing(1)
+            var r = AnyLocalArcTests.give(t)
+        }
+
+        test anyLocalFromCall() {
+            AnyLocalArcTests.localFromCall()
+            Assert.assertEquals(0, instances(AlaThing))
+        }
+
+        static fun localFromMake(): Int {
+            var r = AnyLocalArcTests.make(4)
+            return (r as AlaThing).n
+        }
+
+        test anyLocalFromOwningCall() {
+            Assert.assertEquals(4, AnyLocalArcTests.localFromMake())
+            Assert.assertEquals(0, instances(AlaThing))
+        }
+
+        static fun discard() {
+            AnyLocalArcTests.make(2)
+        }
+
+        test discardedAnyResult() {
+            AnyLocalArcTests.discard()
+            Assert.assertEquals(0, instances(AlaThing))
+        }
+
+        // Temporaries live until their block ends, so the counts are taken
+        // after the helper returns.
+        static fun reassign(): Int {
+            var r: Any = AnyLocalArcTests.make(1)
+            r = AnyLocalArcTests.make(2)
+            var n = (r as AlaThing).n
+            r = 5
+            r = AnyLocalArcTests.make(3)
+            r = r
+            n = n + (r as AlaThing).n
+            r = null
+            r = AnyLocalArcTests.make(4)
+            return n
+        }
+
+        static fun reassignFromNew(): Int {
+            var r: Any = new AlaThing(1)
+            r = new AlaThing(2)
+            return (r as AlaThing).n
+        }
+
+        test anyLocalReassigned() {
+            Assert.assertEquals(5, AnyLocalArcTests.reassign())
+            Assert.assertEquals(0, instances(AlaThing))
+            Assert.assertEquals(2, AnyLocalArcTests.reassignFromNew())
+            Assert.assertEquals(0, instances(AlaThing))
+        }
+
+        static fun earlyReturn(stop: Bool): Int {
+            var r = AnyLocalArcTests.make(7)
+            if (stop) {
+                var q = AnyLocalArcTests.make(8)
+                return 1
+            }
+            return 2
+        }
+
+        test anyLocalEarlyReturn() {
+            Assert.assertEquals(1, AnyLocalArcTests.earlyReturn(true))
+            Assert.assertEquals(0, instances(AlaThing))
+            Assert.assertEquals(2, AnyLocalArcTests.earlyReturn(false))
+            Assert.assertEquals(0, instances(AlaThing))
+        }
+
+        static fun loopWithBreak(): Int {
+            var i = 0
+            var sum = 0
+            while (i < 10) {
+                var r = AnyLocalArcTests.make(i)
+                sum = sum + (r as AlaThing).n
+                if (i == 3) {
+                    break
+                }
+                i++
+            }
+            return sum
+        }
+
+        test anyLocalInLoopWithBreak() {
+            Assert.assertEquals(6, AnyLocalArcTests.loopWithBreak())
+            Assert.assertEquals(0, instances(AlaThing))
+        }
+
+        static fun loopWithContinue(): Int {
+            var sum = 0
+            for (i = 0 until 5) {
+                var r = AnyLocalArcTests.make(i)
+                if (i % 2 == 0) {
+                    continue
+                }
+                sum = sum + (r as AlaThing).n
+            }
+            return sum
+        }
+
+        test anyLocalInLoopWithContinue() {
+            Assert.assertEquals(4, AnyLocalArcTests.loopWithContinue())
+            Assert.assertEquals(0, instances(AlaThing))
+        }
+
+        static fun throwAfter() {
+            var r = AnyLocalArcTests.make(1)
+            throw new AlaBoomException()
+        }
+
+        test anyLocalOnExceptionPath() {
+            var caught = false
+            try {
+                AnyLocalArcTests.throwAfter()
+            } catch (e: AlaBoomException) {
+                caught = true
+            }
+            Assert.assertTrue(caught)
+            Assert.assertEquals(0, instances(AlaThing))
+        }
+
+        static fun catchInside(): Int {
+            var n = 0
+            try {
+                var r = AnyLocalArcTests.make(3)
+                n = (r as AlaThing).n
+                throw new AlaBoomException()
+            } catch (e: AlaBoomException) {
+                var s = AnyLocalArcTests.make(4)
+                n = n + (s as AlaThing).n
+            }
+            return n
+        }
+
+        test anyLocalInTryAndCatch() {
+            Assert.assertEquals(7, AnyLocalArcTests.catchInside())
+            Assert.assertEquals(0, instances(AlaThing))
+        }
+
+        static fun capture(): Int {
+            var r = AnyLocalArcTests.make(5)
+            var f: () => Any = () => r
+            return (f() as AlaThing).n
+        }
+
+        test anyLocalCapturedByLambda() {
+            Assert.assertEquals(5, AnyLocalArcTests.capture())
+            Assert.assertEquals(0, instances(AlaThing))
+        }
+
+        static fun listForms(): Int {
+            var l = List.newList<Any>()
+            l.add(AnyLocalArcTests.make(1))
+            l.add(AnyLocalArcTests.make(2))
+            l.add(AnyLocalArcTests.make(3))
+            l.add(9)
+            var x = l.get(0) as AlaThing
+            var sum = x.n
+            each(l, e) {
+                if (e is AlaThing) {
+                    sum = sum + (e as AlaThing).n
+                }
+            }
+            l.removeAt(1)
+            var y = l.removeAt(0)
+            sum = sum + (y as AlaThing).n
+            return sum
+        }
+
+        test listOfAnyReads() {
+            Assert.assertEquals(8, AnyLocalArcTests.listForms())
+            Assert.assertEquals(0, instances(AlaThing))
+        }
+
+        static fun nullablePrims(): Int {
+            var a: Int? = null
+            var b: Int? = 4
+            var c: Any = 6
+            a = b
+            c = a
+            var d = AnyLocalArcTests.give(3)
+            return (c as Int) + (d as Int)
+        }
+
+        test nullablePrimitivesUnchanged() {
+            Assert.assertEquals(7, AnyLocalArcTests.nullablePrims())
+        }
+
+        static fun typedList(): Int {
+            var l = new List<AlaThing>()
+            l.add(new AlaThing(1))
+            l.add(new AlaThing(2))
+            l.removeAt(0)
+            return l.getSize()
+        }
+
+        test typedListRemoveAtStatement() {
+            Assert.assertEquals(1, AnyLocalArcTests.typedList())
+            Assert.assertEquals(0, instances(AlaThing))
+        }
+
+        // Redmine #479: what a throwing call's arguments and receiver hold is
+        // released when the try body is left, before the catch runs.
+        static fun boom(t: AlaThing) {
+            throw new AlaBoomException()
+        }
+
+        static fun boomAny(t: Any) {
+            throw new AlaBoomException()
+        }
+
+        static fun wrap(t: AlaThing): AlaThing {
+            return t
+        }
+
+        test argumentTemporaryOnThrow() {
+            var caught = 0
+            try {
+                AnyLocalArcTests.boom(new AlaThing(1))
+            } catch (e: AlaBoomException) {
+                Assert.assertEquals(0, instances(AlaThing))
+                caught++
+            }
+            Assert.assertEquals(0, instances(AlaThing))
+            try {
+                AnyLocalArcTests.boomAny(AnyLocalArcTests.make(2))
+            } catch (e: AlaBoomException) {
+                Assert.assertEquals(0, instances(AlaThing))
+                caught++
+            }
+            try {
+                AnyLocalArcTests.boom(AnyLocalArcTests.wrap(new AlaThing(3)))
+            } catch (e: AlaBoomException) {
+                Assert.assertEquals(0, instances(AlaThing))
+                caught++
+            }
+            try {
+                var n = new AlaThing(4).boomOn()
+            } catch (e: AlaBoomException) {
+                Assert.assertEquals(0, instances(AlaThing))
+                caught++
+            }
+            try {
+                var r = AnyLocalArcTests.make(5)
+                AnyLocalArcTests.boom(new AlaThing(6))
+            } catch (e: AlaBoomException) {
+                Assert.assertEquals(0, instances(AlaThing))
+                caught++
+            }
+            Assert.assertEquals(5, caught)
+            Assert.assertEquals(0, instances(AlaThing))
+        }
+
+        // The try body's locals and temporaries are released on a normal exit
+        // too, and on a return or break out of it.
+        static fun tryReturn(): Int {
+            try {
+                var r = AnyLocalArcTests.make(7)
+                var t = AnyLocalArcTests.wrap(new AlaThing(8))
+                return (r as AlaThing).n + t.n
+            } catch (e: AlaBoomException) {
+                return 0
+            }
+            return 1
+        }
+
+        static fun tryBreak(): Int {
+            var i = 0
+            while (i < 5) {
+                try {
+                    var r = AnyLocalArcTests.make(i)
+                    if (i == 2) {
+                        break
+                    }
+                } catch (e: AlaBoomException) {
+                }
+                i++
+            }
+            return i
+        }
+
+        test tryBodyScopeExits() {
+            try {
+                AnyLocalArcTests.wrap(new AlaThing(1))
+                var r = AnyLocalArcTests.make(2)
+            } catch (e: AlaBoomException) {
+            }
+            Assert.assertEquals(0, instances(AlaThing))
+            Assert.assertEquals(15, AnyLocalArcTests.tryReturn())
+            Assert.assertEquals(0, instances(AlaThing))
+            Assert.assertEquals(2, AnyLocalArcTests.tryBreak())
+            Assert.assertEquals(0, instances(AlaThing))
+        }
+
+        // An Any local of a suspend fun is saved across the suspension and
+        // released when the machine finishes.
+        static suspend fun parked() {
+            var r = AnyLocalArcTests.make(9)
+            suspend(cont) {
+                AnyLocalArcTests.pending = cont
+            }
+            AnyLocalArcTests.seen = (r as AlaThing).n
+        }
+
+        test anyLocalInSuspendFun() {
+            AnyLocalArcTests.parked()
+            var c = AnyLocalArcTests.pending
+            AnyLocalArcTests.pending = null
+            if (c != null) {
+                c.resume()
+            }
+            Assert.assertEquals(9, AnyLocalArcTests.seen)
+            Assert.assertEquals(0, instances(AlaThing))
+        }
+
+        static fun holder(): Int {
+            var h = new AlaHolder()
+            return h.n + (h.held as AlaThing).n
+        }
+
+        test anyFieldInitializerAndInitBlock() {
+            Assert.assertEquals(3, AnyLocalArcTests.holder())
+            Assert.assertEquals(0, instances(AlaThing))
+        }
+    }
+}
