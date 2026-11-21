@@ -8,7 +8,7 @@ namespace Tests {
     // (Any equality: 3 == 3, "a" == "a", objects by equals) and released as
     // boxes. Same for HashMap<String, Any>, HashMap<Any, V> and HashSet<Any>.
     // The release checks (instances() back to 0) are in
-    // tests-v1-only/tests/ListOfAnyArcV1Tests.aml.
+    // tests/ListOfAnyArcTests.aml.
 
     enum LaColor {
         import Am.Lang
