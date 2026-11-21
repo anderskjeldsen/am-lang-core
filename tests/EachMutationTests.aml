@@ -1,0 +1,149 @@
+namespace Tests {
+
+    class EmHolder {
+        import Am.Lang
+        import Am.Collections
+        var items: List<String> = new List<String>()
+    }
+
+    // `each` over a List the loop body changes (#544). The loop walks the list by
+    // position, as List.iterator() does: an element added during the loop is
+    // visited, a list that shrinks ends the loop early, and a variable or field
+    // reassigned in the body doesn't free the list being walked. v2 used to take
+    // the size once (so the added elements were skipped, and a shrinking list was
+    // read past its end) and to borrow the list (so reassigning it crashed).
+    class EachMutationTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static test elementsAddedDuringTheLoopAreVisited() {
+            var l = new List<String>()
+            l.add("a")
+            l.add("b")
+            var seen = ""
+            each (s in l) {
+                seen = seen + s
+                if (l.getSize() < 5) { l.add("x" + l.getSize().toString()) }
+            }
+            Assert.assertEquals("abx2x3x4", seen)
+            Assert.assertEquals(5, l.getSize())
+        }
+
+        static test aShrinkingListEndsTheLoop() {
+            var l = new List<Int>()
+            l.add(1)
+            l.add(2)
+            l.add(3)
+            l.add(4)
+            var seen = ""
+            each (x in l) {
+                seen = seen + x.toString()
+                l.removeAt(l.getSize() - 1)
+            }
+            Assert.assertEquals("12", seen)
+            Assert.assertEquals(2, l.getSize())
+        }
+
+        static test clearingTheListEndsTheLoop() {
+            var l = new List<String>()
+            l.add("only" + 1.toString())
+            l.add("never")
+            var n = 0
+            each (s in l) {
+                n++
+                l.removeAt(1)
+                l.removeAt(0)
+            }
+            Assert.assertEquals(1, n)
+            Assert.assertEquals(0, l.getSize())
+        }
+
+        static test reassigningTheLocalKeepsWalkingTheOriginal() {
+            var l = new List<String>()
+            l.add("a" + 1.toString())
+            l.add("b" + 2.toString())
+            l.add("c" + 3.toString())
+            var seen = ""
+            each (s in l) {
+                seen = seen + s
+                l = new List<String>()
+                l.add("zz")
+            }
+            Assert.assertEquals("a1b2c3", seen)
+            Assert.assertEquals(1, l.getSize())
+            Assert.assertEquals("zz", l.get(0))
+        }
+
+        static test reassigningTheFieldKeepsWalkingTheOriginal() {
+            var h = new EmHolder()
+            h.items.add("p" + 1.toString())
+            h.items.add("q" + 2.toString())
+            var seen = ""
+            each (s in h.items) {
+                seen = seen + s
+                h.items = new List<String>()
+            }
+            Assert.assertEquals("p1q2", seen)
+            Assert.assertEquals(0, h.items.getSize())
+        }
+
+        static fun firstLong(l: List<String>): String {
+            each (s in l) {
+                if (s.length() > 2) { return s }
+            }
+            return ""
+        }
+
+        static fun countUntilStop(l: List<String>): Int {
+            var n = 0
+            each (s in l) {
+                if (s == "stop") { break }
+                n++
+            }
+            return n
+        }
+
+        static test returnAndBreakInsideTheLoop() {
+            var l = new List<String>()
+            l.add("a")
+            l.add("bcd")
+            l.add("stop")
+            l.add("e")
+            Assert.assertEquals("bcd", EachMutationTests.firstLong(l))
+            Assert.assertEquals(2, EachMutationTests.countUntilStop(l))
+            // The list is still intact after both loops left early.
+            Assert.assertEquals(4, l.getSize())
+        }
+
+        static test nestedLoopsOverTheSameList() {
+            var l = new List<Int>()
+            l.add(1)
+            l.add(2)
+            var sum = 0
+            each (a in l) {
+                each (b in l) {
+                    sum = sum + a * 10 + b
+                }
+            }
+            Assert.assertEquals(66, sum)
+        }
+
+        // The list a call returns is held by the loop alone.
+        static test eachLoopOverAListFromACall() {
+            var seen = ""
+            each (s in EachMutationTests.makeList()) {
+                seen = seen + s
+            }
+            Assert.assertEquals("xyz", seen)
+        }
+
+        static fun makeList(): List<String> {
+            var l = new List<String>()
+            l.add("x")
+            l.add("y")
+            l.add("z")
+            return l
+        }
+    }
+}
