@@ -1,7 +1,7 @@
 namespace Tests {
 
     // Redmine #515: contextual words (either, when, data, scratch, keep, shared,
-    // fast) stay usable as ordinary identifiers in every position.
+    // fast, loop) stay usable as ordinary identifiers in every position.
     class CwEitherBox(var n: Int) {
         import Am.Lang
     }
@@ -799,6 +799,162 @@ namespace Tests {
             Assert.assertEquals(9, either(CwEitherConstruct.boom(), 9))
             Assert.assertEquals(3, either(either, 9))
             Assert.assertEquals(4, either(either + 1, 9))
+        }
+    }
+    class CwLoopBox(var n: Int) {
+        import Am.Lang
+    }
+
+    class CwLoop {
+        import Am.Lang
+        import Am.Tests
+
+        var loop: Int = 5
+        var loopBox: CwLoopBox = new CwLoopBox(7)
+
+        static fun ident(x: Int): Int {
+            return x
+        }
+
+        static fun asParam(loop: Int): Int {
+            return loop + 1
+        }
+
+        static fun paramArg(loop: Int): Int {
+            return CwLoop.ident(loop)
+        }
+
+        static fun fieldRead(o: CwLoop): Int {
+            return o.loop
+        }
+
+        fun fieldSelf(): Int {
+            return loop * 2
+        }
+
+        static test testLocalAndArgument() {
+            var loop = 4
+            Assert.assertEquals(4, CwLoop.ident(loop))
+            Assert.assertEquals(9, CwLoop.ident(loop) + 5)
+            Assert.assertEquals(12, CwLoop.ident(loop + loop + loop))
+        }
+
+        static test testExpression() {
+            var loop = 10
+            var r = loop + 1
+            Assert.assertEquals(11, r)
+            Assert.assertTrue(loop > 3)
+            Assert.assertTrue(loop == 10 && loop != 2)
+            if (loop > 5) {
+                r = loop * 3
+            }
+            Assert.assertEquals(30, r)
+        }
+
+        static test testAssignmentTarget() {
+            var loop = 1
+            loop = 2
+            loop = loop + 5
+            loop += 1
+            Assert.assertEquals(8, loop)
+        }
+
+        static test testReceiver() {
+            var loop = new CwLoopBox(3)
+            Assert.assertEquals(3, loop.n)
+            loop.n = 9
+            Assert.assertEquals(9, loop.n)
+            Assert.assertEquals("9", loop.n.toString())
+        }
+
+        static test testParameter() {
+            Assert.assertEquals(6, CwLoop.asParam(5))
+            Assert.assertEquals(8, CwLoop.paramArg(8))
+        }
+
+        static test testField() {
+            var o = new CwLoop()
+            o.bare()
+            var o2 = new CwLoop()
+            Assert.assertEquals(5, o2.loop)
+            Assert.assertEquals(10, o2.fieldSelf())
+            o2.loop = 6
+            Assert.assertEquals(6, CwLoop.fieldRead(o2))
+            Assert.assertEquals(7, o2.loopBox.n)
+            o2.loopBox.n = 8
+            Assert.assertEquals(8, o2.loopBox.n)
+        }
+
+        fun bare() {
+            Assert.assertEquals(5, loop)
+            Assert.assertEquals(5, this.loop)
+            loop = 6
+            Assert.assertEquals(6, loop)
+            loopBox.n = 8
+            Assert.assertEquals(8, loopBox.n)
+        }
+
+        static test testLambdaParameter() {
+            var f = (loop: Int) => loop + 100
+            Assert.assertEquals(103, f(3))
+            var h: (Int) => Int = (loop) => CwLoop.ident(loop)
+            Assert.assertEquals(42, h(42))
+        }
+
+        static test testReturnAndString() {
+            var loop = 7
+            Assert.assertEquals("v=7", "v=" + loop.toString())
+            Assert.assertEquals(7, CwLoop.back(loop))
+        }
+
+        static fun back(x: Int): Int {
+            var loop = x
+            return loop
+        }
+    }
+
+    class CwLoopConstruct {
+        import Am.Lang
+        import Am.Tests
+
+        static fun loop(): Int {
+            return 11
+        }
+
+        static fun loop(x: Int): Int {
+            return x + 1
+        }
+
+        fun loop2(): Int {
+            return CwLoopConstruct.loop() + 1
+        }
+
+        static test testFunctionNamedLoop() {
+            Assert.assertEquals(11, CwLoopConstruct.loop())
+            Assert.assertEquals(5, CwLoopConstruct.loop(4))
+            Assert.assertEquals(12, new CwLoopConstruct().loop2())
+        }
+
+        static test testLoopStillLoops() {
+            var loop = 0
+            var n = 0
+            loop {
+                n += 1
+                if (n >= 3) { break }
+            }
+            Assert.assertEquals(3, n)
+            loop += 2
+            Assert.assertEquals(2, loop)
+            outer@ loop {
+                loop {
+                    break@outer
+                }
+            }
+        }
+
+        static test testBareCallToLoop() {
+            Assert.assertEquals(11, loop())
+            Assert.assertEquals(5, loop(4))
         }
     }
 }
