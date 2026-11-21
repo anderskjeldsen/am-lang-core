@@ -1,0 +1,85 @@
+namespace Tests {
+
+    enum SpColor {
+        import Am.Lang
+        red = 1
+    }
+
+    class SpThing {
+        import Am.Lang
+
+        override fun toString(): String {
+            return "thing"
+        }
+    }
+
+    // #486: `+` joins two Strings. There is no implicit toString: `"a" + 1` is a
+    // compile error (see the compiler tests); an Int, Bool, enum, object or nullable
+    // goes in through toString() or a string template.
+    class StringPlusTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun maybeInt(): Int? { return 5 }
+        static fun noInt(): Int? { return null }
+        static fun maybeColor(): SpColor? { return SpColor.red }
+
+        test stringsChainLeftToRight() {
+            var a = "a"
+            var b = "b"
+            Assert.assertEquals("ab", a + b)
+            Assert.assertEquals("a-b-c", a + "-" + b + "-" + "c")
+            Assert.assertEquals("xab", "x" + a + b)
+        }
+
+        test compoundAssignWithString() {
+            var s = "a"
+            s += "b"
+            s += "c" + "d"
+            Assert.assertEquals("abcd", s)
+        }
+
+        test nullableStringOperand() {
+            var n: String? = "n"
+            var r = "a" + n!!
+            Assert.assertEquals("an", r)
+        }
+
+        test intsGoInThroughToString() {
+            var i = 1
+            var j = 2
+            Assert.assertEquals("a12", "a" + i.toString() + j.toString())
+            Assert.assertEquals("a3", "a" + (i + j).toString())
+            Assert.assertEquals("a1", "a" + i.toString())
+        }
+
+        test intsGoInThroughTemplates() {
+            var i = 1
+            var j = 2
+            Assert.assertEquals("a12", "a${i}${j}")
+            Assert.assertEquals("a-1-2", "a-${i}-${j}")
+        }
+
+        test otherTypesThroughToString() {
+            var b = true
+            var l = 7L
+            Assert.assertEquals("x true 7", "x " + b.toString() + " " + l.toString())
+            Assert.assertEquals("o thing", "o " + new SpThing().toString())
+            Assert.assertEquals("t=thing", "t=${new SpThing()}")
+        }
+
+        test nullablePrimitiveAndEnumResults() {
+            var m = StringPlusTests.maybeInt()
+            var k: Int = m!!
+            Assert.assertEquals("i 5", "i " + k.toString())
+            Assert.assertEquals("i 5", "i ${k}")
+        }
+
+        test intArithmeticIsUnaffected() {
+            var i = 1
+            var j = 2
+            Assert.assertEquals(3, i + j)
+            Assert.assertEquals(6, i + j + 3)
+        }
+    }
+}
