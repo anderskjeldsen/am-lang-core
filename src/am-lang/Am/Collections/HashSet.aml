@@ -5,9 +5,8 @@ namespace Am.Collections {
      * that is already present does nothing, and has() is constant time on average, which makes
      * this far better than List.contains() when you test membership often. Element types need
      * hash() and equals() that agree. Iteration order is unspecified. Not synchronised.
-     * One caveat worth knowing: remove() unlinks the value but does not recycle its slot, so a
-     * long-lived set under heavy add/remove churn keeps growing its backing arrays; rebuild the
-     * set periodically if that pattern applies to you.
+     * remove() recycles the slot it frees and releases the value it held, so add/remove churn
+     * does not grow the set or keep removed objects alive.
      */
     class HashSet<T>: Set<T>, Iterable<T> {
         import Am.Lang
@@ -17,11 +16,20 @@ namespace Am.Collections {
          */
         private var size: Int
         /**
-         * Next free slot in the values array; only ever moves forward.
+         * High-water mark of value slots allocated when no freed slot was available to reuse.
+         * Freed slots are recycled through freeHead, so this stays bounded to the peak live
+         * count and never marches past the backing arrays under add/remove churn.
          */
         private var currentValueIndex: Int
         /**
-         * Chain links between values sharing a bucket. Eagerly initialised to zero length so the
+         * Head of the free-slot list, where 0 means empty and any other value is a slot index plus
+         * one. remove() pushes a vacated slot here and privateSetValue() pops one before extending
+         * currentValueIndex.
+         */
+        private var freeHead: Int
+        /**
+         * Chain links between values sharing a bucket, also reused as the free-list link once a
+         * slot is vacated. Eagerly initialised to zero length so the
          * field declaration is honest about being non-null; the real storage materialises on the
          * first insert, which add() detects by checking the length rather than for null.
          */
@@ -39,10 +47,6 @@ namespace Am.Collections {
          * Number of buckets, always a power of two; a value's bucket is its hash masked by (bucketSize - 1).
          */
         private var bucketSize: Int
-        /**
-         * Counter of chained entries, used together with the load factor to decide when to grow.
-         */
-        private var currentIndex: Int
 
         /**
          * Returns the number of distinct values in the set.
@@ -100,29 +104,38 @@ namespace Am.Collections {
                 this.nextIndexes = new Int[this.bucketSize]
                 this.values = new T[this.bucketSize]
                 this.valueIndexes = new Int[this.bucketSize]
-                this.currentIndex = this.bucketSize
             }
 
-            if ( this.size * 4 >= this.bucketSize * 2 || this.currentIndex >= (this.bucketSize * 2) ) {
-                var valueLastIndex = this.currentValueIndex
+            // Grow at load factor 0.5 of LIVE values. size is the sole trigger: slots are
+            // recycled, so the slot count never passes the peak live count, and the rehash
+            // walks only live bucket chains.
+            if (this.size * 4 >= this.bucketSize * 2) {
+                var oldValueIndexes = this.valueIndexes
+                var oldNextIndexes = this.nextIndexes
                 var oldValues = this.values
+                var oldBucketSize = this.bucketSize
                 var newBucketSize = this.bucketSize * 4
                 this.bucketSize = newBucketSize
-                this.currentIndex = newBucketSize
                 this.currentValueIndex = 0
+                this.freeHead = 0
                 this.size = 0
 
                 this.nextIndexes = new Int[newBucketSize]
                 this.values = new T[newBucketSize]
                 this.valueIndexes = new Int[newBucketSize]
-//                ("create new bucket in HashSet: " + this.bucketSize.toString() + ", copy " + valueLastIndex.toString() + " items").println()
 
-                var i = 0
-                while(i < valueLastIndex) {
-                    var oldValue = oldValues[i]
-                    this.privateSetValue(oldValue)
-                    i++
-                }       
+                // Re-insert LIVE values only, by walking the old bucket chains. Freed slots
+                // are on the old free list, unreachable from any bucket, so a removed value
+                // is not brought back.
+                var b = 0
+                while (b < oldBucketSize) {
+                    var vi = oldValueIndexes[b] - 1
+                    while (vi > -1) {
+                        this.privateSetValue(oldValues[vi])
+                        vi = oldNextIndexes[vi] - 1
+                    }
+                    b++
+                }
             }
 
             this.privateSetValue(value)
@@ -146,26 +159,24 @@ namespace Am.Collections {
                 return
             }
 
-            this.values[this.currentValueIndex] = value
-//            this.nextIndexes[this.currentValueIndex] = 0
-
-            if (valueIndex < 0) {
-                this.valueIndexes[index] = this.currentValueIndex + 1 // cause all are initially set to 0, then a real 0 will be 1
-                this.nextIndexes[this.currentValueIndex] = 0
-                this.size++            
-            } 
-            else {        
-//                {v: x, n: 0}          
-//              {v: y, n: x}
-//                this.valueIndexes[this.currentIndex] = valueIndex + 1 // append new index to the value at the end
-//                this.nextIndexes[this.currentValueIndex] = this.nextIndexes[valueIndex] // append new index to the next value at the end
-
-                this.valueIndexes[index] = this.currentValueIndex + 1
-                this.nextIndexes[this.currentValueIndex] = valueIndex + 1 // old value
-                this.currentIndex++
-                this.size++
+            // Allocate a slot: reuse a freed one if available, else extend.
+            var slot = 0
+            if (this.freeHead > 0) {
+                slot = this.freeHead - 1
+                this.freeHead = this.nextIndexes[slot]
+            } else {
+                slot = this.currentValueIndex
+                this.currentValueIndex++
             }
-            this.currentValueIndex++
+
+            this.values[slot] = value
+            if (valueIndex < 0) {
+                this.nextIndexes[slot] = 0
+            } else {
+                this.nextIndexes[slot] = valueIndex + 1 // chain to old head
+            }
+            this.valueIndexes[index] = slot + 1 // new head of the bucket (0 means empty, so +1)
+            this.size++
         }
         /**
          * Tests whether a value is in the set; an alias for has() that matches the naming used by List.
@@ -185,8 +196,8 @@ namespace Am.Collections {
         }
 
         /**
-         * Removes a value from the set. The slot it occupied is not returned to a free list, so heavy
-         * add/remove churn grows the backing arrays over time.
+         * Removes a value from the set. The slot it occupied goes on a free list for the next add,
+         * and the set lets go of the value, so repeated add-and-remove cycles do not grow the set.
          * @param value The value to remove
          * @return True if the value was present and removed
          */
@@ -212,6 +223,7 @@ namespace Am.Collections {
                 } else {
                     this.valueIndexes[index] = 0
                 }
+                this.freeSlot(valueIndex)
                 this.size--
                 return true
             }
@@ -229,6 +241,7 @@ namespace Am.Collections {
                     } else {
                         this.nextIndexes[previousIndex] = 0
                     }
+                    this.freeSlot(valueIndex)
                     this.size--
                     return true
                 }
@@ -236,6 +249,18 @@ namespace Am.Collections {
                 valueIndex = this.nextIndexes[valueIndex] - 1
             }
             return false
+        }
+
+        /**
+         * Returns an unlinked slot to the free list. Its nextIndexes cell becomes the free-list
+         * link, and the value reference is dropped now so the removed object is released rather
+         * than pinned in the backing array until the slot is reused.
+         * @param slot Index of the slot to release
+         */
+        private fun freeSlot(slot: Int) {
+            this.nextIndexes[slot] = this.freeHead
+            this.freeHead = slot + 1
+            this.values[slot] = default(T)
         }
 
         /**
@@ -248,7 +273,7 @@ namespace Am.Collections {
             }
             this.size = 0
             this.currentValueIndex = 0
-            this.currentIndex = this.bucketSize
+            this.freeHead = 0
             if (this.valueIndexes.length() > 0) {
                 var i = 0
                 while(i < this.valueIndexes.length()) {

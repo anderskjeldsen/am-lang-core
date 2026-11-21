@@ -1,0 +1,296 @@
+namespace Tests {
+
+    // Redmine #500: HashSet.remove never freed its slot (the removed value stayed
+    // referenced in values[]), and the rehash in add() re-inserted every slot up
+    // to the high-water mark, so after a resize a removed value was a member
+    // again. HashSet now recycles freed slots through a free list, clears the
+    // slot's value, and rehashes by walking live bucket chains, as HashMap does.
+    // HashMap's own remove path is checked here too.
+
+    // Equal by id, so a set holds one per id and a removal finds it by id.
+    class HsItem(var id: Int) {
+        import Am.Lang
+
+        override fun hash(): UInt {
+            return this.id as UInt
+        }
+
+        override fun equals(other: Object): Bool {
+            try {
+                return (other as HsItem).id == this.id
+            } catch (e: Exception) {
+            }
+            return false
+        }
+    }
+
+    class HashSetRemoveTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun addItem(s: HashSet<HsItem>, id: Int) {
+            s.add(new HsItem(id))
+        }
+
+        static fun removeItem(s: HashSet<HsItem>, id: Int): Bool {
+            return s.remove(new HsItem(id))
+        }
+
+        static fun hasItem(s: HashSet<HsItem>, id: Int): Bool {
+            return s.contains(new HsItem(id))
+        }
+
+        static fun putItem(m: HashMap<Int, HsItem>, key: Int, id: Int) {
+            m.set(key, new HsItem(id))
+        }
+
+        // Sum and count of what iteration yields.
+        static fun sumOf(s: HashSet<Int>): Int {
+            var sum = 0
+            each(x in s) {
+                sum += x
+            }
+            return sum
+        }
+
+        static fun countOf(s: HashSet<Int>): Int {
+            var n = 0
+            each(x in s) {
+                n++
+            }
+            return n
+        }
+
+        test addRemoveReAdd() {
+            var s = new HashSet<Int>()
+            s.add(1)
+            s.add(2)
+            s.add(3)
+            Assert.assertEquals(3, s.getSize())
+            Assert.assertTrue(s.remove(2))
+            Assert.assertEquals(2, s.getSize())
+            Assert.assertFalse(s.contains(2))
+            Assert.assertFalse(s.remove(2))
+            Assert.assertEquals(2, s.getSize())
+            s.add(2)
+            Assert.assertEquals(3, s.getSize())
+            Assert.assertTrue(s.contains(2))
+            s.add(2)
+            Assert.assertEquals(3, s.getSize())
+            Assert.assertEquals(6, HashSetRemoveTests.sumOf(s))
+            Assert.assertEquals(3, HashSetRemoveTests.countOf(s))
+        }
+
+        test removeFromEmptyAndAbsent() {
+            var s = new HashSet<Int>()
+            Assert.assertFalse(s.remove(1))
+            s.add(1)
+            Assert.assertFalse(s.remove(1025))
+            Assert.assertEquals(1, s.getSize())
+        }
+
+        // 0 and 1024 share a bucket in the first table (1024 buckets), so the
+        // removal hits the head, the middle and the tail of one chain.
+        test removeFromAChain() {
+            var s = new HashSet<Int>()
+            s.add(0)
+            s.add(1024)
+            s.add(2048)
+            s.add(3072)
+            Assert.assertTrue(s.remove(2048))
+            Assert.assertTrue(s.remove(3072))
+            Assert.assertTrue(s.remove(0))
+            Assert.assertEquals(1, s.getSize())
+            Assert.assertTrue(s.contains(1024))
+            Assert.assertFalse(s.contains(0))
+            Assert.assertFalse(s.contains(2048))
+            Assert.assertFalse(s.contains(3072))
+            s.add(2048)
+            Assert.assertEquals(2, s.getSize())
+            Assert.assertEquals(3072, HashSetRemoveTests.sumOf(s))
+        }
+
+        test removedValuesStayGoneAcrossAResize() {
+            var s = new HashSet<Int>()
+            var i = 0
+            while (i < 100) {
+                s.add(i)
+                i++
+            }
+            i = 0
+            while (i < 100) {
+                if (i % 2 == 0) {
+                    s.remove(i)
+                }
+                i++
+            }
+            Assert.assertEquals(50, s.getSize())
+            // Enough adds to resize (1024 buckets, grows at 512 live values),
+            // twice over with the second growth.
+            i = 1000
+            while (i < 3000) {
+                s.add(i)
+                i++
+            }
+            Assert.assertEquals(50 + 2000, s.getSize())
+            i = 0
+            while (i < 100) {
+                Assert.assertEquals(i % 2 == 1, s.contains(i))
+                i++
+            }
+            Assert.assertEquals(2050, HashSetRemoveTests.countOf(s))
+            var expected = 0
+            i = 1
+            while (i < 100) {
+                expected += i
+                i += 2
+            }
+            i = 1000
+            while (i < 3000) {
+                expected += i
+                i++
+            }
+            Assert.assertEquals(expected, HashSetRemoveTests.sumOf(s))
+            Assert.assertEquals(2050, s.toArray().length() as Int)
+        }
+
+        // Removing as it goes, past several resizes: size and membership after every step.
+        test sizeAfterEveryStep() {
+            var s = new HashSet<Int>()
+            var i = 0
+            var live = 0
+            while (i < 3000) {
+                s.add(i)
+                live++
+                Assert.assertEquals(live, s.getSize())
+                if (i % 3 == 0) {
+                    Assert.assertTrue(s.remove(i))
+                    live--
+                    Assert.assertEquals(live, s.getSize())
+                    Assert.assertFalse(s.contains(i))
+                }
+                i++
+            }
+            i = 0
+            while (i < 3000) {
+                Assert.assertEquals(i % 3 != 0, s.contains(i))
+                i++
+            }
+            Assert.assertEquals(live, HashSetRemoveTests.countOf(s))
+        }
+
+        test clearThenReuse() {
+            var s = new HashSet<Int>()
+            var i = 0
+            while (i < 700) {
+                s.add(i)
+                i++
+            }
+            s.remove(5)
+            s.clear()
+            Assert.assertEquals(0, s.getSize())
+            Assert.assertTrue(s.isEmpty())
+            Assert.assertFalse(s.contains(6))
+            Assert.assertEquals(0, HashSetRemoveTests.countOf(s))
+            s.add(5)
+            s.add(6)
+            Assert.assertEquals(2, s.getSize())
+            Assert.assertEquals(11, HashSetRemoveTests.sumOf(s))
+        }
+
+        test removedObjectsAreReleased() {
+            var s = new HashSet<HsItem>()
+            var i = 0
+            while (i < 10) {
+                HashSetRemoveTests.addItem(s, i)
+                i++
+            }
+            Assert.assertEquals(10, instances(HsItem))
+            Assert.assertTrue(HashSetRemoveTests.removeItem(s, 3))
+            Assert.assertEquals(9, instances(HsItem))
+            Assert.assertTrue(HashSetRemoveTests.removeItem(s, 0))
+            Assert.assertTrue(HashSetRemoveTests.removeItem(s, 9))
+            Assert.assertEquals(7, instances(HsItem))
+            Assert.assertFalse(HashSetRemoveTests.hasItem(s, 3))
+            Assert.assertTrue(HashSetRemoveTests.hasItem(s, 4))
+            // Removed objects stay released through a resize too.
+            i = 100
+            while (i < 700) {
+                HashSetRemoveTests.addItem(s, i)
+                i++
+            }
+            Assert.assertEquals(607, s.getSize())
+            Assert.assertEquals(607, instances(HsItem))
+            Assert.assertFalse(HashSetRemoveTests.hasItem(s, 3))
+            s.clear()
+            Assert.assertEquals(0, instances(HsItem))
+        }
+
+        test hashMapRemoveReleasesAndStaysGoneAcrossAResize() {
+            var m = new HashMap<Int, HsItem>()
+            var i = 0
+            while (i < 20) {
+                HashSetRemoveTests.putItem(m, i, i)
+                i++
+            }
+            Assert.assertEquals(20, instances(HsItem))
+            i = 0
+            while (i < 20) {
+                if (i % 2 == 0) {
+                    Assert.assertTrue(m.remove(i))
+                }
+                i++
+            }
+            Assert.assertEquals(10, m.getSize())
+            Assert.assertEquals(10, instances(HsItem))
+            // Several resizes (8 buckets at the start, x8 each time).
+            i = 100
+            while (i < 1100) {
+                HashSetRemoveTests.putItem(m, i, i)
+                i++
+            }
+            Assert.assertEquals(1010, m.getSize())
+            Assert.assertEquals(1010, instances(HsItem))
+            i = 0
+            while (i < 20) {
+                Assert.assertEquals(i % 2 == 1, m.containsKey(i))
+                i++
+            }
+            Assert.assertEquals(1010, m.buildKeys().getSize())
+            // add, remove, add again with the same key, past a resize
+            Assert.assertTrue(m.remove(1))
+            HashSetRemoveTests.putItem(m, 1, 1)
+            Assert.assertEquals(1010, m.getSize())
+            Assert.assertEquals(1010, instances(HsItem))
+            m.clear()
+            Assert.assertEquals(0, instances(HsItem))
+        }
+
+        test hundredThousandAddRemoveCycles() {
+            var s = new HashSet<Int>()
+            var m = new HashMap<Int, Int>()
+            var i = 0
+            while (i < 100000) {
+                s.add(i)
+                m.set(i, i)
+                Assert.assertTrue(s.remove(i))
+                Assert.assertTrue(m.remove(i))
+                i++
+            }
+            Assert.assertEquals(0, s.getSize())
+            Assert.assertEquals(0, m.getSize())
+            Assert.assertFalse(s.contains(99999))
+            // A few live values among the churn stay put.
+            s.add(7)
+            i = 0
+            while (i < 100000) {
+                s.add(1000000 + i)
+                s.remove(1000000 + i)
+                i++
+            }
+            Assert.assertEquals(1, s.getSize())
+            Assert.assertTrue(s.contains(7))
+        }
+    }
+}
