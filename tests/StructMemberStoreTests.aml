@@ -130,6 +130,24 @@ namespace Tests {
             return other.x * 10 + p.x
         }
 
+        // Read-only: used in place (not copied on entry).
+        static fun readOnly(p: SmsPoint): Int {
+            return p.x * 10 + p.y
+        }
+
+        // Read-only, passed on to a function that writes its own copy.
+        static fun passOn(p: SmsPoint): Int {
+            var r = SmsHolder.clobber(p)
+            return r + p.x
+        }
+
+        // Read-only, stored into a static and a field: the stores copy.
+        static fun keep(p: SmsPoint, h: SmsHolder) {
+            spt = p
+            h.ipt = p
+            h.arr[0] = p
+        }
+
         static fun bump(p: SmsPoint): SmsPoint {
             p.x += 100
             return p
@@ -342,6 +360,28 @@ namespace Tests {
             var r = SmsHolder.bump(lp)
             Assert.assertEquals(120, r.x)
             Assert.assertEquals(20, lp.x)
+        }
+
+        test readOnlyStructParametersSeeTheValuePassed() {
+            var lp: SmsPoint
+            lp.x = 3
+            lp.y = 4
+            Assert.assertEquals(34, SmsHolder.readOnly(lp))
+            Assert.assertEquals(104, SmsHolder.passOn(lp))
+            Assert.assertEquals(3, lp.x)
+            var h = new SmsHolder()
+            SmsHolder.keep(lp, h)
+            SmsHolder.spt.x += 10
+            h.ipt.x += 20
+            h.arr[0].x += 30
+            Assert.assertEquals(3, lp.x)
+            Assert.assertEquals(13, SmsHolder.spt.x)
+            Assert.assertEquals(23, h.ipt.x)
+            Assert.assertEquals(33, h.arr[0].x)
+            lp.x = 5
+            Assert.assertEquals(13, SmsHolder.spt.x)
+            Assert.assertEquals(23, h.ipt.x)
+            Assert.assertEquals(54, SmsHolder.readOnly(lp))
         }
 
         test memberStoreInALambda() {
