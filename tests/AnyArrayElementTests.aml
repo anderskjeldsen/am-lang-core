@@ -1,0 +1,115 @@
+namespace Tests {
+
+    // Redmine #395: after `arr[0] = 2.75` on an `Any[]`, reading `arr[0]` in v1
+    // failed with "`Any?` is redundant" on a line that never wrote `Any?`. The
+    // element read is typed nullable and the check fired on that compiler-made
+    // type. Reads of an Any element through toString, `as`, `is`, a typed
+    // local and an argument, for Int, Double, String, an object and null,
+    // (`List<Any>` and `HashMap<String, Any>` don't compile in v1 yet, #396.)
+
+    class AaeThing {
+        import Am.Lang
+
+        var n: Int = 7
+
+        override fun toString(): String {
+            return "thing " + this.n.toString()
+        }
+    }
+
+    class AnyArrayElementTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun text(a: Any): String {
+            return a.toString()
+        }
+
+        static fun isNothing(a: Any): Bool {
+            return a == null
+        }
+
+        test intElement() {
+            var arr = new Any[2]
+            arr[0] = 42
+            Assert.assertEquals("42", arr[0].toString())
+            var e: Any = arr[0]
+            Assert.assertEquals("42", e.toString())
+            Assert.assertEquals(42, arr[0] as Int)
+            Assert.assertTrue(arr[0] is Int)
+            Assert.assertFalse(arr[0] is String)
+            Assert.assertEquals("42", AnyArrayElementTests.text(arr[0]))
+        }
+
+        test doubleElement() {
+            var arr = new Any[2]
+            arr[0] = 2.75
+            Assert.assertEquals("2.75", arr[0].toString())
+            var e: Any = arr[0]
+            Assert.assertEquals("2.75", e.toString())
+            var d = arr[0] as Double
+            Assert.assertTrue(d == 2.75)
+            Assert.assertTrue(arr[0] is Double)
+            Assert.assertFalse(arr[0] is Int)
+            Assert.assertEquals("2.75", AnyArrayElementTests.text(arr[0]))
+        }
+
+        test stringElement() {
+            var arr: Any[] = new Any[2]
+            arr[1] = "hello"
+            Assert.assertEquals("hello", arr[1].toString())
+            var e: Any = arr[1]
+            Assert.assertEquals("hello", e.toString())
+            Assert.assertEquals("hello", arr[1] as String)
+            Assert.assertTrue(arr[1] is String)
+            Assert.assertFalse(arr[1] is Double)
+        }
+
+        test objectElement() {
+            var arr = new Any[2]
+            arr[0] = new AaeThing()
+            Assert.assertEquals("thing 7", arr[0].toString())
+            var e: Any = arr[0]
+            Assert.assertEquals("thing 7", e.toString())
+            var t = arr[0] as AaeThing
+            Assert.assertEquals(7, t.n)
+            Assert.assertTrue(arr[0] is AaeThing)
+            Assert.assertFalse(arr[0] is String)
+        }
+
+        test nullElement() {
+            var arr = new Any[2]
+            arr[0] = 5
+            arr[0] = null
+            var e: Any = arr[0]
+            Assert.assertTrue(e == null)
+            Assert.assertTrue(arr[1] == null)
+            Assert.assertTrue(AnyArrayElementTests.isNothing(arr[1]))
+            arr[1] = 3
+            Assert.assertFalse(AnyArrayElementTests.isNothing(arr[1]))
+            arr[1] = null
+            Assert.assertFalse(arr[1] is String)
+            Assert.assertFalse(arr[1] is Int)
+            var threw = false
+            try {
+                arr[1].toString()
+            } catch (ex: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+
+        test mixedElements() {
+            var arr = new Any[4]
+            arr[0] = 1
+            arr[1] = 2.5
+            arr[2] = "three"
+            arr[3] = new AaeThing()
+            var out = ""
+            for (i = 0 until 4) {
+                out = out + arr[i].toString() + ";"
+            }
+            Assert.assertEquals("1;2.5;three;thing 7;", out)
+        }
+    }
+}
