@@ -78,5 +78,47 @@ namespace Tests {
             var s = "<" + "${NtEcho.echo("m")}" + ">" + "${NtEcho.echo("}")}"
             Assert.assertEquals("<m>}", s)
         }
+
+        // Redmine #463: escapes are decided once. `\\` is a backslash and never the
+        // start of `\$`, so `"\\${n}"` is a backslash and then the fragment.
+        test backslashBeforeAFragment() {
+            var n = 3
+            Assert.assertEquals("\\3", "\\${n}")
+            Assert.assertEquals("\\3", "\\$n")
+            Assert.assertEquals("\${n}", "\${n}")
+            Assert.assertEquals("\\\${n}", "\\\${n}")
+            Assert.assertEquals("\\\\3", "\\\\${n}")
+            Assert.assertEquals(2, "\\${n}".length())
+            Assert.assertEquals(5, "\\\${n}".length())
+            Assert.assertEquals(3, "\\\\${n}".length())
+        }
+
+        test dollarEscapeFollowedByText() {
+            var n = 3
+            Assert.assertEquals("\$x and 3", "\$x and ${n}")
+            Assert.assertEquals("\${n}abc", "\${n}abc")
+            Assert.assertEquals("\\x3", "\\x${n}")
+            Assert.assertEquals("a\\b$", "a\\b\$")
+            Assert.assertEquals("\\$", "\\\$")
+        }
+
+        test escapesNextToFragments() {
+            var n = 3
+            Assert.assertEquals("a\nb\\3\t", "a\nb\\${n}\t")
+            Assert.assertEquals("3\\3", "${n}\\${n}")
+            Assert.assertEquals("\"\\3\"", "\"\\${n}\"")
+            Assert.assertEquals("3\\", "${n}\\")
+            Assert.assertEquals("\\3\\", "\\${n}\\")
+        }
+
+        test backslashesInsideAFragmentString() {
+            var n = 3
+            Assert.assertEquals("a\\b", "${NtEcho.echo("a\\b")}")
+            Assert.assertEquals("\\3", "\\${NtEcho.echo("3")}")
+            Assert.assertEquals("\\3", "${NtEcho.echo("\\")}${NtEcho.echo("3")}")
+            Assert.assertEquals("\\\"", "\\${NtEcho.echo("\"")}")
+            Assert.assertEquals("\${n}", "${NtEcho.echo("\${n}")}")
+            Assert.assertEquals("\\3", "${NtEcho.echo("\\")}$n")
+        }
     }
 }
