@@ -1,0 +1,219 @@
+namespace Tests {
+
+    class NlaHolder {
+        import Am.Lang
+        var i: Any = -3
+        var l: Any = -4L
+        var d: Any = -1.5
+        var assigned: Any = 0
+    }
+
+    class NlaNode {
+        import Am.Lang
+        var id: Int = 7
+    }
+
+    class NlaOther {
+        import Am.Lang
+    }
+
+    // Redmine #493: `var n: Any = -3` rendered `.object_value = -(3)` in v2 (a gcc
+    // error), because the unary minus on a literal was not seen as a numeric
+    // literal by the Any boxing. Redmine #504: `a as Node?` did not parse in v2.
+    class NegativeLiteralAnyTests {
+        import Am.Lang
+        import Am.Tests
+        import Am.Collections
+
+        fun takeAny(a: Any): String {
+            return a.toString()
+        }
+
+        fun retInt(): Any {
+            return -3
+        }
+
+        fun retLong(): Any {
+            return -3L
+        }
+
+        fun retDouble(): Any {
+            return -1.5
+        }
+
+        fun retLocal(): Any {
+            var x = 8
+            return -x
+        }
+
+        test localInitialisers() {
+            var a: Any = -3
+            var b: Any = -3L
+            var c: Any = -1.5
+            var x = 5
+            var d: Any = -x
+            var y = 2.5
+            var e: Any = -y
+            Assert.assertEquals("-3", a.toString())
+            Assert.assertEquals("-3", b.toString())
+            Assert.assertEquals("-1.5", c.toString())
+            Assert.assertEquals("-5", d.toString())
+            Assert.assertEquals("-2.5", e.toString())
+            Assert.assertEquals(-3, a as Int)
+            Assert.assertEquals(-3L, b as Long)
+            Assert.assertEquals(-5, d as Int)
+        }
+
+        test fieldInitialisers() {
+            var h = new NlaHolder()
+            Assert.assertEquals("-3", h.i.toString())
+            Assert.assertEquals("-4", h.l.toString())
+            Assert.assertEquals("-1.5", h.d.toString())
+            Assert.assertEquals(-3, h.i as Int)
+        }
+
+        test fieldAssignments() {
+            var h = new NlaHolder()
+            h.assigned = -7
+            Assert.assertEquals("-7", h.assigned.toString())
+            h.assigned = -7L
+            Assert.assertEquals("-7", h.assigned.toString())
+            h.assigned = -2.25
+            Assert.assertEquals("-2.25", h.assigned.toString())
+            var x = 9
+            h.assigned = -x
+            Assert.assertEquals("-9", h.assigned.toString())
+            Assert.assertEquals(-9, h.assigned as Int)
+        }
+
+        test localAssignments() {
+            var a: Any = 1
+            a = -3
+            Assert.assertEquals("-3", a.toString())
+            a = -2.5
+            Assert.assertEquals("-2.5", a.toString())
+        }
+
+        test arguments() {
+            Assert.assertEquals("-3", this.takeAny(-3))
+            Assert.assertEquals("-3", this.takeAny(-3L))
+            Assert.assertEquals("-1.5", this.takeAny(-1.5))
+            var x = 6
+            Assert.assertEquals("-6", this.takeAny(-x))
+        }
+
+        test returns() {
+            Assert.assertEquals("-3", this.retInt().toString())
+            Assert.assertEquals("-3", this.retLong().toString())
+            Assert.assertEquals("-1.5", this.retDouble().toString())
+            Assert.assertEquals("-8", this.retLocal().toString())
+            Assert.assertEquals(-3, this.retInt() as Int)
+        }
+
+        test listOfAny() {
+            var list = new List<Any>()
+            list.add(-3)
+            list.add(-3L)
+            list.add(-1.5)
+            var x = 4
+            list.add(-x)
+            Assert.assertEquals("-3", list.get(0).toString())
+            Assert.assertEquals("-3", list.get(1).toString())
+            Assert.assertEquals("-1.5", list.get(2).toString())
+            Assert.assertEquals("-4", list.get(3).toString())
+        }
+
+        test castToNullableObject() {
+            var nothing: Any = null
+            var r1 = nothing as NlaNode?
+            Assert.assertTrue(r1 == null)
+            var node: Any = new NlaNode()
+            var r2 = node as NlaNode?
+            Assert.assertTrue(r2 != null)
+            Assert.assertEquals(7, r2!!.id)
+        }
+
+        test castToNullableObjectWrongTypeThrows() {
+            var other: Any = new NlaOther()
+            var threw = false
+            try {
+                var r = other as NlaNode?
+                Assert.assertTrue(r == null)
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+
+        test castToNullablePrimitive() {
+            var five: Any = 5
+            var a = five as Int?
+            Assert.assertTrue(a != null)
+            Assert.assertEquals(5, a!!)
+            var nothing: Any = null
+            var b = nothing as Int?
+            Assert.assertTrue(b == null)
+        }
+
+        test castToNullablePrimitiveZeroIsNotNull() {
+            var zero: Any = 0
+            var a = zero as Int?
+            Assert.assertTrue(a != null)
+            Assert.assertEquals(0, a!!)
+            var neg: Any = -3
+            var b = neg as Int?
+            Assert.assertTrue(b != null)
+            Assert.assertEquals(-3, b!!)
+        }
+
+        test castToNullablePrimitiveWrongTypeThrows() {
+            var text: Any = "five"
+            var threw = false
+            try {
+                var a = text as Int?
+                Assert.assertTrue(a == null)
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+
+        test nonNullCastOfNullStillThrows() {
+            var nothing: Any = null
+            var threw = false
+            try {
+                var n = nothing as NlaNode
+                Assert.assertTrue(n == null)
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+
+        test isWithNullableType() {
+            var node: Any = new NlaNode()
+            var other: Any = new NlaOther()
+            Assert.assertTrue(node is NlaNode?)
+            Assert.assertTrue(!(other is NlaNode?))
+        }
+
+        fun nodeOrNull(a: Any): NlaNode? {
+            return a as NlaNode?
+        }
+
+        test castInReturn() {
+            Assert.assertTrue(this.nodeOrNull(new NlaNode()) != null)
+            var nothing: Any = null
+            Assert.assertTrue(this.nodeOrNull(nothing) == null)
+        }
+
+        test castToNullableGeneric() {
+            var l: Any = new List<Int>()
+            var r = l as List<Int>?
+            Assert.assertTrue(r != null)
+            var nothing: Any = null
+            var r2 = nothing as List<Int>?
+            Assert.assertTrue(r2 == null)
+        }
+    }
+}
