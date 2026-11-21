@@ -1,0 +1,89 @@
+namespace Tests {
+
+    // Redmine #518: the test runner builds each test class as `new X()`
+    // builds it, so an instance `test` sees its property defaults, init
+    // blocks and base-class constructor arguments. The v1 runner used to
+    // allocate the instance bare: `x` read 0 here and `box.n` segfaulted the
+    // whole run, losing every line of output.
+    class TiBox(var n: Int) {
+        import Am.Lang
+    }
+
+    class TiFields {
+        import Am.Lang
+        import Am.Tests
+
+        var x: Int = 5
+        var flag: Bool = true
+        var name: String = "fields"
+        var box: TiBox = new TiBox(7)
+        var maybe: TiBox? = null
+        var list: Am.Collections.List<Int> = new Am.Collections.List<Int>()
+
+        test primitiveDefaults() {
+            Assert.assertEquals(5, x)
+            Assert.assertTrue(flag)
+        }
+
+        test objectDefaults() {
+            Assert.assertEquals("fields", name)
+            Assert.assertEquals(7, box.n)
+            Assert.assertTrue(maybe == null)
+            Assert.assertTrue(list.getSize() == 0)
+        }
+
+        test thisQualified() {
+            Assert.assertEquals(5, this.x)
+            Assert.assertEquals(7, this.box.n)
+        }
+    }
+
+    class TiInitBlock {
+        import Am.Lang
+        import Am.Tests
+
+        var y: Int = 1
+        var label: String = "before"
+
+        init {
+            y = y + 8
+            label = "after"
+        }
+
+        test initBlockRan() {
+            Assert.assertEquals(9, y)
+            Assert.assertEquals("after", label)
+        }
+    }
+
+    class TiBase(var k: Int) {
+        import Am.Lang
+        var fromBase: String = "base"
+    }
+
+    class TiDerived() : TiBase(11) {
+        import Am.Lang
+        import Am.Tests
+
+        var own: Int = 2
+
+        test baseConstructorArgument() {
+            Assert.assertEquals(11, k)
+            Assert.assertEquals("base", fromBase)
+            Assert.assertEquals(2, own)
+        }
+    }
+
+    class TiConstOnly {
+        import Am.Lang
+        import Am.Tests
+
+        var a: Int = 3
+        var b: Long = 40000000000L
+
+        test constantDefaults() {
+            Assert.assertEquals(3, a)
+            Assert.assertTrue(b == 40000000000L)
+        }
+    }
+}
