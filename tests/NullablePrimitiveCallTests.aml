@@ -1,0 +1,296 @@
+namespace Tests {
+
+    // Redmine #528, #506: `Int?`, `Long?`, `Bool?` and `Color?` values (a call
+    // result, a local, a field) used where a primitive is needed: `toString()`,
+    // `!!.toString()`, `!!.hash()` and a template fragment. The printed strings
+    // are checked. v2 passed the whole nullable_value to the primitive's
+    // toString (gcc "incompatible type for argument 1") for a template fragment
+    // of a call result or a field, and `f()!!.g()` as a statement was a parse
+    // error. A null throws; the message of an exception from a template is
+    // v1's "Null reference: <name>".
+    //
+    // An enum's toString() is its number, not its member name (#506: v2 calls
+    // Int's toString for it, as v1 does).
+
+    enum NpcColor {
+        import Am.Lang
+
+        red = 1
+        blue = 2
+    }
+
+    class NpcHolder {
+        import Am.Lang
+
+        var i: Int? = null
+        var l: Long? = null
+        var b: Bool? = null
+        var c: NpcColor? = null
+
+        fun fill() {
+            this.i = 5
+            this.l = 6L
+            this.b = true
+            this.c = NpcColor.blue
+        }
+
+        fun inst(give: Bool): Int? {
+            if (give) { return 3 }
+            return null
+        }
+
+        fun fieldIsSet(give: Bool): Bool? {
+            if (give) { return true }
+            return null
+        }
+
+        fun instColor(give: Bool): NpcColor? {
+            if (give) { return NpcColor.red }
+            return null
+        }
+    }
+
+    class NullablePrimitiveCallTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun mi(give: Bool): Int? {
+            if (give) { return 7 }
+            return null
+        }
+
+        static fun ml(give: Bool): Long? {
+            if (give) { return 9L }
+            return null
+        }
+
+        static fun mb(give: Bool): Bool? {
+            if (give) { return true }
+            return null
+        }
+
+        static fun mc(give: Bool): NpcColor? {
+            if (give) { return NpcColor.blue }
+            return null
+        }
+
+        static fun note(e: Exception): String {
+            return e.message
+        }
+
+        // ---- a plain Color and a Color? print the number (#506) ----
+
+        test colorToStringIsTheNumber() {
+            var c = NpcColor.blue
+            Assert.assertEquals("2", c.toString())
+            Assert.assertEquals("c=2", "c=${c}")
+            var n: NpcColor? = NpcColor.red
+            Assert.assertEquals("1", n.toString())
+            Assert.assertEquals("1", n!!.toString())
+            Assert.assertEquals("n=1", "n=${n}")
+            Assert.assertEquals("2", NullablePrimitiveCallTests.mc(true).toString())
+        }
+
+        // ---- !!.toString() on a call result ----
+
+        test bangToStringOnACallResult() {
+            Assert.assertEquals("7", NullablePrimitiveCallTests.mi(true)!!.toString())
+            Assert.assertEquals("9", NullablePrimitiveCallTests.ml(true)!!.toString())
+            Assert.assertEquals("true", NullablePrimitiveCallTests.mb(true)!!.toString())
+            Assert.assertEquals("2", NullablePrimitiveCallTests.mc(true)!!.toString())
+            var h = new NpcHolder()
+            Assert.assertEquals("3", h.inst(true)!!.toString())
+            Assert.assertEquals("1", h.instColor(true)!!.toString())
+        }
+
+        test bangToStringOnANullCallResultThrows() {
+            var threw = 0
+            try { NullablePrimitiveCallTests.mi(false)!!.toString() } catch (e: Exception) { threw++ }
+            try { NullablePrimitiveCallTests.ml(false)!!.toString() } catch (e: Exception) { threw++ }
+            try { NullablePrimitiveCallTests.mb(false)!!.toString() } catch (e: Exception) { threw++ }
+            try { NullablePrimitiveCallTests.mc(false)!!.toString() } catch (e: Exception) { threw++ }
+            Assert.assertEquals(4, threw)
+        }
+
+        // `f()!!.g()` as a statement (v2 did not parse it)
+        static var seen: String = ""
+
+        static fun remember(s: String) {
+            NullablePrimitiveCallTests.seen = NullablePrimitiveCallTests.seen + s + ";"
+        }
+
+        test bangChainAsAStatement() {
+            NullablePrimitiveCallTests.seen = ""
+            NullablePrimitiveCallTests.mi(true)!!.toString().length()
+            NullablePrimitiveCallTests.mc(true)!!.toString().length()
+            NullablePrimitiveCallTests.remember(NullablePrimitiveCallTests.ml(true)!!.toString())
+            NullablePrimitiveCallTests.remember(NullablePrimitiveCallTests.mb(true)!!.toString() + "!")
+            Assert.assertEquals("9;true!;", NullablePrimitiveCallTests.seen)
+            var threw = false
+            try {
+                NullablePrimitiveCallTests.mi(false)!!.toString().length()
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+
+        // ---- toString() / !!.toString() on a call result: no bang ----
+
+        test toStringOnACallResult() {
+            Assert.assertEquals("7", NullablePrimitiveCallTests.mi(true).toString())
+            Assert.assertEquals("9", NullablePrimitiveCallTests.ml(true).toString())
+            Assert.assertEquals("true", NullablePrimitiveCallTests.mb(true).toString())
+            Assert.assertEquals("2", NullablePrimitiveCallTests.mc(true).toString())
+        }
+
+        test toStringOnANullCallResultThrows() {
+            var threw = 0
+            try { NullablePrimitiveCallTests.mi(false).toString() } catch (e: Exception) { threw++ }
+            try { NullablePrimitiveCallTests.ml(false).toString() } catch (e: Exception) { threw++ }
+            try { NullablePrimitiveCallTests.mb(false).toString() } catch (e: Exception) { threw++ }
+            try { NullablePrimitiveCallTests.mc(false).toString() } catch (e: Exception) { threw++ }
+            Assert.assertEquals(4, threw)
+        }
+
+        // ---- locals ----
+
+        test locals() {
+            var i = NullablePrimitiveCallTests.mi(true)
+            var l = NullablePrimitiveCallTests.ml(true)
+            var b = NullablePrimitiveCallTests.mb(true)
+            var c = NullablePrimitiveCallTests.mc(true)
+            Assert.assertEquals("7", i!!.toString())
+            Assert.assertEquals("9", l!!.toString())
+            Assert.assertEquals("true", b!!.toString())
+            Assert.assertEquals("2", c!!.toString())
+            Assert.assertEquals("7 9 true 2", i.toString() + " " + l.toString() + " " + b.toString() + " " + c.toString())
+            Assert.assertEquals("7 9 true 2", "${i} ${l} ${b} ${c}")
+            Assert.assertEquals("7 9 true 2", "${i!!} ${l!!} ${b!!} ${c!!}")
+        }
+
+        test annotatedLocals() {
+            var i: Int? = 11
+            var c: NpcColor? = NpcColor.red
+            Assert.assertEquals("11", i!!.toString())
+            Assert.assertEquals("1", c!!.toString())
+            Assert.assertEquals("i=11 c=1", "i=${i} c=${c}")
+            i = null
+            c = null
+            var threw = 0
+            try { i!!.toString() } catch (e: Exception) { threw++ }
+            try { c!!.toString() } catch (e: Exception) { threw++ }
+            Assert.assertEquals(2, threw)
+        }
+
+        test nullLocalsThrow() {
+            var i = NullablePrimitiveCallTests.mi(false)
+            var c = NullablePrimitiveCallTests.mc(false)
+            var threw = 0
+            try { i!!.toString() } catch (e: Exception) { threw++ }
+            try { c!!.toString() } catch (e: Exception) { threw++ }
+            try { i.toString() } catch (e: Exception) { threw++ }
+            try { c.toString() } catch (e: Exception) { threw++ }
+            Assert.assertEquals(4, threw)
+        }
+
+        // ---- fields ----
+
+        test fields() {
+            var h = new NpcHolder()
+            h.fill()
+            Assert.assertEquals("5", h.i!!.toString())
+            Assert.assertEquals("6", h.l!!.toString())
+            Assert.assertEquals("true", h.b!!.toString())
+            Assert.assertEquals("2", h.c!!.toString())
+            Assert.assertEquals("5 6 true 2", h.i.toString() + " " + h.l.toString() + " " + h.b.toString() + " " + h.c.toString())
+            Assert.assertEquals("5 6 true 2", "${h.i} ${h.l} ${h.b} ${h.c}")
+            Assert.assertEquals("5 6 true 2", "${h.i!!} ${h.l!!} ${h.b!!} ${h.c!!}")
+        }
+
+        test nullFieldsThrow() {
+            var h = new NpcHolder()
+            var threw = 0
+            try { h.i!!.toString() } catch (e: Exception) { threw++ }
+            try { h.l!!.toString() } catch (e: Exception) { threw++ }
+            try { h.b!!.toString() } catch (e: Exception) { threw++ }
+            try { h.c!!.toString() } catch (e: Exception) { threw++ }
+            try { h.i.toString() } catch (e: Exception) { threw++ }
+            try { h.c.toString() } catch (e: Exception) { threw++ }
+            Assert.assertEquals(6, threw)
+        }
+
+        // ---- hash and other primitive methods through !! ----
+
+        test otherPrimitiveMethodsThroughBang() {
+            var h = new NpcHolder()
+            Assert.assertEquals("3", h.inst(true)!!.hash().toString())
+            Assert.assertEquals("7", NullablePrimitiveCallTests.mi(true)!!.hash().toString())
+            Assert.assertEquals("true", h.fieldIsSet(true)!!.toString())
+        }
+
+        // ---- template fragments ----
+
+        test templateOfACallResult() {
+            Assert.assertEquals("i 7", "i ${NullablePrimitiveCallTests.mi(true)}")
+            Assert.assertEquals("l 9", "l ${NullablePrimitiveCallTests.ml(true)}")
+            Assert.assertEquals("b true", "b ${NullablePrimitiveCallTests.mb(true)}")
+            Assert.assertEquals("c 2", "c ${NullablePrimitiveCallTests.mc(true)}")
+            Assert.assertEquals("7 and 2", "${NullablePrimitiveCallTests.mi(true)} and ${NullablePrimitiveCallTests.mc(true)}")
+            var h = new NpcHolder()
+            Assert.assertEquals("3 1", "${h.inst(true)} ${h.instColor(true)}")
+            Assert.assertEquals("7 9 true 2", "${NullablePrimitiveCallTests.mi(true)!!} ${NullablePrimitiveCallTests.ml(true)!!} ${NullablePrimitiveCallTests.mb(true)!!} ${NullablePrimitiveCallTests.mc(true)!!}")
+        }
+
+        // A null in a template throws: "Null reference: <name>", with no name
+        // for a call result (v1, #393).
+        test nullTemplateFragmentsThrow() {
+            var msgs = new List<String>()
+            try { var s = "i ${NullablePrimitiveCallTests.mi(false)}" } catch (e: Exception) { msgs.add(NullablePrimitiveCallTests.note(e)) }
+            try { var s = "l ${NullablePrimitiveCallTests.ml(false)}" } catch (e: Exception) { msgs.add(NullablePrimitiveCallTests.note(e)) }
+            try { var s = "b ${NullablePrimitiveCallTests.mb(false)}" } catch (e: Exception) { msgs.add(NullablePrimitiveCallTests.note(e)) }
+            try { var s = "c ${NullablePrimitiveCallTests.mc(false)}" } catch (e: Exception) { msgs.add(NullablePrimitiveCallTests.note(e)) }
+            Assert.assertEquals(4, msgs.getSize())
+            each (m in msgs) {
+                Assert.assertEquals("Null reference: ", m)
+            }
+        }
+
+        test nullTemplateLocalAndFieldNameTheValue() {
+            var i = NullablePrimitiveCallTests.mi(false)
+            var msg = ""
+            try { var s = "i ${i}" } catch (e: Exception) { msg = NullablePrimitiveCallTests.note(e) }
+            Assert.assertEquals("Null reference: i", msg)
+            var h = new NpcHolder()
+            msg = ""
+            try { var s = "c ${h.c}" } catch (e: Exception) { msg = NullablePrimitiveCallTests.note(e) }
+            Assert.assertEquals("Null reference: c", msg)
+            msg = ""
+            try { var s = "i ${h.i}" } catch (e: Exception) { msg = NullablePrimitiveCallTests.note(e) }
+            Assert.assertEquals("Null reference: i", msg)
+        }
+
+        // ---- more contexts ----
+
+        static fun show(s: String): String {
+            return "<" + s + ">"
+        }
+
+        test asArgumentConcatAndComparison() {
+            Assert.assertEquals("<7>", NullablePrimitiveCallTests.show(NullablePrimitiveCallTests.mi(true)!!.toString()))
+            Assert.assertEquals("x7y", "x" + NullablePrimitiveCallTests.mi(true)!!.toString() + "y")
+            Assert.assertTrue(NullablePrimitiveCallTests.mi(true)!!.toString() == "7")
+            Assert.assertTrue(NullablePrimitiveCallTests.mc(true)!!.toString() == "2")
+            var n: Int = NullablePrimitiveCallTests.mi(true)!!
+            Assert.assertEquals("7", n.toString())
+        }
+
+        // `toString` and `hash` stay ordinary names for members and locals.
+        test identifiersNamedLikeTheMethods() {
+            var toString = 4
+            var hash: Int? = 6
+            Assert.assertEquals("4 6", toString.toString() + " " + hash!!.toString())
+        }
+    }
+}
