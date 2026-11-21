@@ -8,8 +8,7 @@ namespace Tests {
     // Any local, a return, `List<Any>.add`, and next to an Int with the same
     // number. `is Color` is checked first in `kind`: an enum in an Any is also an
     // `is Int` (#392), so a check for Int first would call it an int.
-    // The one path only v1 compiles (`List<Color?>`) is in
-    // tests-v1-only/NullableEnumAnyV1Tests.aml.
+    // A `Color?` out of a `List<Color?>` is in NullableEnumListAnyTests.aml.
 
     enum AneColor {
         import Am.Lang
