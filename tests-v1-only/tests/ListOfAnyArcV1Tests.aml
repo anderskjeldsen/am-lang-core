@@ -1,0 +1,169 @@
+namespace Tests {
+
+    // Redmine #396: what List<Any>, HashMap<String, Any> and HashSet<Any> own
+    // is released: an object replaced by a primitive or null, removed, or
+    // cleared, and the whole collection when it goes. The behaviour tests are
+    // in tests/ListOfAnyTests.aml; these live here because v2 doesn't release
+    // an Any local that holds a call's result yet (V2_PORT_PLAN.md), so its
+    // counts stay up. clearReleasesObjects also covers HashMap.clear and
+    // HashSet.clear, which kept every key and value alive before.
+
+    class LaArcThing(var n: Int) {
+        import Am.Lang
+    }
+
+    class ListOfAnyArcV1Tests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        // A `new` in an argument, or an object read out with `get`, is a
+        // temporary the caller holds until it returns, so the objects are
+        // made and read in helpers: what the counts see is what the
+        // collection owns.
+        static fun addThing(l: List<Any>, n: Int) {
+            l.add(new LaArcThing(n))
+        }
+
+        static fun setThing(l: List<Any>, i: Int, n: Int) {
+            l.set(i, new LaArcThing(n))
+        }
+
+        static fun thingAt(m: HashMap<String, Any>, key: String): Int {
+            return (m.get(key) as LaArcThing).n
+        }
+
+        static fun putThing(m: HashMap<String, Any>, key: String, n: Int) {
+            m.set(key, new LaArcThing(n))
+        }
+
+        test objectsAreReleased() {
+            var l = List.newList<Any>()
+            ListOfAnyArcV1Tests.addThing(l, 1)
+            ListOfAnyArcV1Tests.addThing(l, 2)
+            l.add(3)
+            ListOfAnyArcV1Tests.addThing(l, 4)
+            ListOfAnyArcV1Tests.addThing(l, 5)
+            Assert.assertEquals(4, instances(LaArcThing))
+            // An object replaced by a primitive, and a primitive by an object.
+            l.set(0, 0)
+            Assert.assertEquals(3, instances(LaArcThing))
+            ListOfAnyArcV1Tests.setThing(l, 2, 6)
+            Assert.assertEquals(4, instances(LaArcThing))
+            l.set(2, null)
+            Assert.assertEquals(3, instances(LaArcThing))
+            ListOfAnyArcV1Tests.removeFirstThing(l)
+            Assert.assertEquals(2, instances(LaArcThing))
+            ListOfAnyArcV1Tests.dropAt(l, 0)
+            ListOfAnyArcV1Tests.dropLast(l)
+            Assert.assertEquals(1, instances(LaArcThing))
+            l.clear()
+            Assert.assertEquals(0, instances(LaArcThing))
+        }
+
+        static fun removeFirstThing(l: List<Any>) {
+            var found: Any = null
+            each(l, x) {
+                if (found == null && x is LaArcThing) {
+                    found = x
+                }
+            }
+            l.remove(found)
+        }
+
+        static fun dropAt(l: List<Any>, i: Int) {
+            l.removeAt(i)
+        }
+
+        static fun dropLast(l: List<Any>) {
+            l.removeLast()
+        }
+
+        test listIsReleasedWithItsObjects() {
+            ListOfAnyArcV1Tests.fill()
+            Assert.assertEquals(0, instances(LaArcThing))
+        }
+
+        static fun fill() {
+            var l = List.newList<Any>()
+            ListOfAnyArcV1Tests.addThing(l, 1)
+            l.add("x")
+            ListOfAnyArcV1Tests.addThing(l, 2)
+            each(l, x) {
+                if (x is LaArcThing) {
+                    var t = x as LaArcThing
+                    t.n++
+                }
+            }
+            Assert.assertEquals(2, instances(LaArcThing))
+        }
+
+        test hashMapOfStringToAny() {
+            var m = new HashMap<String, Any>()
+            m.set("i", 3)
+            m.set("s", "str")
+            m.set("b", false)
+            ListOfAnyArcV1Tests.putThing(m, "t", 9)
+            m.set("n", null)
+            Assert.assertEquals(5, m.getSize())
+            Assert.assertTrue(m.containsKey("i"))
+            Assert.assertTrue(m.containsKey("n"))
+            Assert.assertFalse(m.containsKey("x"))
+            Assert.assertEquals(3, m.get("i") as Int)
+            Assert.assertEquals("str", m.get("s") as String)
+            Assert.assertFalse(m.get("b") as Bool)
+            Assert.assertEquals(9, ListOfAnyArcV1Tests.thingAt(m, "t"))
+            Assert.assertTrue(m.get("n") == null)
+            Assert.assertTrue(m.containsValue("str"))
+            Assert.assertTrue(m.containsValue(3))
+            Assert.assertFalse(m.containsValue(4))
+            m.set("i", 4)
+            Assert.assertEquals(4, m.get("i") as Int)
+            Assert.assertEquals(1, instances(LaArcThing))
+            ListOfAnyArcV1Tests.putThing(m, "t", 10)
+            Assert.assertEquals(1, instances(LaArcThing))
+            m.set("t", 0)
+            Assert.assertEquals(0, instances(LaArcThing))
+            ListOfAnyArcV1Tests.putThing(m, "t", 11)
+            m.remove("t")
+            Assert.assertEquals(0, instances(LaArcThing))
+            ListOfAnyArcV1Tests.putThing(m, "u", 12)
+            m.clear()
+            Assert.assertEquals(0, instances(LaArcThing))
+        }
+
+        static fun addToSet(s: HashSet<Any>, n: Int) {
+            s.add(new LaArcThing(n))
+        }
+
+        static fun putTyped(m: HashMap<String, LaArcThing>, key: String, n: Int) {
+            m.set(key, new LaArcThing(n))
+        }
+
+        // clear() used to reset the indexes only, so a cleared HashMap or
+        // HashSet kept its old keys and values alive, whatever their type.
+        test clearReleasesObjects() {
+            var s = new HashSet<Any>()
+            ListOfAnyArcV1Tests.addToSet(s, 1)
+            ListOfAnyArcV1Tests.addToSet(s, 2)
+            s.add(3)
+            Assert.assertEquals(2, instances(LaArcThing))
+            s.clear()
+            Assert.assertEquals(0, s.getSize())
+            Assert.assertEquals(0, instances(LaArcThing))
+            s.add(3)
+            Assert.assertTrue(s.has(3))
+
+            var m = new HashMap<String, LaArcThing>()
+            ListOfAnyArcV1Tests.putTyped(m, "a", 1)
+            ListOfAnyArcV1Tests.putTyped(m, "b", 2)
+            Assert.assertEquals(2, instances(LaArcThing))
+            m.clear()
+            Assert.assertEquals(0, m.getSize())
+            Assert.assertFalse(m.containsKey("a"))
+            Assert.assertEquals(0, instances(LaArcThing))
+            ListOfAnyArcV1Tests.putTyped(m, "a", 3)
+            Assert.assertEquals(3, m.get("a").n)
+        }
+    }
+}

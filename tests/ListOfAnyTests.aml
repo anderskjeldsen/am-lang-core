@@ -1,0 +1,230 @@
+namespace Tests {
+
+    // Redmine #396: List<Any> didn't compile in gcc under v1. The renderer
+    // erased every object-like type argument to one shared List<Object> body
+    // taking `aobject *` items, and Any (a class) was erased with them, but an
+    // Any is a `nullable_value`: a box that can hold a primitive. List<Any> now
+    // gets its own variant, like List<Int?>, so items are stored, compared
+    // (Any equality: 3 == 3, "a" == "a", objects by equals) and released as
+    // boxes. Same for HashMap<String, Any>, HashMap<Any, V> and HashSet<Any>.
+    // The release checks (instances() back to 0) are in
+    // tests-v1-only/tests/ListOfAnyArcV1Tests.aml.
+
+    enum LaColor {
+        import Am.Lang
+
+        red = 1
+        blue = 2
+    }
+
+    class LaThing(var n: Int) {
+        import Am.Lang
+    }
+
+    class ListOfAnyTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun mixed(t: LaThing): List<Any> {
+            var l = List.newList<Any>()
+            l.add(3)
+            l.add(true)
+            l.add(2.5)
+            l.add("a")
+            l.add(t)
+            l.add(LaColor.blue)
+            l.add(null)
+            return l
+        }
+
+        test addAndGet() {
+            var t = new LaThing(7)
+            var l = ListOfAnyTests.mixed(t)
+            Assert.assertEquals(7, l.getSize())
+            Assert.assertEquals(3, l.get(0) as Int)
+            Assert.assertTrue(l.get(1) as Bool)
+            Assert.assertDoubleCloseEnough(2.5, l.get(2) as Double)
+            Assert.assertEquals("a", l.get(3) as String)
+            var back = l.get(4) as LaThing
+            Assert.assertEquals(7, back.n)
+            Assert.assertTrue(l.get(4) is LaThing)
+            Assert.assertTrue(l.get(5) is LaColor)
+            var c = l.get(5) as LaColor
+            Assert.assertTrue(c == LaColor.blue)
+            Assert.assertTrue(l.get(6) == null)
+            Assert.assertFalse(l.get(0) == null)
+        }
+
+        test setReplaces() {
+            var t = new LaThing(1)
+            var l = ListOfAnyTests.mixed(t)
+            l.set(0, "zero")
+            l.set(6, 42)
+            l.set(3, null)
+            Assert.assertEquals("zero", l.get(0) as String)
+            Assert.assertEquals(42, l.get(6) as Int)
+            Assert.assertTrue(l.get(3) == null)
+            Assert.assertEquals(7, l.getSize())
+        }
+
+        test containsComparesValues() {
+            var t = new LaThing(1)
+            var l = ListOfAnyTests.mixed(t)
+            Assert.assertTrue(l.contains(3))
+            Assert.assertFalse(l.contains(4))
+            Assert.assertTrue(l.contains(true))
+            Assert.assertFalse(l.contains(false))
+            Assert.assertTrue(l.contains(2.5))
+            // A String built at run time is a different object from the
+            // constant: equal by value.
+            var empty = ""
+            Assert.assertTrue(l.contains(empty + "a"))
+            Assert.assertFalse(l.contains("b"))
+            Assert.assertTrue(l.contains(t))
+            Assert.assertFalse(l.contains(new LaThing(1)))
+            Assert.assertTrue(l.contains(LaColor.blue))
+            Assert.assertTrue(l.contains(null))
+        }
+
+        test containsNullOnlyWhenPresent() {
+            var l = List.newList<Any>()
+            l.add(0)
+            l.add(false)
+            Assert.assertFalse(l.contains(null))
+            Assert.assertTrue(l.contains(0))
+        }
+
+        test removeByValue() {
+            var t = new LaThing(1)
+            var l = ListOfAnyTests.mixed(t)
+            l.remove("a")
+            l.remove(3)
+            l.remove(null)
+            l.remove(t)
+            l.remove(99)
+            Assert.assertEquals(3, l.getSize())
+            Assert.assertTrue(l.get(0) as Bool)
+            Assert.assertDoubleCloseEnough(2.5, l.get(1) as Double)
+            Assert.assertTrue(l.get(2) is LaColor)
+            Assert.assertFalse(l.contains(t))
+        }
+
+        test removeAtAndInsert() {
+            var l = List.newList<Any>()
+            l.add(1)
+            l.add("two")
+            l.insertAt(1, 1.5)
+            Assert.assertEquals(3, l.getSize())
+            var removed = l.removeAt(0)
+            Assert.assertEquals(1, removed as Int)
+            Assert.assertEquals("two", l.removeLast() as String)
+            Assert.assertEquals(1, l.getSize())
+        }
+
+        test eachVisitsEveryItem() {
+            var t = new LaThing(5)
+            var l = ListOfAnyTests.mixed(t)
+            var count = 0
+            var nulls = 0
+            var ints = 0
+            var strings = 0
+            each(l, x) {
+                count++
+                if (x == null) {
+                    nulls++
+                } else if (x is LaColor) {
+                    // An enum is also its backing Int (#392), so test it first.
+                } else if (x is Int) {
+                    ints++
+                } else if (x is String) {
+                    strings++
+                }
+            }
+            Assert.assertEquals(7, count)
+            Assert.assertEquals(1, nulls)
+            Assert.assertEquals(1, ints)
+            Assert.assertEquals(1, strings)
+        }
+
+        test growsPastCapacity() {
+            var l = List.newList<Any>()
+            var i = 0
+            while (i < 20) {
+                if (i % 2 == 0) {
+                    l.add(i)
+                } else {
+                    l.add(i.toString())
+                }
+                i++
+            }
+            Assert.assertEquals(20, l.getSize())
+            Assert.assertEquals(18, l.get(18) as Int)
+            Assert.assertEquals("19", l.get(19) as String)
+            Assert.assertTrue(l.contains("7"))
+            Assert.assertFalse(l.contains(7))
+        }
+
+        static fun thingAt(m: HashMap<String, Any>, key: String): Int {
+            return (m.get(key) as LaThing).n
+        }
+
+        test hashMapOfStringToAny() {
+            var m = new HashMap<String, Any>()
+            m.set("i", 3)
+            m.set("s", "str")
+            m.set("b", false)
+            m.set("t", new LaThing(9))
+            m.set("n", null)
+            Assert.assertEquals(5, m.getSize())
+            Assert.assertTrue(m.containsKey("i"))
+            Assert.assertTrue(m.containsKey("n"))
+            Assert.assertFalse(m.containsKey("x"))
+            Assert.assertEquals(3, m.get("i") as Int)
+            Assert.assertEquals("str", m.get("s") as String)
+            Assert.assertFalse(m.get("b") as Bool)
+            Assert.assertEquals(9, ListOfAnyTests.thingAt(m, "t"))
+            Assert.assertTrue(m.get("n") == null)
+            Assert.assertTrue(m.containsValue("str"))
+            Assert.assertTrue(m.containsValue(3))
+            Assert.assertFalse(m.containsValue(4))
+            m.set("i", 4)
+            Assert.assertEquals(4, m.get("i") as Int)
+        }
+
+        test hashMapKeyedByAny() {
+            var m = new HashMap<Any, Int>()
+            m.set(1, 10)
+            m.set("one", 11)
+            m.set(true, 12)
+            m.set(1L, 13)
+            Assert.assertEquals(4, m.getSize())
+            Assert.assertEquals(10, m.get(1))
+            var on = "on"
+            Assert.assertEquals(11, m.get(on + "e"))
+            Assert.assertEquals(12, m.get(true))
+            Assert.assertTrue(m.containsKey(1L))
+            Assert.assertFalse(m.containsKey(2))
+            Assert.assertFalse(m.containsKey("two"))
+            m.set(1, 20)
+            Assert.assertEquals(20, m.get(1))
+            Assert.assertEquals(4, m.getSize())
+        }
+
+        test hashSetOfAny() {
+            var s = new HashSet<Any>()
+            s.add(1)
+            s.add("a")
+            s.add(1)
+            s.add("a")
+            s.add(2.5)
+            Assert.assertEquals(3, s.getSize())
+            Assert.assertTrue(s.has(1))
+            Assert.assertTrue(s.has("a"))
+            Assert.assertFalse(s.has(2))
+            Assert.assertTrue(s.remove("a"))
+            Assert.assertFalse(s.has("a"))
+            Assert.assertEquals(2, s.getSize())
+        }
+    }
+}
