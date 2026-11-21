@@ -1,0 +1,149 @@
+namespace Tests {
+
+    // Redmine #444: a subclass that inherits an interface implementation (the
+    // method is declared on a base class, not overridden) must get an interface
+    // table entry pointing at the base class's function.
+    interface IiLabelled {
+        fun label(): String
+    }
+
+    interface IiPair {
+        fun left(): String
+        fun right(): String
+    }
+
+    class IiBase : IiLabelled {
+        import Am.Lang
+
+        fun label(): String {
+            return "base"
+        }
+    }
+
+    class IiLeaf : IiBase {
+    }
+
+    class IiMid : IiBase {
+    }
+
+    class IiDeep : IiMid {
+    }
+
+    class IiPairBase : IiPair {
+        import Am.Lang
+
+        open fun left(): String {
+            return "base-left"
+        }
+
+        open fun right(): String {
+            return "base-right"
+        }
+    }
+
+    // Overrides one of the two interface methods; the other is inherited.
+    class IiPairLeaf : IiPairBase {
+        import Am.Lang
+
+        override fun left(): String {
+            return "leaf-left"
+        }
+    }
+
+    // Overrides the middle one only; the bottom class inherits both.
+    class IiPairMid : IiPairBase {
+        import Am.Lang
+
+        override fun right(): String {
+            return "mid-right"
+        }
+    }
+
+    class IiPairBottom : IiPairMid {
+    }
+
+    interface IiHolder<T> {
+        fun get(): T
+    }
+
+    class IiGenericBase<T> : IiHolder<T> {
+        import Am.Lang
+        var value: T? = null
+
+        fun put(v: T) {
+            this.value = v
+        }
+
+        fun get(): T {
+            return this.value!!
+        }
+    }
+
+    class IiGenericSub<T> : IiGenericBase<T> {
+        // Own setter: calling the inherited put() through Sub<T> is #422.
+        fun fill(v: T) {
+            this.value = v
+        }
+    }
+
+    class InheritedInterfaceImplTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun labelOf(l: IiLabelled): String {
+            return l.label()
+        }
+
+        static fun leftOf(p: IiPair): String {
+            return p.left()
+        }
+
+        static fun rightOf(p: IiPair): String {
+            return p.right()
+        }
+
+        static fun intOf(h: IiHolder<Int>): Int {
+            return h.get()
+        }
+
+        static fun stringOf(h: IiHolder<String>): String {
+            return h.get()
+        }
+
+        test inheritedImplementationThroughTheInterface() {
+            Assert.assertEquals("base", InheritedInterfaceImplTests.labelOf(new IiBase()))
+            Assert.assertEquals("base", InheritedInterfaceImplTests.labelOf(new IiLeaf()))
+        }
+
+        test threeLevels() {
+            Assert.assertEquals("base", InheritedInterfaceImplTests.labelOf(new IiDeep()))
+            Assert.assertEquals("base", InheritedInterfaceImplTests.labelOf(new IiMid()))
+        }
+
+        test overridingOneOfTwoInterfaceMethods() {
+            var leaf = new IiPairLeaf()
+            Assert.assertEquals("leaf-left", InheritedInterfaceImplTests.leftOf(leaf))
+            Assert.assertEquals("base-right", InheritedInterfaceImplTests.rightOf(leaf))
+            var base = new IiPairBase()
+            Assert.assertEquals("base-left", InheritedInterfaceImplTests.leftOf(base))
+        }
+
+        test overrideInTheMiddleInheritedAtTheBottom() {
+            var bottom = new IiPairBottom()
+            Assert.assertEquals("base-left", InheritedInterfaceImplTests.leftOf(bottom))
+            Assert.assertEquals("mid-right", InheritedInterfaceImplTests.rightOf(bottom))
+        }
+
+        test genericBaseWithGenericSubclass() {
+            var b = new IiGenericBase<Int>()
+            b.put(7)
+            Assert.assertEquals(7, InheritedInterfaceImplTests.intOf(b))
+            var s = new IiGenericSub<Int>()
+            s.fill(8)
+            Assert.assertEquals(8, InheritedInterfaceImplTests.intOf(s))
+            var t = new IiGenericSub<String>()
+            t.fill("s")
+            Assert.assertEquals("s", InheritedInterfaceImplTests.stringOf(t))
+        }
+    }
+}

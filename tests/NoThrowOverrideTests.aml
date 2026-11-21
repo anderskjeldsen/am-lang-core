@@ -79,6 +79,11 @@ namespace Tests {
         }
     }
 
+    // Inherits label() from NoThrowOverrideTag: the interface table entry
+    // points at the base class's function (Redmine #444).
+    class NoThrowOverrideInheritedTag : NoThrowOverrideTag {
+    }
+
     class NoThrowOverrideTests {
         import Am.Lang
         import Am.Tests
@@ -131,6 +136,7 @@ namespace Tests {
             Assert.assertEquals("leaf caught", NoThrowOverrideTests.describe(leaf))
             Assert.assertTrue(NoThrowOverrideTests.hashOf(leaf) == 11UI)
             Assert.assertEquals("tag", NoThrowOverrideTests.labelOf(new NoThrowOverrideTag()))
+            Assert.assertEquals("tag", NoThrowOverrideTests.labelOf(new NoThrowOverrideInheritedTag()))
         }
 
         test repeatedCatchesDoNotPileUp() {
