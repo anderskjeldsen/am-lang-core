@@ -1,0 +1,804 @@
+namespace Tests {
+
+    // Redmine #515: contextual words (either, when, data, scratch, keep, shared,
+    // fast) stay usable as ordinary identifiers in every position.
+    class CwEitherBox(var n: Int) {
+        import Am.Lang
+    }
+
+    class CwEither {
+        import Am.Lang
+        import Am.Tests
+
+        var either: Int = 5
+        var eitherBox: CwEitherBox = new CwEitherBox(7)
+
+        static fun ident(x: Int): Int {
+            return x
+        }
+
+        static fun asParam(either: Int): Int {
+            return either + 1
+        }
+
+        static fun paramArg(either: Int): Int {
+            return CwEither.ident(either)
+        }
+
+        static fun fieldRead(o: CwEither): Int {
+            return o.either
+        }
+
+        fun fieldSelf(): Int {
+            return either * 2
+        }
+
+        static test testLocalAndArgument() {
+            var either = 4
+            Assert.assertEquals(4, CwEither.ident(either))
+            Assert.assertEquals(9, CwEither.ident(either) + 5)
+            Assert.assertEquals(12, CwEither.ident(either + either + either))
+        }
+
+        static test testExpression() {
+            var either = 10
+            var r = either + 1
+            Assert.assertEquals(11, r)
+            Assert.assertTrue(either > 3)
+            Assert.assertTrue(either == 10 && either != 2)
+            if (either > 5) {
+                r = either * 3
+            }
+            Assert.assertEquals(30, r)
+        }
+
+        static test testAssignmentTarget() {
+            var either = 1
+            either = 2
+            either = either + 5
+            either += 1
+            Assert.assertEquals(8, either)
+        }
+
+        static test testReceiver() {
+            var either = new CwEitherBox(3)
+            Assert.assertEquals(3, either.n)
+            either.n = 9
+            Assert.assertEquals(9, either.n)
+            Assert.assertEquals("9", either.n.toString())
+        }
+
+        static test testParameter() {
+            Assert.assertEquals(6, CwEither.asParam(5))
+            Assert.assertEquals(8, CwEither.paramArg(8))
+        }
+
+        static test testField() {
+            var o = new CwEither()
+            o.bare()
+            var o2 = new CwEither()
+            Assert.assertEquals(5, o2.either)
+            Assert.assertEquals(10, o2.fieldSelf())
+            o2.either = 6
+            Assert.assertEquals(6, CwEither.fieldRead(o2))
+            Assert.assertEquals(7, o2.eitherBox.n)
+            o2.eitherBox.n = 8
+            Assert.assertEquals(8, o2.eitherBox.n)
+        }
+
+        fun bare() {
+            Assert.assertEquals(5, either)
+            Assert.assertEquals(5, this.either)
+            either = 6
+            Assert.assertEquals(6, either)
+            eitherBox.n = 8
+            Assert.assertEquals(8, eitherBox.n)
+        }
+
+        static test testLambdaParameter() {
+            var f = (either: Int) => either + 100
+            Assert.assertEquals(103, f(3))
+            var h: (Int) => Int = (either) => CwEither.ident(either)
+            Assert.assertEquals(42, h(42))
+        }
+
+        static test testReturnAndString() {
+            var either = 7
+            Assert.assertEquals("v=7", "v=" + either.toString())
+            Assert.assertEquals(7, CwEither.back(either))
+        }
+
+        static fun back(x: Int): Int {
+            var either = x
+            return either
+        }
+    }
+
+    class CwWhenBox(var n: Int) {
+        import Am.Lang
+    }
+
+    class CwWhen {
+        import Am.Lang
+        import Am.Tests
+
+        var when: Int = 5
+        var whenBox: CwWhenBox = new CwWhenBox(7)
+
+        static fun ident(x: Int): Int {
+            return x
+        }
+
+        static fun asParam(when: Int): Int {
+            return when + 1
+        }
+
+        static fun paramArg(when: Int): Int {
+            return CwWhen.ident(when)
+        }
+
+        static fun fieldRead(o: CwWhen): Int {
+            return o.when
+        }
+
+        fun fieldSelf(): Int {
+            return when * 2
+        }
+
+        static test testLocalAndArgument() {
+            var when = 4
+            Assert.assertEquals(4, CwWhen.ident(when))
+            Assert.assertEquals(9, CwWhen.ident(when) + 5)
+            Assert.assertEquals(12, CwWhen.ident(when + when + when))
+        }
+
+        static test testExpression() {
+            var when = 10
+            var r = when + 1
+            Assert.assertEquals(11, r)
+            Assert.assertTrue(when > 3)
+            Assert.assertTrue(when == 10 && when != 2)
+            if (when > 5) {
+                r = when * 3
+            }
+            Assert.assertEquals(30, r)
+        }
+
+        static test testAssignmentTarget() {
+            var when = 1
+            when = 2
+            when = when + 5
+            when += 1
+            Assert.assertEquals(8, when)
+        }
+
+        static test testReceiver() {
+            var when = new CwWhenBox(3)
+            Assert.assertEquals(3, when.n)
+            when.n = 9
+            Assert.assertEquals(9, when.n)
+            Assert.assertEquals("9", when.n.toString())
+        }
+
+        static test testParameter() {
+            Assert.assertEquals(6, CwWhen.asParam(5))
+            Assert.assertEquals(8, CwWhen.paramArg(8))
+        }
+
+        static test testField() {
+            var o = new CwWhen()
+            o.bare()
+            var o2 = new CwWhen()
+            Assert.assertEquals(5, o2.when)
+            Assert.assertEquals(10, o2.fieldSelf())
+            o2.when = 6
+            Assert.assertEquals(6, CwWhen.fieldRead(o2))
+            Assert.assertEquals(7, o2.whenBox.n)
+            o2.whenBox.n = 8
+            Assert.assertEquals(8, o2.whenBox.n)
+        }
+
+        fun bare() {
+            Assert.assertEquals(5, when)
+            Assert.assertEquals(5, this.when)
+            when = 6
+            Assert.assertEquals(6, when)
+            whenBox.n = 8
+            Assert.assertEquals(8, whenBox.n)
+        }
+
+        static test testLambdaParameter() {
+            var f = (when: Int) => when + 100
+            Assert.assertEquals(103, f(3))
+            var h: (Int) => Int = (when) => CwWhen.ident(when)
+            Assert.assertEquals(42, h(42))
+        }
+
+        static test testReturnAndString() {
+            var when = 7
+            Assert.assertEquals("v=7", "v=" + when.toString())
+            Assert.assertEquals(7, CwWhen.back(when))
+        }
+
+        static fun back(x: Int): Int {
+            var when = x
+            return when
+        }
+    }
+
+    class CwDataBox(var n: Int) {
+        import Am.Lang
+    }
+
+    class CwData {
+        import Am.Lang
+        import Am.Tests
+
+        var data: Int = 5
+        var dataBox: CwDataBox = new CwDataBox(7)
+
+        static fun ident(x: Int): Int {
+            return x
+        }
+
+        static fun asParam(data: Int): Int {
+            return data + 1
+        }
+
+        static fun paramArg(data: Int): Int {
+            return CwData.ident(data)
+        }
+
+        static fun fieldRead(o: CwData): Int {
+            return o.data
+        }
+
+        fun fieldSelf(): Int {
+            return data * 2
+        }
+
+        static test testLocalAndArgument() {
+            var data = 4
+            Assert.assertEquals(4, CwData.ident(data))
+            Assert.assertEquals(9, CwData.ident(data) + 5)
+            Assert.assertEquals(12, CwData.ident(data + data + data))
+        }
+
+        static test testExpression() {
+            var data = 10
+            var r = data + 1
+            Assert.assertEquals(11, r)
+            Assert.assertTrue(data > 3)
+            Assert.assertTrue(data == 10 && data != 2)
+            if (data > 5) {
+                r = data * 3
+            }
+            Assert.assertEquals(30, r)
+        }
+
+        static test testAssignmentTarget() {
+            var data = 1
+            data = 2
+            data = data + 5
+            data += 1
+            Assert.assertEquals(8, data)
+        }
+
+        static test testReceiver() {
+            var data = new CwDataBox(3)
+            Assert.assertEquals(3, data.n)
+            data.n = 9
+            Assert.assertEquals(9, data.n)
+            Assert.assertEquals("9", data.n.toString())
+        }
+
+        static test testParameter() {
+            Assert.assertEquals(6, CwData.asParam(5))
+            Assert.assertEquals(8, CwData.paramArg(8))
+        }
+
+        static test testField() {
+            var o = new CwData()
+            o.bare()
+            var o2 = new CwData()
+            Assert.assertEquals(5, o2.data)
+            Assert.assertEquals(10, o2.fieldSelf())
+            o2.data = 6
+            Assert.assertEquals(6, CwData.fieldRead(o2))
+            Assert.assertEquals(7, o2.dataBox.n)
+            o2.dataBox.n = 8
+            Assert.assertEquals(8, o2.dataBox.n)
+        }
+
+        fun bare() {
+            Assert.assertEquals(5, data)
+            Assert.assertEquals(5, this.data)
+            data = 6
+            Assert.assertEquals(6, data)
+            dataBox.n = 8
+            Assert.assertEquals(8, dataBox.n)
+        }
+
+        static test testLambdaParameter() {
+            var f = (data: Int) => data + 100
+            Assert.assertEquals(103, f(3))
+            var h: (Int) => Int = (data) => CwData.ident(data)
+            Assert.assertEquals(42, h(42))
+        }
+
+        static test testReturnAndString() {
+            var data = 7
+            Assert.assertEquals("v=7", "v=" + data.toString())
+            Assert.assertEquals(7, CwData.back(data))
+        }
+
+        static fun back(x: Int): Int {
+            var data = x
+            return data
+        }
+    }
+
+    class CwScratchBox(var n: Int) {
+        import Am.Lang
+    }
+
+    class CwScratch {
+        import Am.Lang
+        import Am.Tests
+
+        var scratch: Int = 5
+        var scratchBox: CwScratchBox = new CwScratchBox(7)
+
+        static fun ident(x: Int): Int {
+            return x
+        }
+
+        static fun asParam(scratch: Int): Int {
+            return scratch + 1
+        }
+
+        static fun paramArg(scratch: Int): Int {
+            return CwScratch.ident(scratch)
+        }
+
+        static fun fieldRead(o: CwScratch): Int {
+            return o.scratch
+        }
+
+        fun fieldSelf(): Int {
+            return scratch * 2
+        }
+
+        static test testLocalAndArgument() {
+            var scratch = 4
+            Assert.assertEquals(4, CwScratch.ident(scratch))
+            Assert.assertEquals(9, CwScratch.ident(scratch) + 5)
+            Assert.assertEquals(12, CwScratch.ident(scratch + scratch + scratch))
+        }
+
+        static test testExpression() {
+            var scratch = 10
+            var r = scratch + 1
+            Assert.assertEquals(11, r)
+            Assert.assertTrue(scratch > 3)
+            Assert.assertTrue(scratch == 10 && scratch != 2)
+            if (scratch > 5) {
+                r = scratch * 3
+            }
+            Assert.assertEquals(30, r)
+        }
+
+        static test testAssignmentTarget() {
+            var scratch = 1
+            scratch = 2
+            scratch = scratch + 5
+            scratch += 1
+            Assert.assertEquals(8, scratch)
+        }
+
+        static test testReceiver() {
+            var scratch = new CwScratchBox(3)
+            Assert.assertEquals(3, scratch.n)
+            scratch.n = 9
+            Assert.assertEquals(9, scratch.n)
+            Assert.assertEquals("9", scratch.n.toString())
+        }
+
+        static test testParameter() {
+            Assert.assertEquals(6, CwScratch.asParam(5))
+            Assert.assertEquals(8, CwScratch.paramArg(8))
+        }
+
+        static test testField() {
+            var o = new CwScratch()
+            o.bare()
+            var o2 = new CwScratch()
+            Assert.assertEquals(5, o2.scratch)
+            Assert.assertEquals(10, o2.fieldSelf())
+            o2.scratch = 6
+            Assert.assertEquals(6, CwScratch.fieldRead(o2))
+            Assert.assertEquals(7, o2.scratchBox.n)
+            o2.scratchBox.n = 8
+            Assert.assertEquals(8, o2.scratchBox.n)
+        }
+
+        fun bare() {
+            Assert.assertEquals(5, scratch)
+            Assert.assertEquals(5, this.scratch)
+            scratch = 6
+            Assert.assertEquals(6, scratch)
+            scratchBox.n = 8
+            Assert.assertEquals(8, scratchBox.n)
+        }
+
+        static test testLambdaParameter() {
+            var f = (scratch: Int) => scratch + 100
+            Assert.assertEquals(103, f(3))
+            var h: (Int) => Int = (scratch) => CwScratch.ident(scratch)
+            Assert.assertEquals(42, h(42))
+        }
+
+        static test testReturnAndString() {
+            var scratch = 7
+            Assert.assertEquals("v=7", "v=" + scratch.toString())
+            Assert.assertEquals(7, CwScratch.back(scratch))
+        }
+
+        static fun back(x: Int): Int {
+            var scratch = x
+            return scratch
+        }
+    }
+
+    class CwKeepBox(var n: Int) {
+        import Am.Lang
+    }
+
+    class CwKeep {
+        import Am.Lang
+        import Am.Tests
+
+        var keep: Int = 5
+        var keepBox: CwKeepBox = new CwKeepBox(7)
+
+        static fun ident(x: Int): Int {
+            return x
+        }
+
+        static fun asParam(keep: Int): Int {
+            return keep + 1
+        }
+
+        static fun paramArg(keep: Int): Int {
+            return CwKeep.ident(keep)
+        }
+
+        static fun fieldRead(o: CwKeep): Int {
+            return o.keep
+        }
+
+        fun fieldSelf(): Int {
+            return keep * 2
+        }
+
+        static test testLocalAndArgument() {
+            var keep = 4
+            Assert.assertEquals(4, CwKeep.ident(keep))
+            Assert.assertEquals(9, CwKeep.ident(keep) + 5)
+            Assert.assertEquals(12, CwKeep.ident(keep + keep + keep))
+        }
+
+        static test testExpression() {
+            var keep = 10
+            var r = keep + 1
+            Assert.assertEquals(11, r)
+            Assert.assertTrue(keep > 3)
+            Assert.assertTrue(keep == 10 && keep != 2)
+            if (keep > 5) {
+                r = keep * 3
+            }
+            Assert.assertEquals(30, r)
+        }
+
+        static test testAssignmentTarget() {
+            var keep = 1
+            keep = 2
+            keep = keep + 5
+            keep += 1
+            Assert.assertEquals(8, keep)
+        }
+
+        static test testReceiver() {
+            var keep = new CwKeepBox(3)
+            Assert.assertEquals(3, keep.n)
+            keep.n = 9
+            Assert.assertEquals(9, keep.n)
+            Assert.assertEquals("9", keep.n.toString())
+        }
+
+        static test testParameter() {
+            Assert.assertEquals(6, CwKeep.asParam(5))
+            Assert.assertEquals(8, CwKeep.paramArg(8))
+        }
+
+        static test testField() {
+            var o = new CwKeep()
+            o.bare()
+            var o2 = new CwKeep()
+            Assert.assertEquals(5, o2.keep)
+            Assert.assertEquals(10, o2.fieldSelf())
+            o2.keep = 6
+            Assert.assertEquals(6, CwKeep.fieldRead(o2))
+            Assert.assertEquals(7, o2.keepBox.n)
+            o2.keepBox.n = 8
+            Assert.assertEquals(8, o2.keepBox.n)
+        }
+
+        fun bare() {
+            Assert.assertEquals(5, keep)
+            Assert.assertEquals(5, this.keep)
+            keep = 6
+            Assert.assertEquals(6, keep)
+            keepBox.n = 8
+            Assert.assertEquals(8, keepBox.n)
+        }
+
+        static test testLambdaParameter() {
+            var f = (keep: Int) => keep + 100
+            Assert.assertEquals(103, f(3))
+            var h: (Int) => Int = (keep) => CwKeep.ident(keep)
+            Assert.assertEquals(42, h(42))
+        }
+
+        static test testReturnAndString() {
+            var keep = 7
+            Assert.assertEquals("v=7", "v=" + keep.toString())
+            Assert.assertEquals(7, CwKeep.back(keep))
+        }
+
+        static fun back(x: Int): Int {
+            var keep = x
+            return keep
+        }
+    }
+
+    class CwSharedBox(var n: Int) {
+        import Am.Lang
+    }
+
+    class CwShared {
+        import Am.Lang
+        import Am.Tests
+
+        var shared: Int = 5
+        var sharedBox: CwSharedBox = new CwSharedBox(7)
+
+        static fun ident(x: Int): Int {
+            return x
+        }
+
+        static fun asParam(shared: Int): Int {
+            return shared + 1
+        }
+
+        static fun paramArg(shared: Int): Int {
+            return CwShared.ident(shared)
+        }
+
+        static fun fieldRead(o: CwShared): Int {
+            return o.shared
+        }
+
+        fun fieldSelf(): Int {
+            return shared * 2
+        }
+
+        static test testLocalAndArgument() {
+            var shared = 4
+            Assert.assertEquals(4, CwShared.ident(shared))
+            Assert.assertEquals(9, CwShared.ident(shared) + 5)
+            Assert.assertEquals(12, CwShared.ident(shared + shared + shared))
+        }
+
+        static test testExpression() {
+            var shared = 10
+            var r = shared + 1
+            Assert.assertEquals(11, r)
+            Assert.assertTrue(shared > 3)
+            Assert.assertTrue(shared == 10 && shared != 2)
+            if (shared > 5) {
+                r = shared * 3
+            }
+            Assert.assertEquals(30, r)
+        }
+
+        static test testAssignmentTarget() {
+            var shared = 1
+            shared = 2
+            shared = shared + 5
+            shared += 1
+            Assert.assertEquals(8, shared)
+        }
+
+        static test testReceiver() {
+            var shared = new CwSharedBox(3)
+            Assert.assertEquals(3, shared.n)
+            shared.n = 9
+            Assert.assertEquals(9, shared.n)
+            Assert.assertEquals("9", shared.n.toString())
+        }
+
+        static test testParameter() {
+            Assert.assertEquals(6, CwShared.asParam(5))
+            Assert.assertEquals(8, CwShared.paramArg(8))
+        }
+
+        static test testField() {
+            var o = new CwShared()
+            o.bare()
+            var o2 = new CwShared()
+            Assert.assertEquals(5, o2.shared)
+            Assert.assertEquals(10, o2.fieldSelf())
+            o2.shared = 6
+            Assert.assertEquals(6, CwShared.fieldRead(o2))
+            Assert.assertEquals(7, o2.sharedBox.n)
+            o2.sharedBox.n = 8
+            Assert.assertEquals(8, o2.sharedBox.n)
+        }
+
+        fun bare() {
+            Assert.assertEquals(5, shared)
+            Assert.assertEquals(5, this.shared)
+            shared = 6
+            Assert.assertEquals(6, shared)
+            sharedBox.n = 8
+            Assert.assertEquals(8, sharedBox.n)
+        }
+
+        static test testLambdaParameter() {
+            var f = (shared: Int) => shared + 100
+            Assert.assertEquals(103, f(3))
+            var h: (Int) => Int = (shared) => CwShared.ident(shared)
+            Assert.assertEquals(42, h(42))
+        }
+
+        static test testReturnAndString() {
+            var shared = 7
+            Assert.assertEquals("v=7", "v=" + shared.toString())
+            Assert.assertEquals(7, CwShared.back(shared))
+        }
+
+        static fun back(x: Int): Int {
+            var shared = x
+            return shared
+        }
+    }
+
+    class CwFastBox(var n: Int) {
+        import Am.Lang
+    }
+
+    class CwFast {
+        import Am.Lang
+        import Am.Tests
+
+        var fast: Int = 5
+        var fastBox: CwFastBox = new CwFastBox(7)
+
+        static fun ident(x: Int): Int {
+            return x
+        }
+
+        static fun asParam(fast: Int): Int {
+            return fast + 1
+        }
+
+        static fun paramArg(fast: Int): Int {
+            return CwFast.ident(fast)
+        }
+
+        static fun fieldRead(o: CwFast): Int {
+            return o.fast
+        }
+
+        fun fieldSelf(): Int {
+            return fast * 2
+        }
+
+        static test testLocalAndArgument() {
+            var fast = 4
+            Assert.assertEquals(4, CwFast.ident(fast))
+            Assert.assertEquals(9, CwFast.ident(fast) + 5)
+            Assert.assertEquals(12, CwFast.ident(fast + fast + fast))
+        }
+
+        static test testExpression() {
+            var fast = 10
+            var r = fast + 1
+            Assert.assertEquals(11, r)
+            Assert.assertTrue(fast > 3)
+            Assert.assertTrue(fast == 10 && fast != 2)
+            if (fast > 5) {
+                r = fast * 3
+            }
+            Assert.assertEquals(30, r)
+        }
+
+        static test testAssignmentTarget() {
+            var fast = 1
+            fast = 2
+            fast = fast + 5
+            fast += 1
+            Assert.assertEquals(8, fast)
+        }
+
+        static test testReceiver() {
+            var fast = new CwFastBox(3)
+            Assert.assertEquals(3, fast.n)
+            fast.n = 9
+            Assert.assertEquals(9, fast.n)
+            Assert.assertEquals("9", fast.n.toString())
+        }
+
+        static test testParameter() {
+            Assert.assertEquals(6, CwFast.asParam(5))
+            Assert.assertEquals(8, CwFast.paramArg(8))
+        }
+
+        static test testField() {
+            var o = new CwFast()
+            o.bare()
+            var o2 = new CwFast()
+            Assert.assertEquals(5, o2.fast)
+            Assert.assertEquals(10, o2.fieldSelf())
+            o2.fast = 6
+            Assert.assertEquals(6, CwFast.fieldRead(o2))
+            Assert.assertEquals(7, o2.fastBox.n)
+            o2.fastBox.n = 8
+            Assert.assertEquals(8, o2.fastBox.n)
+        }
+
+        fun bare() {
+            Assert.assertEquals(5, fast)
+            Assert.assertEquals(5, this.fast)
+            fast = 6
+            Assert.assertEquals(6, fast)
+            fastBox.n = 8
+            Assert.assertEquals(8, fastBox.n)
+        }
+
+        static test testLambdaParameter() {
+            var f = (fast: Int) => fast + 100
+            Assert.assertEquals(103, f(3))
+            var h: (Int) => Int = (fast) => CwFast.ident(fast)
+            Assert.assertEquals(42, h(42))
+        }
+
+        static test testReturnAndString() {
+            var fast = 7
+            Assert.assertEquals("v=7", "v=" + fast.toString())
+            Assert.assertEquals(7, CwFast.back(fast))
+        }
+
+        static fun back(x: Int): Int {
+            var fast = x
+            return fast
+        }
+    }
+
+    class CwEitherConstruct {
+        import Am.Lang
+        import Am.Tests
+
+        static fun boom(): Int {
+            throw new Exception("boom")
+        }
+
+        static test testEitherKeywordStillWorks() {
+            var either = 3
+            Assert.assertEquals(9, either(CwEitherConstruct.boom(), 9))
+            Assert.assertEquals(3, either(either, 9))
+            Assert.assertEquals(4, either(either + 1, 9))
+        }
+    }
+}
