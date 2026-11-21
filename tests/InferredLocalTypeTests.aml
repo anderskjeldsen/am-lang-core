@@ -63,11 +63,12 @@ namespace Tests {
             if (a is Bool) {
                 return "bool"
             }
-            if (a is Int) {
-                return "int"
-            }
+            // Before Int: an enum in an Any is also an `is Int` (#392).
             if (a is IltColor) {
                 return "color"
+            }
+            if (a is Int) {
+                return "int"
             }
             if (a is String) {
                 return "string"
@@ -294,8 +295,7 @@ namespace Tests {
             Assert.assertEquals("null", InferredLocalTypeTests.kindOf(noColor))
             var color = nd.maybeColor(true)
             Assert.assertTrue(color == IltColor.green)
-            // Not "color": v1 boxes an IltColor? local without the enum's tag.
-            Assert.assertTrue(InferredLocalTypeTests.kindOf(color) != "null")
+            Assert.assertEquals("color", InferredLocalTypeTests.kindOf(color))
             var noNode = nd.getNext()
             Assert.assertTrue(noNode == null)
             Assert.assertEquals("null", InferredLocalTypeTests.kindOf(noNode))
