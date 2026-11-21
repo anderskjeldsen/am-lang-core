@@ -1,0 +1,268 @@
+namespace Tests {
+
+    // Redmine #516: a nullable enum (`Color?`) that reaches an Any slot keeps the
+    // enum's identity, like a plain `Color` does (#392): `a is Color` is true,
+    // `a as Color` works, toString and `as Int` give the number as before, and a
+    // null `Color?` stays null. Each way a `Color?` gets into an Any: a local, a
+    // parameter, a call result, a field, a reassigned local, an Any field, an
+    // Any local, a return, `List<Any>.add`, and next to an Int with the same
+    // number. `is Color` is checked first in `kind`: an enum in an Any is also an
+    // `is Int` (#392), so a check for Int first would call it an int.
+    // The one path only v1 compiles (`List<Color?>`) is in
+    // tests-v1-only/NullableEnumAnyV1Tests.aml.
+
+    enum AneColor {
+        import Am.Lang
+
+        red = 1
+        green = 2
+    }
+
+    enum AneOther {
+        import Am.Lang
+
+        a = 1
+        b = 2
+    }
+
+    class AneHolder {
+        import Am.Lang
+
+        var opt: AneColor?
+        var item: Any = null
+
+        fun maybe(give: Bool): AneColor? {
+            if (give) {
+                return AneColor.green
+            }
+            return null
+        }
+
+        fun asAny(c: AneColor?): Any {
+            return c
+        }
+
+        fun fieldAsAny(): Any {
+            return this.opt
+        }
+
+        fun self(): AneHolder? {
+            return this
+        }
+    }
+
+    class AnyNullableEnumTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun kind(a: Any): String {
+            if (a == null) {
+                return "null"
+            }
+            if (a is AneColor) {
+                return "color"
+            }
+            if (a is AneOther) {
+                return "other"
+            }
+            if (a is Int) {
+                return "int"
+            }
+            return "else"
+        }
+
+        test inferredLocalIntoAnyArgument() {
+            var h = new AneHolder()
+            var c = h.maybe(true)
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(c))
+            var n = h.maybe(false)
+            Assert.assertEquals("null", AnyNullableEnumTests.kind(n))
+        }
+
+        test annotatedLocalIntoAnyArgument() {
+            var c: AneColor? = AneColor.red
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(c))
+            var n: AneColor? = null
+            Assert.assertEquals("null", AnyNullableEnumTests.kind(n))
+        }
+
+        test parameterIntoAnyArgument() {
+            var h = new AneHolder()
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(h.asAny(AneColor.green)))
+            var n: AneColor? = null
+            Assert.assertEquals("null", AnyNullableEnumTests.kind(h.asAny(n)))
+        }
+
+        test callResultIntoAnyArgument() {
+            var h = new AneHolder()
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(h.maybe(true)))
+            Assert.assertEquals("null", AnyNullableEnumTests.kind(h.maybe(false)))
+        }
+
+        test safeCallResultIntoAnyArgument() {
+            var h = new AneHolder()
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(h.self()?.maybe(true)))
+            Assert.assertEquals("null", AnyNullableEnumTests.kind(h.self()?.maybe(false)))
+            var none: AneHolder? = null
+            Assert.assertEquals("null", AnyNullableEnumTests.kind(none?.maybe(true)))
+            h.opt = AneColor.red
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(h.self()?.opt))
+            h.opt = null
+            Assert.assertEquals("null", AnyNullableEnumTests.kind(h.self()?.opt))
+            var a: Any = h.self()?.maybe(true)
+            Assert.assertTrue(a is AneColor)
+        }
+
+        test fieldReturnedAsAny() {
+            var h = new AneHolder()
+            Assert.assertEquals("null", AnyNullableEnumTests.kind(h.fieldAsAny()))
+            h.opt = AneColor.red
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(h.fieldAsAny()))
+        }
+
+        test nullLiteralForAnOptionalParameter() {
+            var h = new AneHolder()
+            Assert.assertEquals("null", AnyNullableEnumTests.kind(h.asAny(null)))
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(h.asAny(AneColor.red)))
+        }
+
+        test fieldIntoAnyArgument() {
+            var h = new AneHolder()
+            Assert.assertEquals("null", AnyNullableEnumTests.kind(h.opt))
+            h.opt = AneColor.red
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(h.opt))
+            h.opt = null
+            Assert.assertEquals("null", AnyNullableEnumTests.kind(h.opt))
+        }
+
+        test nonNullEnumStoredAsOptionalKeepsItsTag() {
+            var h = new AneHolder()
+            var c: AneColor = AneColor.green
+            var o: AneColor? = c
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(o))
+            h.opt = c
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(h.opt))
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(h.asAny(c)))
+        }
+
+        test anyLocalFromOptional() {
+            var h = new AneHolder()
+            var c = h.maybe(true)
+            var a: Any = c
+            Assert.assertTrue(a is AneColor)
+            Assert.assertFalse(a is AneOther)
+            var d: Any = h.maybe(true)
+            Assert.assertTrue(d is AneColor)
+            var n = h.maybe(false)
+            var z: Any = n
+            Assert.assertTrue(z == null)
+            Assert.assertFalse(z is AneColor)
+        }
+
+        test reassignedAnyLocal() {
+            var h = new AneHolder()
+            var a: Any = null
+            a = h.maybe(true)
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(a))
+            a = h.maybe(false)
+            Assert.assertEquals("null", AnyNullableEnumTests.kind(a))
+            a = 2
+            Assert.assertEquals("int", AnyNullableEnumTests.kind(a))
+        }
+
+        test anyFieldFromOptional() {
+            var h = new AneHolder()
+            h.item = h.maybe(true)
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(h.item))
+            Assert.assertTrue((h.item as AneColor) == AneColor.green)
+            h.opt = AneColor.red
+            h.item = h.opt
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(h.item))
+            Assert.assertTrue((h.item as AneColor) == AneColor.red)
+            h.item = h.maybe(false)
+            Assert.assertEquals("null", AnyNullableEnumTests.kind(h.item))
+        }
+
+        test returnedAsAny() {
+            var h = new AneHolder()
+            var c = h.maybe(true)
+            var r: Any = h.asAny(c)
+            Assert.assertTrue(r is AneColor)
+            Assert.assertTrue((r as AneColor) == AneColor.green)
+            var n = h.maybe(false)
+            Assert.assertTrue(h.asAny(n) == null)
+        }
+
+        test listOfAnyAdd() {
+            var h = new AneHolder()
+            var c = h.maybe(true)
+            var n = h.maybe(false)
+            h.opt = AneColor.red
+            var l = new List<Any>()
+            l.add(c)
+            l.add(n)
+            l.add(h.opt)
+            l.add(h.maybe(true))
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(l.get(0)))
+            Assert.assertEquals("null", AnyNullableEnumTests.kind(l.get(1)))
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(l.get(2)))
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(l.get(3)))
+        }
+
+        test castBackAndPrint() {
+            var h = new AneHolder()
+            var c = h.maybe(true)
+            var a: Any = c
+            Assert.assertTrue((a as AneColor) == AneColor.green)
+            Assert.assertEquals(2, a as Int)
+            Assert.assertEquals("2", a.toString())
+            Assert.assertEquals("2", "${a}")
+            h.opt = AneColor.red
+            Assert.assertEquals("1", AnyNullableEnumTests.show(h.opt))
+        }
+
+        static fun show(a: Any): String {
+            return a.toString()
+        }
+
+        test optionalColorNextToIntWithTheSameNumber() {
+            var h = new AneHolder()
+            var c = h.maybe(true)
+            var i: Int? = 2
+            var ca: Any = c
+            var ia: Any = i
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(ca))
+            Assert.assertEquals("int", AnyNullableEnumTests.kind(ia))
+            Assert.assertTrue(ca is AneColor)
+            Assert.assertFalse(ia is AneColor)
+            Assert.assertEquals("2", ca.toString())
+            Assert.assertEquals("2", ia.toString())
+            var l = new List<Any>()
+            l.add(c)
+            l.add(i)
+            Assert.assertEquals("color", AnyNullableEnumTests.kind(l.get(0)))
+            Assert.assertEquals("int", AnyNullableEnumTests.kind(l.get(1)))
+        }
+
+        test optionalColorIsNotTheOtherEnumWithTheSameNumber() {
+            var h = new AneHolder()
+            var c = h.maybe(true)
+            var a: Any = c
+            Assert.assertTrue(a is AneColor)
+            Assert.assertFalse(a is AneOther)
+            var o: AneOther? = AneOther.b
+            var b: Any = o
+            Assert.assertTrue(b is AneOther)
+            Assert.assertFalse(b is AneColor)
+        }
+
+        test nullColorWithZeroMemberIsStillNull() {
+            var n: AneColor? = null
+            var a: Any = n
+            Assert.assertTrue(a == null)
+            Assert.assertFalse(a is AneColor)
+            Assert.assertFalse(a is Int)
+        }
+    }
+}

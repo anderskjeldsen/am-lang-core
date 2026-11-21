@@ -5,11 +5,49 @@ namespace Tests {
         import Am.Lang
     }
 
+    // An exception class whose property initializer reads a primary-constructor
+    // parameter (#480): `throw new` must run the constructor first, as `new` does.
+    class CodedException(var code: Int) : Exception("coded") {
+        import Am.Lang
+
+        var text: String = "code " + this.code.toString()
+        var doubled: Int = this.code * 2
+    }
+
     class ExceptionTests {
         import Am.Lang
         import Am.Collections
         import Am.Tests
         
+        // #480
+        test throwNewRunsConstructorBeforeInitializers() {
+            var text = ""
+            var doubled = 0
+            var code = 0
+            try {
+                throw new CodedException(21)
+            } catch (e: CodedException) {
+                text = e.text
+                doubled = e.doubled
+                code = e.code
+            }
+            Assert.assertEquals("code 21", text)
+            Assert.assertEquals(42, doubled)
+            Assert.assertEquals(21, code)
+        }
+
+        // #480: the same class built with `new` and thrown later agrees.
+        test throwNewAgreesWithNew() {
+            var viaNew = new CodedException(5)
+            var text = ""
+            try {
+                throw new CodedException(5)
+            } catch (e: CodedException) {
+                text = e.text
+            }
+            Assert.assertEquals(viaNew.text, text)
+        }
+
         test throwAndCatch() {
             var caught = false
             try {
