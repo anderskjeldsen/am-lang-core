@@ -1,0 +1,304 @@
+namespace Tests {
+
+    // The type an inferred local (or a returned / boxed value) gets from its
+    // initializer, in v1 and v2:
+    //   #487: `var s = a + b == c` is a Bool. v2 typed a comparison whose left
+    //         side is arithmetic as the left operand (`int var_s`), so the
+    //         local boxed into an Any as an Int.
+    //   #494: `(h.item as IltColor) == IltColor.blue` with an Any field: the
+    //         cast's target is the operand's type. v2 took the field's Any and
+    //         rendered __any_equals with an int (a gcc error).
+    //   #505: `var n = node.getNext()` with a Node? result is a Node? local, so
+    //         `n.value` on null throws "Null reference: n" as through `node`.
+    //         v2 dropped the `?` and read through NULL.
+
+    enum IltColor {
+        import Am.Lang
+
+        red = 1
+        green = 2
+        blue = 3
+    }
+
+    class IltHolder {
+        import Am.Lang
+
+        var item: Any = null
+    }
+
+    class IltNode {
+        import Am.Lang
+
+        var value: Int = 0
+        var next: IltNode? = null
+
+        fun getNext(): IltNode? {
+            return this.next
+        }
+
+        fun maybeInt(give: Bool): Int? {
+            if (give) {
+                return this.value
+            }
+            return null
+        }
+
+        fun maybeColor(give: Bool): IltColor? {
+            if (give) {
+                return IltColor.green
+            }
+            return null
+        }
+    }
+
+    class InferredLocalTypeTests {
+        import Am.Lang
+        import Am.Tests
+
+        // What an Any holds, as the boxing saw it.
+        static fun kindOf(a: Any): String {
+            if (a == null) {
+                return "null"
+            }
+            if (a is Bool) {
+                return "bool"
+            }
+            if (a is Int) {
+                return "int"
+            }
+            if (a is IltColor) {
+                return "color"
+            }
+            if (a is String) {
+                return "string"
+            }
+            if (a is IltNode) {
+                return "node"
+            }
+            return "other"
+        }
+
+        static fun text(a: Any): String {
+            return a.toString()
+        }
+
+        static fun sumEqualsAny(a: Int, b: Int, c: Int): Any {
+            return a + b == c
+        }
+
+        static fun notEqualAny(a: Int, b: Int): Any {
+            return !(a == b)
+        }
+
+        static fun castPlusAny(a: Any): Any {
+            return (a as Int) + 1
+        }
+
+        static fun valueOf(n: IltNode?): Int {
+            var m = n
+            return m.value
+        }
+
+        // #487
+        test comparisonOfSumIsBool() {
+            var a = 2
+            var b = 3
+            var c = 5
+            var s = a + b == c
+            Assert.assertEquals("bool", InferredLocalTypeTests.kindOf(s))
+            Assert.assertEquals("true", InferredLocalTypeTests.text(s))
+            Assert.assertTrue(s)
+        }
+
+        test parenthesisedComparisonIsBool() {
+            var a = 2
+            var b = 3
+            var c = 5
+            var s = (a + b) != c
+            Assert.assertEquals("bool", InferredLocalTypeTests.kindOf(s))
+            Assert.assertEquals("false", InferredLocalTypeTests.text(s))
+            var t = (a * b) - 1 >= c
+            Assert.assertEquals("bool", InferredLocalTypeTests.kindOf(t))
+            Assert.assertEquals("true", InferredLocalTypeTests.text(t))
+            var u = a * b < c
+            Assert.assertEquals("bool", InferredLocalTypeTests.kindOf(u))
+            Assert.assertFalse(u)
+        }
+
+        test logicalOfComparisonsIsBool() {
+            var a = 2
+            var b = 3
+            var both = a + 1 == b && b > a
+            Assert.assertEquals("bool", InferredLocalTypeTests.kindOf(both))
+            Assert.assertTrue(both)
+            var anyOf = a - 1 > b || b - a == 1
+            Assert.assertEquals("bool", InferredLocalTypeTests.kindOf(anyOf))
+            Assert.assertTrue(anyOf)
+            var neg = !(a + b == 5)
+            Assert.assertEquals("bool", InferredLocalTypeTests.kindOf(neg))
+            Assert.assertFalse(neg)
+        }
+
+        test comparisonOfCallIsBool() {
+            var s = "abc"
+            var same = s.length() + 1 == 4
+            Assert.assertEquals("bool", InferredLocalTypeTests.kindOf(same))
+            Assert.assertTrue(same)
+        }
+
+        test annotatedComparisonIsBool() {
+            var a = 2
+            var b = 3
+            var s: Bool = a + b == 6
+            Assert.assertEquals("bool", InferredLocalTypeTests.kindOf(s))
+            Assert.assertFalse(s)
+        }
+
+        test comparisonPassedAndReturnedAsAny() {
+            var a = 2
+            Assert.assertEquals("bool", InferredLocalTypeTests.kindOf(a + 1 == 3))
+            Assert.assertEquals("bool", InferredLocalTypeTests.kindOf(InferredLocalTypeTests.sumEqualsAny(1, 2, 3)))
+            Assert.assertEquals("true", InferredLocalTypeTests.text(InferredLocalTypeTests.sumEqualsAny(1, 2, 3)))
+            Assert.assertEquals("false", InferredLocalTypeTests.text(InferredLocalTypeTests.sumEqualsAny(1, 2, 4)))
+            Assert.assertEquals("bool", InferredLocalTypeTests.kindOf(InferredLocalTypeTests.notEqualAny(1, 2)))
+            Assert.assertEquals("true", InferredLocalTypeTests.text(InferredLocalTypeTests.notEqualAny(1, 2)))
+        }
+
+        test sumIsStillAnInt() {
+            var a = 2
+            var b = 3
+            var s = (a + b) * 2
+            Assert.assertEquals("int", InferredLocalTypeTests.kindOf(s))
+            Assert.assertEquals(10, s)
+        }
+
+        // #494
+        test castFieldEqualsEnum() {
+            var h = new IltHolder()
+            h.item = IltColor.blue
+            var isBlue = (h.item as IltColor) == IltColor.blue
+            Assert.assertEquals("bool", InferredLocalTypeTests.kindOf(isBlue))
+            Assert.assertTrue(isBlue)
+            var isRed = (h.item as IltColor) == IltColor.red
+            Assert.assertFalse(isRed)
+            var notRed = (h.item as IltColor) != IltColor.red
+            Assert.assertTrue(notRed)
+            var notBlue = (h.item as IltColor) != IltColor.blue
+            Assert.assertFalse(notBlue)
+            var seen = ""
+            if ((h.item as IltColor) == IltColor.blue) {
+                seen = "blue"
+            }
+            Assert.assertEquals("blue", seen)
+            Assert.assertTrue((h.item as IltColor) == IltColor.blue)
+        }
+
+        test castLocalEqualsEnum() {
+            var a: Any = IltColor.green
+            Assert.assertTrue((a as IltColor) == IltColor.green)
+            Assert.assertFalse((a as IltColor) != IltColor.green)
+            Assert.assertTrue((a as IltColor) != IltColor.red)
+        }
+
+        test castFieldToWrongEnumThrows() {
+            var h = new IltHolder()
+            h.item = 3
+            var threw = false
+            try {
+                var b = (h.item as IltColor) == IltColor.blue
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+
+        test castIntPlus() {
+            var x: Any = 41
+            var y = (x as Int) + 1
+            Assert.assertEquals("int", InferredLocalTypeTests.kindOf(y))
+            Assert.assertEquals(42, y)
+            var h = new IltHolder()
+            h.item = 9
+            var z = (h.item as Int) + 1
+            Assert.assertEquals(10, z)
+            Assert.assertTrue((h.item as Int) + 1 == 10)
+            Assert.assertEquals("int", InferredLocalTypeTests.kindOf(InferredLocalTypeTests.castPlusAny(4)))
+            Assert.assertEquals("5", InferredLocalTypeTests.text(InferredLocalTypeTests.castPlusAny(4)))
+        }
+
+        test castThenCall() {
+            var h = new IltHolder()
+            h.item = 12
+            Assert.assertEquals("12", (h.item as Int).toString())
+            h.item = "hey"
+            Assert.assertEquals(3, (h.item as String).length())
+        }
+
+        // #505
+        test nullInferredLocalThrowsOnAccess() {
+            var nd = new IltNode()
+            nd.value = 7
+            var n = nd.getNext()
+            var threw = false
+            try {
+                var v = n.value
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+
+        test nullCopiedLocalThrowsOnAccess() {
+            var threw = false
+            try {
+                InferredLocalTypeTests.valueOf(null)
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+            var nd = new IltNode()
+            nd.value = 4
+            Assert.assertEquals(4, InferredLocalTypeTests.valueOf(nd))
+        }
+
+        test nonNullInferredLocalWorks() {
+            var nd = new IltNode()
+            nd.value = 7
+            var second = new IltNode()
+            second.value = 8
+            nd.next = second
+            var m = nd
+            Assert.assertEquals(7, m.value)
+            var n = nd.getNext()
+            Assert.assertEquals(8, n.value)
+            var p = nd.next
+            Assert.assertEquals(8, p.value)
+            var q = nd.getNext()!!
+            Assert.assertEquals(8, q.value)
+            Assert.assertEquals("node", InferredLocalTypeTests.kindOf(n))
+            n = null
+            Assert.assertEquals("null", InferredLocalTypeTests.kindOf(n))
+        }
+
+        test nullableIntAndEnumLocalsFromCalls() {
+            var nd = new IltNode()
+            nd.value = 5
+            var none = nd.maybeInt(false)
+            Assert.assertTrue(none == null)
+            Assert.assertEquals("null", InferredLocalTypeTests.kindOf(none))
+            var some = nd.maybeInt(true)
+            Assert.assertTrue(some == 5)
+            Assert.assertEquals("int", InferredLocalTypeTests.kindOf(some))
+            var noColor = nd.maybeColor(false)
+            Assert.assertTrue(noColor == null)
+            Assert.assertEquals("null", InferredLocalTypeTests.kindOf(noColor))
+            var color = nd.maybeColor(true)
+            Assert.assertTrue(color == IltColor.green)
+            // Not "color": v1 boxes an IltColor? local without the enum's tag.
+            Assert.assertTrue(InferredLocalTypeTests.kindOf(color) != "null")
+            var noNode = nd.getNext()
+            Assert.assertTrue(noNode == null)
+            Assert.assertEquals("null", InferredLocalTypeTests.kindOf(noNode))
+        }
+    }
+}
