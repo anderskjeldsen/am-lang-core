@@ -1,0 +1,162 @@
+namespace Tests {
+
+    // Redmine #471: a type argument that is itself generic keeps its own
+    // arguments at every depth, as in v1: a field `HashMap<String, List<Int>>`
+    // is the variant `HashMap_ta_Am_Lang_String_x_Am_Collections_List_tp_Am_Lang_Int_tpe_`.
+    // v2 erased the nested argument in the field's header include
+    // (`HashMap_ta_Am_Lang_String_x_Am_Collections_List.h`, which doesn't
+    // exist). With nullable arguments inside (#523): `List<List<Int?>>`,
+    // `NstBox<HashMap<Int, List<NstColor?>>>`.
+
+    enum NstColor {
+        import Am.Lang
+
+        red = 1
+        green = 2
+    }
+
+    class NstItem(var n: Int) {
+        import Am.Lang
+    }
+
+    class NstBox<T>(var v: T) {
+        import Am.Lang
+
+        fun get(): T {
+            return this.v
+        }
+    }
+
+    class NstHolder {
+        import Am.Lang
+        import Am.Collections
+
+        var byName: HashMap<String, List<Int>> = new HashMap<String, List<Int>>()
+        var rows: List<List<String>> = new List<List<String>>()
+        var deep: List<List<List<Int>>> = new List<List<List<Int>>>()
+        var optRows: List<List<Int?>> = new List<List<Int?>>()
+        var boxed: NstBox<HashMap<Int, List<NstColor?>>> = new NstBox<HashMap<Int, List<NstColor?>>>(new HashMap<Int, List<NstColor?>>())
+    }
+
+    class NestedTypeArgumentTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun addItemList(m: HashMap<String, List<NstItem>>, key: String, n: Int) {
+            var l = new List<NstItem>()
+            l.add(new NstItem(n))
+            m.set(key, l)
+        }
+
+        static fun itemAt(m: HashMap<String, List<NstItem>>, key: String): Int {
+            return m.get(key).get(0).n
+        }
+
+        test hashMapOfLists() {
+            var h = new NstHolder()
+            var a = new List<Int>()
+            a.add(7)
+            a.add(8)
+            h.byName.set("a", a)
+            h.byName.set("b", new List<Int>())
+            Assert.assertEquals(7, h.byName.get("a").get(0))
+            Assert.assertEquals(8, h.byName.get("a").get(1))
+            Assert.assertEquals(2, h.byName.get("a").getSize())
+            Assert.assertEquals(0, h.byName.get("b").getSize())
+            h.byName.get("b").add(9)
+            Assert.assertEquals(9, h.byName.get("b").get(0))
+            Assert.assertTrue(h.byName.containsKey("a"))
+            Assert.assertFalse(h.byName.containsKey("c"))
+            var total = 0
+            each (k in h.byName.keys()) {
+                each (n in h.byName.get(k)) {
+                    total = total + n
+                }
+            }
+            Assert.assertEquals(24, total)
+        }
+
+        test localHashMapOfLists() {
+            var m = new HashMap<String, List<Int>>()
+            var l = new List<Int>()
+            l.add(1)
+            m.set("x", l)
+            m.get("x").add(2)
+            Assert.assertEquals(2, m.get("x").getSize())
+            Assert.assertEquals(2, m.get("x").get(1))
+        }
+
+        test listOfLists() {
+            var h = new NstHolder()
+            var r = new List<String>()
+            r.add("a")
+            r.add("b")
+            h.rows.add(r)
+            h.rows.add(new List<String>())
+            h.rows.get(1).add("c")
+            Assert.assertEquals(2, h.rows.getSize())
+            Assert.assertEquals("b", h.rows.get(0).get(1))
+            Assert.assertEquals("c", h.rows.get(1).get(0))
+            var joined = ""
+            each (row in h.rows) {
+                each (s in row) {
+                    joined = joined + s
+                }
+            }
+            Assert.assertEquals("abc", joined)
+            Assert.assertTrue(h.rows.contains(r))
+            h.rows.remove(r)
+            Assert.assertEquals(1, h.rows.getSize())
+        }
+
+        test threeLevels() {
+            var h = new NstHolder()
+            var inner = new List<Int>()
+            inner.add(42)
+            var mid = new List<List<Int>>()
+            mid.add(inner)
+            h.deep.add(mid)
+            Assert.assertEquals(42, h.deep.get(0).get(0).get(0))
+            h.deep.get(0).get(0).add(43)
+            Assert.assertEquals(2, inner.getSize())
+        }
+
+        test listOfListsOfNullableInt() {
+            var h = new NstHolder()
+            var r = new List<Int?>()
+            r.add(1)
+            r.add(null)
+            h.optRows.add(r)
+            Assert.assertTrue(h.optRows.get(0).get(0) == 1)
+            Assert.assertTrue(h.optRows.get(0).get(1) == null)
+            Assert.assertTrue(h.optRows.get(0).contains(null))
+        }
+
+        test boxOfMapOfListsOfNullableEnum() {
+            var h = new NstHolder()
+            var cs = new List<NstColor?>()
+            cs.add(NstColor.green)
+            cs.add(null)
+            h.boxed.get().set(1, cs)
+            Assert.assertTrue(h.boxed.get().containsKey(1))
+            Assert.assertTrue(h.boxed.get().get(1).get(0) == NstColor.green)
+            Assert.assertTrue(h.boxed.get().get(1).get(1) == null)
+            Assert.assertEquals(2, h.boxed.v.get(1).getSize())
+        }
+
+        // The lists a map of lists holds are released with it.
+        test nestedObjectsAreReleased() {
+            Assert.assertEquals(0, instances(NstItem))
+            var m = new HashMap<String, List<NstItem>>()
+            NestedTypeArgumentTests.addItemList(m, "a", 1)
+            NestedTypeArgumentTests.addItemList(m, "b", 2)
+            Assert.assertEquals(2, instances(NstItem))
+            Assert.assertEquals(2, NestedTypeArgumentTests.itemAt(m, "b"))
+            m.remove("a")
+            Assert.assertEquals(1, instances(NstItem))
+            m = new HashMap<String, List<NstItem>>()
+            Assert.assertEquals(0, instances(NstItem))
+        }
+    }
+}
