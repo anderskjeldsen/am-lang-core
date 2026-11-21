@@ -1,0 +1,357 @@
+namespace Tests {
+
+    // #531 (v2), #532 (v1): a store into a member of a struct reached through
+    // an instance field, a static, an array element or a nested struct changes
+    // the stored struct in place; a struct local or parameter is a copy, so a
+    // store through it leaves the original alone. Each form runs the same
+    // sequence: = 5, += 2, -= 1, *= 3, ++, --, prefix ++, prefix --, then a
+    // prefix ++ read as a value: 5 7 6 18 19 18 19 18, then 19.
+
+    struct SmsPoint {
+        import Am.Lang
+        var x: Int
+        var y: Int
+    }
+
+    struct SmsPair {
+        import Am.Lang
+        var p: SmsPoint
+        var k: Int
+    }
+
+    class SmsHolder {
+        import Am.Lang
+
+        static var spt: SmsPoint
+        var ipt: SmsPoint
+        var nest: SmsPair
+        var arr: SmsPoint[] = new SmsPoint[3]
+
+        fun bareField(): String {
+            ipt.x = 5
+            var s = ipt.x.toString()
+            ipt.x += 2
+            s = s + " " + ipt.x.toString()
+            ipt.x -= 1
+            s = s + " " + ipt.x.toString()
+            ipt.x *= 3
+            s = s + " " + ipt.x.toString()
+            ipt.x++
+            s = s + " " + ipt.x.toString()
+            ipt.x--
+            s = s + " " + ipt.x.toString()
+            ++ipt.x
+            s = s + " " + ipt.x.toString()
+            --ipt.x
+            s = s + " " + ipt.x.toString()
+            var b = ++ipt.x
+            return s + " " + b.toString() + " " + ipt.x.toString()
+        }
+
+        fun thisField(): String {
+            this.ipt.y = 5
+            var s = this.ipt.y.toString()
+            this.ipt.y += 2
+            s = s + " " + this.ipt.y.toString()
+            this.ipt.y -= 1
+            s = s + " " + this.ipt.y.toString()
+            this.ipt.y *= 3
+            s = s + " " + this.ipt.y.toString()
+            this.ipt.y++
+            s = s + " " + this.ipt.y.toString()
+            this.ipt.y--
+            s = s + " " + this.ipt.y.toString()
+            ++this.ipt.y
+            s = s + " " + this.ipt.y.toString()
+            --this.ipt.y
+            s = s + " " + this.ipt.y.toString()
+            var b = ++this.ipt.y
+            return s + " " + b.toString() + " " + this.ipt.y.toString()
+        }
+
+        fun bareStatic(): String {
+            spt.x = 5
+            var s = spt.x.toString()
+            spt.x += 2
+            s = s + " " + spt.x.toString()
+            spt.x -= 1
+            s = s + " " + spt.x.toString()
+            spt.x *= 3
+            s = s + " " + spt.x.toString()
+            spt.x++
+            s = s + " " + spt.x.toString()
+            spt.x--
+            s = s + " " + spt.x.toString()
+            ++spt.x
+            s = s + " " + spt.x.toString()
+            --spt.x
+            s = s + " " + spt.x.toString()
+            var b = ++spt.x
+            return s + " " + b.toString() + " " + spt.x.toString()
+        }
+
+        fun bareArray(): String {
+            arr[1].x = 5
+            var s = arr[1].x.toString()
+            arr[1].x += 2
+            s = s + " " + arr[1].x.toString()
+            arr[1].x -= 1
+            s = s + " " + arr[1].x.toString()
+            arr[1].x *= 3
+            s = s + " " + arr[1].x.toString()
+            arr[1].x++
+            s = s + " " + arr[1].x.toString()
+            arr[1].x--
+            s = s + " " + arr[1].x.toString()
+            ++arr[1].x
+            s = s + " " + arr[1].x.toString()
+            --arr[1].x
+            s = s + " " + arr[1].x.toString()
+            var b = ++arr[1].x
+            return s + " " + b.toString() + " " + arr[1].x.toString()
+        }
+
+        static fun sum(p: SmsPoint): Int {
+            return p.x + p.y
+        }
+
+        static fun clobber(p: SmsPoint): Int {
+            p.x = 99
+            p.x += 1
+            p.x++
+            return p.x
+        }
+
+        static fun reassign(p: SmsPoint): Int {
+            var other: SmsPoint
+            other.x = 3
+            p = other
+            p.x = 4
+            return other.x * 10 + p.x
+        }
+
+        static fun bump(p: SmsPoint): SmsPoint {
+            p.x += 100
+            return p
+        }
+    }
+
+    class StructMemberStoreTests {
+        import Am.Lang
+        import Am.Tests
+
+        test instanceFieldMemberStores() {
+            var h = new SmsHolder()
+            Assert.assertEquals("5 7 6 18 19 18 19 18 19 19", h.bareField())
+            Assert.assertEquals(19, h.ipt.x)
+            Assert.assertEquals("5 7 6 18 19 18 19 18 19 19", h.thisField())
+            Assert.assertEquals(19, h.ipt.y)
+            Assert.assertEquals(19, h.ipt.x)
+        }
+
+        test staticMemberStores() {
+            var h = new SmsHolder()
+            Assert.assertEquals("5 7 6 18 19 18 19 18 19 19", h.bareStatic())
+            Assert.assertEquals(19, SmsHolder.spt.x)
+            SmsHolder.spt.y = 5
+            SmsHolder.spt.y += 2
+            Assert.assertEquals(7, SmsHolder.spt.y)
+            SmsHolder.spt.y -= 1
+            SmsHolder.spt.y *= 3
+            Assert.assertEquals(18, SmsHolder.spt.y)
+            SmsHolder.spt.y++
+            Assert.assertEquals(19, SmsHolder.spt.y)
+            SmsHolder.spt.y--
+            --SmsHolder.spt.y
+            Assert.assertEquals(17, SmsHolder.spt.y)
+            ++SmsHolder.spt.y
+            var b = ++SmsHolder.spt.y
+            Assert.assertEquals(19, b)
+            Assert.assertEquals(19, SmsHolder.spt.y)
+            SmsHolder.spt.x /= 2
+            Assert.assertEquals(9, SmsHolder.spt.x)
+            SmsHolder.spt.x %= 5
+            Assert.assertEquals(4, SmsHolder.spt.x)
+        }
+
+        test arrayElementMemberStores() {
+            var h = new SmsHolder()
+            Assert.assertEquals("5 7 6 18 19 18 19 18 19 19", h.bareArray())
+            Assert.assertEquals(19, h.arr[1].x)
+            Assert.assertEquals(0, h.arr[0].x)
+            var arr = new SmsPoint[2]
+            arr[0].y = 5
+            arr[0].y += 2
+            arr[0].y *= 3
+            arr[0].y++
+            ++arr[0].y
+            arr[0].y--
+            Assert.assertEquals(22, arr[0].y)
+            Assert.assertEquals(0, arr[1].y)
+            for (i = 0 until 2) {
+                arr[i].x += i + 1
+            }
+            Assert.assertEquals(1, arr[0].x)
+            Assert.assertEquals(2, arr[1].x)
+            h.arr[2].y -= 4
+            h.arr[2].y--
+            Assert.assertEquals(0 - 5, h.arr[2].y)
+        }
+
+        test otherObjectFieldMemberStores() {
+            var o = new SmsHolder()
+            o.ipt.x = 5
+            o.ipt.x += 2
+            o.ipt.x -= 1
+            o.ipt.x *= 3
+            Assert.assertEquals(18, o.ipt.x)
+            o.ipt.x++
+            o.ipt.x++
+            o.ipt.x--
+            Assert.assertEquals(19, o.ipt.x)
+            --o.ipt.x
+            var b = ++o.ipt.x
+            Assert.assertEquals(19, b)
+            Assert.assertEquals(19, o.ipt.x)
+            o.ipt.y = 20
+            o.ipt.y /= 3
+            Assert.assertEquals(6, o.ipt.y)
+            var n = 0
+            while (n < 3) {
+                o.ipt.y += 2
+                n++
+            }
+            Assert.assertEquals(12, o.ipt.y)
+        }
+
+        test nestedStructMemberStores() {
+            var o = new SmsHolder()
+            o.nest.p.x = 5
+            o.nest.p.x += 2
+            o.nest.p.x -= 1
+            o.nest.p.x *= 3
+            o.nest.p.x++
+            o.nest.p.x--
+            ++o.nest.p.x
+            --o.nest.p.x
+            Assert.assertEquals(18, o.nest.p.x)
+            var b = ++o.nest.p.x
+            Assert.assertEquals(19, b)
+            Assert.assertEquals(19, o.nest.p.x)
+            o.nest.k += 4
+            Assert.assertEquals(4, o.nest.k)
+            var q: SmsPoint
+            q.x = 3
+            q.y = 4
+            o.nest.p = q
+            q.x = 30
+            Assert.assertEquals(3, o.nest.p.x)
+            Assert.assertEquals(7, SmsHolder.sum(o.nest.p))
+        }
+
+        test localStructMemberStores() {
+            var lp: SmsPoint
+            lp.x = 5
+            lp.x += 2
+            lp.x -= 1
+            lp.x *= 3
+            lp.x++
+            lp.x--
+            ++lp.x
+            --lp.x
+            Assert.assertEquals(18, lp.x)
+            var b = ++lp.x
+            Assert.assertEquals(19, b)
+            var lq: SmsPair
+            lq.p.x = 5
+            lq.p.x += 2
+            lq.p.x++
+            Assert.assertEquals(8, lq.p.x)
+        }
+
+        test localCopiesDoNotChangeTheOriginal() {
+            var a: SmsPoint
+            a.x = 1
+            var b: SmsPoint = a
+            b.x = 2
+            Assert.assertEquals(1, a.x)
+            Assert.assertEquals(2, b.x)
+            var c: SmsPoint
+            c = a
+            c.x += 3
+            Assert.assertEquals(1, a.x)
+            Assert.assertEquals(4, c.x)
+            var o = new SmsHolder()
+            o.ipt.x = 20
+            var f: SmsPoint = o.ipt
+            f.x = 1000
+            f.x++
+            Assert.assertEquals(20, o.ipt.x)
+            Assert.assertEquals(1001, f.x)
+            SmsHolder.spt.y = 20
+            var st: SmsPoint = SmsHolder.spt
+            st.y += 50
+            Assert.assertEquals(20, SmsHolder.spt.y)
+            Assert.assertEquals(70, st.y)
+            o.arr[0].y = 20
+            var e: SmsPoint = o.arr[0]
+            e.y += 50
+            Assert.assertEquals(20, o.arr[0].y)
+            o.nest.p.x = 20
+            var np: SmsPoint = o.nest.p
+            np.x += 50
+            Assert.assertEquals(20, o.nest.p.x)
+            Assert.assertEquals(70, np.x)
+            o.arr[1] = a
+            a.x = 9
+            Assert.assertEquals(1, o.arr[1].x)
+            o.ipt = a
+            a.x = 10
+            Assert.assertEquals(9, o.ipt.x)
+        }
+
+        test structLiteralsAndLoopCopies() {
+            var a: SmsPoint = { x: 1, y: 2 }
+            var b: SmsPoint = a
+            b = { x: 5, y: 6 }
+            Assert.assertEquals(1, a.x)
+            Assert.assertEquals(6, b.y)
+            var last: SmsPoint
+            var i = 0
+            while (i < 3) {
+                var t: SmsPoint = { x: i, y: i * 10 }
+                last = t
+                t.x = 100
+                i++
+            }
+            Assert.assertEquals(2, last.x)
+            Assert.assertEquals(20, last.y)
+        }
+
+        test structParametersAreCopies() {
+            var o = new SmsHolder()
+            o.ipt.x = 20
+            Assert.assertEquals(101, SmsHolder.clobber(o.ipt))
+            Assert.assertEquals(20, o.ipt.x)
+            var lp: SmsPoint
+            lp.x = 20
+            Assert.assertEquals(101, SmsHolder.clobber(lp))
+            Assert.assertEquals(20, lp.x)
+            Assert.assertEquals(34, SmsHolder.reassign(lp))
+            Assert.assertEquals(20, lp.x)
+            var r = SmsHolder.bump(lp)
+            Assert.assertEquals(120, r.x)
+            Assert.assertEquals(20, lp.x)
+        }
+
+        test memberStoreInALambda() {
+            var o = new SmsHolder()
+            o.ipt.y = 6
+            var f: () => void = () => {
+                o.ipt.y += 1000
+            }
+            f()
+            Assert.assertEquals(1006, o.ipt.y)
+        }
+    }
+}

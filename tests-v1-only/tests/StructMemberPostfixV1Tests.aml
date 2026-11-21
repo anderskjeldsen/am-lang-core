@@ -1,0 +1,67 @@
+namespace TestsV1 {
+
+    // Redmine #532: a postfix ++ / -- read as a value (`var a = Holder.spt.x++`)
+    // on a struct member, through a static, an instance field, an array element
+    // and a nested struct. v2 has no postfix ++ in value position yet (see
+    // V2_PORT_PLAN.md), so this lives here; the statement forms and prefix
+    // values are in am-lang-core/tests/StructMemberStoreTests.aml.
+
+    struct SpvPoint {
+        import Am.Lang
+        var x: Int
+        var y: Int
+    }
+
+    struct SpvPair {
+        import Am.Lang
+        var p: SpvPoint
+    }
+
+    class SpvHolder {
+        import Am.Lang
+
+        static var spt: SpvPoint
+        var ipt: SpvPoint
+        var nest: SpvPair
+        var arr: SpvPoint[] = new SpvPoint[2]
+
+        fun bareStatic(): Int {
+            spt.x = 7
+            var a = spt.x++
+            var b = spt.x--
+            return a * 100 + b * 10 + spt.x
+        }
+
+        fun bareField(): Int {
+            ipt.x = 7
+            var a = ipt.x++
+            var b = this.ipt.x--
+            return a * 100 + b * 10 + ipt.x
+        }
+    }
+
+    class StructMemberPostfixV1Tests {
+        import Am.Lang
+        import Am.Tests
+
+        test postfixValueOnStructMembers() {
+            var h = new SpvHolder()
+            Assert.assertEquals(787, h.bareStatic())
+            Assert.assertEquals(7, SpvHolder.spt.x)
+            Assert.assertEquals(787, h.bareField())
+            Assert.assertEquals(7, h.ipt.x)
+            SpvHolder.spt.y = 3
+            var a = SpvHolder.spt.y++
+            Assert.assertEquals(3, a)
+            Assert.assertEquals(4, SpvHolder.spt.y)
+            h.arr[1].y = 3
+            var b = h.arr[1].y++
+            Assert.assertEquals(3, b)
+            Assert.assertEquals(4, h.arr[1].y)
+            h.nest.p.x = 3
+            var c = h.nest.p.x--
+            Assert.assertEquals(3, c)
+            Assert.assertEquals(2, h.nest.p.x)
+        }
+    }
+}
