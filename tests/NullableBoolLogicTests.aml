@@ -1,0 +1,156 @@
+namespace Tests {
+
+    class NblHolder {
+        import Am.Lang
+
+        var flag: Bool? = null
+        var evals: Int = 0
+
+        fun getNull(): Bool? {
+            this.evals = this.evals + 1
+            return null
+        }
+
+        fun getTrue(): Bool? { return true }
+    }
+
+    // Redmine #491: a null `Bool?` operand of && or || read as false in v1
+    // (`.value.bool_value` of the nullable struct). Like every other operator
+    // since #388 it now throws; the right operand is only checked when it is
+    // evaluated, so `false && nullBool` and `true || nullBool` still short-circuit.
+    class NullableBoolLogicTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun andOf(a: Bool?, b: Bool?): Bool { return a && b }
+        static fun orOf(a: Bool?, b: Bool?): Bool { return a || b }
+
+        static fun andThrows(a: Bool?, b: Bool?): Bool {
+            try {
+                var r = a && b
+            } catch (e: Exception) {
+                return true
+            }
+            return false
+        }
+
+        static fun orThrows(a: Bool?, b: Bool?): Bool {
+            try {
+                var r = a || b
+            } catch (e: Exception) {
+                return true
+            }
+            return false
+        }
+
+        static fun ifThrows(a: Bool?): Bool {
+            try {
+                if (a) {
+                    return false
+                }
+            } catch (e: Exception) {
+                return true
+            }
+            return false
+        }
+
+        static fun whileThrows(a: Bool?): Bool {
+            try {
+                while (a) {
+                    return false
+                }
+            } catch (e: Exception) {
+                return true
+            }
+            return false
+        }
+
+        test nonNullOperands() {
+            Assert.assertTrue(NullableBoolLogicTests.andOf(true, true))
+            Assert.assertFalse(NullableBoolLogicTests.andOf(true, false))
+            Assert.assertFalse(NullableBoolLogicTests.andOf(false, true))
+            Assert.assertFalse(NullableBoolLogicTests.andOf(false, false))
+            Assert.assertTrue(NullableBoolLogicTests.orOf(true, true))
+            Assert.assertTrue(NullableBoolLogicTests.orOf(true, false))
+            Assert.assertTrue(NullableBoolLogicTests.orOf(false, true))
+            Assert.assertFalse(NullableBoolLogicTests.orOf(false, false))
+        }
+
+        test nullLeftThrows() {
+            Assert.assertTrue(NullableBoolLogicTests.andThrows(null, true))
+            Assert.assertTrue(NullableBoolLogicTests.andThrows(null, false))
+            Assert.assertTrue(NullableBoolLogicTests.orThrows(null, true))
+            Assert.assertTrue(NullableBoolLogicTests.orThrows(null, false))
+        }
+
+        test nullRightThrowsWhenEvaluated() {
+            Assert.assertTrue(NullableBoolLogicTests.andThrows(true, null))
+            Assert.assertTrue(NullableBoolLogicTests.orThrows(false, null))
+        }
+
+        test nullRightIsNotEvaluatedWhenLeftDecides() {
+            Assert.assertFalse(NullableBoolLogicTests.andThrows(false, null))
+            Assert.assertFalse(NullableBoolLogicTests.andOf(false, null))
+            Assert.assertFalse(NullableBoolLogicTests.orThrows(true, null))
+            Assert.assertTrue(NullableBoolLogicTests.orOf(true, null))
+        }
+
+        test callOperands() {
+            var h = new NblHolder()
+            Assert.assertFalse(false && h.getNull())
+            Assert.assertTrue(true || h.getNull())
+            Assert.assertEquals(0, h.evals)
+            Assert.assertTrue(h.getTrue() && h.getTrue())
+            var thrown = false
+            try {
+                var r = true && h.getNull()
+            } catch (e: Exception) {
+                thrown = true
+            }
+            Assert.assertTrue(thrown)
+            Assert.assertEquals(1, h.evals)
+            thrown = false
+            try {
+                var r = h.getNull() || true
+            } catch (e: Exception) {
+                thrown = true
+            }
+            Assert.assertTrue(thrown)
+        }
+
+        test propertyOperands() {
+            var h = new NblHolder()
+            var thrown = false
+            try {
+                var r = h.flag && true
+            } catch (e: Exception) {
+                thrown = true
+            }
+            Assert.assertTrue(thrown)
+            thrown = false
+            try {
+                var r = true && h.flag
+            } catch (e: Exception) {
+                thrown = true
+            }
+            Assert.assertTrue(thrown)
+            h.flag = true
+            Assert.assertTrue(h.flag && true)
+            Assert.assertTrue(false || h.flag)
+            h.flag = false
+            Assert.assertFalse(true && h.flag)
+            Assert.assertFalse(h.flag || false)
+        }
+
+        test conditions() {
+            Assert.assertTrue(NullableBoolLogicTests.ifThrows(null))
+            Assert.assertTrue(NullableBoolLogicTests.whileThrows(null))
+            var hit = false
+            var t: Bool? = true
+            if (t) {
+                hit = true
+            }
+            Assert.assertTrue(hit)
+        }
+    }
+}
