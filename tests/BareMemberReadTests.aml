@@ -1,0 +1,262 @@
+namespace Tests {
+
+    // Redmine #507 / #508: a bare read (no `this.` / `Owner.`) of an Any
+    // member kept the whole box (an Int's flags) in every context, and a bare
+    // read of a struct-typed field or static reached member access and
+    // passing on.
+
+    class BmThing {
+        import Am.Lang
+
+        var n: Int = 7
+    }
+
+    struct BmPoint {
+        import Am.Lang
+        var x: Int
+        var y: Int
+    }
+
+    class BmAnyHolder {
+        import Am.Lang
+
+        var a: Any = null
+        var other: Any = null
+        static var sa: Any = null
+
+        fun setInt(v: Int) { this.a = v }
+        fun setBool(v: Bool) { this.a = v }
+        fun setString(v: String) { this.a = v }
+        fun setThing(v: BmThing) { this.a = v }
+        static fun setStaticInt(v: Int) { BmAnyHolder.sa = v }
+        static fun setStaticString(v: String) { BmAnyHolder.sa = v }
+
+        static fun take(x: Any): String {
+            return "" + x.toString()
+        }
+
+        static fun takeIsInt(x: Any): Bool {
+            return x is Int
+        }
+
+        fun passOn(): String { return BmAnyHolder.take(a) }
+        fun passOnIsInt(): Bool { return BmAnyHolder.takeIsInt(a) }
+        fun toStr(): String { return a.toString() }
+        fun assignLocal(): String {
+            var l: Any = a
+            return l.toString()
+        }
+        fun assignLocalIsInt(): Bool {
+            var l: Any = a
+            return l is Int
+        }
+        fun inferLocal(): String {
+            var l = a
+            return l.toString()
+        }
+        fun storeOther(): String {
+            other = a
+            return other.toString()
+        }
+        fun storeOtherQualified(): String {
+            this.other = a
+            return this.other.toString()
+        }
+        fun give(): Any { return a }
+        fun giveIsInt(): Bool {
+            var r = give()
+            return r is Int
+        }
+        fun isInt(): Bool { return a is Int }
+        fun isBool(): Bool { return a is Bool }
+        fun isString(): Bool { return a is String }
+        fun isThing(): Bool { return a is BmThing }
+        fun isNull(): Bool { return a == null }
+        fun template(): String { return "<${a}>" }
+        fun thingN(): Int {
+            var t = a as BmThing
+            return t.n
+        }
+        fun intValue(): Int {
+            var t = a as Int
+            return t
+        }
+
+        static fun sPassOn(): String { return BmAnyHolder.take(sa) }
+        static fun sToStr(): String { return sa.toString() }
+        static fun sLocalIsInt(): Bool {
+            var l: Any = sa
+            return l is Int
+        }
+        static fun sIsInt(): Bool { return sa is Int }
+        static fun sGive(): Any { return sa }
+    }
+
+    class BmStructHolder {
+        import Am.Lang
+
+        static var spt: BmPoint
+        var ipt: BmPoint
+
+        static fun take(p: BmPoint): Int { return p.x * 100 + p.y }
+
+        fun set(x: Int, y: Int) {
+            var p: BmPoint
+            p.x = x
+            p.y = y
+            this.ipt = p
+        }
+
+        static fun setStatic(x: Int, y: Int) {
+            var p: BmPoint
+            p.x = x
+            p.y = y
+            BmStructHolder.spt = p
+        }
+
+        fun readX(): Int { return ipt.x }
+        fun readSum(): Int { return ipt.x + ipt.y }
+        fun cmpX(v: Int): Bool { return ipt.x == v }
+        fun passOn(): Int { return BmStructHolder.take(ipt) }
+        fun copy(): Int {
+            var p = ipt
+            return p.x * 100 + p.y
+        }
+        fun copyTyped(): Int {
+            var p: BmPoint = ipt
+            return p.y
+        }
+        fun writeMember(v: Int) { ipt.x = v }
+        fun give(): BmPoint { return ipt }
+
+        static fun sReadX(): Int { return spt.x }
+        static fun sReadSum(): Int { return spt.x + spt.y }
+        static fun sCmpX(v: Int): Bool { return spt.x == v }
+        static fun sPassOn(): Int { return BmStructHolder.take(spt) }
+        static fun sCopy(): Int {
+            var p = spt
+            return p.x * 100 + p.y
+        }
+        static fun sGive(): BmPoint { return spt }
+    }
+
+    class BareMemberReadTests {
+        import Am.Lang
+        import Am.Tests
+
+        test bareAnyInt() {
+            var h = new BmAnyHolder()
+            h.setInt(42)
+            Assert.assertEquals("42", h.passOn())
+            Assert.assertTrue(h.passOnIsInt())
+            Assert.assertEquals("42", h.toStr())
+            Assert.assertEquals("42", h.assignLocal())
+            Assert.assertTrue(h.assignLocalIsInt())
+            Assert.assertEquals("42", h.inferLocal())
+            Assert.assertEquals("42", h.storeOther())
+            Assert.assertEquals("42", h.storeOtherQualified())
+            Assert.assertTrue(h.giveIsInt())
+            Assert.assertTrue(h.isInt())
+            Assert.assertFalse(h.isBool())
+            Assert.assertFalse(h.isString())
+            Assert.assertFalse(h.isNull())
+            Assert.assertEquals("<42>", h.template())
+            Assert.assertEquals(42, h.intValue())
+        }
+
+        test bareAnyZeroAndNegative() {
+            var h = new BmAnyHolder()
+            h.setInt(0)
+            Assert.assertTrue(h.isInt())
+            Assert.assertFalse(h.isNull())
+            Assert.assertEquals("0", h.passOn())
+            h.setInt(-5)
+            Assert.assertEquals("-5", h.toStr())
+            Assert.assertTrue(h.assignLocalIsInt())
+        }
+
+        test bareAnyBool() {
+            var h = new BmAnyHolder()
+            h.setBool(true)
+            Assert.assertTrue(h.isBool())
+            Assert.assertFalse(h.isInt())
+            Assert.assertEquals("true", h.passOn())
+            Assert.assertEquals("true", h.assignLocal())
+            Assert.assertEquals("true", h.storeOther())
+        }
+
+        test bareAnyString() {
+            var h = new BmAnyHolder()
+            h.setString("hello")
+            Assert.assertTrue(h.isString())
+            Assert.assertFalse(h.isInt())
+            Assert.assertEquals("hello", h.passOn())
+            Assert.assertEquals("hello", h.toStr())
+            Assert.assertEquals("hello", h.assignLocal())
+            Assert.assertEquals("hello", h.inferLocal())
+            Assert.assertEquals("hello", h.storeOther())
+            Assert.assertEquals("<hello>", h.template())
+        }
+
+        test bareAnyObject() {
+            var h = new BmAnyHolder()
+            var t = new BmThing()
+            t.n = 99
+            h.setThing(t)
+            Assert.assertTrue(h.isThing())
+            Assert.assertFalse(h.isInt())
+            Assert.assertEquals(99, h.thingN())
+            var g = h.give() as BmThing
+            Assert.assertEquals(99, g.n)
+            Assert.assertTrue(h.storeOther() != "")
+        }
+
+        test bareAnyNull() {
+            var h = new BmAnyHolder()
+            Assert.assertTrue(h.isNull())
+            Assert.assertFalse(h.isInt())
+        }
+
+        test bareStaticAny() {
+            BmAnyHolder.setStaticInt(17)
+            Assert.assertEquals("17", BmAnyHolder.sPassOn())
+            Assert.assertEquals("17", BmAnyHolder.sToStr())
+            Assert.assertTrue(BmAnyHolder.sLocalIsInt())
+            Assert.assertTrue(BmAnyHolder.sIsInt())
+            BmAnyHolder.setStaticString("s")
+            Assert.assertEquals("s", BmAnyHolder.sPassOn())
+            Assert.assertFalse(BmAnyHolder.sIsInt())
+        }
+
+        test bareStructField() {
+            var h = new BmStructHolder()
+            h.set(3, 4)
+            Assert.assertEquals(3, h.readX())
+            Assert.assertEquals(7, h.readSum())
+            Assert.assertTrue(h.cmpX(3))
+            Assert.assertFalse(h.cmpX(4))
+            Assert.assertEquals(304, h.passOn())
+            Assert.assertEquals(304, h.copy())
+            Assert.assertEquals(4, h.copyTyped())
+            Assert.assertEquals(304, BmStructHolder.take(h.give()))
+        }
+
+        test bareStructFieldMemberStore() {
+            var h = new BmStructHolder()
+            h.set(3, 4)
+            h.writeMember(9)
+            Assert.assertEquals(9, h.readX())
+            Assert.assertEquals(904, h.passOn())
+        }
+
+        test bareStructStatic() {
+            BmStructHolder.setStatic(5, 6)
+            Assert.assertEquals(5, BmStructHolder.sReadX())
+            Assert.assertEquals(11, BmStructHolder.sReadSum())
+            Assert.assertTrue(BmStructHolder.sCmpX(5))
+            Assert.assertEquals(506, BmStructHolder.sPassOn())
+            Assert.assertEquals(506, BmStructHolder.sCopy())
+            Assert.assertEquals(506, BmStructHolder.take(BmStructHolder.sGive()))
+        }
+    }
+}
