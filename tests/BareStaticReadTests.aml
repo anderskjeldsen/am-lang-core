@@ -1,0 +1,245 @@
+namespace Tests {
+
+    // Redmine #391 / #415: a bare static read (no `Class.`) inside the class,
+    // with or without `!!`, crashed v1 with a NullPointerException.
+
+    class BsNode {
+        import Am.Lang
+
+        var n: Int = 0
+    }
+
+    class BsHolder {
+        import Am.Lang
+
+        static var sj: Int = 3
+        static var sv: Int? = null
+        static var name: String = "abc"
+        static var node: BsNode = new BsNode()
+        static var maybe: BsNode? = null
+        static var count: Int = 0
+
+        // Reads, static function.
+        static fun readPlain(): Int {
+            return sj
+        }
+
+        static fun cmp(): Bool {
+            return sj == 3
+        }
+
+        static fun readBang(): Int {
+            return sv!!
+        }
+
+        static fun readBangVar(): Int {
+            var x = sv!!
+            return x
+        }
+
+        static fun readBangExpr(): Int {
+            return sv!! + 1
+        }
+
+        static fun plusExpr(): Int {
+            return sj + 1
+        }
+
+        static fun asArg(): Int {
+            return BsHolder.twice(sj)
+        }
+
+        static fun asArgBang(): Int {
+            return BsHolder.twice(sv!!)
+        }
+
+        static fun twice(a: Int): Int {
+            return a * 2
+        }
+
+        static fun asValue(): Int {
+            var x = sj
+            return x
+        }
+
+        static fun nameLength(): Int {
+            return name.length()
+        }
+
+        static fun nodeValue(): Int {
+            return node.n
+        }
+
+        static fun maybeValue(): Int {
+            return maybe!!.n
+        }
+
+        // Writes.
+        static fun assign(v: Int) {
+            sj = v
+        }
+
+        static fun assignNullable(v: Int?) {
+            sv = v
+        }
+
+        static fun assignNullLiteral() {
+            sv = null
+        }
+
+        static fun assignLiteral() {
+            sv = 5
+        }
+
+        static fun assignNode(v: BsNode) {
+            node = v
+        }
+
+        static fun incr() {
+            sj++
+            count += 1
+            count++
+        }
+
+        static fun addAssign(v: Int) {
+            sj += v
+        }
+
+        // Instance function reading the same statics.
+        fun instPlain(): Int {
+            return sj
+        }
+
+        fun instBang(): Int {
+            return sv!!
+        }
+
+        fun instBangVar(): Int {
+            var x = sv!!
+            return x + sj
+        }
+
+        fun instNode(): Int {
+            return maybe!!.n
+        }
+
+        fun instAssign(v: Int) {
+            sj = v
+            sv = v
+        }
+
+        fun instIncr() {
+            sj++
+            sj += 2
+        }
+
+    }
+
+    class BareStaticReadTests {
+        import Am.Lang
+        import Am.Tests
+
+        test staticPlain() {
+            BsHolder.sj = 3
+            Assert.assertEquals(3, BsHolder.readPlain())
+            Assert.assertTrue(BsHolder.cmp())
+            Assert.assertEquals(4, BsHolder.plusExpr())
+            Assert.assertEquals(6, BsHolder.asArg())
+            Assert.assertEquals(3, BsHolder.asValue())
+        }
+
+        test staticBang() {
+            BsHolder.sv = 7
+            Assert.assertEquals(7, BsHolder.readBang())
+            Assert.assertEquals(7, BsHolder.readBangVar())
+            Assert.assertEquals(8, BsHolder.readBangExpr())
+            Assert.assertEquals(14, BsHolder.asArgBang())
+        }
+
+        test staticBangOnNullThrows() {
+            BsHolder.sv = null
+            Assert.assertTrue(BareStaticReadTests.throwsOn(0))
+            Assert.assertTrue(BareStaticReadTests.throwsOn(1))
+            Assert.assertTrue(BareStaticReadTests.throwsOn(2))
+            Assert.assertTrue(BareStaticReadTests.throwsOn(3))
+            Assert.assertTrue(BareStaticReadTests.throwsOn(4))
+            BsHolder.sv = 5
+            Assert.assertEquals(5, BsHolder.readBang())
+        }
+
+        test objectStatics() {
+            BsHolder.name = "hello"
+            Assert.assertEquals(5, BsHolder.nameLength())
+            var a = new BsNode()
+            a.n = 11
+            BsHolder.assignNode(a)
+            Assert.assertEquals(11, BsHolder.nodeValue())
+            BsHolder.maybe = a
+            Assert.assertEquals(11, BsHolder.maybeValue())
+            Assert.assertEquals(11, new BsHolder().instNode())
+            BsHolder.maybe = null
+            var threw = false
+            try {
+                BsHolder.maybeValue()
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+
+        test staticWrites() {
+            BsHolder.assign(10)
+            Assert.assertEquals(10, BsHolder.sj)
+            BsHolder.assignNullable(9)
+            Assert.assertEquals(9, BsHolder.sv!!)
+            BsHolder.assignNullable(null)
+            Assert.assertTrue(BsHolder.sv == null)
+            BsHolder.assignLiteral()
+            Assert.assertEquals(5, BsHolder.sv!!)
+            BsHolder.assignNullLiteral()
+            Assert.assertTrue(BsHolder.sv == null)
+            BsHolder.sj = 1
+            BsHolder.count = 0
+            BsHolder.incr()
+            Assert.assertEquals(2, BsHolder.sj)
+            Assert.assertEquals(2, BsHolder.count)
+            BsHolder.addAssign(5)
+            Assert.assertEquals(7, BsHolder.sj)
+        }
+
+        test instanceFunctions() {
+            var h = new BsHolder()
+            BsHolder.sj = 3
+            BsHolder.sv = 7
+            Assert.assertEquals(3, h.instPlain())
+            Assert.assertEquals(7, h.instBang())
+            Assert.assertEquals(10, h.instBangVar())
+            h.instAssign(20)
+            Assert.assertEquals(20, BsHolder.sj)
+            Assert.assertEquals(20, BsHolder.sv!!)
+            h.instIncr()
+            Assert.assertEquals(23, BsHolder.sj)
+            BsHolder.sv = null
+            var threw = false
+            try {
+                h.instBang()
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+
+        static fun throwsOn(which: Int): Bool {
+            try {
+                if (which == 0) { BsHolder.readBang() }
+                if (which == 1) { BsHolder.readBangVar() }
+                if (which == 2) { BsHolder.readBangExpr() }
+                if (which == 3) { BsHolder.asArgBang() }
+                if (which == 4) { new BsHolder().instBang() }
+            } catch (e: Exception) {
+                return true
+            }
+            return false
+        }
+    }
+}
