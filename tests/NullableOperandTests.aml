@@ -1,0 +1,259 @@
+namespace Tests {
+
+    // Redmine #388: a nullable primitive (Int?, Long?, Bool?, Double?) used as
+    // an operand of an arithmetic, bitwise, relational, `!` or unary `-`
+    // operator. v1 put the `nullable_value` struct itself into the C
+    // expression (`int + nullable_value`, a gcc error). The operand is now
+    // converted like a nullable argument: a null check, then the plain value.
+    // After a null guard (`if (x == null) return`, `throw`, `continue`,
+    // `break`, or inside `if (x != null)`) the check never fires; without one,
+    // a null operand throws instead of reading garbage.
+
+    enum NoColor<UByte> {
+        import Am.Lang
+
+        black = 0UB
+        red = 1UB
+        white = 7UB
+    }
+
+    class NoBox {
+        import Am.Lang
+
+        var count: Int? = null
+    }
+
+    class NullableOperandTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun incAfterReturn(x: Int?): Int {
+            if (x == null) {
+                return -1
+            }
+            return x + 1
+        }
+
+        static fun rightOperand(x: Int?): Int {
+            if (x == null) {
+                return -1
+            }
+            return 10 - x
+        }
+
+        static fun mixed(x: Int?): Int {
+            if (x == null) {
+                return -1
+            }
+            return x * x + (x % 3) - (x & 1) + (x << 1)
+        }
+
+        static fun longAfterReturn(x: Long?): Long {
+            if (x == null) {
+                return 0L
+            }
+            return x * 3L + 1L
+        }
+
+        static fun doubleAfterThrow(d: Double?): Double {
+            if (d == null) {
+                throw new Exception("no value")
+            }
+            return d / 2.0
+        }
+
+        static fun notAfterReturn(b: Bool?): Bool {
+            if (b == null) {
+                return false
+            }
+            return !b
+        }
+
+        static fun negAfterReturn(x: Int?): Int {
+            if (x == null) {
+                return 0
+            }
+            return -x
+        }
+
+        static fun greater(x: Int?): Bool {
+            if (x == null) {
+                return false
+            }
+            return x > 3
+        }
+
+        static fun insideNotNull(x: Int?): Int {
+            if (x != null) {
+                return x * 2
+            }
+            return -1
+        }
+
+        static fun pick(i: Int): Int? {
+            if (i % 2 == 0) {
+                return null
+            }
+            return i
+        }
+
+        static fun sumWithContinue(n: Int): Int {
+            var sum = 0
+            for (i = 0 until n) {
+                var v = NullableOperandTests.pick(i)
+                if (v == null) {
+                    continue
+                }
+                sum = sum + v
+            }
+            return sum
+        }
+
+        static fun firstNullAfterBreak(): Int {
+            var last = 0
+            var i = 1
+            while (i < 10) {
+                var v = NullableOperandTests.pick(i)
+                if (v == null) {
+                    break
+                }
+                last = v * 10
+                i = i + 1
+            }
+            return last
+        }
+
+        static fun colorCode(c: NoColor): Int {
+            if (c == NoColor.white) {
+                return 7
+            }
+            if (c == NoColor.red) {
+                return 1
+            }
+            return 0
+        }
+
+        static fun colorAfterReturn(c: NoColor?): Int {
+            if (c == null) {
+                return -1
+            }
+            return NullableOperandTests.colorCode(c) + 100
+        }
+
+        // No guard: a null operand throws; it must not read as 0.
+        static fun unguardedThrows(x: Int?): Bool {
+            var thrown = false
+            try {
+                var r = x + 1
+            } catch (e: Exception) {
+                thrown = true
+            }
+            return thrown
+        }
+
+        // Reassigned to null after the guard: the guard no longer holds, and
+        // the operand check throws.
+        static fun reassignedThrows(x: Int?): Bool {
+            if (x == null) {
+                return false
+            }
+            var y: Int? = x
+            y = null
+            var thrown = false
+            try {
+                var r = y + 1
+            } catch (e: Exception) {
+                thrown = true
+            }
+            return thrown
+        }
+
+        test intAfterReturn() {
+            Assert.assertEquals(5, NullableOperandTests.incAfterReturn(4))
+            Assert.assertEquals(1, NullableOperandTests.incAfterReturn(0))
+            Assert.assertEquals(-1, NullableOperandTests.incAfterReturn(null))
+            Assert.assertEquals(6, NullableOperandTests.rightOperand(4))
+            Assert.assertEquals(-1, NullableOperandTests.rightOperand(null))
+            // 5*5 + 5%3 - (5&1) + (5<<1) = 25 + 2 - 1 + 10
+            Assert.assertEquals(36, NullableOperandTests.mixed(5))
+            Assert.assertEquals(-1, NullableOperandTests.mixed(null))
+        }
+
+        test longAndDouble() {
+            Assert.assertEquals(13L, NullableOperandTests.longAfterReturn(4L))
+            Assert.assertEquals(0L, NullableOperandTests.longAfterReturn(null))
+            Assert.assertDoubleCloseEnough(2.5, NullableOperandTests.doubleAfterThrow(5.0))
+            var thrown = false
+            try {
+                NullableOperandTests.doubleAfterThrow(null)
+            } catch (e: Exception) {
+                thrown = true
+            }
+            Assert.assertTrue(thrown)
+        }
+
+        test boolAndUnary() {
+            Assert.assertFalse(NullableOperandTests.notAfterReturn(true))
+            Assert.assertTrue(NullableOperandTests.notAfterReturn(false))
+            Assert.assertFalse(NullableOperandTests.notAfterReturn(null))
+            Assert.assertEquals(-4, NullableOperandTests.negAfterReturn(4))
+            Assert.assertEquals(0, NullableOperandTests.negAfterReturn(null))
+            Assert.assertTrue(NullableOperandTests.greater(4))
+            Assert.assertFalse(NullableOperandTests.greater(3))
+            Assert.assertFalse(NullableOperandTests.greater(null))
+        }
+
+        test insideNotNullBlock() {
+            Assert.assertEquals(8, NullableOperandTests.insideNotNull(4))
+            Assert.assertEquals(0, NullableOperandTests.insideNotNull(0))
+            Assert.assertEquals(-1, NullableOperandTests.insideNotNull(null))
+        }
+
+        test loopsWithContinueAndBreak() {
+            // odd i in 0..6: 1 + 3 + 5
+            Assert.assertEquals(9, NullableOperandTests.sumWithContinue(7))
+            // i = 1 is odd (10), i = 2 is null: break
+            Assert.assertEquals(10, NullableOperandTests.firstNullAfterBreak())
+        }
+
+        test nullableEnum() {
+            Assert.assertEquals(107, NullableOperandTests.colorAfterReturn(NoColor.white))
+            Assert.assertEquals(100, NullableOperandTests.colorAfterReturn(NoColor.black))
+            Assert.assertEquals(-1, NullableOperandTests.colorAfterReturn(null))
+        }
+
+        test localsAndProperties() {
+            var x: Int? = 5
+            if (x != null) {
+                var y = x + 1
+                Assert.assertEquals(6, y)
+            }
+            var b = new NoBox()
+            b.count = 3
+            if (b.count != null) {
+                Assert.assertEquals(9, b.count * 3)
+                Assert.assertEquals(12, 4 * b.count)
+                Assert.assertEquals(-3, -b.count)
+                Assert.assertTrue(b.count > 2)
+            }
+            // A call returning Int?, on either side.
+            Assert.assertEquals(4, NullableOperandTests.pick(3) + 1)
+            Assert.assertEquals(7, 10 - NullableOperandTests.pick(3))
+        }
+
+        // An identifier named like the operators' internal names still works.
+        test operatorNamesAsIdentifiers() {
+            var negate: Int? = 2
+            var arg = 5
+            if (negate != null) {
+                Assert.assertEquals(7, negate + arg)
+            }
+        }
+
+        test nullOperandThrows() {
+            Assert.assertTrue(NullableOperandTests.unguardedThrows(null))
+            Assert.assertFalse(NullableOperandTests.unguardedThrows(0))
+            Assert.assertTrue(NullableOperandTests.reassignedThrows(4))
+        }
+    }
+}
