@@ -1,0 +1,17 @@
+namespace ThreadExitRace {
+
+    // What the operating system says about the program's threads.
+    #implementationPlatforms "libc", "amigaos", "morphos-ppc"
+    native class Probe {
+        import Am.Lang
+
+        // AmigaOS/MorphOS: how many Exec tasks named `prefix`... still
+        // exist, and how many of those still have an isolate bound
+        // (tc_UserData set: the task has not reached its last action).
+        // Encoded as alive * 1000 + bound. Elsewhere 0.
+        static native fun tasks(prefix: String): Int
+
+        // AmigaOS/MorphOS: AvailMem(MEMF_ANY). Elsewhere 0.
+        static native fun freeMemory(): Long
+    }
+}

@@ -487,7 +487,7 @@ struct _aisolate {
     aisolate * parent;          // the spawning isolate (holds a handle on it); NULL for main
     int handle_count;           // Thread handle objects + the running thread itself (global lock)
     bool started;
-    bool done;                  // runnable returned, heap torn down
+    bool done;                  // runnable returned, heap torn down; Amiga family: and the task has left the program's code (#459)
     bool joined;
     void * native;              // platform thread data (Thread.c)
     amessage * boot;            // the copied Runnable, opened by the worker on entry
@@ -697,6 +697,11 @@ void __amlc_isolate_retain(aisolate * const iso);
 void __amlc_isolate_release(aisolate * const iso); // frees once no handles remain and the isolate is done
 void __amlc_isolate_enter(aisolate * const iso);   // binds iso to the calling OS thread
 void __amlc_isolate_teardown(aisolate * const iso); // statics deref + heap release + mailbox close; call from iso's own thread
+// Amiga family only: the worker task's very last call, right before its
+// entry returns to dos.library. Drops the task's own handle and sets `done`
+// under a Forbid() that the task's removal ends (#459). Elsewhere teardown
+// sets `done`, and the thread drops its handle with __amlc_isolate_release.
+void __amlc_isolate_task_exit(aisolate * const iso);
 // After the statics are dereferenced: mark/sweep, TRACKOBJECTS leak report,
 // then frees every object left whatever its code count (#447). Worker
 // teardown and main's generated shutdown call it.

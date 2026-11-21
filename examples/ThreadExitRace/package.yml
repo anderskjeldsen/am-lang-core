@@ -1,0 +1,50 @@
+# Join and exit races of short-lived threads (Redmine #459). A real program,
+# run by run.sh: many threads that end at once, joined right before main
+# returns, run repeatedly in one AmigaOS session. On the Amiga family a join
+# (and main's out-of-memory shutdown) used to return while the worker task
+# was still running a few instructions of the program's code, so main could
+# exit and unload the program under it. `./run.sh` for linux-x64,
+# `./run.sh --amiga` for AmigaOS under the amlang-amiberry image,
+# `./run.sh --morphos` builds the MorphOS variant (no emulator here).
+id: thread-exit-race
+version: 1.0.0
+type: application
+dependencies:
+  - id: am-lang-core
+    type: local
+    path: ../..
+platforms:
+  - id: libc
+    abstract: true
+  - id: linux-x64
+    extends: libc
+    gccCommand: gcc -O1
+    gccAdditionalOptions:
+      - -pthread
+  - id: amigaos
+    extends: libc
+    gccCommand: m68k-amigaos-gcc -O2
+    gccAdditionalOptions:
+      - -noixemul
+    additionalLinkerFlags:
+      - -noixemul
+  - id: morphos-ppc
+    extends: libc
+    gccCommand: ppc-morphos-gcc -O2
+    gccAdditionalOptions:
+      - -noixemul
+    additionalLinkerFlags:
+      - -noixemul
+buildTargets:
+  - id: linux-x64
+    platform: linux-x64
+  - id: amigaos-docker
+    platform: amigaos
+    dockerBuild:
+      image: amiga-gcc:latest
+      buildPath: /host
+  - id: morphos-ppc-docker
+    platform: morphos-ppc
+    dockerBuild:
+      image: amigadev/crosstools:ppc-morphos
+      buildPath: /work
