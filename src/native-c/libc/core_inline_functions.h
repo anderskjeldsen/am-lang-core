@@ -24,7 +24,7 @@ typedef function_result (*Am_Lang_Object_equals_0_T)(aobject * const this, aobje
 extern Am_Lang_Object_equals_0_index;
 */
 static inline void __set_primitive_nullable(nullable_value * nullable_value, bool is_primitive_nullable) {
-    unsigned char f = nullable_value->flags;
+    unsigned short f = nullable_value->flags; // 16 bits: the high byte is the enum tag (#392)
     f &= ~PRIMITIVE_NULLABLE;
     f |= is_primitive_nullable ? PRIMITIVE_NULLABLE : 0;
     nullable_value->flags = f;
@@ -108,7 +108,7 @@ static inline void __amlc_heap_unlink(aisolate * const iso, aobject * const obj)
 }
 
 static inline void __set_primitive_null(nullable_value * nullable_value, bool is_primitive_null) {
-    unsigned char f = nullable_value->flags;
+    unsigned short f = nullable_value->flags; // 16 bits: the high byte is the enum tag (#392)
     f &= ~PRIMITIVE_NULL;
     f |= is_primitive_null ? PRIMITIVE_NULL : 0;
     nullable_value->flags = f; 
@@ -128,6 +128,14 @@ static inline bool __is_primitive(const nullable_value nullable_value) {
 
 static inline bool __any_has_flags(const nullable_value *nv, unsigned short flags) {
     return (nv->flags & flags) == flags;
+}
+
+// Redmine #392: an Any that holds an enum value is the enum's backing primitive
+// with the enum's tag (1..255, assigned by the compiler) in the high byte of
+// the flags. Objects have flags 0 and plain primitives a zero high byte, so
+// neither is ever "an enum". `a is Color` / `a as Color` test the tag.
+static inline bool __any_is_enum(const nullable_value a, unsigned short tag) {
+    return (a.flags & PRIMITIVE) != 0 && (a.flags >> 8) == tag && tag != 0;
 }
 
 // `new` of a class whose every property slot the generated code stores
