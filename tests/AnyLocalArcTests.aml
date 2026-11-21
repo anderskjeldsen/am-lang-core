@@ -30,6 +30,15 @@ namespace Tests {
         }
     }
 
+    // #511: an Any temporary passed to a base constructor is released after it.
+    class AlaBase(var held: Any) {
+        import Am.Lang
+    }
+
+    class AlaDerived() : AlaBase(AnyLocalArcTests.make(5)) {
+        import Am.Lang
+    }
+
     class AlaBoomException() : Exception("boom") {
         import Am.Lang
     }
@@ -49,6 +58,16 @@ namespace Tests {
 
         static fun make(n: Int): Any {
             return new AlaThing(n)
+        }
+
+        static fun derivedFromAnyTemp(): Int {
+            var d = new AlaDerived()
+            return (d.held as AlaThing).n
+        }
+
+        test anyTemporaryArgumentOfBaseConstructor() {
+            Assert.assertEquals(5, AnyLocalArcTests.derivedFromAnyTemp())
+            Assert.assertEquals(0, instances(AlaThing))
         }
 
         static fun localFromCall() {
