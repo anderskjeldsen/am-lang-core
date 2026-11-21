@@ -1,0 +1,274 @@
+namespace Tests {
+
+    // Redmine #550: `target op= rhs` evaluates the receiver chain and every
+    // index ONCE. v2 copied the target and evaluated it twice, so `arr[n++] += 5`
+    // bumped n twice and `arr[f()] += 1` called f twice. Counters prove each
+    // side effect runs once and that the right element changes.
+
+    struct CoPoint {
+        import Am.Lang
+        var x: Int
+        var y: Int
+    }
+
+    class CoInner {
+        import Am.Lang
+        var d: Int = 1
+        var s: String = "a"
+    }
+
+    class CoNode {
+        import Am.Lang
+        var c: Int[] = new Int[4]
+        var inner: CoInner = new CoInner()
+        var pt: CoPoint
+        var n: Int = 10
+        var s: String = "x"
+        var m: Int? = 3
+        var l: Long = 100
+        var u: UInt = 100
+
+        static var sn: Int = 5
+        static var calls: Int = 0
+        static var shared: CoNode = new CoNode()
+
+        static fun idx(i: Int): Int {
+            CoNode.calls++
+            return i
+        }
+
+        static fun get(): CoNode {
+            CoNode.calls++
+            return CoNode.shared
+        }
+
+        fun me(): CoNode {
+            CoNode.calls++
+            return this
+        }
+
+        fun inn(): CoInner {
+            CoNode.calls++
+            return this.inner
+        }
+
+        fun arr(): Int[] {
+            CoNode.calls++
+            return this.c
+        }
+    }
+
+    class CompoundOnceTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun reset() {
+            CoNode.calls = 0
+            CoNode.shared = new CoNode()
+        }
+
+        test indexSideEffectOnce() {
+            var a = new Int[4]
+            a[0] = 10
+            a[1] = 20
+            a[2] = 30
+            var n = 0
+            a[n++] += 5
+            Assert.assertEquals(1, n)
+            Assert.assertEquals(15, a[0])
+            Assert.assertEquals(20, a[1])
+            a[n++] -= 2
+            Assert.assertEquals(2, n)
+            Assert.assertEquals(18, a[1])
+            a[n++] *= 3
+            Assert.assertEquals(90, a[2])
+            Assert.assertEquals(3, n)
+            Assert.assertEquals(0, a[3])
+        }
+
+        test everyOperatorOnCallIndex() {
+            reset()
+            var a = new Int[4]
+            a[1] = 100
+            a[CoNode.idx(1)] += 5
+            Assert.assertEquals(105, a[1])
+            a[CoNode.idx(1)] -= 5
+            Assert.assertEquals(100, a[1])
+            a[CoNode.idx(1)] *= 2
+            Assert.assertEquals(200, a[1])
+            a[CoNode.idx(1)] /= 8
+            Assert.assertEquals(25, a[1])
+            a[CoNode.idx(1)] %= 7
+            Assert.assertEquals(4, a[1])
+            a[CoNode.idx(1)] |= 9
+            Assert.assertEquals(13, a[1])
+            a[CoNode.idx(1)] &= 6
+            Assert.assertEquals(4, a[1])
+            a[CoNode.idx(1)] ^= 5
+            Assert.assertEquals(1, a[1])
+            Assert.assertEquals(8, CoNode.calls)
+            Assert.assertEquals(0, a[0])
+            Assert.assertEquals(0, a[2])
+        }
+
+        test callIndexOnFieldArray() {
+            reset()
+            var o = new CoNode()
+            o.c[2] = 7
+            o.c[CoNode.idx(2)] += 3
+            Assert.assertEquals(1, CoNode.calls)
+            Assert.assertEquals(10, o.c[2])
+            o.me().c[CoNode.idx(2)] *= 2
+            Assert.assertEquals(3, CoNode.calls)
+            Assert.assertEquals(20, o.c[2])
+            o.arr()[CoNode.idx(3)] += 9
+            Assert.assertEquals(5, CoNode.calls)
+            Assert.assertEquals(9, o.c[3])
+            Assert.assertEquals(0, o.c[0])
+        }
+
+        test fieldOfCallResult() {
+            reset()
+            CoNode.get().n += 1
+            Assert.assertEquals(1, CoNode.calls)
+            Assert.assertEquals(11, CoNode.shared.n)
+            CoNode.get().n -= 3
+            CoNode.get().n *= 4
+            CoNode.get().n /= 2
+            CoNode.get().n %= 7
+            CoNode.get().n |= 8
+            CoNode.get().n &= 12
+            CoNode.get().n ^= 5
+            Assert.assertEquals(8, CoNode.calls)
+            var v = 11
+            v -= 3
+            v *= 4
+            v /= 2
+            v %= 7
+            v |= 8
+            v &= 12
+            v ^= 5
+            Assert.assertEquals(v, CoNode.shared.n)
+            CoNode.get().l += 5
+            Assert.assertTrue(CoNode.shared.l == 105)
+            CoNode.get().u -= 1
+            Assert.assertEquals(99, CoNode.shared.u as Int)
+            Assert.assertEquals(10, CoNode.calls)
+        }
+
+        test nestedChain() {
+            reset()
+            var o = new CoNode()
+            o.inn().d += 4
+            Assert.assertEquals(1, CoNode.calls)
+            Assert.assertEquals(5, o.inner.d)
+            o.me().inn().d *= 3
+            Assert.assertEquals(3, CoNode.calls)
+            Assert.assertEquals(15, o.inner.d)
+            o.me().arr()[CoNode.idx(1)] += 6
+            Assert.assertEquals(6, CoNode.calls)
+            Assert.assertEquals(6, o.c[1])
+            o.me().me().n -= 1
+            Assert.assertEquals(8, CoNode.calls)
+            Assert.assertEquals(9, o.n)
+        }
+
+        // v1 renders a class-typed `target op= rhs` as `target = target op rhs` on a
+        // clone of the target, so a call in the receiver runs twice (OperatorBinder,
+        // "accepted" there); only the stored value is checked here. v2 evaluates the
+        // receiver once: ProjectCompileTest.compoundAssignmentEvaluatesTargetOnce.
+        test stringOnCallResult() {
+            reset()
+            var o = new CoNode()
+            o.me().s += "y"
+            Assert.assertEquals("xy", o.s)
+            o.inn().s += "b"
+            Assert.assertEquals("ab", o.inner.s)
+            CoNode.get().s += "z"
+            Assert.assertEquals("xz", CoNode.shared.s)
+        }
+
+        test structMemberThroughCall() {
+            reset()
+            var o = new CoNode()
+            o.me().pt.x += 4
+            Assert.assertEquals(1, CoNode.calls)
+            Assert.assertEquals(4, o.pt.x)
+            o.me().pt.y -= 2
+            o.me().pt.y *= 5
+            Assert.assertEquals(3, CoNode.calls)
+            Assert.assertEquals(-10, o.pt.y)
+            Assert.assertEquals(4, o.pt.x)
+        }
+
+        test structElementMembers() {
+            reset()
+            var pts = new CoPoint[3]
+            var n = 0
+            pts[n++].x += 5
+            Assert.assertEquals(1, n)
+            Assert.assertEquals(5, pts[0].x)
+            pts[CoNode.idx(2)].y -= 3
+            Assert.assertEquals(1, CoNode.calls)
+            Assert.assertEquals(-3, pts[2].y)
+            Assert.assertEquals(0, pts[1].y)
+            var o = new CoNode()
+            var parr = new CoPoint[2]
+            parr[n--].x *= 2
+            Assert.assertEquals(0, n)
+        }
+
+        test staticTargets() {
+            reset()
+            CoNode.sn += 3
+            CoNode.sn *= 2
+            Assert.assertEquals(16, CoNode.sn)
+            var a = new Int[3]
+            var n = 1
+            a[n++] += CoNode.sn
+            Assert.assertEquals(2, n)
+            Assert.assertEquals(16, a[1])
+        }
+
+        test nullableTargets() {
+            reset()
+            var o = new CoNode()
+            o.me().m += 4
+            Assert.assertEquals(1, CoNode.calls)
+            Assert.assertEquals(7, o.m!!)
+            o.me().m *= 2
+            Assert.assertEquals(2, CoNode.calls)
+            Assert.assertEquals(14, o.m!!)
+            o.m = null
+            var threw = false
+            try {
+                o.me().m += 1
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+            Assert.assertEquals(3, CoNode.calls)
+        }
+
+        test rhsEvaluatedOnce() {
+            reset()
+            var a = new Int[3]
+            a[CoNode.idx(1)] += CoNode.idx(7)
+            Assert.assertEquals(2, CoNode.calls)
+            Assert.assertEquals(7, a[1])
+        }
+
+        test outOfBoundsThrowsOnce() {
+            reset()
+            var a = new Int[2]
+            var threw = false
+            try {
+                a[CoNode.idx(5)] += 1
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+            Assert.assertEquals(1, CoNode.calls)
+        }
+    }
+}
