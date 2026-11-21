@@ -1,0 +1,251 @@
+namespace Tests {
+
+    class ItThrower {
+        import Am.Lang
+        static fun boom(msg: String): Int {
+            throw new Exception(msg)
+        }
+        static fun one(): Int {
+            return 1
+        }
+    }
+
+    class ItField {
+        import Am.Lang
+        var name: String = "set before the throw"
+        var v: Int = ItThrower.boom("field")
+        var after: String = "never set"
+    }
+
+    class ItBlock {
+        import Am.Lang
+        var name: String = "set before the throw"
+        init { ItThrower.boom("init block") }
+    }
+
+    open class ItThrowingBase {
+        import Am.Lang
+        var baseName: String = "base"
+        var bv: Int = ItThrower.boom("base")
+    }
+
+    class ItSubOfThrowingBase : ItThrowingBase {
+        import Am.Lang
+        var subName: String = "sub"
+    }
+
+    open class ItOkBase {
+        import Am.Lang
+        var baseName: String = "base " + "ok"
+        var bv: Int = ItThrower.one()
+    }
+
+    class ItSubThrows : ItOkBase {
+        import Am.Lang
+        var subName: String = "sub " + "name"
+        var sv: Int = ItThrower.boom("sub after base")
+    }
+
+    class ItHolder {
+        import Am.Lang
+        var label: String = "holder"
+        var inner: ItField = new ItField()
+    }
+
+    data class ItData(var x: Int) {
+        import Am.Lang
+        var y: Int = ItThrower.boom("data " + x.toString())
+    }
+
+    class ItBox<T> {
+        import Am.Lang
+        import Am.Collections
+        var items: List<T> = new List<T>()
+        var v: Int = ItThrower.boom("generic")
+    }
+
+    class ItBadException(var m: String) : Exception(m) {
+        import Am.Lang
+        var v: Int = ItThrower.boom("bad exception")
+    }
+
+    class ItCatching {
+        import Am.Lang
+        var v: Int = 0
+        init {
+            try {
+                this.v = ItThrower.boom("caught inside")
+            } catch (e: Exception) {
+                this.v = 7
+            }
+        }
+    }
+
+    // Redmine #426: an exception thrown by a property initializer or an
+    // `init { }` block (of the class or of a base class) reached no catch: v1
+    // ignored the result of ___init_instance. Each case must reach the
+    // caller's catch with its message, and the half-built object must be
+    // released (no instance left alive).
+    class InitializerThrowTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun take(o: Any): Int {
+            return 1
+        }
+
+        static fun make(): ItField {
+            return new ItField()
+        }
+
+        test propertyInitializerThrows() {
+            var m = "not caught"
+            try {
+                var o = new ItField()
+                m = "constructed"
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertEquals("field", m)
+            Assert.assertEquals(0, instances(ItField))
+        }
+
+        test initBlockThrows() {
+            var m = "not caught"
+            try {
+                var o = new ItBlock()
+                m = "constructed"
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertEquals("init block", m)
+            Assert.assertEquals(0, instances(ItBlock))
+        }
+
+        test baseClassInitializerThrows() {
+            var m = "not caught"
+            try {
+                var o = new ItSubOfThrowingBase()
+                m = "constructed"
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertEquals("base", m)
+            Assert.assertEquals(0, instances(ItSubOfThrowingBase))
+        }
+
+        test subclassInitializerThrowsAfterBase() {
+            var m = "not caught"
+            try {
+                var o = new ItSubThrows()
+                m = "constructed"
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertEquals("sub after base", m)
+            Assert.assertEquals(0, instances(ItSubThrows))
+        }
+
+        test newAsAnArgument() {
+            var m = "not caught"
+            try {
+                InitializerThrowTests.take(new ItField())
+                m = "constructed"
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertEquals("field", m)
+            Assert.assertEquals(0, instances(ItField))
+        }
+
+        test newAsAReturnValue() {
+            var m = "not caught"
+            try {
+                var o = InitializerThrowTests.make()
+                m = "constructed"
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertEquals("field", m)
+            Assert.assertEquals(0, instances(ItField))
+        }
+
+        test newInAnotherClassesInitializer() {
+            var m = "not caught"
+            try {
+                var o = new ItHolder()
+                m = "constructed"
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertEquals("field", m)
+            Assert.assertEquals(0, instances(ItHolder))
+            Assert.assertEquals(0, instances(ItField))
+        }
+
+        test dataClassInitializerThrows() {
+            var m = "not caught"
+            try {
+                var o = new ItData(5)
+                m = "constructed"
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertEquals("data 5", m)
+            Assert.assertEquals(0, instances(ItData))
+        }
+
+        test genericClassInitializerThrows() {
+            var m = "not caught"
+            try {
+                var o = new ItBox<String>()
+                m = "constructed"
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertEquals("generic", m)
+        }
+
+        test builtIntoABaseTypedVariable() {
+            var m = "not caught"
+            try {
+                var o: ItOkBase = new ItSubThrows()
+                m = "constructed"
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertEquals("sub after base", m)
+            Assert.assertEquals(0, instances(ItSubThrows))
+        }
+
+        test throwingConstructionInALoop() {
+            var caught = 0
+            for (i = 1 to 5) {
+                try {
+                    var o = new ItSubThrows()
+                } catch (e: Exception) {
+                    caught++
+                }
+            }
+            Assert.assertEquals(5, caught)
+            Assert.assertEquals(0, instances(ItSubThrows))
+        }
+
+        test throwingAnExceptionWhoseInitializerThrows() {
+            var m = "not caught"
+            try {
+                throw new ItBadException("never thrown")
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertEquals("bad exception", m)
+            Assert.assertEquals(0, instances(ItBadException))
+        }
+
+        test anInitializerThatCatchesConstructs() {
+            var o = new ItCatching()
+            Assert.assertEquals(7, o.v)
+            Assert.assertEquals(1, instances(ItCatching))
+        }
+    }
+}
