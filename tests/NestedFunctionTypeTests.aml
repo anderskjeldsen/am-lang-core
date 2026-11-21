@@ -1,0 +1,206 @@
+namespace Tests {
+
+    // Function types as the parts of a function type (#390): a parameter or a return
+    // type that is itself `(x: Int) => Int`, to three levels, as a local's, a field's,
+    // a parameter's and a return type's annotation, and as a type argument.
+    class NftHolder {
+        import Am.Lang
+        import Am.Collections
+
+        var op: (f: (x: Int) => Int, v: Int) => Int = (f, v) => f(f(v))
+        var maker: (n: Int) => (x: Int) => Int = (n) => (x) => x + n
+        var callbacks: List<(x: Int) => Int> = new List<(x: Int) => Int>()
+        var maybe: ((x: Int) => Int)? = null
+
+        fun getOp(): (f: (x: Int) => Int, v: Int) => Int {
+            return this.op
+        }
+    }
+
+    class NestedFunctionTypeTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun apply2(h: (f: (x: Int) => Int, v: Int) => Int, v: Int): Int {
+            return h((x) => x + 1, v)
+        }
+
+        static fun twiceOf(f: (x: Int) => Int, v: Int): Int {
+            return f(f(v))
+        }
+
+        static fun makeAdder(n: Int): (x: Int) => Int {
+            return (x) => x + n
+        }
+
+        static fun compose(f: (x: Int) => Int, g: (x: Int) => Int): (x: Int) => Int {
+            return (x) => g(f(x))
+        }
+
+        static fun curried(): (a: Int) => (b: Int) => Int {
+            return (a) => (b) => a * 10 + b
+        }
+
+        static fun threeDeep(): (a: Int) => (b: Int) => (c: Int) => Int {
+            return (a) => (b) => (c) => a * 100 + b * 10 + c
+        }
+
+        // Depth 3: a parameter whose parameter is a function type.
+        static fun withDeepParam(g: (h: (f: (x: Int) => Int) => Int) => Int, v: Int): Int {
+            return g((f) => f(v))
+        }
+
+        static fun unnamed(h: ((Int) => Int, Int) => Int, v: Int): Int {
+            return h((x) => x * 3, v)
+        }
+
+        static fun orDefault(f: ((x: Int) => Int)?, v: Int): Int {
+            if (f == null) {
+                return -1
+            }
+            return f!!(v)
+        }
+
+        test localTwiceWithLambdaArgument() {
+            var twice: (f: (x: Int) => Int, v: Int) => Int = (f, v) => f(f(v))
+            var r: Int = twice((x) => x + 3, 10)
+            Assert.assertEquals(16, r)
+            var r2: Int = twice((m) => m * 2, 5)
+            Assert.assertEquals(20, r2)
+        }
+
+        test localTwiceWithTypedLambdaAndFunctionValue() {
+            var twice: (f: (x: Int) => Int, v: Int) => Int = (f, v) => f(f(v))
+            var inc = (x: Int) => x + 1
+            var r: Int = twice(inc, 1)
+            Assert.assertEquals(3, r)
+            var r2: Int = twice((x: Int) => x - 5, 0)
+            Assert.assertEquals(-10, r2)
+        }
+
+        test functionTypedParameterTakingAFunctionTypedLocal() {
+            var twice: (f: (x: Int) => Int, v: Int) => Int = (f, v) => f(f(v))
+            Assert.assertEquals(3, NestedFunctionTypeTests.apply2(twice, 1))
+            Assert.assertEquals(12, NestedFunctionTypeTests.apply2((f, v) => f(v) * 2, 5))
+        }
+
+        test staticHigherOrderFunction() {
+            Assert.assertEquals(7, NestedFunctionTypeTests.twiceOf((x) => x + 2, 3))
+            Assert.assertEquals(7, NestedFunctionTypeTests.twiceOf(NestedFunctionTypeTests.makeAdder(2), 3))
+        }
+
+        test returnedFunction() {
+            var f = NestedFunctionTypeTests.makeAdder(3)
+            var r: Int = f(4)
+            Assert.assertEquals(7, r)
+        }
+
+        test composedFunctions() {
+            var f = NestedFunctionTypeTests.compose(NestedFunctionTypeTests.makeAdder(1), NestedFunctionTypeTests.makeAdder(10))
+            var r: Int = f(5)
+            Assert.assertEquals(16, r)
+            var g = NestedFunctionTypeTests.compose((x) => x * 2, (x) => x - 1)
+            var r2: Int = g(5)
+            Assert.assertEquals(9, r2)
+        }
+
+        test functionReturningAFunctionReturningAFunction() {
+            var c = NestedFunctionTypeTests.curried()
+            var c1 = c(4)
+            var r: Int = c1(2)
+            Assert.assertEquals(42, r)
+            var t = NestedFunctionTypeTests.threeDeep()
+            var t1 = t(1)
+            var t2 = t1(2)
+            var r3: Int = t2(3)
+            Assert.assertEquals(123, r3)
+        }
+
+        test localOfReturningFunctionType() {
+            var maker: (n: Int) => (x: Int) => Int = (n) => (x) => x * n
+            var times3 = maker(3)
+            var r: Int = times3(7)
+            Assert.assertEquals(21, r)
+        }
+
+        test parameterNestedThreeDeep() {
+            Assert.assertEquals(9, NestedFunctionTypeTests.withDeepParam((h) => h((x) => x * 3), 3))
+        }
+
+        test unnamedNestedParameter() {
+            Assert.assertEquals(12, NestedFunctionTypeTests.unnamed((f, v) => f(v), 4))
+        }
+
+        test nullableNestedParameter() {
+            Assert.assertEquals(-1, NestedFunctionTypeTests.orDefault(null, 5))
+            Assert.assertEquals(10, NestedFunctionTypeTests.orDefault((x) => x * 2, 5))
+        }
+
+        test fieldOfNestedFunctionType() {
+            var h = new NftHolder()
+            var r: Int = h.op((x) => x * 2, 3)
+            Assert.assertEquals(12, r)
+        }
+
+        test fieldReturningAFunction() {
+            var h = new NftHolder()
+            var m = h.maker
+            var add5 = m(5)
+            var r: Int = add5(1)
+            Assert.assertEquals(6, r)
+        }
+
+        test methodReturningANestedFunctionTypedField() {
+            var h = new NftHolder()
+            var g = h.getOp()
+            var r: Int = g((x) => x * 3, 2)
+            Assert.assertEquals(18, r)
+        }
+
+        test nullableFieldOfFunctionType() {
+            var h = new NftHolder()
+            Assert.assertTrue(h.maybe == null)
+            h.maybe = (x: Int) => x + 1
+            Assert.assertTrue(h.maybe != null)
+        }
+
+        test functionTypeAsTypeArgument() {
+            var h = new NftHolder()
+            h.callbacks.add((x: Int) => x + 100)
+            h.callbacks.add((x: Int) => x * 2)
+            Assert.assertEquals(2, h.callbacks.getSize())
+            var first: (x: Int) => Int = h.callbacks.get(0)
+            var second: (x: Int) => Int = h.callbacks.get(1)
+            var a: Int = first(1)
+            var b: Int = second(21)
+            Assert.assertEquals(101, a)
+            Assert.assertEquals(42, b)
+        }
+
+        test localListOfNestedFunctionTypes() {
+            var fs = new List<(f: (x: Int) => Int, v: Int) => Int>()
+            fs.add((f: (x: Int) => Int, v: Int) => f(v))
+            var h: (f: (x: Int) => Int, v: Int) => Int = fs.get(0)
+            var r: Int = h((x) => x + 8, 1)
+            Assert.assertEquals(9, r)
+        }
+
+        test listOfListsOfFunctionTypes() {
+            var rows = new List<List<(x: Int) => Int>>()
+            rows.add(new List<(x: Int) => Int>())
+            rows.get(0).add((x: Int) => x + 1)
+            var f: (x: Int) => Int = rows.get(0).get(0)
+            var r: Int = f(1)
+            Assert.assertEquals(2, r)
+        }
+
+        // The function types change nothing about plain identifiers.
+        test namesStayUsableAsIdentifiers() {
+            var f = 3
+            var v = 4
+            var x = f + v
+            Assert.assertEquals(7, x)
+        }
+    }
+}
