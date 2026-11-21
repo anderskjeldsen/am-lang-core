@@ -2795,7 +2795,13 @@ void __amlc_isolate_boot_main(void) {
 #endif
 }
 
+#ifdef AMLC_AMIGA_FAMILY
+static void __amlc_reap_isolates(void);
+#endif
 aisolate * __amlc_isolate_create(void) {
+#ifdef AMLC_AMIGA_FAMILY
+    __amlc_reap_isolates();
+#endif
     aisolate * iso = __amlc_isolate_alloc();
     __amlc_isolate_alloc_statics(iso);
     iso->parent = __amlc_isolate();
@@ -2878,11 +2884,62 @@ void __amlc_isolate_teardown(aisolate * const iso) {
     iso->statics = NULL;
     iso->statics_count = 0;
     __amlc_arenas_free_all(iso);
+#ifndef AMLC_AMIGA_FAMILY
     __amlc_global_lock();
     iso->done = true;
     __amlc_global_broadcast();   // wakes joiners waiting in __amlc_join_wait_done
     __amlc_global_unlock();
+#endif
+    // Amiga family: `done` is set by __amlc_isolate_task_exit, the task's
+    // very last action (#459).
 }
+
+#ifdef AMLC_AMIGA_FAMILY
+// The worker task's last action (#459), after every other instruction of
+// program code: drop the running task's own handle, lower the isolate count
+// and set `done`, all under a Forbid() that is never Permit()ed. The caller
+// returns straight to dos.library, whose process exit removes the task, and
+// Exec's task removal ends the Forbid. So no other task runs between `done`
+// and the moment this task has left the program's code: a join or main's
+// shutdown that sees `done` may let main exit and unload the program's
+// segments.
+//
+// Nothing here may Wait() (which would break the Forbid): no free(), since
+// libnix's malloc takes a semaphore. When this was the last handle, the
+// isolate is left in the live list, done and without handles, and the next
+// Thread.start frees it (__amlc_reap_isolates). tc_UserData is cleared so a
+// new isolate at the same address is never matched with this task while
+// dos.library finishes (__amlc_find_isolate_task).
+void __amlc_isolate_task_exit(aisolate * const iso) {
+    Forbid();
+    iso->handle_count--;
+    __amlc_isolate_count--;
+    iso->done = true;
+    FindTask(NULL)->tc_UserData = NULL;
+}
+
+// Frees the isolates whose task has ended (done) and that no handle refers
+// to any more: those whose own task dropped the last handle in
+// __amlc_isolate_task_exit. Each is unlinked from the live list under the
+// lock first, so two callers never free the same one.
+static void __amlc_reap_isolates(void) {
+    for (;;) {
+        aisolate * z = NULL;
+        Forbid();
+        for (aisolate ** p = &__amlc_live_isolates; *p != NULL; p = &(*p)->live_next) {
+            aisolate * const i = *p;
+            if (i != __amlc_main_isolate && i->done && i->handle_count == 0) {
+                *p = i->live_next;
+                z = i;
+                break;
+            }
+        }
+        Permit();
+        if (z == NULL) break;
+        __amlc_isolate_free(z);
+    }
+}
+#endif
 
 // ---- out-of-memory shutdown (#446) ----------------------------------------
 // See core.h. Nothing on these paths allocates: the messages go straight to

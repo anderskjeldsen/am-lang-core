@@ -197,9 +197,13 @@ void Am_Threading_Thread__InitTask()
 #endif
 	}
 
-	__amlc_isolate_teardown(iso);   // sets iso->done; join() polls it
-	__amlc_isolate_release(iso);    // the running task's own handle
-	__amlc_isolate_count_dec();
+	__amlc_isolate_teardown(iso);
+	// Last: drops the running task's own handle and sets iso->done (what
+	// join() and main's shutdown poll) under a Forbid() that is never
+	// undone here. We return to dos.library, which removes the task, and
+	// that ends the Forbid; so main cannot run, exit and unload the program
+	// while this task is still in its code (#459). Add nothing after it.
+	__amlc_isolate_task_exit(iso);
 }
 
 function_result Am_Threading_Thread_start_0(aobject * const this)
@@ -313,7 +317,8 @@ function_result Am_Threading_Thread_join_0(aobject * const this)
 		return __result;
 	}
 	// One Exec tick (20 ms) per poll: a real Wait(), so a same-priority
-	// worker gets the CPU. `done` is set by the worker's teardown.
+	// worker gets the CPU. `done` is set by the worker's last action, once it
+	// has left the program's code (__amlc_isolate_task_exit).
 	while (!iso->done) {
 		if (__amlc_join_give_up()) break;
 		Delay(1);

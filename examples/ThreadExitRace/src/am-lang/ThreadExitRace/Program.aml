@@ -1,0 +1,154 @@
+namespace ThreadExitRace {
+
+    // Short-lived threads joined right before the program exits (Redmine
+    // #459). On AmigaOS/MorphOS a join used to return as soon as the worker's
+    // teardown set `done`, while its task still ran a few instructions of the
+    // program's code (the handle release, the return to dos.library): main
+    // could exit and unload the program under it. run.sh runs each mode
+    // many times in one emulator session, then checks the shell still works.
+    //   join    10 rounds of 12 threads, each round joined; after every
+    //           round Probe.tasks counts the workers' Exec tasks still in
+    //           the system and those still bound to an isolate (a bound one
+    //           has not reached its last action: it may run program code)
+    //   exit    16 threads joined, then main returns at once (no probe)
+    //   drop    8 rounds of 10 threads whose handles are dropped at once;
+    //           each sends main a message. Their isolates are freed by a
+    //           later Thread.start, so free memory must not keep falling.
+    //           run.sh runs it after 40 other runs in the same Shell: main's
+    //           mailbox signal bit used to leak from the Shell's process on
+    //           every run, and after about 15 runs main's receive() failed
+    //   nested  a worker starts and joins 4 threads of its own; main joins it
+
+    class Box(var v: Int) {
+        import Am.Lang
+    }
+
+    class Work {
+        import Am.Lang
+        import Am.Threading
+
+        // A little allocation and arithmetic, different per thread.
+        static fun busy(n: Int): Int {
+            var s = 0
+            var count = 20 + (n * 7) % 40
+            for (i = 0 until count) {
+                var b = new Box(i)
+                s = s + b.v
+            }
+            return s
+        }
+    }
+
+    class Worker(var n: Int) : Runnable {
+        import Am.Lang
+        import Am.Threading
+        override fun run() {
+            if (this.n % 2 == 0) {
+                // A self handle (released in the worker's teardown).
+                var me = Thread.getCurrent()
+            }
+            Work.busy(this.n)
+        }
+    }
+
+    class Messenger(var n: Int) : Runnable {
+        import Am.Lang
+        import Am.Threading
+        override fun run() {
+            Thread.getParent().send(new Box(Work.busy(this.n)))
+        }
+    }
+
+    class Nester : Runnable {
+        import Am.Lang
+        import Am.Threading
+        import Am.Collections
+        override fun run() {
+            var ts = new List<Thread>()
+            for (i = 0 until 4) {
+                ts.add(Program.start(new Worker(i), "xr-child"))
+            }
+            each(ts, t) {
+                t.join()
+            }
+        }
+    }
+
+    class Program {
+        import Am.Lang
+        import Am.Threading
+        import Am.Collections
+
+        static fun start(r: Runnable, name: String): Thread {
+            var t = new Thread(r)
+            t.name = name
+            t.start()
+            return t
+        }
+
+        static fun joinRound(count: Int, base: Int) {
+            var ts = new List<Thread>()
+            for (i = 0 until count) {
+                ts.add(Program.start(new Worker(base + i), "xr-worker"))
+            }
+            each(ts, t) {
+                t.join()
+            }
+        }
+
+        static fun main(args: String[]) {
+            var mode = "join"
+            if (args.length() > 0) {
+                mode = args[0]
+            }
+            if (mode == "join") {
+                var maxAlive = 0
+                var maxBound = 0
+                for (round = 0 until 10) {
+                    Program.joinRound(12, round * 12)
+                    var p = Probe.tasks("xr-")
+                    var alive = p / 1000
+                    var bound = p % 1000
+                    if (alive > maxAlive) {
+                        maxAlive = alive
+                    }
+                    if (bound > maxBound) {
+                        maxBound = bound
+                    }
+                }
+                "join: 120 threads joined; alive after join ${maxAlive}, bound after join ${maxBound}".println()
+            } else if (mode == "exit") {
+                Program.joinRound(16, 0)
+            } else if (mode == "drop") {
+                var first = 0L
+                var last = 0L
+                var lowest = 0L
+                for (round = 0 until 8) {
+                    for (i = 0 until 10) {
+                        Program.start(new Messenger(round * 10 + i), "xr-messenger")
+                    }
+                    for (i = 0 until 10) {
+                        var m = Thread.receive()
+                    }
+                    Thread.sleep(100L)
+                    var free = Probe.freeMemory()
+                    if (round == 1) {
+                        first = free
+                        lowest = free
+                    }
+                    if (round >= 1 && free < lowest) {
+                        lowest = free
+                    }
+                    last = free
+                }
+                Thread.sleep(300L)
+                var p = Probe.tasks("xr-")
+                "drop: 80 threads; free after round 1 ${first}, after round 7 ${last}, lowest ${lowest}; tasks left ${p / 1000}".println()
+            } else if (mode == "nested") {
+                var t = Program.start(new Nester(), "xr-nester")
+                t.join()
+            }
+            "${mode}: done".println()
+        }
+    }
+}
