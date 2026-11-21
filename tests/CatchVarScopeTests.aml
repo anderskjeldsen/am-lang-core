@@ -1,0 +1,365 @@
+namespace Tests {
+
+    class CvsErrorA() : Exception("a") {
+        import Am.Lang
+
+        var codeA: Int = 11
+    }
+
+    class CvsErrorB() : Exception("b") {
+        import Am.Lang
+
+        var codeB: Int = 22
+    }
+
+    class CvsBox {
+        import Am.Lang
+
+        var label: String = "box"
+    }
+
+    // Redmine #397: in v2 a catch variable was a function-level C local
+    // `var_e`, so a later `var e` of another type, a second catch `e` of
+    // another exception type, or the same name in sibling blocks declared the
+    // same C name twice ("conflicting types for 'var_e'"). Each case checks
+    // the values, and that each catch sees its own exception.
+    class CatchVarScopeTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun failA(): Int {
+            throw new CvsErrorA()
+        }
+
+        static fun failB(): Int {
+            throw new CvsErrorB()
+        }
+
+        static fun failPlain(msg: String): Int {
+            throw new Exception(msg)
+        }
+
+        static fun catchThenIntLocal(): Int {
+            var seen = ""
+            try {
+                CatchVarScopeTests.failPlain("first")
+            } catch (e: Exception) {
+                seen = e.message
+            }
+            var e = 5
+            e = e + 1
+            Assert.assertEquals("first", seen)
+            return e
+        }
+
+        static fun catchThenStringLocal(): String {
+            try {
+                CatchVarScopeTests.failA()
+            } catch (e: CvsErrorA) {
+                Assert.assertEquals(11, e.codeA)
+            }
+            var e = "text"
+            return e + "!"
+        }
+
+        static fun catchThenObjectLocal(): String {
+            try {
+                CatchVarScopeTests.failPlain("x")
+            } catch (e: Exception) {
+                Assert.assertEquals("x", e.message)
+            }
+            var e = new CvsBox()
+            e.label = "after"
+            return e.label
+        }
+
+        static fun twoCatchesDifferentTypes(): String {
+            var out = ""
+            try {
+                CatchVarScopeTests.failA()
+            } catch (e: CvsErrorA) {
+                out = out + "A" + e.codeA.toString()
+            }
+            try {
+                CatchVarScopeTests.failB()
+            } catch (e: CvsErrorB) {
+                out = out + "B" + e.codeB.toString()
+            }
+            try {
+                CatchVarScopeTests.failPlain("p")
+            } catch (e: Exception) {
+                out = out + "E" + e.message
+            }
+            return out
+        }
+
+        static fun multiCatch(which: Int): String {
+            try {
+                if (which == 0) {
+                    CatchVarScopeTests.failA()
+                } else {
+                    CatchVarScopeTests.failB()
+                }
+            } catch (e: CvsErrorA) {
+                return "A" + e.codeA.toString()
+            } catch (e: CvsErrorB) {
+                return "B" + e.codeB.toString()
+            }
+            return "none"
+        }
+
+        static fun nestedSameName(): String {
+            var out = ""
+            try {
+                try {
+                    CatchVarScopeTests.failA()
+                } catch (e: CvsErrorA) {
+                    out = out + "inner" + e.codeA.toString()
+                    CatchVarScopeTests.failB()
+                }
+            } catch (e: CvsErrorB) {
+                out = out + "outer" + e.codeB.toString()
+            }
+            return out
+        }
+
+        static fun nestedInsideCatchBody(): String {
+            var out = ""
+            try {
+                CatchVarScopeTests.failPlain("one")
+            } catch (e: Exception) {
+                out = out + e.message
+                try {
+                    CatchVarScopeTests.failB()
+                } catch (inner: CvsErrorB) {
+                    out = out + inner.codeB.toString()
+                }
+            }
+            return out
+        }
+
+        static fun localInTryAndCatch(): String {
+            var out = ""
+            try {
+                var e = 7
+                out = out + e.toString()
+                CatchVarScopeTests.failA()
+            } catch (e: CvsErrorA) {
+                out = out + "A" + e.codeA.toString()
+            }
+            return out
+        }
+
+        static fun siblingIfBlocks(flag: Bool): String {
+            if (flag) {
+                var v = 40
+                return (v + 2).toString()
+            } else {
+                var v = "forty"
+                return v + "-two"
+            }
+        }
+
+        static fun siblingIfWithCatch(flag: Bool): String {
+            var out = ""
+            if (flag) {
+                try {
+                    CatchVarScopeTests.failA()
+                } catch (e: CvsErrorA) {
+                    out = "A" + e.codeA.toString()
+                }
+            } else {
+                var e = 3
+                out = "int" + e.toString()
+            }
+            return out
+        }
+
+        static fun catchInLoop(): String {
+            var out = ""
+            var i = 0
+            while (i < 3) {
+                try {
+                    if (i == 1) {
+                        CatchVarScopeTests.failA()
+                    } else {
+                        CatchVarScopeTests.failPlain("i" + i.toString())
+                    }
+                } catch (e: CvsErrorA) {
+                    out = out + "A"
+                } catch (e: Exception) {
+                    out = out + e.message
+                }
+                i++
+            }
+            return out
+        }
+
+        static fun lambdaCapturesCatchVar(): String {
+            var f: () => String = () => "unset"
+            try {
+                CatchVarScopeTests.failA()
+            } catch (e: CvsErrorA) {
+                var code = e.codeA
+                f = () => "code" + code.toString()
+            }
+            var e = 99
+            return f() + "/" + e.toString()
+        }
+
+        static fun lambdaUsesCatchVarDirectly(): String {
+            var out = ""
+            try {
+                CatchVarScopeTests.failPlain("direct")
+            } catch (e: Exception) {
+                var g: () => String = () => e.message
+                out = g()
+            }
+            return out
+        }
+
+        static fun catchVarThenLaterCatchOfOtherType(): String {
+            var out = ""
+            try {
+                CatchVarScopeTests.failPlain("plain")
+            } catch (e: Exception) {
+                out = out + e.message
+            }
+            try {
+                CatchVarScopeTests.failB()
+            } catch (e: CvsErrorB) {
+                out = out + "/" + e.codeB.toString()
+            }
+            var e = 1.5
+            out = out + "/" + e.toString()
+            return out
+        }
+
+        test catchVariableThenIntLocal() {
+            Assert.assertEquals(6, CatchVarScopeTests.catchThenIntLocal())
+        }
+
+        test catchVariableThenStringLocal() {
+            Assert.assertEquals("text!", CatchVarScopeTests.catchThenStringLocal())
+        }
+
+        test catchVariableThenObjectLocal() {
+            Assert.assertEquals("after", CatchVarScopeTests.catchThenObjectLocal())
+        }
+
+        test twoCatchesWithTheSameNameAndDifferentTypes() {
+            Assert.assertEquals("A11B22Ep", CatchVarScopeTests.twoCatchesDifferentTypes())
+        }
+
+        test eachClauseOfAMultiCatchSeesItsOwnException() {
+            Assert.assertEquals("A11", CatchVarScopeTests.multiCatch(0))
+            Assert.assertEquals("B22", CatchVarScopeTests.multiCatch(1))
+        }
+
+        test nestedTryWithTheSameCatchName() {
+            Assert.assertEquals("inner11outer22", CatchVarScopeTests.nestedSameName())
+        }
+
+        test nestedTryInsideACatchBody() {
+            Assert.assertEquals("one22", CatchVarScopeTests.nestedInsideCatchBody())
+        }
+
+        test aLocalInTheTryBodyAndACatchVariableWithTheSameName() {
+            Assert.assertEquals("7A11", CatchVarScopeTests.localInTryAndCatch())
+        }
+
+        test sameNameInSiblingIfBlocks() {
+            Assert.assertEquals("42", CatchVarScopeTests.siblingIfBlocks(true))
+            Assert.assertEquals("forty-two", CatchVarScopeTests.siblingIfBlocks(false))
+        }
+
+        test aCatchVariableAndALocalInSiblingBlocks() {
+            Assert.assertEquals("A11", CatchVarScopeTests.siblingIfWithCatch(true))
+            Assert.assertEquals("int3", CatchVarScopeTests.siblingIfWithCatch(false))
+        }
+
+        test aCatchInALoopSeesTheCurrentException() {
+            Assert.assertEquals("i0Ai2", CatchVarScopeTests.catchInLoop())
+        }
+
+        test aLambdaFromACatchBlockAndALaterLocalWithTheSameName() {
+            Assert.assertEquals("code11/99", CatchVarScopeTests.lambdaCapturesCatchVar())
+        }
+
+        test aLambdaReadingTheCatchVariable() {
+            Assert.assertEquals("direct", CatchVarScopeTests.lambdaUsesCatchVarDirectly())
+        }
+
+        test catchVariablesOfThreeTypesThenADoubleLocal() {
+            Assert.assertEquals("plain/22/1.5", CatchVarScopeTests.catchVarThenLaterCatchOfOtherType())
+        }
+    }
+    // The same names in suspend functions, where the locals live in the state
+    // struct and the function parks between the catch and the later local.
+    class CatchVarSuspendTests {
+        import Am.Lang
+        import Am.Async
+        import Am.Tests
+
+        static var pending: Continuation? = null
+        var log: String = ""
+        var number: Int = 0
+
+        suspend fun park(): Int {
+            suspend(cont) {
+                CatchVarSuspendTests.pending = cont
+            }
+            return 1
+        }
+
+        suspend fun failA(): Int {
+            var p = this.park()
+            throw new CvsErrorA()
+        }
+
+        suspend fun failB(): Int {
+            var p = this.park()
+            throw new CvsErrorB()
+        }
+
+        suspend fun catchesThenLocals() {
+            try {
+                var a = this.failA()
+            } catch (e: CvsErrorA) {
+                this.log = this.log + "A" + e.codeA.toString()
+                var p1 = this.park()
+                this.log = this.log + "/" + e.message
+            }
+            try {
+                var b = this.failB()
+            } catch (e: CvsErrorB) {
+                this.log = this.log + " B" + e.codeB.toString()
+            }
+            var e = 40
+            var p2 = this.park()
+            e = e + 2
+            this.number = e
+            this.log = this.log + " e" + e.toString()
+        }
+
+        private static fun drive() {
+            var guard = 0
+            while (CatchVarSuspendTests.pending != null && guard < 100) {
+                var c = CatchVarSuspendTests.pending
+                CatchVarSuspendTests.pending = null
+                if (c != null) {
+                    c.resume()
+                }
+                guard++
+            }
+        }
+
+        test eachCatchSeesItsOwnExceptionAcrossSuspendPoints() {
+            var t = new CatchVarSuspendTests()
+            t.catchesThenLocals()
+            CatchVarSuspendTests.drive()
+            Assert.assertEquals("A11/a B22 e42", t.log)
+            Assert.assertEquals(42, t.number)
+        }
+    }
+}
