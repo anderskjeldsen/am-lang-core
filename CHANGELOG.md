@@ -11,6 +11,7 @@ Changes since 0.15.0. Needs amlc 0.16.0.
 
 ### Added
 
+- **GenericBareFieldTests** (2026-11-21, Redmine #410). Bare field names in a generic class's methods, as a program: `items.add(x)`, `maybe!!.add(x)`, a field as an argument, `last = item` and `maybe = new List<T>()` (the stored object stays alive), `n += 1`, a `T` and a `T?` field, `items.get(i)` used as `T`, in `Box<Int>`, `Box<String>` and `Box<GbItem>`; a parameter or local named like a field wins; a generic subclass using its base's field by bare name; the same stores in a plain class (`Int?` field set and cleared). v1 handled all of it; v2 did not until #410.
 - **AnyArrayElementTests** (2026-11-21, Redmine #395). An Int, a Double, a String, an object and null stored in an `Any[]` and read back through `toString()`, `as`, `is`, an `Any` local and an argument to an `Any` parameter; a null element passed on and tested; mixed kinds in one array. v1 rejected every read with "`Any?` is redundant"; v2 didn't compile `arr[0] is X` and crashed on `f(arr[0])` with an Int element (see the compiler's changelog). `List<Any>` and `HashMap<String, Any>` don't compile in v1 yet (#396), so they aren't covered. 6 tests; 631/631 under v1 and v2.
 
 - **BareStaticReadTests** (2026-11-21, Redmine #391, #415). Bare statics inside their own class, as a program: reads, `!!`, `sv!! + 1`, as an argument, in `return`, writes (`Int`, `Int?`, `sv = null`, an object), `++`, `+=`, a nullable object static with `!!`, from static and instance functions; `!!` on a null static throws.

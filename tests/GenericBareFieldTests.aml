@@ -1,0 +1,297 @@
+namespace Tests {
+
+    class GbItem(var v: Int) {
+        import Am.Lang
+    }
+
+    class GbBox<T> {
+        import Am.Lang
+        import Am.Collections
+
+        var items: List<T> = new List<T>()
+        var maybe: List<T>? = null
+        var last: T? = null
+        var cur: T
+        var n: Int = 0
+        var total: Int = 0
+
+        fun add(item: T) {
+            items.add(item)
+            n = n + 1
+        }
+
+        fun addBang(item: T) {
+            maybe!!.add(item)
+        }
+
+        fun makeMaybe() {
+            maybe = new List<T>()
+        }
+
+        fun at(i: Int): T {
+            return items.get(i)
+        }
+
+        fun first(): T {
+            var x: T = items.get(0)
+            return x
+        }
+
+        fun size(): Int {
+            return items.getSize()
+        }
+
+        fun bangSize(): Int {
+            return maybe!!.getSize()
+        }
+
+        fun copyInto(other: List<T>) {
+            other.add(items.get(0))
+            other.add(items.get(items.getSize() - 1))
+            other.add(items.get(countOf(items) - 1))
+        }
+
+        fun countOf(l: List<T>): Int {
+            return l.getSize()
+        }
+
+        fun viaHelper(): Int {
+            return countOf(items)
+        }
+
+        fun remember(item: T) {
+            last = item
+            cur = item
+            n += 1
+            total += 10
+        }
+
+        fun current(): T {
+            return cur
+        }
+
+        fun lastBang(): T {
+            return last!!
+        }
+
+        fun lastOr(item: T): T {
+            if (this.last == null) {
+                return item
+            }
+            return last!!
+        }
+
+        fun shadowed(items: Int): Int {
+            // the parameter wins over the field
+            return items + 1
+        }
+
+        fun shadowedLocal(): Int {
+            var n = 100
+            n += 1
+            return n
+        }
+    }
+
+    // The same bare-name stores and calls in a plain class.
+    class GbPlain {
+        import Am.Lang
+        import Am.Collections
+
+        var count: Int? = null
+        var names: List<String>? = null
+        var title: String = "a"
+
+        fun setCount(v: Int) {
+            count = v
+        }
+
+        fun clearCount() {
+            count = null
+        }
+
+        fun fill() {
+            names = new List<String>()
+            names!!.add("x")
+            title = "b" + "c"
+        }
+
+        fun nameCount(): Int {
+            return names!!.getSize()
+        }
+    }
+
+    class GbBase<T> {
+        import Am.Lang
+        import Am.Collections
+
+        var baseItems: List<T> = new List<T>()
+        var baseCount: Int = 0
+    }
+
+    class GbSub<T> : GbBase<T> {
+        import Am.Lang
+        import Am.Collections
+
+        fun add(item: T) {
+            baseItems.add(item)
+            baseCount += 1
+        }
+
+        fun firstBase(): T {
+            return baseItems.get(0)
+        }
+    }
+
+    class GenericBareFieldTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        test bareFieldCallInt() {
+            var b = new GbBox<Int>()
+            b.add(3)
+            b.add(4)
+            Assert.assertEquals(2, b.size())
+            Assert.assertEquals(2, b.n)
+            Assert.assertEquals(3, b.at(0))
+            Assert.assertEquals(4, b.at(1))
+            Assert.assertEquals(3, b.first())
+        }
+
+        test bareFieldCallString() {
+            var b = new GbBox<String>()
+            b.add("x")
+            b.add("y")
+            Assert.assertEquals(2, b.size())
+            Assert.assertEquals("x", b.at(0))
+            Assert.assertEquals("y", b.at(1))
+            Assert.assertEquals("x", b.first())
+        }
+
+        test bareFieldCallClass() {
+            var b = new GbBox<GbItem>()
+            b.add(new GbItem(7))
+            b.add(new GbItem(8))
+            Assert.assertEquals(2, b.size())
+            Assert.assertEquals(7, b.at(0).v)
+            Assert.assertEquals(8, b.at(1).v)
+        }
+
+        test bareObjectStoreKeepsTheObject() {
+            var b = new GbBox<Int>()
+            b.makeMaybe()
+            b.addBang(1)
+            b.makeMaybe()
+            Assert.assertEquals(0, b.bangSize())
+            b.addBang(2)
+            Assert.assertEquals(2, b.maybe!!.get(0))
+        }
+
+        test bareFieldBangInt() {
+            var b = new GbBox<Int>()
+            b.makeMaybe()
+            b.addBang(5)
+            b.addBang(6)
+            Assert.assertEquals(2, b.bangSize())
+            Assert.assertEquals(6, b.maybe!!.get(1))
+        }
+
+        test bareFieldBangString() {
+            var b = new GbBox<String>()
+            b.makeMaybe()
+            b.addBang("q")
+            Assert.assertEquals(1, b.bangSize())
+            Assert.assertEquals("q", b.maybe!!.get(0))
+        }
+
+        test bareFieldAsArgument() {
+            var b = new GbBox<Int>()
+            b.add(1)
+            b.add(2)
+            var other = new List<Int>()
+            b.copyInto(other)
+            Assert.assertEquals(3, other.getSize())
+            Assert.assertEquals(1, other.get(0))
+            Assert.assertEquals(2, other.get(1))
+            Assert.assertEquals(2, other.get(2))
+            Assert.assertEquals(2, b.viaHelper())
+        }
+
+        test bareFieldAsArgumentString() {
+            var b = new GbBox<String>()
+            b.add("a")
+            var other = new List<String>()
+            b.copyInto(other)
+            Assert.assertEquals(3, other.getSize())
+            Assert.assertEquals("a", other.get(0))
+            Assert.assertEquals("a", other.get(2))
+            Assert.assertEquals(1, b.viaHelper())
+        }
+
+        test bareFieldAssignmentAndCompound() {
+            var b = new GbBox<Int>()
+            b.remember(42)
+            b.remember(43)
+            Assert.assertEquals(43, b.last!!)
+            Assert.assertEquals(43, b.current())
+            Assert.assertEquals(43, b.lastBang())
+            Assert.assertEquals(2, b.n)
+            Assert.assertEquals(20, b.total)
+            Assert.assertEquals(43, b.lastOr(0))
+        }
+
+        test bareFieldOfTString() {
+            var b = new GbBox<String>()
+            Assert.assertEquals("dflt", b.lastOr("dflt"))
+            b.remember("hello")
+            Assert.assertEquals("hello", b.last!!)
+            Assert.assertEquals("hello", b.current())
+            Assert.assertEquals("hello", b.lastBang())
+            Assert.assertEquals("hello", b.lastOr("dflt"))
+        }
+
+        test bareFieldOfTClass() {
+            var b = new GbBox<GbItem>()
+            b.remember(new GbItem(9))
+            Assert.assertEquals(9, b.last!!.v)
+            Assert.assertEquals(9, b.current().v)
+        }
+
+        test parameterAndLocalShadowFields() {
+            var b = new GbBox<Int>()
+            Assert.assertEquals(8, b.shadowed(7))
+            Assert.assertEquals(101, b.shadowedLocal())
+            Assert.assertEquals(0, b.n)
+        }
+
+        test plainClassBareStores() {
+            var p = new GbPlain()
+            Assert.assertTrue(p.count == null)
+            p.setCount(5)
+            Assert.assertEquals(5, p.count!!)
+            p.clearCount()
+            Assert.assertTrue(p.count == null)
+            p.fill()
+            Assert.assertEquals(1, p.nameCount())
+            Assert.assertEquals("x", p.names!!.get(0))
+            Assert.assertEquals("bc", p.title)
+        }
+
+        test genericSubclassBareBaseField() {
+            var s = new GbSub<Int>()
+            s.add(11)
+            s.add(12)
+            Assert.assertEquals(2, s.baseCount)
+            Assert.assertEquals(2, s.baseItems.getSize())
+            Assert.assertEquals(11, s.firstBase())
+        }
+
+        test genericSubclassBareBaseFieldString() {
+            var s = new GbSub<String>()
+            s.add("z")
+            Assert.assertEquals(1, s.baseCount)
+            Assert.assertEquals("z", s.firstBase())
+        }
+    }
+}
