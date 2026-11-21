@@ -1,0 +1,195 @@
+namespace Tests {
+
+    class RtcNode {
+        import Am.Lang
+        var v: Int = 1
+        var next: RtcNode? = null
+
+        fun get(): Int {
+            return this.v
+        }
+
+        fun getNext(): RtcNode? {
+            return this.next
+        }
+
+        fun nextValue(): Int {
+            return next.v
+        }
+    }
+
+    class RtcColor {
+        import Am.Lang
+        var c: Int = 3
+    }
+
+    class RtcShade : RtcColor {
+        import Am.Lang
+    }
+
+    enum RtcTone {
+        import Am.Lang
+        low = 1
+        high = 2
+    }
+
+    // Redmine #428/#495: the runtime checks v1 emits and v2 used to leave out
+    // (it dereferenced NULL, or handed on a pointer of the wrong class). Each
+    // case throws an Exception with v1's message: a member access through a
+    // null `T?` object, `as` from an Any holding something else or null, and
+    // a negative array size. The non-null and right-class paths still return
+    // their value.
+    class RuntimeCheckTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun read(node: RtcNode?): Int {
+            return node.v
+        }
+
+        static fun call(node: RtcNode?): Int {
+            return node.get()
+        }
+
+        static fun length(s: String?): Int {
+            return s.length()
+        }
+
+        static fun chain(node: RtcNode?): Int {
+            return node.next.v
+        }
+
+        static fun callResult(node: RtcNode): Int {
+            return node.getNext().v
+        }
+
+        static fun assign(node: RtcNode?) {
+            node.v = 5
+        }
+
+        static fun statementCall(node: RtcNode?) {
+            node.get()
+        }
+
+        static fun guarded(node: RtcNode?): Bool {
+            return node != null && node.v > 0
+        }
+
+        static fun eitherSide(node: RtcNode?): Bool {
+            return node == null || node.v > 0
+        }
+
+        static fun captured(node: RtcNode?): Int {
+            var f: () => Int = () => node.v
+            return f()
+        }
+
+        static fun asString(a: Any): String {
+            return a as String
+        }
+
+        static fun asColor(a: Any): RtcColor {
+            return a as RtcColor
+        }
+
+        static fun asInt(a: Any): Int {
+            return a as Int
+        }
+
+        static fun asTone(a: Any): RtcTone {
+            return a as RtcTone
+        }
+
+        static fun array(n: Int): Int[] {
+            return new Int[n]
+        }
+
+        // The message of what `which` throws, or "none".
+        static fun thrown(which: Int): String {
+            try {
+                if (which == 1) { RuntimeCheckTests.read(null) }
+                if (which == 2) { RuntimeCheckTests.call(null) }
+                if (which == 3) { RuntimeCheckTests.length(null) }
+                if (which == 4) { RuntimeCheckTests.chain(new RtcNode()) }
+                if (which == 5) { RuntimeCheckTests.callResult(new RtcNode()) }
+                if (which == 6) { RuntimeCheckTests.assign(null) }
+                if (which == 7) { RuntimeCheckTests.statementCall(null) }
+                if (which == 8) { RuntimeCheckTests.captured(null) }
+                if (which == 9) { new RtcNode().nextValue() }
+                if (which == 10) { RuntimeCheckTests.asString(5) }
+                if (which == 11) { RuntimeCheckTests.asString(null) }
+                if (which == 12) { RuntimeCheckTests.asColor("x") }
+                if (which == 13) { RuntimeCheckTests.asColor(null) }
+                if (which == 14) { RuntimeCheckTests.asInt("x") }
+                if (which == 15) { RuntimeCheckTests.asInt(null) }
+                if (which == 16) { RuntimeCheckTests.asTone(5) }
+                if (which == 17) { RuntimeCheckTests.asTone(null) }
+                if (which == 18) { RuntimeCheckTests.array(-1) }
+            } catch (e: Exception) {
+                return e.message
+            }
+            return "none"
+        }
+
+        test aMemberAccessThroughANullObjectThrows() {
+            Assert.assertEquals("Null reference: node", RuntimeCheckTests.thrown(1))
+            Assert.assertEquals("Null reference: node", RuntimeCheckTests.thrown(2))
+            Assert.assertEquals("Null reference: s", RuntimeCheckTests.thrown(3))
+            Assert.assertEquals("Null reference: next", RuntimeCheckTests.thrown(4))
+            Assert.assertEquals("Null reference: ", RuntimeCheckTests.thrown(5))
+            Assert.assertEquals("Null reference: node", RuntimeCheckTests.thrown(6))
+            Assert.assertEquals("Null reference: node", RuntimeCheckTests.thrown(7))
+            Assert.assertEquals("Null reference: node", RuntimeCheckTests.thrown(8))
+            Assert.assertEquals("Null reference: next", RuntimeCheckTests.thrown(9))
+        }
+
+        test aNonNullObjectIsReadAsBefore() {
+            var n = new RtcNode()
+            n.next = new RtcNode()
+            n.next.v = 7
+            Assert.assertEquals(1, RuntimeCheckTests.read(n))
+            Assert.assertEquals(1, RuntimeCheckTests.call(n))
+            Assert.assertEquals(2, RuntimeCheckTests.length("ab"))
+            Assert.assertEquals(7, RuntimeCheckTests.chain(n))
+            Assert.assertEquals(7, RuntimeCheckTests.callResult(n))
+            Assert.assertEquals(7, n.nextValue())
+            Assert.assertEquals(1, RuntimeCheckTests.captured(n))
+            RuntimeCheckTests.assign(n)
+            Assert.assertEquals(5, n.v)
+            RuntimeCheckTests.statementCall(n)
+        }
+
+        test aGuardedAccessIsNotChecked() {
+            Assert.assertFalse(RuntimeCheckTests.guarded(null))
+            Assert.assertTrue(RuntimeCheckTests.guarded(new RtcNode()))
+            Assert.assertTrue(RuntimeCheckTests.eitherSide(null))
+            Assert.assertTrue(RuntimeCheckTests.eitherSide(new RtcNode()))
+        }
+
+        test aCastFromAnyChecksTheValue() {
+            Assert.assertEquals("Can't cast Any to String", RuntimeCheckTests.thrown(10))
+            Assert.assertEquals("NullCastError: cannot cast null Any to non-null String", RuntimeCheckTests.thrown(11))
+            Assert.assertEquals("Can't cast Any to RtcColor", RuntimeCheckTests.thrown(12))
+            Assert.assertEquals("NullCastError: cannot cast null Any to non-null RtcColor", RuntimeCheckTests.thrown(13))
+            Assert.assertEquals("Can't cast Any to Int", RuntimeCheckTests.thrown(14))
+            Assert.assertEquals("NullCastError: cannot cast null Any to non-null Int", RuntimeCheckTests.thrown(15))
+            Assert.assertEquals("Can't cast Any to RtcTone", RuntimeCheckTests.thrown(16))
+            Assert.assertEquals("NullCastError: cannot cast null Any to non-null RtcTone", RuntimeCheckTests.thrown(17))
+        }
+
+        test aCastFromAnyOfTheRightTypeKeepsTheValue() {
+            Assert.assertEquals("s", RuntimeCheckTests.asString("s"))
+            Assert.assertEquals(3, RuntimeCheckTests.asColor(new RtcColor()).c)
+            // a subclass is a RtcColor
+            Assert.assertEquals(3, RuntimeCheckTests.asColor(new RtcShade()).c)
+            Assert.assertEquals(42, RuntimeCheckTests.asInt(42))
+            Assert.assertTrue(RuntimeCheckTests.asTone(RtcTone.high) == RtcTone.high)
+        }
+
+        test aNegativeArraySizeThrows() {
+            Assert.assertEquals("Array size can't be negative", RuntimeCheckTests.thrown(18))
+            Assert.assertTrue(RuntimeCheckTests.array(0).length() == 0UI)
+            Assert.assertTrue(RuntimeCheckTests.array(3).length() == 3UI)
+        }
+    }
+}

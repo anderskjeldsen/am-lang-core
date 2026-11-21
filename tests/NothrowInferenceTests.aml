@@ -14,9 +14,9 @@ namespace Tests {
     // catch. NOTE: `amlc test` builds turn the inference off (mocks), so v1
     // exercises this in run builds and RuntimeThrowSitesTest; the suite keeps
     // the behaviour pinned for v2 and for a test mode that stops doing so.
-    // A property read through a null object, a method call on a null String?
-    // and `as` on a boxed Int don't throw under v2, so those are in
-    // tests-v1-only/NothrowInferenceV1Tests.aml.
+    // (A property read through a null object, a method call on a null String?
+    // and `as` on a boxed Int were in tests-v1-only until v2 emitted those
+    // checks too, #428.)
     class NothrowInferenceTests {
         import Am.Lang
         import Am.Tests
@@ -68,6 +68,22 @@ namespace Tests {
 
         static fun nonNullObjectMember(node: NothrowInferenceNode): Int {
             return node.v
+        }
+
+        static fun nullableObjectMember(node: NothrowInferenceNode?): Int {
+            return node.v
+        }
+
+        static fun nullableStringMember(s: String?): Int {
+            return s.length()
+        }
+
+        static fun cast(a: Any): String {
+            return a as String
+        }
+
+        static fun negativeArray(n: Int): Int[] {
+            return new Int[n]
         }
 
         test memberAccessThroughANullAnyFieldReachesTheCaller() {
@@ -158,6 +174,50 @@ namespace Tests {
                 caught++
             }
             Assert.assertEquals(2, caught)
+        }
+
+        test aPropertyReadThroughANullObjectReachesTheCaller() {
+            var caught = false
+            try {
+                NothrowInferenceTests.nullableObjectMember(null)
+            } catch (e: Exception) {
+                caught = true
+            }
+            Assert.assertTrue(caught)
+            Assert.assertEquals(1, NothrowInferenceTests.nullableObjectMember(new NothrowInferenceNode()))
+        }
+
+        test aMethodCallOnANullStringReachesTheCaller() {
+            var caught = false
+            try {
+                NothrowInferenceTests.nullableStringMember(null)
+            } catch (e: Exception) {
+                caught = true
+            }
+            Assert.assertTrue(caught)
+            Assert.assertEquals(2, NothrowInferenceTests.nullableStringMember("ab"))
+        }
+
+        test aFailedCastReachesTheCaller() {
+            var caught = false
+            try {
+                NothrowInferenceTests.cast(5)
+            } catch (e: Exception) {
+                caught = true
+            }
+            Assert.assertTrue(caught)
+            Assert.assertEquals("s", NothrowInferenceTests.cast("s"))
+        }
+
+        test aNegativeArraySizeReachesTheCaller() {
+            var caught = false
+            try {
+                NothrowInferenceTests.negativeArray(-1)
+            } catch (e: Exception) {
+                caught = true
+            }
+            Assert.assertTrue(caught)
+            Assert.assertTrue(NothrowInferenceTests.negativeArray(0).length() == 0UI)
         }
 
         test aFunctionWithoutRuntimeChecksStillReturnsItsValue() {

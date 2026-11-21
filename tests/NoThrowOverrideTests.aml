@@ -6,8 +6,7 @@ namespace Tests {
     // see NoThrowOverrideTest in the compiler). Called through the base type,
     // the caught exception doesn't escape and the override's own fallback is
     // returned. The null-member-access cases are in
-    // tests-v1-only/tests/NoThrowOverrideV1Tests.aml (v2 has no null check on
-    // a method call through a null object yet).
+    // NoThrowOverrideNullMemberTests.aml.
     interface NoThrowOverrideLabelled {
         import Am.Lang
         #noThrow
