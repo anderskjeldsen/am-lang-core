@@ -1,0 +1,136 @@
+namespace Tests {
+
+    // Redmine #534 (v2) and #382 (v1): a generic whose type argument differs in
+    // storage or class from the slot's is a compile error in both compilers. These
+    // are the cases that stay allowed, run as a program under v1 and v2: the
+    // values must come out as they went in.
+
+    class TaaAnimal(var legs: Int) {
+        import Am.Lang
+    }
+
+    class TaaBox<T>(var v: T) {
+        import Am.Lang
+        import Am.Collections
+        var items: List<T> = new List<T>()
+
+        fun keep(xs: List<T>) {
+            this.items = xs
+        }
+
+        fun count(): Int {
+            return this.items.getSize()
+        }
+    }
+
+    class TypeArgumentAllowedTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun sumLong(xs: Long[]): Long {
+            var s = 0L
+            each (x in xs) {
+                s = s + x
+            }
+            return s
+        }
+
+        static fun takeLong(x: Long): Long {
+            return x
+        }
+
+        static fun firstUInt(xs: UInt[]): UInt {
+            return xs[0]
+        }
+
+        static fun firstUByte(xs: UByte[]): UByte {
+            return xs[0]
+        }
+
+        static fun legsOf(b: TaaBox<TaaAnimal>): Int {
+            return b.v.legs
+        }
+
+        static fun nameCount(names: List<String?>): Int {
+            return names.getSize()
+        }
+
+        static fun longSum(xs: Iterable<Long>): Long {
+            var s = 0L
+            each (x in xs) {
+                s = s + x
+            }
+            return s
+        }
+
+        static fun maybeInts(): List<Int?> {
+            var l: List<Int?> = new List<Int?>()
+            l.add(null)
+            l.add(3)
+            return l
+        }
+
+        static fun nullCount(xs: List<Int?>): Int {
+            var n = 0
+            each (x in xs) {
+                if (x == null) {
+                    n++
+                }
+            }
+            return n
+        }
+
+        test numbersAndArrayLiteralsConvert() {
+            var i: Int = 5
+            Assert.assertEquals(5L, TypeArgumentAllowedTests.takeLong(i))
+            var l: Long[] = [1L, 2L]
+            Assert.assertEquals(3L, TypeArgumentAllowedTests.sumLong(l))
+            Assert.assertEquals(6L, TypeArgumentAllowedTests.sumLong([1, 2, 3]))
+        }
+
+        // Same width, the other signedness: the bits read as a converted copy would.
+        test sameWidthSignednessPasses() {
+            var a: Int[] = [0 - 1, 2]
+            var same: Int[] = a
+            var u = TypeArgumentAllowedTests.firstUInt(same)
+            Assert.assertEquals(4294967295L, u as Long)
+            var b: Byte[] = [(0 - 2) as Byte, 3 as Byte]
+            var ub = TypeArgumentAllowedTests.firstUByte(b)
+            Assert.assertEquals(254, ub as Int)
+        }
+
+        test objectArgumentsOfTheSameClassAndNullability() {
+            Assert.assertEquals(4, TypeArgumentAllowedTests.legsOf(new TaaBox<TaaAnimal>(new TaaAnimal(4))))
+            var names: List<String> = new List<String>()
+            names.add("a")
+            names.add("b")
+            var maybe: List<String?> = names
+            Assert.assertEquals(2, TypeArgumentAllowedTests.nameCount(names))
+            Assert.assertEquals(2, maybe.getSize())
+        }
+
+        test aSupertypeWithTheSameArguments() {
+            var ls: List<Long> = new List<Long>()
+            ls.add(10L)
+            ls.add(32L)
+            Assert.assertEquals(42L, TypeArgumentAllowedTests.longSum(ls))
+        }
+
+        test nullableArgumentsThatMatch() {
+            var m = TypeArgumentAllowedTests.maybeInts()
+            Assert.assertEquals(1, TypeArgumentAllowedTests.nullCount(m))
+            var typed: List<Int?> = TypeArgumentAllowedTests.maybeInts()
+            Assert.assertEquals(1, TypeArgumentAllowedTests.nullCount(typed))
+        }
+
+        test aGenericClassKeepsItsOwnArgument() {
+            var ints: List<Int> = new List<Int>()
+            ints.add(7)
+            ints.add(8)
+            var box = new TaaBox<Int>(1)
+            box.keep(ints)
+            Assert.assertEquals(2, box.count())
+        }
+    }
+}
