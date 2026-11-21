@@ -1,0 +1,200 @@
+namespace Tests {
+
+    // Redmine #542: `x++` / `x--` and `++x` / `--x` used as VALUES, in every
+    // position, on locals, fields (bare and `this.`), statics, array elements
+    // and struct members. A postfix value is the OLD value, a prefix value the
+    // new one. v2 mis-parsed the postfix form (`var a = i++` became `++var_var;`).
+
+    struct PfPoint {
+        import Am.Lang
+        var x: Int
+        var y: Int
+    }
+
+    class PfHolder {
+        import Am.Lang
+
+        static var sn: Int = 20
+        static var spt: PfPoint
+        var n: Int = 5
+        var big: Long = 10
+        var b: Byte = 100
+        var u: UInt = 7
+        var ipt: PfPoint
+        var parr: PfPoint[] = new PfPoint[2]
+
+        fun bareField(): Int {
+            var a = n++
+            var c = n--
+            var d = ++n
+            var e = --n
+            return a * 1000 + c * 100 + d * 10 + e
+        }
+
+        fun thisField(): Int {
+            var a = this.n++
+            var c = this.n--
+            var d = ++this.n
+            var e = --this.n
+            return a * 1000 + c * 100 + d * 10 + e
+        }
+
+        fun bareStatic(): Int {
+            var a = sn++
+            var c = sn--
+            var d = ++sn
+            var e = --sn
+            return a * 1000 + c * 100 + d + e
+        }
+
+        fun qualifiedStatic(): Int {
+            var a = PfHolder.sn++
+            return a * 100 + PfHolder.sn
+        }
+
+        fun fieldAssign(): Int {
+            var a = 0
+            a = n++
+            a = a * 10 + n
+            return a
+        }
+
+        fun structMembers(): Int {
+            spt.x = 7
+            ipt.x = 7
+            parr[1].y = 7
+            var a = spt.x++
+            var c = this.ipt.x--
+            var d = parr[1].y++
+            var e = ++spt.x
+            return a * 1000 + c * 100 + d * 10 + e + spt.x + ipt.x + parr[1].y
+        }
+    }
+
+    class PostfixValueTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun take(v: Int): Int {
+            return v * 2
+        }
+
+        static fun ret(v: Int): Int {
+            var i = v
+            return i++
+        }
+
+        static fun retPrefix(v: Int): Int {
+            var i = v
+            return ++i
+        }
+
+        test localsInitializerAndAssignment() {
+            var i = 5
+            var a = i++
+            Assert.assertEquals(5, a)
+            Assert.assertEquals(6, i)
+            var c = 0
+            c = i--
+            Assert.assertEquals(6, c)
+            Assert.assertEquals(5, i)
+            var d = ++i
+            Assert.assertEquals(6, d)
+            var e = --i
+            Assert.assertEquals(5, e)
+            Assert.assertEquals(5, i)
+        }
+
+        test argumentReturnAndExpressions() {
+            var i = 3
+            Assert.assertEquals(6, take(i++))
+            Assert.assertEquals(4, i)
+            Assert.assertEquals(10, take(++i))
+            Assert.assertEquals(5, i)
+            Assert.assertEquals(7, ret(7))
+            Assert.assertEquals(8, retPrefix(7))
+        }
+
+        test arrayIndex() {
+            var arr = new Int[4]
+            arr[0] = 10
+            arr[1] = 11
+            arr[2] = 12
+            var i = 0
+            Assert.assertEquals(10, arr[i++])
+            Assert.assertEquals(11, arr[i++])
+            Assert.assertEquals(2, i)
+            Assert.assertEquals(12, arr[i])
+            arr[i++] = 99
+            Assert.assertEquals(99, arr[2])
+            Assert.assertEquals(3, i)
+            var t = 0
+            for (n = 0 until 3) {
+                t += arr[n]
+                t++
+            }
+            Assert.assertEquals(10 + 11 + 99 + 3, t)
+        }
+
+        test numericTypes() {
+            var l: Long = 9
+            var la = l++
+            Assert.assertTrue(la == 9)
+            Assert.assertTrue(l == 10)
+            var by: Byte = 127
+            var ba = by++
+            Assert.assertTrue(ba == 127)
+            Assert.assertTrue(by == -128)
+            var u: UInt = 0
+            var ua = u--
+            Assert.assertTrue(ua == 0)
+            Assert.assertEquals(0, (u + (1 as UInt)) as Int)
+        }
+
+        test fieldsAndStatics() {
+            var h = new PfHolder()
+            Assert.assertEquals(5665, h.bareField())
+            Assert.assertEquals(5, h.n)
+            Assert.assertEquals(5665, h.thisField())
+            Assert.assertEquals(5, h.n)
+            Assert.assertEquals(22141, h.bareStatic())
+            Assert.assertEquals(20, PfHolder.sn)
+            Assert.assertEquals(2021, h.qualifiedStatic())
+            Assert.assertEquals(21, PfHolder.sn)
+            Assert.assertEquals(56, h.fieldAssign())
+            Assert.assertEquals(6, h.n)
+            var big = h.big++
+            Assert.assertTrue(big == 10)
+            Assert.assertTrue(h.big == 11)
+            var ba = h.b++
+            Assert.assertTrue(ba == 100)
+            Assert.assertTrue(h.b == 101)
+            var ua = h.u--
+            Assert.assertTrue(ua == 7)
+            Assert.assertTrue(h.u == 6)
+        }
+
+        test structMembers() {
+            var h = new PfHolder()
+            Assert.assertEquals(7 * 1000 + 7 * 100 + 7 * 10 + 9 + 9 + 6 + 8, h.structMembers())
+            Assert.assertEquals(9, PfHolder.spt.x)
+            Assert.assertEquals(6, h.ipt.x)
+            Assert.assertEquals(8, h.parr[1].y)
+        }
+
+        test statementFormsAreUnchanged() {
+            var i = 0
+            i++
+            i++
+            ++i
+            --i
+            i--
+            Assert.assertEquals(1, i)
+            // an operator at the start of the next line is a prefix statement
+            var a = i
+            ++i
+            Assert.assertEquals(1, a)
+            Assert.assertEquals(2, i)
+        }
+    }
+}

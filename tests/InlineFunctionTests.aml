@@ -110,6 +110,36 @@ namespace Tests {
         }
     }
 
+    // Redmine #539: an inline call used inside a larger expression, as an
+    // argument, in a chain and in a loop (its temps were declared twice).
+    struct InlinePoint {
+        import Am.Lang
+        var x: Int
+        var y: Int
+    }
+
+    class InlineExprHelper {
+        import Am.Lang
+
+        var calls: Int = 0
+
+        inline fun twice(a: Int): Int {
+            this.calls = this.calls + 1
+            var t = a * 2
+            return t + 1
+        }
+
+        inline fun label(a: Int): String {
+            return "<" + a.toString() + ">"
+        }
+
+        inline fun clobber(p: InlinePoint): Int {
+            p.x = 99
+            p.x += 1
+            return p.x
+        }
+    }
+
     class InlineFunctionTests {
         import Am.Lang
         import Am.Tests
@@ -223,6 +253,39 @@ namespace Tests {
             Assert.assertEquals(5, InlineFunctionTests.clamp(5, 0, 10))
             Assert.assertEquals(0, InlineFunctionTests.clamp(-3, 0, 10))
             Assert.assertEquals(10, InlineFunctionTests.clamp(99, 0, 10))
+        }
+
+        static test inlineCallsInsideExpressions() {
+            var h = new InlineExprHelper()
+            var p: InlinePoint
+            p.x = 1
+            Assert.assertEquals("x100", "x" + h.clobber(p).toString())
+            Assert.assertEquals(1, p.x)
+            Assert.assertEquals(18, h.twice(h.twice(2)) + h.twice(3))
+            Assert.assertEquals(3, h.calls)
+            Assert.assertEquals("<1><3>", h.label(1) + h.label(h.twice(1)))
+            Assert.assertEquals("<5>!", h.label(h.twice(2)) + "!")
+            Assert.assertEquals(4, h.twice(1) + 1)
+            Assert.assertEquals(14, h.twice(1) * 2 + h.twice(1) + 5)
+        }
+
+        static test inlineCallsAsArgumentsAndInChains() {
+            var h = new InlineExprHelper()
+            Assert.assertEquals("<3>", h.label(h.twice(h.twice(0))))
+            Assert.assertEquals("3", h.twice(1).toString())
+            Assert.assertEquals("<3>7", h.label(h.twice(1)) + h.twice(h.twice(1)).toString())
+        }
+
+        static test inlineCallsInLoops() {
+            var h = new InlineExprHelper()
+            var acc = ""
+            var n = 0
+            while (n < 3) {
+                acc = acc + h.twice(n).toString() + "," + h.label(h.twice(n)) + ";"
+                n++
+            }
+            Assert.assertEquals("1,<1>;3,<3>;5,<5>;", acc)
+            Assert.assertEquals(6, h.calls)
         }
     }
 }

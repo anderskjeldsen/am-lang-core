@@ -1,10 +1,9 @@
-namespace TestsV1 {
+namespace Tests {
 
     // Redmine #532: a postfix ++ / -- read as a value (`var a = Holder.spt.x++`)
     // on a struct member, through a static, an instance field, an array element
-    // and a nested struct. v2 has no postfix ++ in value position yet (see
-    // V2_PORT_PLAN.md), so this lives here; the statement forms and prefix
-    // values are in am-lang-core/tests/StructMemberStoreTests.aml.
+    // and a nested struct (v1 and v2, #542); the statement forms and prefix
+    // values are in StructMemberStoreTests.aml.
 
     struct SpvPoint {
         import Am.Lang
@@ -40,7 +39,7 @@ namespace TestsV1 {
         }
     }
 
-    class StructMemberPostfixV1Tests {
+    class StructMemberPostfixTests {
         import Am.Lang
         import Am.Tests
 
