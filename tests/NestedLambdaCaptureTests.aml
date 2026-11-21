@@ -1,0 +1,302 @@
+namespace Tests {
+
+    class NlcItem {
+        import Am.Lang
+        var name: String = ""
+        var size: Int = 0
+        fun label(): String {
+            return this.name + ":" + this.size.toString()
+        }
+    }
+
+    // A lambda in a method of a generic class (#473): each Box<T> gets its own
+    // lambda class, so a captured T is an Int in Box<Int> and a String in Box<String>.
+    class NlcBox<T>(var value: T) {
+        import Am.Lang
+        import Am.Collections
+        var count: Int = 3
+
+        fun size(f: (v: T) => Int): Int {
+            return f(this.value) + this.count
+        }
+
+        // `this` in the lambda is this Box's variant: its own methods.
+        fun callsMethod(f: (v: T) => Int): Int {
+            return NestedLambdaCaptureTests.apply((a) => this.size(f) + a, 100)
+        }
+
+        fun overList(f: (v: T) => Int): Int {
+            var xs = new List<T>()
+            xs.add(this.value)
+            xs.add(this.value)
+            var total = 0
+            each (x in xs) {
+                total = total + NestedLambdaCaptureTests.apply((a) => f(x) + a, 1)
+            }
+            return total
+        }
+
+        fun viaLocal(f: (v: T) => Int): Int {
+            var extra = 5
+            var v = this.value
+            return NestedLambdaCaptureTests.apply((a) => f(v) + a + extra, 1)
+        }
+
+        fun viaField(f: (v: T) => Int): Int {
+            return NestedLambdaCaptureTests.apply((a) => f(this.value) + a, 2)
+        }
+
+        fun nested(f: (v: T) => Int): Int {
+            var extra = 5
+            var v = this.value
+            return NestedLambdaCaptureTests.apply((a) => {
+                return NestedLambdaCaptureTests.apply((b) => f(v) + a + b + extra, a)
+            }, 1)
+        }
+
+        fun withText(f: (v: T) => Int, text: String): Int {
+            var t = text
+            return NestedLambdaCaptureTests.apply((a) => f(this.value) + t.length() + a, 0)
+        }
+    }
+
+    // Values captured by nested lambdas, forwarded through lambdas that never use
+    // them (#472), lambdas in generic classes (#473) and generic static functions
+    // taking lambdas (#474, #390), all checked by value.
+    class NestedLambdaCaptureTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun apply(f: (x: Int) => Int, x: Int): Int {
+            return f(x)
+        }
+
+        static fun gen<T>(v: T, f: (v: T) => Int): Int {
+            return f(v) + 1
+        }
+
+        static fun genNested<T>(v: T, f: (v: T) => Int): Int {
+            var outerLocal = 40
+            return NestedLambdaCaptureTests.apply((a) => {
+                return NestedLambdaCaptureTests.apply((b) => f(v) + b + outerLocal, a)
+            }, 2)
+        }
+
+        static fun call<T>(f: (x: T) => T, v: T): T {
+            return f(v)
+        }
+
+        static fun show(i: Int): String {
+            return "n=" + i.toString()
+        }
+
+        static fun makeItem(name: String, size: Int): NlcItem {
+            var it = new NlcItem()
+            it.name = name
+            it.size = size
+            return it
+        }
+
+        // #472: a String forwarded through lambdas that don't use it was typed Int.
+        test stringThroughTwoLevels() {
+            var prefix = "abc"
+            var r = NestedLambdaCaptureTests.apply((a) => {
+                return NestedLambdaCaptureTests.apply((b) => prefix.length() + b, a)
+            }, 1)
+            Assert.assertEquals(4, r)
+        }
+
+        test stringThroughThreeLevels() {
+            var prefix = "abcd"
+            var r = NestedLambdaCaptureTests.apply((a) => {
+                return NestedLambdaCaptureTests.apply((b) => {
+                    return NestedLambdaCaptureTests.apply((c) => prefix.length() + c, b)
+                }, a)
+            }, 10)
+            Assert.assertEquals(14, r)
+        }
+
+        test stringThroughFourLevels() {
+            var prefix = "abcde"
+            var r = NestedLambdaCaptureTests.apply((a) => {
+                return NestedLambdaCaptureTests.apply((b) => {
+                    return NestedLambdaCaptureTests.apply((c) => {
+                        return NestedLambdaCaptureTests.apply((d) => (prefix + "!").length() + d, c)
+                    }, b)
+                }, a)
+            }, 100)
+            Assert.assertEquals(106, r)
+        }
+
+        test intThroughFourLevels() {
+            var m = 1
+            var n = 10
+            var r = NestedLambdaCaptureTests.apply((a) => {
+                var p = 100
+                return NestedLambdaCaptureTests.apply((b) => {
+                    return NestedLambdaCaptureTests.apply((c) => {
+                        return NestedLambdaCaptureTests.apply((d) => d + m + n + p, c)
+                    }, b)
+                }, a)
+            }, 3)
+            Assert.assertEquals(114, r)
+        }
+
+        test objectThroughThreeLevels() {
+            var item = NestedLambdaCaptureTests.makeItem("box", 7)
+            var r = NestedLambdaCaptureTests.apply((a) => {
+                return NestedLambdaCaptureTests.apply((b) => {
+                    return NestedLambdaCaptureTests.apply((c) => item.label().length() + item.size + c, b)
+                }, a)
+            }, 1)
+            Assert.assertEquals(13, r)
+        }
+
+        // The middle lambda uses the value itself too.
+        test stringUsedAtEveryLevel() {
+            var word = "xy"
+            var r = NestedLambdaCaptureTests.apply((a) => {
+                var mid = word.length() * 10
+                return NestedLambdaCaptureTests.apply((b) => word.length() + b + mid, a)
+            }, 1)
+            Assert.assertEquals(23, r)
+        }
+
+        // A local declared in the outer lambda, forwarded two levels down.
+        test localOfOuterLambdaThroughTwoLevels() {
+            var r = NestedLambdaCaptureTests.apply((a) => {
+                var inner = "hello"
+                return NestedLambdaCaptureTests.apply((b) => {
+                    return NestedLambdaCaptureTests.apply((c) => inner.length() + c, b)
+                }, a)
+            }, 2)
+            Assert.assertEquals(7, r)
+        }
+
+        // An each variable captured by a lambda: it rendered as a bare C name (#472).
+        test eachVariableCaptured() {
+            var items = new List<String>()
+            items.add("a")
+            items.add("bb")
+            var total = 0
+            each (s in items) {
+                total = total + NestedLambdaCaptureTests.apply((b) => s.length() + b, 0)
+            }
+            Assert.assertEquals(3, total)
+        }
+
+        test eachVariableThroughTwoLevels() {
+            var items = new List<String>()
+            items.add("a")
+            items.add("bb")
+            var total = 0
+            var prefix = "x"
+            each (s in items) {
+                total = total + NestedLambdaCaptureTests.apply((a) => {
+                    return NestedLambdaCaptureTests.apply((b) => (prefix + s).length() + b, a)
+                }, 0)
+            }
+            Assert.assertEquals(5, total)
+        }
+
+        test localOfEachBodyThroughTwoLevels() {
+            var items = new List<String>()
+            items.add("one")
+            items.add("three")
+            var total = 0
+            each (s in items) {
+                var doubled = s + s
+                total = total + NestedLambdaCaptureTests.apply((a) => {
+                    return NestedLambdaCaptureTests.apply((b) => doubled.length() + b, a)
+                }, 1)
+            }
+            Assert.assertEquals(18, total)
+        }
+
+        test eachObjectThroughTwoLevels() {
+            var items = new List<NlcItem>()
+            items.add(NestedLambdaCaptureTests.makeItem("a", 1))
+            items.add(NestedLambdaCaptureTests.makeItem("bc", 2))
+            var total = 0
+            each (it in items) {
+                total = total + NestedLambdaCaptureTests.apply((a) => {
+                    return NestedLambdaCaptureTests.apply((b) => it.size + it.name.length() + b, a)
+                }, 0)
+            }
+            Assert.assertEquals(6, total)
+        }
+
+        // #473: lambdas in methods of a generic class.
+        test genericClassLambdaCapturesTLocal() {
+            Assert.assertEquals(9, new NlcBox<String>("abc").viaLocal((s) => s.length()))
+            Assert.assertEquals(24, new NlcBox<Int>(9).viaLocal((i) => i * 2))
+        }
+
+        test genericClassLambdaCapturesTField() {
+            Assert.assertEquals(6, new NlcBox<String>("abcd").viaField((s) => s.length()))
+            Assert.assertEquals(32, new NlcBox<Int>(10).viaField((i) => i * 3))
+        }
+
+        test genericClassNestedLambdas() {
+            Assert.assertEquals(10, new NlcBox<String>("abc").nested((s) => s.length()))
+            Assert.assertEquals(25, new NlcBox<Int>(9).nested((i) => i * 2))
+        }
+
+        test genericClassLambdaCapturesStringLocal() {
+            Assert.assertEquals(7, new NlcBox<String>("ab").withText((s) => s.length(), "hello"))
+            Assert.assertEquals(9, new NlcBox<Int>(4).withText((i) => i, "hello"))
+        }
+
+        test genericClassLambdaCallsOwnMethod() {
+            Assert.assertEquals(106, new NlcBox<String>("abc").callsMethod((s) => s.length()))
+            Assert.assertEquals(110, new NlcBox<Int>(7).callsMethod((i) => i))
+        }
+
+        test genericClassLambdaCapturesEachOfT() {
+            Assert.assertEquals(6, new NlcBox<String>("ab").overList((s) => s.length()))
+            Assert.assertEquals(102, new NlcBox<Int>(5).overList((i) => i * 10))
+        }
+
+        // #474: a generic static function taking a lambda, called with type arguments.
+        test genericFunctionResultAsReceiver() {
+            Assert.assertEquals("6", NestedLambdaCaptureTests.gen<String>("hello", (s) => s.length()).toString())
+        }
+
+        test genericFunctionResultAsValue() {
+            var g: Int = NestedLambdaCaptureTests.gen<String>("hello", (s) => s.length())
+            Assert.assertEquals(6, g)
+            var h = NestedLambdaCaptureTests.gen<Int>(4, (i) => i * 2)
+            Assert.assertEquals(9, h)
+        }
+
+        test genericFunctionResultAsArgument() {
+            Assert.assertEquals("n=9", NestedLambdaCaptureTests.show(NestedLambdaCaptureTests.gen<Int>(4, (i) => i * 2)))
+        }
+
+        test genericFunctionCallAsStatement() {
+            var seen = 0
+            NestedLambdaCaptureTests.gen<String>("abc", (s) => s.length()).toString()
+            seen = 1
+            Assert.assertEquals(1, seen)
+        }
+
+        // Lambdas inside a generic static function, one class per instantiation.
+        test lambdasInsideGenericFunction() {
+            Assert.assertEquals(47, NestedLambdaCaptureTests.genNested<String>("hello", (s) => s.length()))
+            Assert.assertEquals(46, NestedLambdaCaptureTests.genNested<Int>(4, (i) => i))
+        }
+
+        // #390: type arguments inferred from the arguments.
+        test genericFunctionTypeArgumentsInferred() {
+            Assert.assertEquals(6, NestedLambdaCaptureTests.call((x) => x + 1, 5))
+            Assert.assertEquals("ab!", NestedLambdaCaptureTests.call((x) => x + "!", "ab"))
+        }
+
+        // #390: an untyped lambda passed in a call through a function-typed local.
+        test lambdaThroughFunctionTypedLocal() {
+            var twice = (f: (x: Int) => Int, v: Int) => f(f(v))
+            Assert.assertEquals(12, twice((m) => m + 5, 2))
+        }
+    }
+}
