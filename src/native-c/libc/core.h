@@ -467,6 +467,7 @@ struct _amessage {
     aobject * payload;
     aobject * chain;
     int count;              // objects in the graph (allocation accounting)
+    bool failure;           // a worker's "thread failed" notice: receive throws the payload (#467)
 };
 
 struct _aisolate {
@@ -707,6 +708,18 @@ void __amlc_release_heap(void);
 // an exception in *result and returns false.
 bool __amlc_send(aisolate * const target, aobject * const payload, function_result * const result);
 aobject * __amlc_receive(bool const wait);        // NULL when empty and !wait
+// Thread.receive/tryReceive (#467): as __amlc_receive, but a worker's failure
+// notice is taken and its payload (an owned ThreadFailedException) is put in
+// result->exception, returning NULL.
+aobject * __amlc_receive_checked(bool const wait, function_result * const result);
+// A worker whose run() ended with `exception`: whether to tell its parent.
+// False for the main thread, an out-of-memory exception and during an
+// out-of-memory shutdown (nothing may allocate there).
+bool __amlc_failure_notice_wanted(aisolate * const iso, aobject * const exception);
+// Deep-copies `notice` into the parent's mailbox as a failure notice. False
+// (with the copy's exception in *result) when it could not be copied; a
+// parent that has already finished drops it quietly (true).
+bool __amlc_post_failure_notice(aisolate * const iso, aobject * const notice, function_result * const result);
 amessage * __amlc_message_create(aobject * const payload, function_result * const result); // copy without posting
 aobject * __amlc_message_open(amessage * const msg);   // splice into the calling isolate; frees msg; owned payload
 void __amlc_message_discard(amessage * const msg);

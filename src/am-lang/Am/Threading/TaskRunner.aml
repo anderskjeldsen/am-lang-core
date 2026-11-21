@@ -101,12 +101,22 @@ namespace Am.Threading {
             TaskScheduler.attachMain(this.mainThread)
             var running = true
             while (running) {
-                var m = Thread.receive()
-                if (m is TaskStop) {
-                    running = false
-                } else if (m is Task) {
-                    var task = m as Task
-                    task.execute()
+                try {
+                    var m = Thread.receive()
+                    if (m is TaskStop) {
+                        running = false
+                    } else if (m is Task) {
+                        var task = m as Task
+                        task.execute()
+                    }
+                } catch (e: ThreadFailedException) {
+                    // A thread that one of this runner's tasks started died
+                    // (#467): its notice comes here, since this thread is its
+                    // parent. Log it and keep serving the queue, as for a
+                    // task that throws; ending would leave every later task
+                    // (and runAsync caller) waiting forever.
+                    "TaskRunner: a thread started by a task failed, continuing".println()
+                    e.printWithStackTrace()
                 }
             }
         }

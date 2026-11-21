@@ -118,6 +118,38 @@ aobject * Am_Threading_Thread__native_copy_0(aobject * const src, void * const c
     return dst;
 }
 
+// Tells the parent that this worker's run() ended with `exception` (#467):
+// builds a ThreadFailedException on this worker (Thread.failureNotice) and
+// deep-copies it into the parent's mailbox, where the parent's receive()
+// throws it. The original exception travels as its cause when it can be
+// copied; otherwise the notice goes without it. Skipped for out of memory
+// and during an out-of-memory shutdown, which must not allocate.
+static void Am_Threading_Thread__notify_parent(aisolate * const iso, aobject * const exception)
+{
+    if (!__amlc_failure_notice_wanted(iso, exception)) return;
+    aobject * cls = __create_string(exception->class_ptr->name, &Am_Lang_String);
+    if (cls == NULL) return;
+    aobject * msg = exception->object_properties.class_object_properties.properties[Am_Lang_Exception_P_message].nullable_value.value.object_value;
+    if (msg == NULL) msg = cls;
+    for (int attempt = 0; attempt < 2; attempt++) {
+        function_result nr = Am_Threading_Thread_f_failureNotice_0(cls, msg, attempt == 0 ? exception : NULL);
+        if (nr.exception != NULL) {
+            __decrease_reference_count(nr.exception);
+            break;
+        }
+        aobject * notice = nr.return_value.value.object_value;
+        if (notice == NULL) break;
+        function_result pr = { .has_return_value = false };
+        bool posted = __amlc_post_failure_notice(iso, notice, &pr);
+        __decrease_reference_count(notice);
+        if (pr.exception != NULL) __decrease_reference_count(pr.exception);
+        if (posted) break;
+        // The cause could not be copied (it references something not
+        // sendable): try once more without it.
+    }
+    __decrease_reference_count(cls);
+}
+
 // The part of a worker's life that out of memory or a stop request can cut
 // short (see __amlc_worker_run): its statics, then the copied Runnable.
 static void Am_Threading_Thread__run_body(aisolate * const iso)
@@ -136,6 +168,7 @@ static void Am_Threading_Thread__run_body(aisolate * const iso)
         function_result r = rFunc(runnable->object_properties.iface_reference.implementation_object);
         if (r.exception != NULL) {
             Am_Lang_Exception_f_printWithStackTrace_0(r.exception);
+            Am_Threading_Thread__notify_parent(iso, r.exception);
             __decrease_reference_count(r.exception);
         }
         __decrease_reference_count(runnable);
@@ -322,7 +355,8 @@ function_result Am_Threading_Thread_send_0(aobject * const this, aobject * messa
 function_result Am_Threading_Thread_receive_0()
 {
     function_result __result = { .has_return_value = true };
-    aobject * m = __amlc_receive(true);
+    aobject * m = __amlc_receive_checked(true, &__result);
+    if (__result.exception != NULL) return __result;   // a worker's failure notice (#467)
     if (m == NULL) {
         __throw_simple_exception("Thread.receive: the mailbox is closed", "in Am_Threading_Thread_receive_0", &__result);
         return __result;
@@ -334,7 +368,7 @@ function_result Am_Threading_Thread_receive_0()
 function_result Am_Threading_Thread_tryReceive_0()
 {
     function_result __result = { .has_return_value = true };
-    __result.return_value.value.object_value = __amlc_receive(false);
+    __result.return_value.value.object_value = __amlc_receive_checked(false, &__result);
     return __result;
 }
 
