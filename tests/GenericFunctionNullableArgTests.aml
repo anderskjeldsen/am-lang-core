@@ -1,0 +1,180 @@
+namespace Tests {
+
+    // Redmine #535: a generic FUNCTION called with a nullable type argument,
+    // `ident<Int?>(n)`, keeps the `?` (variant `___static_fv_Am_Lang_Int_nullable_`)
+    // and takes and returns a box for Int?/Color?, so null survives. v2 dropped
+    // the `?` and called the Int variant with an int (NullArgumentError on null).
+
+    enum GfnColor {
+        import Am.Lang
+
+        red = 1
+        green = 2
+    }
+
+    class GfnNode(var n: Int) {
+        import Am.Lang
+    }
+
+    class GfnHelper {
+        import Am.Lang
+
+        fun same<T>(v: T): T {
+            return v
+        }
+
+        fun second<A, B>(a: A, b: B): B {
+            return b
+        }
+
+        var seen: Int = 0
+        var seenNull: Int = 0
+
+        fun note<T>(v: T) {
+            this.seen = this.seen + 1
+            if (v == null) {
+                this.seenNull = this.seenNull + 1
+            }
+        }
+    }
+
+    class GenericFunctionNullableArgTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun ident<T>(v: T): T {
+            return v
+        }
+
+        static fun pick<A, B>(a: A, b: B): B {
+            return b
+        }
+
+        static fun orElse<T>(v: T, other: T): T {
+            if (v == null) {
+                return other
+            }
+            return v
+        }
+
+        test intNullAndValue() {
+            var n: Int? = null
+            Assert.assertTrue(GenericFunctionNullableArgTests.ident<Int?>(n) == null)
+            var m: Int? = 7
+            var r: Int? = GenericFunctionNullableArgTests.ident<Int?>(m)
+            Assert.assertTrue(r != null)
+            Assert.assertEquals(7, r!!)
+            var z: Int? = 0
+            Assert.assertTrue(GenericFunctionNullableArgTests.ident<Int?>(z) != null)
+            Assert.assertEquals(7, GenericFunctionNullableArgTests.ident<Int?>(7)!!)
+        }
+
+        test intNullableAndPlainVariantsCoexist() {
+            Assert.assertEquals(5, GenericFunctionNullableArgTests.ident<Int>(5))
+            var n: Int? = null
+            Assert.assertTrue(GenericFunctionNullableArgTests.ident<Int?>(n) == null)
+            Assert.assertEquals(6, GenericFunctionNullableArgTests.ident<Int>(6))
+        }
+
+        test enumNullAndZeroMember() {
+            var n: GfnColor? = null
+            Assert.assertTrue(GenericFunctionNullableArgTests.ident<GfnColor?>(n) == null)
+            var c: GfnColor? = GfnColor.green
+            Assert.assertTrue(GenericFunctionNullableArgTests.ident<GfnColor?>(c) == GfnColor.green)
+            Assert.assertTrue(GenericFunctionNullableArgTests.ident<GfnColor?>(GfnColor.red) == GfnColor.red)
+        }
+
+        test stringAndObject() {
+            var s: String? = null
+            Assert.assertTrue(GenericFunctionNullableArgTests.ident<String?>(s) == null)
+            var t: String? = "hi"
+            Assert.assertEquals("hi", GenericFunctionNullableArgTests.ident<String?>(t)!!)
+            var nd: GfnNode? = null
+            Assert.assertTrue(GenericFunctionNullableArgTests.ident<GfnNode?>(nd) == null)
+            var nd2: GfnNode? = new GfnNode(3)
+            Assert.assertEquals(3, GenericFunctionNullableArgTests.ident<GfnNode?>(nd2)!!.n)
+        }
+
+        test twoTypeParams() {
+            var n: Int? = null
+            Assert.assertTrue(GenericFunctionNullableArgTests.pick<String, Int?>("a", n) == null)
+            Assert.assertEquals(4, GenericFunctionNullableArgTests.pick<String, Int?>("a", 4)!!)
+            var nc: GfnColor? = null
+            Assert.assertTrue(GenericFunctionNullableArgTests.pick<Int?, GfnColor?>(1, nc) == null)
+        }
+
+        test instanceFunction() {
+            var h = new GfnHelper()
+            var n: Int? = null
+            Assert.assertTrue(h.same<Int?>(n) == null)
+            var m: Int? = 9
+            Assert.assertEquals(9, h.same<Int?>(m)!!)
+            var c: GfnColor? = null
+            Assert.assertTrue(h.same<GfnColor?>(c) == null)
+            Assert.assertTrue(h.same<GfnColor?>(GfnColor.green) == GfnColor.green)
+            var s: String? = null
+            Assert.assertTrue(h.same<String?>(s) == null)
+            Assert.assertTrue(h.second<Int, Int?>(1, n) == null)
+            Assert.assertEquals(2, h.second<Int, Int?>(1, 2)!!)
+        }
+
+        test bodyComparesAgainstNull() {
+            var n: Int? = null
+            Assert.assertEquals(3, GenericFunctionNullableArgTests.orElse<Int?>(n, 3)!!)
+            Assert.assertEquals(8, GenericFunctionNullableArgTests.orElse<Int?>(8, 3)!!)
+            var c: GfnColor? = null
+            Assert.assertTrue(GenericFunctionNullableArgTests.orElse<GfnColor?>(c, GfnColor.red) == GfnColor.red)
+        }
+
+        test inferredFromNullableArgument() {
+            var n: Int? = null
+            Assert.assertTrue(GenericFunctionNullableArgTests.ident(n) == null)
+            var m: Int? = 12
+            Assert.assertEquals(12, GenericFunctionNullableArgTests.ident(m)!!)
+            var c: GfnColor? = null
+            Assert.assertTrue(GenericFunctionNullableArgTests.ident(c) == null)
+            var s: String? = null
+            Assert.assertTrue(GenericFunctionNullableArgTests.ident(s) == null)
+        }
+
+        static var staticSeen: Int = 0
+        static var staticSeenNull: Int = 0
+
+        static fun count<T>(v: T) {
+            GenericFunctionNullableArgTests.staticSeen = GenericFunctionNullableArgTests.staticSeen + 1
+            if (v == null) {
+                GenericFunctionNullableArgTests.staticSeenNull = GenericFunctionNullableArgTests.staticSeenNull + 1
+            }
+        }
+
+        test voidFunctionsInStatementPosition() {
+            var n: Int? = null
+            var m: Int? = 3
+            GenericFunctionNullableArgTests.staticSeen = 0
+            GenericFunctionNullableArgTests.staticSeenNull = 0
+            GenericFunctionNullableArgTests.count<Int?>(n)
+            GenericFunctionNullableArgTests.count<Int?>(m)
+            GenericFunctionNullableArgTests.count(n)
+            Assert.assertEquals(3, GenericFunctionNullableArgTests.staticSeen)
+            Assert.assertEquals(2, GenericFunctionNullableArgTests.staticSeenNull)
+            var h = new GfnHelper()
+            var c: GfnColor? = null
+            h.note<Int?>(n)
+            h.note<Int?>(m)
+            h.note<GfnColor?>(c)
+            h.note<GfnColor?>(GfnColor.red)
+            Assert.assertEquals(4, h.seen)
+            Assert.assertEquals(2, h.seenNull)
+        }
+
+        test resultStoredInInferredLocal() {
+            var n: Int? = null
+            var r = GenericFunctionNullableArgTests.ident<Int?>(n)
+            Assert.assertTrue(r == null)
+            var m: Int? = 5
+            var q = GenericFunctionNullableArgTests.ident<Int?>(m)
+            Assert.assertEquals(5, q!!)
+        }
+    }
+}
