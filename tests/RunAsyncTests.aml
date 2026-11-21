@@ -67,6 +67,30 @@ namespace Tests {
             this.doneCount = this.doneCount + 1
         }
 
+        var afterDeath: Int = 0
+
+        // A task on the IO runner starts a thread that dies: the notice goes
+        // to the runner (its parent), which must keep serving (#467).
+        suspend fun runnerOutlivesAFailedThread() {
+            TaskScheduler.schedule(TaskThreadType.IO, () => {
+                var t = new Thread(new TtThrowingWorker())
+                t.name = "ra-dies"
+                t.start()
+                t.join()
+                return true
+            })
+            // Queued behind the task above, so it runs before the runner
+            // takes the notice; the second one is queued behind the notice.
+            var a = TaskScheduler.runAsync<Int>(TaskThreadType.IO, () => {
+                return 3
+            })
+            var b = TaskScheduler.runAsync<Int>(TaskThreadType.IO, () => {
+                return 4
+            })
+            this.afterDeath = a + b
+            this.doneCount = this.doneCount + 1
+        }
+
         // The event loop: replies arrive as Tasks in this thread's mailbox.
         private fun pumpUntil(count: Int) {
             var guard = 0
@@ -94,6 +118,58 @@ namespace Tests {
             t.pumpUntil(1)
             Assert.assertEquals(1, t.doneCount)
             Assert.assertTrue(t.error.indexOf("worker failed") >= 0)
+        }
+
+        test aTaskRunnerOutlivesAThreadItsTaskStarted() {
+            var t = new RunAsyncTests()
+            t.runnerOutlivesAFailedThread()
+            t.pumpUntil(1)
+            Assert.assertEquals(1, t.doneCount)
+            Assert.assertEquals(7, t.afterDeath)
+        }
+
+        // handleMainTasks meets a failed worker's notice while it holds
+        // non-Task messages it took: they are put back, in order, and the
+        // exception comes out once (#467).
+        test handleMainTasksKeepsMessagesWhenAWorkerFailed() {
+            var me = Thread.getCurrent()
+            me.send(new TtResult("a", 1, 0))
+            me.send(new TtResult("b", 2, 0))
+            var w = new Thread(new TtThrowingWorker())
+            w.name = "ra-main-dies"
+            w.start()
+            w.join()
+            me.send(new TtResult("c", 3, 0))
+            var thrown = 0
+            var message = ""
+            try {
+                TaskScheduler.handleMainTasks()
+            } catch (e: ThreadFailedException) {
+                thrown = thrown + 1
+                message = e.message
+            }
+            Assert.assertEquals(1, thrown)
+            Assert.assertEquals("Thread 'ra-main-dies' failed: TtThrowingWorker fails on purpose (expected in the test output)", message)
+            // Nothing lost: a, b and c are all still there, a before b.
+            var labels = ""
+            var more = true
+            while (more) {
+                try {
+                    var m = Thread.tryReceive()
+                    if (m == null) {
+                        more = false
+                    } else {
+                        labels = labels + (m as TtResult).label
+                    }
+                } catch (e: ThreadFailedException) {
+                    thrown = thrown + 1
+                }
+            }
+            Assert.assertEquals(1, thrown)
+            Assert.assertEquals(3, labels.length())
+            Assert.assertTrue(labels.indexOf("a") >= 0)
+            Assert.assertTrue(labels.indexOf("c") >= 0)
+            Assert.assertTrue(labels.indexOf("a") < labels.indexOf("b"))
         }
 
         test twoRunsInFlightEachGetTheirOwnResult() {

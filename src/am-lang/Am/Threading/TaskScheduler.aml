@@ -150,23 +150,32 @@ namespace Am.Threading {
          * call. Messages that are not Tasks are put back into the mailbox, after the tasks, so a
          * program mixing raw Thread messages with Main tasks keeps them — but that is a copy per call,
          * so prefer not to mix the two on one thread. A task that throws is caught and logged, and the
-         * drain continues.
+         * drain continues. When the drain reaches the notice of a worker started by this thread that
+         * died (Thread.receive), the drain stops there, the other messages it took are put back, in
+         * order, and the ThreadFailedException is thrown; the next call goes on with the rest.
          * @return The number of tasks executed, 0 when nothing was waiting
          */
         static fun handleMainTasks(): Int {
             var count = 0
             var others = List.newList<Object>()
+            var failure: ThreadFailedException? = null
             var draining = true
             while (draining) {
-                var m = Thread.tryReceive()
-                if (m == null) {
+                try {
+                    var m = Thread.tryReceive()
+                    if (m == null) {
+                        draining = false
+                    } else if (m is Task) {
+                        var task = m as Task
+                        task.execute()
+                        count = count + 1
+                    } else {
+                        others.add(m)
+                    }
+                } catch (e: ThreadFailedException) {
+                    // Put back what was taken before letting it out (#467).
+                    failure = e
                     draining = false
-                } else if (m is Task) {
-                    var task = m as Task
-                    task.execute()
-                    count = count + 1
-                } else {
-                    others.add(m)
                 }
             }
             if (others.getSize() > 0) {
@@ -176,6 +185,9 @@ namespace Am.Threading {
                     me.send(others.get(i))
                     i = i + 1
                 }
+            }
+            if (failure != null) {
+                throw failure!!
             }
             return count
         }
