@@ -1,0 +1,68 @@
+namespace Tests {
+
+    // Redmine #516: a nullable enum out of a `List<Color?>` into an Any keeps
+    // the enum's tag. The rest is am-lang-core/tests/AnyNullableEnumTests.aml.
+    // In tests-v1-only until v2 named `List<Color?>`'s class (#523: it was
+    // `List_ta_Color?`, a gcc error).
+
+    enum NlaColor {
+        import Am.Lang
+
+        red = 1
+        green = 2
+    }
+
+    class NlaListHolder {
+        import Am.Lang
+        import Am.Collections
+
+        var opt: NlaColor?
+        var list: List<NlaColor?>
+
+        init {
+            this.list = new List<NlaColor?>()
+        }
+
+        fun maybe(give: Bool): NlaColor? {
+            if (give) {
+                return NlaColor.green
+            }
+            return null
+        }
+    }
+
+    class NullableEnumListAnyTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun kind(a: Any): String {
+            if (a == null) {
+                return "null"
+            }
+            if (a is NlaColor) {
+                return "color"
+            }
+            if (a is Int) {
+                return "int"
+            }
+            return "else"
+        }
+
+        test listOfOptionalElementIntoAny() {
+            var h = new NlaListHolder()
+            h.list.add(NlaColor.green)
+            h.list.add(null)
+            Assert.assertEquals("color", NullableEnumListAnyTests.kind(h.list.get(0)))
+            Assert.assertEquals("null", NullableEnumListAnyTests.kind(h.list.get(1)))
+            var la = new List<Any>()
+            la.add(h.list.get(0))
+            la.add(h.list.get(1))
+            la.add(1)
+            Assert.assertEquals("color", NullableEnumListAnyTests.kind(la.get(0)))
+            Assert.assertEquals("null", NullableEnumListAnyTests.kind(la.get(1)))
+            Assert.assertEquals("int", NullableEnumListAnyTests.kind(la.get(2)))
+            Assert.assertEquals("2", la.get(0).toString())
+        }
+    }
+}
