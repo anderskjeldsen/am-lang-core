@@ -1,0 +1,209 @@
+namespace Tests {
+
+    // Redmine #392: `a is Color` was false and `a as Color` threw for an Any that
+    // holds a Color, in v1 and v2: a boxed enum is its backing primitive, so
+    // nothing said which enum it was. The box's flags carry the enum's tag in
+    // their high byte now. `is` / `as` against an enum compare the tag, so an
+    // Int with the same number, or a member of another enum, is not a Color.
+    // Reading the Any as its backing number (`as Int`, toString) is unchanged.
+
+    enum AeColor {
+        import Am.Lang
+
+        red = 1
+        blue = 2
+    }
+
+    // The same numbers as AeColor, a different enum.
+    enum AeOther {
+        import Am.Lang
+
+        a = 1
+        b = 2
+    }
+
+    // UByte backing and a zero member.
+    enum AeByte<UByte> {
+        import Am.Lang
+
+        none = 0UB
+        top = 200UB
+    }
+
+    // Negative values.
+    enum AeSigned {
+        import Am.Lang
+
+        down = -3
+        zero = 0
+        up = 12
+    }
+
+    class AeHolder {
+        import Am.Lang
+
+        var item: Any = null
+        var maybe: Any = null
+    }
+
+    class AnyEnumIsAsTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun isColor(a: Any): Bool {
+            return a is AeColor
+        }
+
+        static fun asColor(a: Any): AeColor {
+            return a as AeColor
+        }
+
+        static fun describe(a: Any): String {
+            if (a is AeColor) {
+                return "color"
+            }
+            if (a is AeOther) {
+                return "other"
+            }
+            return "neither"
+        }
+
+        static fun whenDescribe(a: Any): String {
+            return when (a) {
+                is AeColor -> "color"
+                is AeOther -> "other"
+                else -> "neither"
+            }
+        }
+
+        static fun tryAsColor(a: Any): Bool {
+            try {
+                var c = a as AeColor
+                return true
+            } catch (e: Exception) {
+                return false
+            }
+        }
+
+        test localIsColor() {
+            var a: Any = AeColor.blue
+            Assert.assertTrue(a is AeColor)
+            Assert.assertFalse(a is AeOther)
+        }
+
+        test asColorReturnsTheValue() {
+            var a: Any = AeColor.blue
+            var c = a as AeColor
+            Assert.assertTrue(c == AeColor.blue)
+            Assert.assertEquals(2, c.getValue())
+        }
+
+        test intWithTheSameNumberIsNotAColor() {
+            var a: Any = 2
+            Assert.assertFalse(a is AeColor)
+            Assert.assertFalse(AnyEnumIsAsTests.tryAsColor(a))
+        }
+
+        test otherEnumIsNotAColor() {
+            var a: Any = AeOther.b
+            Assert.assertFalse(a is AeColor)
+            Assert.assertTrue(a is AeOther)
+            Assert.assertFalse(AnyEnumIsAsTests.tryAsColor(a))
+        }
+
+        test otherTypesAreNotAColor() {
+            Assert.assertFalse(AnyEnumIsAsTests.isColor("x"))
+            Assert.assertFalse(AnyEnumIsAsTests.isColor(2L))
+            Assert.assertFalse(AnyEnumIsAsTests.isColor(true))
+            Assert.assertFalse(AnyEnumIsAsTests.isColor(new AeHolder()))
+            Assert.assertFalse(AnyEnumIsAsTests.tryAsColor("x"))
+        }
+
+        test parameter() {
+            Assert.assertTrue(AnyEnumIsAsTests.isColor(AeColor.red))
+            Assert.assertFalse(AnyEnumIsAsTests.isColor(1))
+            Assert.assertFalse(AnyEnumIsAsTests.isColor(AeOther.a))
+            Assert.assertTrue(AnyEnumIsAsTests.asColor(AeColor.red) == AeColor.red)
+            Assert.assertEquals("color", AnyEnumIsAsTests.describe(AeColor.red))
+            Assert.assertEquals("other", AnyEnumIsAsTests.describe(AeOther.a))
+            Assert.assertEquals("neither", AnyEnumIsAsTests.describe(1))
+        }
+
+        test field() {
+            var h = new AeHolder()
+            h.item = AeColor.blue
+            Assert.assertTrue(h.item is AeColor)
+            Assert.assertFalse(h.item is AeOther)
+            var got = h.item as AeColor
+            Assert.assertTrue(got == AeColor.blue)
+            h.item = 2
+            Assert.assertFalse(h.item is AeColor)
+        }
+
+        test asOnAnIntThrows() {
+            var a: Any = 2
+            var threw = false
+            try {
+                var c = a as AeColor
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+
+        test asOtherEnumThrows() {
+            Assert.assertFalse(AnyEnumIsAsTests.tryAsColor(AeOther.a))
+            Assert.assertTrue(AnyEnumIsAsTests.tryAsColor(AeColor.red))
+        }
+
+        test unsignedByteBacking() {
+            var a: Any = AeByte.top
+            Assert.assertTrue(a is AeByte)
+            Assert.assertFalse(a is AeColor)
+            Assert.assertTrue((a as AeByte) == AeByte.top)
+            var z: Any = AeByte.none
+            Assert.assertTrue(z is AeByte)
+            var plain: Any = 200UB
+            Assert.assertFalse(plain is AeByte)
+        }
+
+        test negativeValues() {
+            var a: Any = AeSigned.down
+            Assert.assertTrue(a is AeSigned)
+            Assert.assertFalse(a is AeColor)
+            Assert.assertTrue((a as AeSigned) == AeSigned.down)
+            Assert.assertEquals(-3, (a as AeSigned).getValue())
+            var zero: Any = AeSigned.zero
+            Assert.assertTrue(zero is AeSigned)
+            var minusThree = -3
+            var n: Any = minusThree
+            Assert.assertFalse(n is AeSigned)
+        }
+
+        test nullableEnumInAny() {
+            var c: AeColor? = null
+            var a: Any = c
+            Assert.assertFalse(a is AeColor)
+            Assert.assertTrue(a == null)
+            var d: AeColor? = AeColor.red
+            var b: Any = d
+            Assert.assertTrue(b is AeColor)
+            Assert.assertTrue((b as AeColor) == AeColor.red)
+        }
+
+        test whenIsEnum() {
+            Assert.assertEquals("color", AnyEnumIsAsTests.whenDescribe(AeColor.blue))
+            Assert.assertEquals("other", AnyEnumIsAsTests.whenDescribe(AeOther.b))
+            Assert.assertEquals("neither", AnyEnumIsAsTests.whenDescribe(2))
+        }
+
+        test readingTheAnyAsItsBackingNumberIsUnchanged() {
+            var a: Any = AeColor.blue
+            Assert.assertEquals("2", a.toString())
+            Assert.assertEquals(2, a as Int)
+            Assert.assertTrue(a is Int)
+            var s: Any = AeSigned.down
+            Assert.assertEquals("-3", s.toString())
+        }
+    }
+}

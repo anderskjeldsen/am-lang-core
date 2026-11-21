@@ -210,7 +210,7 @@ struct _array_holder {
 
 // rename to: any_value
 struct _nullable_value {
-    unsigned short flags; // 1 = nullable primitive (this is a primitive that CAN be set to NULL), 2 = primitive null (this is a primitive that is CURRENTLY NULL)
+    unsigned short flags; // low byte: PRIMITIVE_* bits; high byte: enum tag when the value is an enum (#392). 1 = nullable primitive (this is a primitive that CAN be set to NULL), 2 = primitive null (this is a primitive that is CURRENTLY NULL)
     value value;
 };
 // object_data.value.object_value
@@ -827,6 +827,7 @@ static inline void __set_primitive_null(nullable_value * nullable_value, bool is
 static inline bool __is_primitive_null(const nullable_value nullable_value);
 static inline bool __is_primitive(const nullable_value nullable_value);
 static inline bool __any_has_flags(const nullable_value *nv, unsigned short flags);
+static inline bool __any_is_enum(const nullable_value a, unsigned short tag);
 static inline ctype __value_flags_to_ctype(unsigned char flags);
 bool __any_equals(const nullable_value a, const nullable_value b);
 bool __any_null(const nullable_value a);
