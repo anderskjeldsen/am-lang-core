@@ -1,0 +1,229 @@
+namespace Tests {
+
+    // Redmine #523: a nullable type argument (`List<Int?>`, `List<Color?>`,
+    // `HashMap<String, Int?>`, `List<String?>`, `List<Node?>`) is a variant of
+    // its own, named as v1 names it (`List_ta_Am_Lang_Int_nullable_`). A
+    // nullable primitive or enum is stored as a box, as Any is (#396): a null
+    // element stays null, contains/remove compare boxes, and an element read
+    // out is an Int? / Color? again. v2 named the class `List_ta_Color?`
+    // (a gcc error) before.
+
+    enum NtaColor {
+        import Am.Lang
+
+        red = 1
+        green = 2
+    }
+
+    class NtaNode(var n: Int) {
+        import Am.Lang
+    }
+
+    class NtaHolder {
+        import Am.Lang
+        import Am.Collections
+
+        var ints: List<Int?> = new List<Int?>()
+        var colors: List<NtaColor?> = new List<NtaColor?>()
+        var byName: HashMap<String, Int?> = new HashMap<String, Int?>()
+    }
+
+    class NullableTypeArgumentTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun sum(l: List<Int?>): Int {
+            var total = 0
+            each (v in l) {
+                if (v != null) {
+                    total = total + v
+                }
+            }
+            return total
+        }
+
+        static fun nulls(l: List<Int?>): Int {
+            var count = 0
+            each (v in l) {
+                if (v == null) {
+                    count++
+                }
+            }
+            return count
+        }
+
+        static fun firstOrMinus(l: List<Int?>): Int {
+            var v = l.get(0)
+            if (v == null) {
+                return -1
+            }
+            return v
+        }
+
+        static fun addNode(l: List<NtaNode?>, n: Int) {
+            l.add(new NtaNode(n))
+        }
+
+        static fun nodeAt(l: List<NtaNode?>, i: Int): Int {
+            var node = l.get(i)
+            if (node == null) {
+                return -1
+            }
+            return node.n
+        }
+
+        test listOfNullableInt() {
+            var l = new List<Int?>()
+            l.add(5)
+            l.add(null)
+            l.add(0)
+            l.add(-7)
+            Assert.assertEquals(4, l.getSize())
+            Assert.assertTrue(l.get(0) == 5)
+            Assert.assertTrue(l.get(1) == null)
+            Assert.assertTrue(l.get(2) != null)
+            Assert.assertTrue(l.get(2) == 0)
+            Assert.assertEquals(-2, NullableTypeArgumentTests.sum(l))
+            Assert.assertEquals(1, NullableTypeArgumentTests.nulls(l))
+            Assert.assertEquals(5, NullableTypeArgumentTests.firstOrMinus(l))
+            Assert.assertTrue(l.contains(5))
+            Assert.assertTrue(l.contains(null))
+            Assert.assertTrue(l.contains(0))
+            Assert.assertFalse(l.contains(6))
+            l.set(0, null)
+            Assert.assertEquals(-1, NullableTypeArgumentTests.firstOrMinus(l))
+            Assert.assertEquals(2, NullableTypeArgumentTests.nulls(l))
+            // remove takes out every null.
+            l.remove(null)
+            Assert.assertEquals(2, l.getSize())
+            Assert.assertFalse(l.contains(null))
+            l.insertAt(0, null)
+            var removed = l.removeAt(0)
+            Assert.assertTrue(removed == null)
+            Assert.assertEquals(2, l.getSize())
+            var last = l.removeLast()
+            Assert.assertTrue(last == -7)
+            var x = l.get(0)
+            var y = 0
+            if (x != null) {
+                y = x + 1
+            }
+            Assert.assertEquals(1, y)
+        }
+
+        // A null Int? and a 0 are different elements.
+        test nullIsNotZero() {
+            var l = new List<Int?>()
+            l.add(0)
+            Assert.assertFalse(l.contains(null))
+            l.add(null)
+            l.remove(0)
+            Assert.assertEquals(1, l.getSize())
+            Assert.assertTrue(l.get(0) == null)
+            Assert.assertFalse(l.contains(0))
+        }
+
+        test listOfNullableEnum() {
+            var l = new List<NtaColor?>()
+            l.add(NtaColor.green)
+            l.add(null)
+            l.add(NtaColor.red)
+            Assert.assertEquals(3, l.getSize())
+            Assert.assertTrue(l.get(0) == NtaColor.green)
+            Assert.assertTrue(l.get(1) == null)
+            Assert.assertTrue(l.get(2) == NtaColor.red)
+            Assert.assertTrue(l.contains(null))
+            Assert.assertTrue(l.contains(NtaColor.red))
+            var greens = 0
+            var nones = 0
+            each (c in l) {
+                if (c == null) {
+                    nones++
+                } else if (c == NtaColor.green) {
+                    greens++
+                }
+            }
+            Assert.assertEquals(1, greens)
+            Assert.assertEquals(1, nones)
+            // List<NtaColor> in the same program is its own variant.
+            var plain = new List<NtaColor>()
+            plain.add(NtaColor.red)
+            Assert.assertTrue(plain.get(0) == NtaColor.red)
+        }
+
+        test fieldsOfNullableTypeArguments() {
+            var h = new NtaHolder()
+            h.ints.add(3)
+            h.ints.add(null)
+            h.colors.add(null)
+            h.colors.add(NtaColor.green)
+            h.byName.set("a", 3)
+            h.byName.set("n", null)
+            Assert.assertEquals(3, NullableTypeArgumentTests.sum(h.ints))
+            Assert.assertTrue(h.ints.get(1) == null)
+            Assert.assertTrue(h.colors.get(0) == null)
+            Assert.assertTrue(h.colors.get(1) == NtaColor.green)
+            Assert.assertTrue(h.byName.get("a") == 3)
+            Assert.assertTrue(h.byName.containsKey("n"))
+            Assert.assertTrue(h.byName.get("n") == null)
+        }
+
+        test hashMapOfNullableInt() {
+            var m = new HashMap<String, Int?>()
+            m.set("a", 1)
+            m.set("z", null)
+            m.set("zero", 0)
+            Assert.assertEquals(3, m.getSize())
+            Assert.assertTrue(m.get("a") == 1)
+            Assert.assertTrue(m.get("z") == null)
+            Assert.assertTrue(m.get("zero") == 0)
+            Assert.assertTrue(m.containsValue(null))
+            Assert.assertTrue(m.containsValue(0))
+            Assert.assertFalse(m.containsValue(2))
+            m.set("a", null)
+            Assert.assertTrue(m.get("a") == null)
+            Assert.assertTrue(m.remove("z"))
+            Assert.assertFalse(m.containsKey("z"))
+            var keyCount = 0
+            each (k in m.keys()) {
+                keyCount++
+            }
+            Assert.assertEquals(2, keyCount)
+        }
+
+        test listOfNullableString() {
+            var l = new List<String?>()
+            l.add("s")
+            l.add(null)
+            Assert.assertEquals(2, l.getSize())
+            Assert.assertEquals("s", l.get(0))
+            Assert.assertTrue(l.get(1) == null)
+            Assert.assertTrue(l.contains(null))
+            Assert.assertTrue(l.contains("s"))
+            l.remove(null)
+            Assert.assertEquals(1, l.getSize())
+        }
+
+        // Objects in a List<NtaNode?> are owned by the list and released with it.
+        test listOfNullableObjectReleases() {
+            Assert.assertEquals(0, instances(NtaNode))
+            var l = new List<NtaNode?>()
+            NullableTypeArgumentTests.addNode(l, 1)
+            l.add(null)
+            NullableTypeArgumentTests.addNode(l, 3)
+            Assert.assertEquals(2, instances(NtaNode))
+            Assert.assertEquals(1, NullableTypeArgumentTests.nodeAt(l, 0))
+            Assert.assertEquals(-1, NullableTypeArgumentTests.nodeAt(l, 1))
+            Assert.assertEquals(3, NullableTypeArgumentTests.nodeAt(l, 2))
+            l.set(0, null)
+            Assert.assertEquals(1, instances(NtaNode))
+            l.clear()
+            Assert.assertEquals(0, instances(NtaNode))
+            NullableTypeArgumentTests.addNode(l, 4)
+            Assert.assertEquals(1, instances(NtaNode))
+            l = new List<NtaNode?>()
+            Assert.assertEquals(0, instances(NtaNode))
+        }
+    }
+}
