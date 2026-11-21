@@ -1,0 +1,263 @@
+namespace Tests {
+
+    // #538: methods declared in a struct. `this` is a pointer to the struct
+    // the method is called on, so a store through `this` changes the receiver
+    // in place, whether it is a local, a field, a static, an array element or a
+    // nested struct. A method that only reads `this`, or returns a struct, works
+    // on the receiver without changing it.
+
+    struct SmtPoint {
+        import Am.Lang
+        var x: Int
+        var y: Int
+
+        fun setX(v: Int) { this.x = v }
+        fun setBoth(a: Int, b: Int) {
+            setX(a)
+            this.y = b
+        }
+        fun bump() {
+            this.setX(this.x + 1)
+            y++
+        }
+        fun sum(): Int { return x + this.y }
+        fun twice(): Int { return sum() * 2 }
+        fun copy(): SmtPoint { return this }
+        fun moved(dx: Int): SmtPoint {
+            var r = this
+            r.x += dx
+            return r
+        }
+        fun absorb(o: SmtPoint) {
+            x += o.x
+            y += o.y
+        }
+    }
+
+    struct SmtPair {
+        import Am.Lang
+        var p: SmtPoint
+        var k: Int
+
+        fun setPX(v: Int) { this.p.setX(v) }
+        fun setK(v: Int) { k = v }
+    }
+
+    // A struct with a name that shadows nothing and a method named like a
+    // property of another type: methods and members live side by side.
+    struct SmtCounter {
+        import Am.Lang
+        var n: Int
+        fun inc(): Int {
+            n++
+            return n
+        }
+    }
+
+    class SmtHolder {
+        import Am.Lang
+
+        static var spt: SmtPoint
+        var ipt: SmtPoint
+        var nest: SmtPair
+        var arr: SmtPoint[] = new SmtPoint[3]
+        var pairs: SmtPair[] = new SmtPair[2]
+        var cnt: SmtCounter
+
+        fun viaThis() {
+            this.ipt.setX(21)
+            ipt.y = 22
+            ipt.bump()
+        }
+
+        static fun viaStatic() {
+            spt.setBoth(31, 32)
+            spt.bump()
+        }
+
+        // A struct parameter is copied on entry because a method call on it
+        // can change it (#531), so the caller's struct is left alone.
+        static fun onParam(p: SmtPoint): Int {
+            p.setX(99)
+            return p.x
+        }
+
+        static fun readParam(p: SmtPoint): Int {
+            return p.twice()
+        }
+    }
+
+    class StructMethodTests {
+        import Am.Lang
+        import Am.Tests
+
+        test methodOnLocalWritesInPlace() {
+            var a: SmtPoint
+            a.setX(5)
+            Assert.assertEquals(5, a.x)
+            a.setBoth(7, 8)
+            Assert.assertEquals(7, a.x)
+            Assert.assertEquals(8, a.y)
+            a.bump()
+            Assert.assertEquals(8, a.x)
+            Assert.assertEquals(9, a.y)
+        }
+
+        test readOnlyMethods() {
+            var a: SmtPoint
+            a.x = 3
+            a.y = 4
+            Assert.assertEquals(7, a.sum())
+            Assert.assertEquals(14, a.twice())
+            Assert.assertEquals(3, a.x)
+            Assert.assertEquals(4, a.y)
+        }
+
+        test methodReturningStructIsACopy() {
+            var a: SmtPoint
+            a.x = 1
+            a.y = 2
+            var c = a.copy()
+            c.setX(100)
+            Assert.assertEquals(1, a.x)
+            Assert.assertEquals(100, c.x)
+            Assert.assertEquals(2, c.y)
+            var m = a.moved(10)
+            Assert.assertEquals(1, a.x)
+            Assert.assertEquals(11, m.x)
+            a.copy().setX(50)
+            Assert.assertEquals(1, a.x)
+            Assert.assertEquals(6, a.moved(5).x)
+        }
+
+        test structArgument() {
+            var a: SmtPoint
+            a.x = 1
+            a.y = 2
+            var b: SmtPoint
+            b.x = 10
+            b.y = 20
+            a.absorb(b)
+            Assert.assertEquals(11, a.x)
+            Assert.assertEquals(22, a.y)
+            Assert.assertEquals(10, b.x)
+            a.absorb(a)
+            Assert.assertEquals(22, a.x)
+            Assert.assertEquals(44, a.y)
+        }
+
+        test methodOnInstanceField() {
+            var h = new SmtHolder()
+            h.ipt.setX(7)
+            Assert.assertEquals(7, h.ipt.x)
+            Assert.assertEquals(0, h.ipt.y)
+            h.ipt.setBoth(1, 2)
+            h.ipt.bump()
+            Assert.assertEquals(2, h.ipt.x)
+            Assert.assertEquals(3, h.ipt.y)
+            Assert.assertEquals(5, h.ipt.sum())
+            Assert.assertEquals(5, h.ipt.sum())
+            h.viaThis()
+            Assert.assertEquals(22, h.ipt.x)
+            Assert.assertEquals(23, h.ipt.y)
+            var other = new SmtHolder()
+            Assert.assertEquals(0, other.ipt.x)
+        }
+
+        test methodOnStatic() {
+            SmtHolder.spt.setX(8)
+            Assert.assertEquals(8, SmtHolder.spt.x)
+            SmtHolder.viaStatic()
+            Assert.assertEquals(32, SmtHolder.spt.x)
+            Assert.assertEquals(33, SmtHolder.spt.y)
+            Assert.assertEquals(65, SmtHolder.spt.sum())
+        }
+
+        test methodOnArrayElement() {
+            var h = new SmtHolder()
+            h.arr[1].setX(9)
+            Assert.assertEquals(9, h.arr[1].x)
+            Assert.assertEquals(0, h.arr[0].x)
+            Assert.assertEquals(0, h.arr[2].x)
+            var i = 2
+            h.arr[i].setBoth(4, 5)
+            h.arr[i].bump()
+            Assert.assertEquals(5, h.arr[2].x)
+            Assert.assertEquals(6, h.arr[2].y)
+            var local = new SmtPoint[2]
+            local[0].setX(3)
+            local[1].setX(4)
+            local[1].bump()
+            Assert.assertEquals(3, local[0].x)
+            Assert.assertEquals(5, local[1].x)
+            for (j = 0 until 2) {
+                local[j].setBoth(j, j * 10)
+            }
+            Assert.assertEquals(1, local[1].x)
+            Assert.assertEquals(10, local[1].y)
+        }
+
+        test methodOnNestedStruct() {
+            var h = new SmtHolder()
+            h.nest.p.setX(6)
+            h.nest.p.bump()
+            h.nest.setK(3)
+            Assert.assertEquals(7, h.nest.p.x)
+            Assert.assertEquals(1, h.nest.p.y)
+            Assert.assertEquals(3, h.nest.k)
+            h.nest.setPX(40)
+            Assert.assertEquals(40, h.nest.p.x)
+            Assert.assertEquals(3, h.nest.k)
+            h.pairs[1].p.setX(12)
+            h.pairs[1].setPX(13)
+            Assert.assertEquals(13, h.pairs[1].p.x)
+            Assert.assertEquals(0, h.pairs[0].p.x)
+            var pair: SmtPair
+            pair.p.setBoth(2, 3)
+            pair.setPX(20)
+            Assert.assertEquals(20, pair.p.x)
+            Assert.assertEquals(3, pair.p.y)
+        }
+
+        test returnValueAndWrite() {
+            var h = new SmtHolder()
+            Assert.assertEquals(1, h.cnt.inc())
+            Assert.assertEquals(2, h.cnt.inc())
+            Assert.assertEquals(2, h.cnt.n)
+            var c: SmtCounter
+            c.inc()
+            Assert.assertEquals(2, c.inc())
+        }
+
+        test structParameterIsCopiedWhenMethodWrites() {
+            var a: SmtPoint
+            a.x = 1
+            a.y = 2
+            Assert.assertEquals(99, SmtHolder.onParam(a))
+            Assert.assertEquals(1, a.x)
+            Assert.assertEquals(6, SmtHolder.readParam(a))
+        }
+
+        test localCopyIsIndependent() {
+            var a: SmtPoint
+            a.setX(1)
+            var b = a
+            b.setX(2)
+            Assert.assertEquals(1, a.x)
+            Assert.assertEquals(2, b.x)
+            var h = new SmtHolder()
+            h.ipt.setX(5)
+            var c = h.ipt
+            c.setX(6)
+            Assert.assertEquals(5, h.ipt.x)
+            Assert.assertEquals(6, c.x)
+        }
+
+        test methodInLambda() {
+            var h = new SmtHolder()
+            var f: (v: Int) => void = (v: Int) => { h.ipt.setX(v) }
+            f(17)
+            Assert.assertEquals(17, h.ipt.x)
+        }
+    }
+}
