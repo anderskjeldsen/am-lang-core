@@ -1,0 +1,105 @@
+namespace Tests {
+
+    // Redmine #568: a bare call in a STATIC function of a generic class
+    // (`return plain(xs)` in GsBox<U>) stopped v1's renderer with "Collection is
+    // empty" (it looked for a plain variant of the class, which a generic class
+    // doesn't have). #575: v2 rendered the non-generic static functions of a
+    // generic class per class variant while every call went to the base symbol
+    // (`<M>_GsBox_f_plain_0_T`, undeclared: gcc error); they now live once in
+    // the base file, as in v1.
+
+    class GsBox<U>(var item: U) {
+        import Am.Lang
+        import Am.Collections
+
+        static fun plain(xs: List<Int>): Int {
+            return xs.getSize()
+        }
+
+        static fun lenOf<T>(xs: List<T>): Int {
+            return xs.getSize()
+        }
+
+        static fun viaPlain(xs: List<Int>): Int {
+            return plain(xs)
+        }
+
+        static fun viaGeneric(xs: List<Int>): Int {
+            return lenOf<Int>(xs)
+        }
+
+        static fun inOperators(xs: List<Int>): Int {
+            return 10 + lenOf<Int>(xs) + plain(xs)
+        }
+
+        static fun qualifiedAndBare(xs: List<Int>): Int {
+            return GsBox<U>.lenOf<Int>(xs) + lenOf<Int>(xs)
+        }
+
+        static fun label(n: Int): String {
+            return "n=" + n.toString()
+        }
+
+        static fun noArgs(): Int {
+            return 7
+        }
+
+        static fun throwing(n: Int): Int {
+            if (n < 0) {
+                throw new Exception("negative")
+            }
+            return n
+        }
+
+        // An instance method of the variant calls the base's static ones,
+        // bare and qualified.
+        fun sizePlusItem(xs: List<Int>): String {
+            return plain(xs).toString() + "/" + GsBox<U>.plain(xs).toString() + "/" + this.item.toString()
+        }
+    }
+
+    class GenericClassStaticCallTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        test bareCallsInStaticFunctionOfGenericClass() {
+            var l = new List<Int>()
+            l.add(1)
+            l.add(2)
+            Assert.assertEquals(2, GsBox<String>.viaPlain(l))
+            Assert.assertEquals(2, GsBox<String>.viaGeneric(l))
+            Assert.assertEquals(14, GsBox<Int>.inOperators(l))
+            Assert.assertEquals(4, GsBox<String>.qualifiedAndBare(l))
+            Assert.assertEquals("2", GsBox<String>.viaGeneric(l).toString())
+        }
+
+        test nonGenericStaticFunctionOfGenericClass() {
+            var l = new List<Int>()
+            l.add(5)
+            Assert.assertEquals(1, GsBox<String>.plain(l))
+            Assert.assertEquals(1, GsBox<Int>.plain(l))
+            Assert.assertEquals(1, GsBox.plain(l))
+            Assert.assertEquals(1, GsBox.viaPlain(l))
+            Assert.assertEquals("n=3", GsBox<String>.label(3))
+            Assert.assertEquals("n=4", GsBox.label(4))
+            Assert.assertEquals(7, GsBox.noArgs() + GsBox<Long>.noArgs() - 7)
+            var b = new GsBox<String>("s")
+            Assert.assertEquals("1/1/s", b.sizePlusItem(l))
+            var bi = new GsBox<Int>(9)
+            Assert.assertEquals("1/1/9", bi.sizePlusItem(l))
+        }
+
+        test staticFunctionOfGenericClassThrows() {
+            var caught = false
+            try {
+                GsBox<String>.throwing(0 - 1)
+            } catch (e: Exception) {
+                caught = true
+                Assert.assertEquals("negative", e.message)
+            }
+            Assert.assertTrue(caught)
+            Assert.assertEquals(3, GsBox.throwing(3))
+        }
+    }
+}
