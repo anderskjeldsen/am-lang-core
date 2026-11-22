@@ -1,0 +1,98 @@
+namespace Tests {
+
+    // Redmine #586: a bare static primitive (no `Class.`) passed to an Any
+    // parameter rendered `.object_value = <slot>...int_value` in v2 (gcc error),
+    // from an instance function. It is boxed as a primitive Any, as the
+    // qualified form is.
+
+    enum BsaColor {
+        import Am.Lang
+
+        red = 1
+        blue = 2
+    }
+
+    class BsaHolder {
+        import Am.Lang
+        import Am.Tests
+
+        static var n: Int = 7
+        static var flag: Bool = true
+        static var color: BsaColor = BsaColor.blue
+        static var text: String = "hi"
+        static var big: Long = 5000000000L
+
+        static fun same(expected: Any, actual: Any): Bool {
+            return expected == actual
+        }
+
+        fun instanceBare() {
+            Assert.assertEquals(7, n)
+            Assert.assertEquals(true, flag)
+            Assert.assertEquals(BsaColor.blue, color)
+            Assert.assertEquals("hi", text)
+            Assert.assertEquals(5000000000L, big)
+        }
+
+        fun instanceQualified() {
+            Assert.assertEquals(7, BsaHolder.n)
+            Assert.assertEquals(true, BsaHolder.flag)
+            Assert.assertEquals(BsaColor.blue, BsaHolder.color)
+            Assert.assertEquals("hi", BsaHolder.text)
+        }
+
+        fun instanceOwnFn(): Bool {
+            return BsaHolder.same(7, n) && BsaHolder.same(true, flag) && BsaHolder.same(BsaColor.blue, color) && BsaHolder.same("hi", text)
+        }
+
+        fun instanceNotEqual(): Bool {
+            return !BsaHolder.same(8, n) && !BsaHolder.same(BsaColor.red, color)
+        }
+
+        static fun staticBare() {
+            Assert.assertEquals(7, n)
+            Assert.assertEquals(true, flag)
+            Assert.assertEquals(BsaColor.blue, color)
+            Assert.assertEquals("hi", text)
+        }
+
+        fun assignToAny(): Any {
+            var a: Any = n
+            return a
+        }
+    }
+
+    class BareStaticAnyArgTests {
+        import Am.Lang
+        import Am.Tests
+
+        static var count: Int = 0
+        static var on: Bool = false
+
+        test fromInstanceFunction() {
+            var h = new BsaHolder()
+            h.instanceBare()
+            h.instanceQualified()
+            Assert.assertTrue(h.instanceOwnFn())
+            Assert.assertTrue(h.instanceNotEqual())
+        }
+
+        test fromStaticFunction() {
+            BsaHolder.staticBare()
+        }
+
+        test intoAnyLocal() {
+            var h = new BsaHolder()
+            Assert.assertEquals(7, h.assignToAny())
+        }
+
+        test ownBareStatics() {
+            count = 3
+            on = true
+            Assert.assertEquals(3, count)
+            Assert.assertEquals(true, on)
+            count++
+            Assert.assertEquals(4, count)
+        }
+    }
+}
