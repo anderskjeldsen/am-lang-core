@@ -80,10 +80,14 @@ namespace Tests {
     }
 
     class IiGenericSub<T> : IiGenericBase<T> {
-        // Own setter: calling the inherited put() through Sub<T> is #422.
         fun fill(v: T) {
             this.value = v
         }
+    }
+
+    // A non-generic subclass: its interface table points at the base's
+    // IiGenericBase<Int> functions (#422).
+    class IiIntSub : IiGenericBase<Int> {
     }
 
     class InheritedInterfaceImplTests {
@@ -144,6 +148,12 @@ namespace Tests {
             var t = new IiGenericSub<String>()
             t.fill("s")
             Assert.assertEquals("s", InheritedInterfaceImplTests.stringOf(t))
+            s.put(9)
+            Assert.assertEquals(9, InheritedInterfaceImplTests.intOf(s))
+            var i = new IiIntSub()
+            i.put(10)
+            Assert.assertEquals(10, InheritedInterfaceImplTests.intOf(i))
+            Assert.assertEquals(10, i.get())
         }
     }
 }
