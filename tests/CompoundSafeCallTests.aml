@@ -23,6 +23,7 @@ namespace Tests {
         var n: Int = 10
         var m: Int? = 7
         var mn: Int? = null
+        var arr: Int[] = new Int[3]
 
         static var calls: Int = 0
 
@@ -221,6 +222,20 @@ namespace Tests {
             }
             Assert.assertEquals(11, a.n)
             Assert.assertEquals("al", a.s)
+        }
+
+        test arrayElementThroughASafeCall() {
+            CscNode.calls = 0
+            var o: CscNode? = new CscNode()
+            o?.arr[1] += 4
+            o?.me()?.arr[1] *= 3
+            CscNode.maybe(o)?.arr[2] -= 5
+            Assert.assertEquals(12, o!!.arr[1])
+            Assert.assertEquals(-5, o!!.arr[2])
+            var none: CscNode? = null
+            none?.arr[1] += 4
+            CscNode.maybe(none)?.arr[1] += 4
+            Assert.assertEquals(3, CscNode.calls)
         }
 
         test suspendReceiverSuspendsOnce() {
