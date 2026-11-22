@@ -11,6 +11,7 @@ Changes since 0.15.0. Needs amlc 0.16.0.
 
 ### Added
 
+- **AnyObjectEqualsTests runs every case under v1 and v2; tests-v1-only AnyObjectEqualsV1Tests is gone** (2026-11-22, Redmine #533). v2 compiles a primitive or enum on the left of an Any call result (`5 == h.getInt()`, `AoColor.red == h.getEnum()`), Any locals and fields against an enum or another Any, and an object against an Any local now, so the v1-only cases moved into AnyObjectEqualsTests, with three new tests: Any locals and fields on either side of a primitive or enum (`Any(1) != AoColor.red`, `Any(5) != 5L`, null Anys against 0), of an object, and comparisons inside `&&` / `||`.
 - **AnyObjectEqualsTests and tests-v1-only AnyObjectEqualsV1Tests** (2026-11-22, Redmine #562). An Any holding Int, Long, Bool, Double, an enum, a String, an object or null compared with a String, an object, a primitive, null and another Any, `==` and `!=`, as a program: a boxed primitive is not equal to an object and does not crash. v1 and v2 run the chain-result and object-on-the-left cases; a primitive or enum on the left of an Any call result and Any locals compared with enums do not compile in v2 yet (V1Tests).
 
 - **GenericFunctionArrayParamTests** (2026-11-22, Redmine #547). Generic functions with a `T[]` or `List<T>` parameter as a program under v1 and v2: `countOf`, `firstOf`, a `T[]` result and a lambda over the elements, with Int, Long, String, an enum and a class, type arguments inferred and explicit, and an instance function.

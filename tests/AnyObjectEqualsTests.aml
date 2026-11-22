@@ -4,9 +4,9 @@ namespace Tests {
     // (`h.getN() == "5"`) crashed in v1: the guard for an object operand
     // tested `(flags & 0) == 0`, always true, so the boxed Int was read as an
     // object pointer. The comparison is false (true for `!=`) now, in v1 and
-    // v2, for every kind of value the Any holds. A primitive or enum on the
-    // left of an Any call result, and Any locals compared with enums, still
-    // fail to compile in v2: those cases are in tests-v1-only.
+    // v2, for every kind of value the Any holds, in both operand orders.
+    // v2 compiled a primitive or enum on the left of an Any, and an Any local
+    // or field against an enum or another Any, to invalid C until #533.
 
     enum AoColor {
         import Am.Lang
@@ -84,12 +84,15 @@ namespace Tests {
         test primitivesStillCompareWithPrimitives() {
             var h = new AoHolder()
             Assert.assertTrue(h.getInt() == 5)
+            Assert.assertTrue(5 == h.getInt())
             Assert.assertTrue(h.getInt() != 6)
             Assert.assertTrue(h.getLong() == 5L)
             Assert.assertTrue(h.getBool() == true)
             Assert.assertTrue(h.getBool() != false)
             Assert.assertTrue(h.getDouble() == 2.5)
+            Assert.assertTrue(2.5 == h.getDouble())
             Assert.assertTrue(h.getEnum() == AoColor.red)
+            Assert.assertTrue(AoColor.red == h.getEnum())
             Assert.assertTrue(h.getEnum() != AoColor.blue)
         }
 
@@ -111,12 +114,102 @@ namespace Tests {
             Assert.assertTrue(h.getDouble() != null)
         }
 
+        test localsAndFieldsHoldingPrimitives() {
+            var a: Any = 5
+            Assert.assertTrue(a != "5")
+            Assert.assertTrue(!(a == "5"))
+            var h = new AoHolder()
+            Assert.assertTrue(h.value != "5")
+            Assert.assertTrue(!("5" == h.value))
+            var b: Any = AoColor.blue
+            Assert.assertTrue(b != "2")
+            Assert.assertTrue(b == AoColor.blue)
+        }
+
+        test anyAgainstAny() {
+            var h = new AoHolder()
+            var s: Any = "5"
+            Assert.assertTrue(h.getInt() != s)
+            Assert.assertTrue(!(s == h.getInt()))
+            Assert.assertTrue(h.getString() == s)
+            var n: Any = null
+            Assert.assertTrue(h.getNull() == n)
+            Assert.assertTrue(h.getInt() != n)
+            Assert.assertTrue(h.getString() != n)
+        }
+
         test differentPrimitiveKindsAreNotEqual() {
             var h = new AoHolder()
             Assert.assertTrue(h.getLong() != 5)
+            Assert.assertTrue(!(5 == h.getLong()))
             Assert.assertTrue(h.getInt() != 5L)
             Assert.assertTrue(h.getDouble() != 5L)
             Assert.assertTrue(!(h.getBool() == 1))
+        }
+
+        test anyOnEitherSideOfAPrimitiveOrEnum() {
+            var h = new AoHolder()
+            var a: Any = 5
+            Assert.assertTrue(a == 5)
+            Assert.assertTrue(5 == a)
+            Assert.assertTrue(a != 5L)
+            Assert.assertTrue(!(5L == a))
+            Assert.assertTrue(a == h.getInt())
+            Assert.assertTrue(h.getInt() == a)
+            var b: Any = AoColor.blue
+            Assert.assertTrue(AoColor.blue == b)
+            Assert.assertTrue(b != AoColor.red)
+            Assert.assertTrue(b != 2L)
+            var one: Any = 1
+            Assert.assertTrue(one != AoColor.red)
+            Assert.assertTrue(!(AoColor.red == one))
+            Assert.assertTrue(AoColor.red != h.getInt())
+            Assert.assertTrue(h.getInt() != AoColor.red)
+            Assert.assertTrue(true == h.getBool())
+            Assert.assertTrue(!(1 == h.getBool()))
+            Assert.assertTrue(h.getNull() != 0)
+            Assert.assertTrue(!(0 == h.getNull()))
+            var n: Any = null
+            Assert.assertTrue(n != 0)
+            Assert.assertTrue(!(0 == n))
+            h.value = AoColor.blue
+            Assert.assertTrue(h.value == AoColor.blue)
+            Assert.assertTrue(AoColor.blue == h.value)
+            Assert.assertTrue(h.get() != AoColor.red)
+        }
+
+        test anyOnEitherSideOfAnObject() {
+            var h = new AoHolder()
+            var t = new AoThing()
+            var o: Any = t
+            Assert.assertTrue(o == t)
+            Assert.assertTrue(t == o)
+            Assert.assertTrue(o != new AoThing())
+            Assert.assertTrue(o != "t")
+            Assert.assertTrue(o != 5)
+            Assert.assertTrue(!(5 == o))
+            var n: Any = null
+            Assert.assertTrue(n != t)
+            Assert.assertTrue(!(t == n))
+            h.value = t
+            Assert.assertTrue(h.value == t)
+            Assert.assertTrue(t == h.value)
+            Assert.assertTrue(h.value != 5)
+            Assert.assertTrue(!(5 == h.value))
+            Assert.assertTrue(t.name == h.getString() || t == h.get())
+        }
+
+        test comparisonsInsideBoolChains() {
+            var h = new AoHolder()
+            var t = new AoThing()
+            var a: Any = 5
+            var b: Any = AoColor.blue
+            var o: Any = t
+            Assert.assertTrue(5 == h.getInt() && 6 != h.getInt())
+            Assert.assertTrue(5 == h.getInt() || false)
+            Assert.assertTrue(a == 5 && b == AoColor.blue)
+            Assert.assertTrue(t == h.getInt() || o == t)
+            Assert.assertTrue(!(a == "5" || AoColor.red == b))
         }
     }
 }
