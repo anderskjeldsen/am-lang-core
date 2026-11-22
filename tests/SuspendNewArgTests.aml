@@ -1,0 +1,137 @@
+namespace Tests {
+
+    // Redmine #594: in a suspend function, `new T(this.parkInt(3))` (a
+    // constructor argument that suspends) segfaulted in v1. The allocation
+    // temp is hoisted NULL to the function top and assigned in the statement,
+    // so the suspend point neither saved it with the cleanup list nor spilled
+    // it as a statement temp; after the resume the constructor ran on NULL.
+    // core's linux-x64 target builds with -O3, where the stack garbage this
+    // used to read is a register.
+    class SnaVec(var v: Int) {
+        import Am.Lang
+
+        op + (o: SnaVec): SnaVec {
+            return new SnaVec(this.v + o.v)
+        }
+    }
+
+    class SnaPair(var a: Int, var b: Int) {
+        import Am.Lang
+    }
+
+    class SnaBox(var vec: SnaVec) {
+        import Am.Lang
+    }
+
+    class SnaNode {
+        import Am.Lang
+        var vec: SnaVec = new SnaVec(1)
+    }
+
+    class SuspendNewArgTests {
+        import Am.Lang
+        import Am.Lang.Diagnostics
+        import Am.Async
+        import Am.Tests
+
+        static var pending: Continuation? = null
+        var node: SnaNode = new SnaNode()
+        var finished: Bool = false
+        var got: Int = 0
+        var pairSum: Int = 0
+        var mixed: Int = 0
+        var boxed: Int = 0
+        var kept: Int = 0
+        var loopSum: Int = 0
+
+        suspend fun parkInt(v: Int): Int {
+            suspend(cont) {
+                SuspendNewArgTests.pending = cont
+            }
+            return v
+        }
+
+        suspend fun park(): SnaNode {
+            suspend(cont) {
+                SuspendNewArgTests.pending = cont
+            }
+            return this.node
+        }
+
+        fun keep(v: SnaVec): Int {
+            return v.v
+        }
+
+        suspend fun run() {
+            // one suspending argument
+            var v = new SnaVec(this.parkInt(3))
+            this.got = v.v
+            // several
+            var p = new SnaPair(this.parkInt(1), this.parkInt(2))
+            this.pairSum = p.a * 10 + p.b
+            // a suspending argument next to a plain one, both ways round
+            var q = new SnaPair(7, this.parkInt(8))
+            var r = new SnaPair(this.parkInt(9), 6)
+            this.mixed = q.a * 1000 + q.b * 100 + r.a * 10 + r.b
+            // nested `new`
+            var b = new SnaBox(new SnaVec(this.parkInt(4)))
+            this.boxed = b.vec.v
+            // as an operand, in a store and through a suspending receiver
+            this.node.vec = this.node.vec + new SnaVec(this.parkInt(4))
+            this.park().vec += new SnaVec(this.parkInt(5))
+            // as an argument
+            this.kept = this.keep(new SnaVec(this.parkInt(11)))
+            // in a loop
+            for (i = 0 until 3) {
+                var w = new SnaVec(this.parkInt(i + 1))
+                this.loopSum = this.loopSum + w.v
+            }
+            this.finished = true
+        }
+
+        private fun drive() {
+            var guard = 0
+            while (!this.finished && guard < 40) {
+                var c = SuspendNewArgTests.pending
+                SuspendNewArgTests.pending = null
+                if (c != null) {
+                    c.resume()
+                }
+                guard = guard + 1
+            }
+        }
+
+        private static fun once(): SuspendNewArgTests {
+            var t = new SuspendNewArgTests()
+            t.run()
+            t.drive()
+            return t
+        }
+
+        private static fun onceDropped() {
+            var t = SuspendNewArgTests.once()
+            Assert.assertTrue(t.finished)
+        }
+
+        test suspendingConstructorArguments() {
+            var t = SuspendNewArgTests.once()
+            Assert.assertTrue(t.finished)
+            Assert.assertEquals(3, t.got)
+            Assert.assertEquals(12, t.pairSum)
+            Assert.assertEquals(7896, t.mixed)
+            Assert.assertEquals(4, t.boxed)
+            Assert.assertEquals(10, t.node.vec.v)
+            Assert.assertEquals(11, t.kept)
+            Assert.assertEquals(6, t.loopSum)
+        }
+
+        test suspendingConstructorArgumentsDontLeak() {
+            SuspendNewArgTests.onceDropped()
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 10) {
+                SuspendNewArgTests.onceDropped()
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+    }
+}
