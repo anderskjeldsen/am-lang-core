@@ -1,0 +1,159 @@
+namespace Tests {
+
+    // Redmine #580: a statement call whose object result is discarded releases
+    // it right after the statement, so Arc.getAllocationCount() right after the
+    // statement matches the count before it (v2 kept the last result alive: a
+    // result of `this.f()` was never released, one of `T.f()` or a chain lived
+    // to the end of the function). Counts are taken right after a loop, so
+    // they hold under v1 too, which frees locals of a straight-line statement
+    // only at function exit.
+
+    class DrBox {
+        import Am.Lang
+        var tag: String = "t"
+        var kid: DrBox? = null
+
+        fun fresh(): DrBox {
+            return new DrBox()
+        }
+
+        fun text(): String {
+            return "v" + this.tag
+        }
+
+        fun literal(): String {
+            return "literal"
+        }
+
+        fun self(): DrBox {
+            return this
+        }
+
+        fun getTag(): String {
+            return this.tag
+        }
+
+        fun once(): String {
+            return this.tag + "!"
+        }
+
+        static fun made(i: Int): String {
+            return "m" + i.toString()
+        }
+
+        // Calls on `this` and a bare call, results discarded.
+        fun selfCalls(n: Int) {
+            for (i = 0 until n) {
+                this.once()
+                this.fresh()
+                this.text()
+                once()
+            }
+        }
+    }
+
+    class DiscardedResultTests {
+        import Am.Lang
+        import Am.Lang.Diagnostics
+        import Am.Tests
+
+        test discardedNewObjectInLoop() {
+            var b = new DrBox()
+            b.fresh()
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 5) {
+                b.fresh()
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test discardedNewStringInLoop() {
+            var b = new DrBox()
+            b.text()
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 5) {
+                b.once()
+                b.text()
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test discardedStaticCallInLoop() {
+            DrBox.made(0)
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 5) {
+                DrBox.made(i)
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test discardedCallsOnThisInLoop() {
+            var b = new DrBox()
+            b.selfCalls(1)
+            var before = Arc.getAllocationCount()
+            b.selfCalls(5)
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test discardedChainedCallsInLoop() {
+            var b = new DrBox()
+            b.fresh().fresh()
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 5) {
+                b.fresh().fresh().fresh()
+                b.fresh().once()
+                b.self().text()
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test discardedResultsInWhileLoop() {
+            var b = new DrBox()
+            b.fresh()
+            var before = Arc.getAllocationCount()
+            var k = 0
+            while (k < 5) {
+                b.fresh()
+                DrBox.made(k)
+                k++
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test discardedBorrowedResultsStayAlive() {
+            var b = new DrBox()
+            b.kid = new DrBox()
+            for (i = 0 until 5) {
+                b.self()
+                b.literal()
+                b.getTag()
+                b.self().self()
+            }
+            Assert.assertEquals("t", b.tag)
+            Assert.assertEquals("t", b.getTag())
+            Assert.assertEquals("literal", b.literal())
+            Assert.assertTrue(b.self() == b)
+            Assert.assertTrue(b.kid != null)
+        }
+
+        test aNewExpressionStatementInLoop() {
+            new DrBox().once()
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 5) {
+                new DrBox().once()
+                new DrBox().fresh()
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test aStringLiteralReceiverInLoop() {
+            "abc".toUpperCase()
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 5) {
+                "abc".toUpperCase()
+                "abc".substring(1, 1)
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+    }
+}
