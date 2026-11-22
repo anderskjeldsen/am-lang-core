@@ -1,0 +1,83 @@
+namespace Tests {
+
+    // Redmine #548 (am-json's JtSorted): a lambda in a field initializer whose
+    // type has type arguments (`var values: TreeSet<Int> = new TreeSet<Int>((a,
+    // b) => { return a - b })`). v2's validator parsed the lambda once more and
+    // made a stray inner class with Any parameters, which did not compile
+    // (`a - b` on two nullable_values). Each comparator must run with its
+    // parameters typed.
+
+    class FilSorted {
+        import Am.Lang
+        import Am.Collections
+        var ints: TreeSet<Int> = new TreeSet<Int>((a, b) => {
+            return a - b
+        })
+        var desc: TreeSet<Int> = new TreeSet<Int>((a, b) => {
+            return b - a
+        })
+        var byLength: TreeSet<String> = new TreeSet<String>((a, b) => {
+            return a.getLength() - b.getLength()
+        })
+    }
+
+    #reflect
+    class FilReflected {
+        import Am.Lang
+        import Am.Collections
+        var values: TreeSet<Long> = new TreeSet<Long>((a, b) => {
+            if (a < b) { return -1 }
+            if (a > b) { return 1 }
+            return 0
+        })
+    }
+
+    class FieldInitLambdaTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        test intComparatorInAFieldInitializer() {
+            var s = new FilSorted()
+            s.ints.add(3)
+            s.ints.add(1)
+            s.ints.add(2)
+            var l = s.ints.toList()
+            Assert.assertEquals(3, l.getSize())
+            Assert.assertEquals(1, l.get(0))
+            Assert.assertEquals(2, l.get(1))
+            Assert.assertEquals(3, l.get(2))
+        }
+
+        test secondFieldGetsItsOwnComparator() {
+            var s = new FilSorted()
+            s.desc.add(3)
+            s.desc.add(1)
+            s.desc.add(2)
+            var l = s.desc.toList()
+            Assert.assertEquals(3, l.get(0))
+            Assert.assertEquals(1, l.get(2))
+        }
+
+        test stringComparatorInAFieldInitializer() {
+            var s = new FilSorted()
+            s.byLength.add("ccc")
+            s.byLength.add("a")
+            s.byLength.add("bb")
+            var l = s.byLength.toList()
+            Assert.assertEquals("a", l.get(0))
+            Assert.assertEquals("bb", l.get(1))
+            Assert.assertEquals("ccc", l.get(2))
+        }
+
+        test comparatorInAReflectedClass() {
+            var r = new FilReflected()
+            r.values.add(30L)
+            r.values.add(10L)
+            r.values.add(20L)
+            var l = r.values.toList()
+            Assert.assertEquals(10L, l.get(0))
+            Assert.assertEquals(30L, l.get(2))
+        }
+    }
+}

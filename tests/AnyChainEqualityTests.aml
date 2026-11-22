@@ -1,0 +1,78 @@
+namespace Tests {
+
+    // Redmine #548 (am-json under v2): `==` / `!=` on a chain whose RESULT is
+    // Any (`v.getValue() != "19.99"`, `h.payload == s`). v2 typed the
+    // comparison by the chain's first receiver and wrote `<nullable_value> !=
+    // <String*>`, which gcc rejected. It compares the boxes now, as v1 does.
+    // (An Any holding a primitive compared with an object is left out: v1
+    // dereferences the primitive as an object there.)
+
+    class AceHolder {
+        import Am.Lang
+        var payload: Any = "abc"
+        var num: Any = 5
+        fun getValue(): Any { return this.payload }
+        fun getNum(): Any { return this.num }
+        fun self(): AceHolder { return this }
+    }
+
+    class AnyChainEqualityTests {
+        import Am.Lang
+        import Am.Tests
+
+        test anyCallResultComparedWithAString() {
+            var h = new AceHolder()
+            Assert.assertTrue(h.getValue() == "abc")
+            Assert.assertTrue(!(h.getValue() != "abc"))
+            Assert.assertTrue(h.getValue() != "abd")
+            var built = "ab" + "c"
+            Assert.assertTrue(h.getValue() == built)
+            Assert.assertTrue(h.self().getValue() == "abc")
+        }
+
+        test anyFieldComparedWithAString() {
+            var h = new AceHolder()
+            Assert.assertTrue(h.payload == "abc")
+            Assert.assertTrue(h.payload != "x")
+            h.payload = "x"
+            Assert.assertTrue(h.payload == "x")
+            Assert.assertTrue(h.getValue() != "abc")
+        }
+
+        test anyCallResultComparedWithAPrimitive() {
+            var h = new AceHolder()
+            Assert.assertTrue(h.getNum() == 5)
+            Assert.assertTrue(h.getNum() != 6)
+            Assert.assertTrue(!(h.getNum() == 6))
+            h.num = 7L
+            Assert.assertTrue(h.getNum() == 7L)
+        }
+
+        test anyCallResultComparedWithAnotherAny() {
+            var h = new AceHolder()
+            var other: Any = "abc"
+            Assert.assertTrue(h.getValue() == other)
+            var five: Any = 5
+            Assert.assertTrue(h.getNum() == five)
+            Assert.assertTrue(h.getNum() != other)
+        }
+
+        test anyComparisonsInsideBooleanChains() {
+            var h = new AceHolder()
+            Assert.assertTrue(h.getValue() == "abc" && h.getNum() != 4)
+            Assert.assertTrue(h.getValue() == "x" || h.getNum() == 5)
+            Assert.assertTrue(!(h.getValue() == "x" && h.getNum() == 5))
+            var count = 0
+            if (h.getValue() != "abc" || h.getNum() != 5) { count = count + 1 }
+            Assert.assertEquals(0, count)
+        }
+
+        test anyNullComparisonStillWorks() {
+            var h = new AceHolder()
+            Assert.assertTrue(h.getValue() != null)
+            h.payload = null
+            Assert.assertTrue(h.getValue() == null)
+            Assert.assertTrue(h.getValue() != "abc")
+        }
+    }
+}
