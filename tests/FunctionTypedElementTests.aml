@@ -1,0 +1,193 @@
+namespace Tests {
+
+    // A function-typed type argument keeps its signature (#545): an untyped lambda
+    // added to a List<(x: Int) => Int> or a HashMap<String, (x: Int) => Int> takes its
+    // parameter types from it, and a value read back (get, first, removeAt, each)
+    // can be called without an annotation.
+    class FunctionTypedElementHolder {
+        import Am.Lang
+        import Am.Collections
+
+        var handlers: List<(x: Int) => Int> = new List<(x: Int) => Int>()
+        var byName: HashMap<String, (x: Int) => Int> = new HashMap<String, (x: Int) => Int>()
+
+        fun addHandler(f: (x: Int) => Int) {
+            this.handlers.add(f)
+        }
+
+        fun addOffset(n: Int) {
+            this.handlers.add((x) => x + n)
+            handlers.add((x) => x - n)
+        }
+
+        fun getHandlers(): List<(x: Int) => Int> {
+            return this.handlers
+        }
+    }
+
+    class FunctionTypedElementTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        test addUntypedLambdasThenCallReadValues() {
+            var list = new List<(x: Int) => Int>()
+            list.add((x) => x + 1)
+            list.add((x) => x * 10)
+            var f = list.get(0)
+            var g = list.get(1)
+            Assert.assertEquals(2, f(1))
+            Assert.assertEquals(70, g(7))
+            Assert.assertEquals(2, list.getSize())
+        }
+
+        test setAndInsertAt() {
+            var list = new List<(x: Int) => Int>()
+            list.add((x) => x + 1)
+            list.set(0, (x) => x - 4)
+            list.insertAt(0, (x) => x * x)
+            var a = list.get(0)
+            var b = list.get(1)
+            Assert.assertEquals(36, a(6))
+            Assert.assertEquals(6, b(10))
+        }
+
+        test getLastRemoveAtAndRemoveLast() {
+            var list = new List<(x: Int) => Int>()
+            list.add((x) => x + 100)
+            list.add((x) => x + 200)
+            list.add((x) => x + 300)
+            var last = list.getLast()
+            Assert.assertEquals(301, last(1))
+            var removed = list.removeAt(0)
+            Assert.assertEquals(102, removed(2))
+            var tail = list.removeLast()
+            Assert.assertEquals(303, tail(3))
+            Assert.assertEquals(1, list.getSize())
+            var rest = list.get(0)
+            Assert.assertEquals(204, rest(4))
+        }
+
+        test eachVariableCanBeCalled() {
+            var list = new List<(x: Int) => Int>()
+            list.add((x) => x + 1)
+            list.add((x) => x * 2)
+            var total = 0
+            each (f in list) {
+                total = total + f(10)
+            }
+            Assert.assertEquals(31, total)
+        }
+
+        test mapOfFunctionValues() {
+            var m = new HashMap<String, (x: Int) => Int>()
+            m.set("inc", (x) => x + 1)
+            m.set("dbl", (x) => x * 2)
+            var inc = m.get("inc")
+            var dbl = m.get("dbl")
+            Assert.assertEquals(8, inc(7))
+            Assert.assertEquals(14, dbl(7))
+        }
+
+        test fieldListsAndMaps() {
+            var h = new FunctionTypedElementHolder()
+            h.handlers.add((x) => x + 5)
+            h.byName.set("sq", (x) => x * x)
+            h.addHandler((x) => x - 1)
+            var a = h.handlers.get(0)
+            var b = h.handlers.get(1)
+            var c = h.byName.get("sq")
+            Assert.assertEquals(15, a(10))
+            Assert.assertEquals(9, b(10))
+            Assert.assertEquals(25, c(5))
+        }
+
+        test lambdaCapturesAndTwoParameters() {
+            var offset = 1000
+            var list = new List<(x: Int) => Int>()
+            list.add((x) => x + offset)
+            var f = list.get(0)
+            Assert.assertEquals(1003, f(3))
+            var two = new List<(a: Int, b: Int) => Int>()
+            two.add((a, b) => a * 10 + b)
+            var t = two.get(0)
+            Assert.assertEquals(42, t(4, 2))
+        }
+
+        test stringFunctionElements() {
+            var list = new List<(s: String) => String>()
+            list.add((s) => s + "!")
+            var f = list.get(0)
+            Assert.assertEquals("hi!", f("hi"))
+        }
+
+        static fun addTo(list: List<(x: Int) => Int>, n: Int) {
+            list.add((x) => x * n)
+        }
+
+        test annotatedLocalAndParameter() {
+            var list: List<(x: Int) => Int> = new List<(x: Int) => Int>()
+            FunctionTypedElementTests.addTo(list, 3)
+            list.add((x) => x + 1)
+            var f = list.get(0)
+            var g = list.get(1)
+            Assert.assertEquals(15, f(5))
+            Assert.assertEquals(6, g(5))
+        }
+
+        test methodsOfTheHolderAndItsGetter() {
+            var h = new FunctionTypedElementHolder()
+            h.addOffset(7)
+            var a = h.getHandlers().get(0)
+            var b = h.getHandlers().get(1)
+            Assert.assertEquals(17, a(10))
+            Assert.assertEquals(3, b(10))
+            h.getHandlers().add((x) => x * 2)
+            var c = h.handlers.get(2)
+            Assert.assertEquals(20, c(10))
+        }
+
+        test listOfListsOfFunctions() {
+            var rows = new List<List<(x: Int) => Int>>()
+            rows.add(new List<(x: Int) => Int>())
+            rows.get(0).add((x) => x + 1)
+            var inner = rows.get(0)
+            inner.add((x) => x + 2)
+            var f = rows.get(0).get(0)
+            var g = inner.get(1)
+            Assert.assertEquals(2, f(1))
+            Assert.assertEquals(3, g(1))
+            var total = 0
+            each (row in rows) {
+                each (fn in row) {
+                    total = total + fn(10)
+                }
+            }
+            Assert.assertEquals(23, total)
+        }
+
+        test lambdaInsideALambdaUsesTheList() {
+            var list = new List<(x: Int) => Int>()
+            list.add((x) => x + 1)
+            var run: () => Int = () => {
+                list.add((x) => x * 3)
+                var f = list.get(1)
+                return f(4)
+            }
+            var r: Int = run()
+            Assert.assertEquals(12, r)
+            var again = list.get(0)
+            Assert.assertEquals(6, again(5))
+        }
+
+        test namedTypeArgumentsStayUsable() {
+            var names = new List<String>()
+            names.add("a")
+            var n = names.get(0)
+            Assert.assertEquals("a", n)
+            var f = 2
+            var x = 3
+            Assert.assertEquals(5, f + x)
+        }
+    }
+}
