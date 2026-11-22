@@ -5,7 +5,7 @@ with the compiler and carries the same version; changes that need a compiler
 change are also in the compiler's `docs/releases/CHANGELOG.md`. Redmine numbers
 are issues in the private tracker.
 
-## [0.16.0] - Unreleased
+## [0.16.0] - 2026-11-22
 
 Changes since 0.15.0. Needs amlc 0.16.0.
 
