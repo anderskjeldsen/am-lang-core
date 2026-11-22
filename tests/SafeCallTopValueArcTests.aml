@@ -1,0 +1,448 @@
+namespace Tests {
+
+    // Redmine #595: a `?.` chain's top variable holds a reference of its own.
+    // #589 released it after a property or array store (a local declaration
+    // already did); passed as an argument, returned, dropped as a statement,
+    // as the right of `??`, in a group, as an if-expression branch or as the
+    // fallback of a safe call's `??` it leaked the object every time, and as a
+    // string template part it didn't compile. Each helper first stores a fresh
+    // string (or node) in `o`, so the old one is freed unless a chain kept a
+    // reference to it.
+    class StvNode {
+        import Am.Lang
+        var s: String = "a"
+        var kid: StvNode? = null
+        var n: Int = 3
+
+        static fun maybe(x: StvNode?): StvNode? {
+            return x
+        }
+
+        static fun fresh(v: String): String {
+            return v + ""
+        }
+
+        // (`o?.s = v` with a null `o` throws in v2, a bug of its own.)
+        static fun setS(x: StvNode?, v: String) {
+            if (x != null) {
+                x!!.s = StvNode.fresh(v)
+            }
+        }
+
+        static fun setKid(x: StvNode?) {
+            if (x != null) {
+                x!!.kid = new StvNode()
+            }
+        }
+
+        fun me(): StvNode {
+            return this
+        }
+
+        // A string nothing else holds: once the `?` branch's temps are
+        // released, the chain's top variable is its only owner.
+        fun make(): String {
+            return this.s + "!"
+        }
+    }
+
+    class StvLeak {
+        import Am.Lang
+        import Am.Lang.Diagnostics
+        import Am.Async
+
+        static var sink: Int = 0
+        static var text: String = ""
+        static var pending: Continuation? = null
+
+        static fun take(s: String?): Int {
+            if (s == null) {
+                return 0
+            }
+            return s!!.length()
+        }
+
+        static fun takeTwo(a: String?, b: String?): Int {
+            return StvLeak.take(a) * 10 + StvLeak.take(b)
+        }
+
+        static fun takeNode(n: StvNode?): Int {
+            if (n == null) {
+                return 0
+            }
+            return n!!.n
+        }
+
+        fun takeI(s: String?): Int {
+            return StvLeak.take(s)
+        }
+
+        static fun asArg(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            StvLeak.sink += StvLeak.take(StvNode.maybe(o)?.s)
+        }
+
+        static fun asTwoArgs(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            StvLeak.sink += StvLeak.takeTwo(StvNode.maybe(o)?.s, o?.s)
+        }
+
+        static fun asInstanceArg(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            var l = new StvLeak()
+            StvLeak.sink += l.takeI(StvNode.maybe(o)?.s)
+        }
+
+        static fun asNestedArg(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            StvLeak.sink += StvLeak.take(StvNode.fresh(StvNode.maybe(o)?.s ?? "z"))
+        }
+
+        static fun asNodeArg(o: StvNode?) {
+            StvNode.setKid(o)
+            StvLeak.sink += StvLeak.takeNode(StvNode.maybe(o)?.kid)
+        }
+
+        static fun asArgStatement(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            StvLeak.take(StvNode.maybe(o)?.s)
+        }
+
+        static fun asOnlyOwnerArg(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            StvLeak.sink += StvLeak.take(StvNode.maybe(o)?.make())
+        }
+
+        static fun ret(o: StvNode?): String? {
+            return StvNode.maybe(o)?.s
+        }
+
+        static fun asReturn(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            StvLeak.sink += StvLeak.take(StvLeak.ret(o))
+        }
+
+        static fun retNode(o: StvNode?): StvNode? {
+            return StvNode.maybe(o)?.kid
+        }
+
+        static fun asReturnNode(o: StvNode?) {
+            StvNode.setKid(o)
+            StvLeak.sink += StvLeak.takeNode(StvLeak.retNode(o))
+        }
+
+        static fun retOnlyOwner(o: StvNode?): String? {
+            return StvNode.maybe(o)?.make()
+        }
+
+        static fun asReturnOnlyOwner(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            StvLeak.sink += StvLeak.take(StvLeak.retOnlyOwner(o))
+        }
+
+        static fun asTemplate(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            StvLeak.text = "v=${StvNode.maybe(o)?.s ?? "z"}."
+        }
+
+        static fun asTemplateOnlyOwner(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            StvLeak.text = "v=${StvNode.maybe(o)?.make() ?? "z"}."
+        }
+
+        static fun asElvisLeft(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            var t = StvNode.maybe(o)?.s ?? "z"
+            StvLeak.sink += t.length()
+        }
+
+        static fun asElvisRight(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            var none: String? = null
+            var t = none ?? StvNode.maybe(o)?.s ?? "z"
+            StvLeak.sink += t.length()
+        }
+
+        static fun asElvisFallback(o: StvNode?, p: StvNode?) {
+            StvNode.setS(o, "qq")
+            StvNode.setS(p, "ppp")
+            var t = StvNode.maybe(o)?.s ?? StvNode.maybe(p)?.s ?? "z"
+            StvLeak.sink += t.length()
+        }
+
+        static fun asElvisArg(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            StvLeak.sink += StvLeak.take(StvNode.maybe(o)?.s ?? "z")
+        }
+
+        static fun asLambdaArg(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            var f: (x: String?) => Int = x => StvLeak.take(x)
+            StvLeak.sink += f(StvNode.maybe(o)?.s)
+        }
+
+        static fun asGroup(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            var t = (StvNode.maybe(o)?.s)
+            StvLeak.sink += StvLeak.take(t)
+        }
+
+        static fun asIfBranch(o: StvNode?, yes: Bool) {
+            StvNode.setS(o, "qq")
+            var t = if (yes) StvNode.maybe(o)?.s else null
+            StvLeak.sink += StvLeak.take(t)
+        }
+
+        static fun asWhenSubject(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            var k = when (StvNode.maybe(o)?.s) {
+                "qq" -> 1
+                else -> 2
+            }
+            StvLeak.sink += k
+        }
+
+        static fun asIfNullCheck(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            if (StvNode.maybe(o)?.s == null) {
+                StvLeak.sink += 1
+            }
+        }
+
+        static fun asIfNotNullCheck(o: StvNode?) {
+            StvNode.setKid(o)
+            if (StvNode.maybe(o)?.kid != null) {
+                StvLeak.sink += 1
+            }
+        }
+
+        // (`maybe(o)?.s == "qq"` doesn't compile in v2, a bug of its own.)
+        static fun asNotNullString(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            if (StvNode.maybe(o)?.s != null) {
+                StvLeak.sink += 1
+            }
+        }
+
+        static fun asStatement(o: StvNode?) {
+            StvNode.setKid(o)
+            StvNode.maybe(o)?.kid?.me()
+        }
+
+        static fun asOnlyOwnerStatement(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            StvNode.maybe(o)?.make()
+        }
+
+        static fun asLocalAssign(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            var t: String? = null
+            t = StvNode.maybe(o)?.s
+            StvLeak.sink += StvLeak.take(t)
+        }
+
+        static fun asArgInLoop(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            for (i = 0 until 3) {
+                StvLeak.sink += StvLeak.take(StvNode.maybe(o)?.make())
+            }
+        }
+
+        suspend fun parkStr(s: String?): Int {
+            suspend(cont) {
+                StvLeak.pending = cont
+            }
+            return StvLeak.take(s)
+        }
+
+        suspend fun suspendingArg(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            StvLeak.sink += this.parkStr(StvNode.maybe(o)?.make())
+        }
+
+        suspend fun parkInt(v: Int): Int {
+            suspend(cont) {
+                StvLeak.pending = cont
+            }
+            return v
+        }
+
+        suspend fun suspendingArgs(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            var a = this.parkStr(StvNode.maybe(o)?.s)
+            var b = this.parkInt(StvNode.maybe(o)?.n ?? 5)
+            var c = this.parkStr(StvNode.maybe(o)?.s ?? "zzzz")
+            StvLeak.sink += a * 100 + b * 10 + c
+        }
+
+        static fun asSuspendArgs(o: StvNode?) {
+            var l = new StvLeak()
+            l.suspendingArgs(o)
+            var guard = 0
+            while (StvLeak.pending != null && guard < 5) {
+                var c = StvLeak.pending
+                StvLeak.pending = null
+                if (c != null) {
+                    c.resume()
+                }
+                guard++
+            }
+        }
+
+        static fun asSuspendArg(o: StvNode?) {
+            var l = new StvLeak()
+            l.suspendingArg(o)
+            var c = StvLeak.pending
+            StvLeak.pending = null
+            if (c != null) {
+                c.resume()
+            }
+        }
+
+        static fun run(kind: Int, o: StvNode?) {
+            if (kind == 0) { StvLeak.asArg(o) }
+            if (kind == 1) { StvLeak.asTwoArgs(o) }
+            if (kind == 2) { StvLeak.asInstanceArg(o) }
+            if (kind == 3) { StvLeak.asNestedArg(o) }
+            if (kind == 4) { StvLeak.asNodeArg(o) }
+            if (kind == 5) { StvLeak.asArgStatement(o) }
+            if (kind == 6) { StvLeak.asOnlyOwnerArg(o) }
+            if (kind == 7) { StvLeak.asReturn(o) }
+            if (kind == 8) { StvLeak.asReturnNode(o) }
+            if (kind == 9) { StvLeak.asReturnOnlyOwner(o) }
+            if (kind == 10) { StvLeak.asTemplate(o) }
+            if (kind == 11) { StvLeak.asTemplateOnlyOwner(o) }
+            if (kind == 12) { StvLeak.asElvisLeft(o) }
+            if (kind == 13) { StvLeak.asElvisRight(o) }
+            if (kind == 14) { StvLeak.asElvisFallback(o, null) }
+            if (kind == 15) { StvLeak.asElvisFallback(null, o) }
+            if (kind == 16) { StvLeak.asElvisArg(o) }
+            if (kind == 17) { StvLeak.asLambdaArg(o) }
+            if (kind == 18) { StvLeak.asGroup(o) }
+            if (kind == 19) { StvLeak.asIfBranch(o, true) }
+            if (kind == 20) { StvLeak.asWhenSubject(o) }
+            if (kind == 21) { StvLeak.asIfNullCheck(o) }
+            if (kind == 22) { StvLeak.asIfNotNullCheck(o) }
+            if (kind == 23) { StvLeak.asNotNullString(o) }
+            if (kind == 24) { StvLeak.asStatement(o) }
+            if (kind == 25) { StvLeak.asOnlyOwnerStatement(o) }
+            if (kind == 26) { StvLeak.asLocalAssign(o) }
+            if (kind == 27) { StvLeak.asArgInLoop(o) }
+            if (kind == 28) { StvLeak.asSuspendArg(o) }
+            if (kind == 29) { StvLeak.asSuspendArgs(o) }
+        }
+
+        static var kinds: Int = 30
+
+        // Runs [kind] ten times on [o] and returns how many objects it left.
+        static fun leftBy(kind: Int, o: StvNode?): Long {
+            // one warm-up run (and the string it leaves in o.s is replaced
+            // by the next run's, so it's in both counts)
+            StvLeak.run(kind, o)
+            StvLeak.text = ""
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 10) {
+                StvLeak.run(kind, o)
+            }
+            StvLeak.text = ""
+            return Arc.getAllocationCount() - before
+        }
+
+        // Runs [kind] once on [o] and returns what it added to the sink.
+        static fun valueOf(kind: Int, o: StvNode?): Int {
+            StvLeak.sink = 0
+            StvLeak.run(kind, o)
+            return StvLeak.sink
+        }
+    }
+
+    class SafeCallTopValueArcTests {
+        import Am.Lang
+        import Am.Tests
+
+        test safeCallValuesDontLeak() {
+            var o = new StvNode()
+            for (k = 0 until StvLeak.kinds) {
+                var left = StvLeak.leftBy(k, o)
+                if (left != 0L) {
+                    ("kind " + k.toString() + " left " + left.toString()).println()
+                }
+                Assert.assertEquals(0L, left)
+            }
+        }
+
+        test nullReceiversDontLeak() {
+            for (k = 0 until StvLeak.kinds) {
+                var left = StvLeak.leftBy(k, null)
+                if (left != 0L) {
+                    ("kind " + k.toString() + " left " + left.toString() + " (null)").println()
+                }
+                Assert.assertEquals(0L, left)
+            }
+        }
+
+        test safeCallValuesAreRight() {
+            var o = new StvNode()
+            Assert.assertEquals(2, StvLeak.valueOf(0, o))
+            Assert.assertEquals(22, StvLeak.valueOf(1, o))
+            Assert.assertEquals(2, StvLeak.valueOf(2, o))
+            Assert.assertEquals(2, StvLeak.valueOf(3, o))
+            Assert.assertEquals(3, StvLeak.valueOf(4, o))
+            Assert.assertEquals(3, StvLeak.valueOf(6, o))
+            Assert.assertEquals(2, StvLeak.valueOf(7, o))
+            Assert.assertEquals(3, StvLeak.valueOf(8, o))
+            Assert.assertEquals(3, StvLeak.valueOf(9, o))
+            StvLeak.run(10, o)
+            Assert.assertEquals("v=qq.", StvLeak.text)
+            StvLeak.run(11, o)
+            Assert.assertEquals("v=qq!.", StvLeak.text)
+            Assert.assertEquals(2, StvLeak.valueOf(12, o))
+            Assert.assertEquals(2, StvLeak.valueOf(13, o))
+            Assert.assertEquals(2, StvLeak.valueOf(14, o))
+            Assert.assertEquals(3, StvLeak.valueOf(15, o))
+            Assert.assertEquals(2, StvLeak.valueOf(16, o))
+            Assert.assertEquals(2, StvLeak.valueOf(17, o))
+            Assert.assertEquals(2, StvLeak.valueOf(18, o))
+            Assert.assertEquals(2, StvLeak.valueOf(19, o))
+            StvLeak.sink = 0
+            StvLeak.asIfBranch(o, false)
+            Assert.assertEquals(0, StvLeak.sink)
+            Assert.assertEquals(1, StvLeak.valueOf(20, o))
+            Assert.assertEquals(0, StvLeak.valueOf(21, o))
+            Assert.assertEquals(1, StvLeak.valueOf(22, o))
+            Assert.assertEquals(1, StvLeak.valueOf(23, o))
+            Assert.assertEquals(2, StvLeak.valueOf(26, o))
+            Assert.assertEquals(9, StvLeak.valueOf(27, o))
+            Assert.assertEquals(3, StvLeak.valueOf(28, o))
+            Assert.assertEquals(232, StvLeak.valueOf(29, o))
+        }
+
+        test nullReceiverValues() {
+            Assert.assertEquals(0, StvLeak.valueOf(0, null))
+            Assert.assertEquals(0, StvLeak.valueOf(1, null))
+            Assert.assertEquals(1, StvLeak.valueOf(3, null))
+            Assert.assertEquals(0, StvLeak.valueOf(4, null))
+            Assert.assertEquals(0, StvLeak.valueOf(6, null))
+            Assert.assertEquals(0, StvLeak.valueOf(7, null))
+            Assert.assertEquals(0, StvLeak.valueOf(9, null))
+            StvLeak.run(10, null)
+            Assert.assertEquals("v=z.", StvLeak.text)
+            StvLeak.run(11, null)
+            Assert.assertEquals("v=z.", StvLeak.text)
+            Assert.assertEquals(1, StvLeak.valueOf(12, null))
+            Assert.assertEquals(1, StvLeak.valueOf(13, null))
+            Assert.assertEquals(1, StvLeak.valueOf(14, null))
+            Assert.assertEquals(1, StvLeak.valueOf(16, null))
+            Assert.assertEquals(0, StvLeak.valueOf(17, null))
+            Assert.assertEquals(0, StvLeak.valueOf(18, null))
+            Assert.assertEquals(2, StvLeak.valueOf(20, null))
+            // (21: `null?.s == null` reads false in v1, a bug of its own)
+            Assert.assertEquals(0, StvLeak.valueOf(22, null))
+            Assert.assertEquals(0, StvLeak.valueOf(23, null))
+            Assert.assertEquals(0, StvLeak.valueOf(26, null))
+            Assert.assertEquals(0, StvLeak.valueOf(27, null))
+            Assert.assertEquals(0, StvLeak.valueOf(28, null))
+            Assert.assertEquals(54, StvLeak.valueOf(29, null))
+        }
+    }
+}
