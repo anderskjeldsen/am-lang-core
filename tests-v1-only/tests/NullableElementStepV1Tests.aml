@@ -1,0 +1,27 @@
+namespace TestsV1 {
+
+    // Redmine #551: `++` / `--` on an Int? array element. v2 has no Int?[]
+    // (V2_PORT_PLAN.md), so this lives outside tests/; the other #551 forms
+    // are in am-lang-core/tests/PostfixExpressionTests.aml.
+    class NullableElementStepV1Tests {
+        import Am.Lang
+        import Am.Tests
+
+        test nullableElementSteps() {
+            var na: Int?[] = new Int?[2]
+            na[0] = 5
+            var w = na[0]++
+            Assert.assertEquals(5, w)
+            Assert.assertEquals(6, na[0]!!)
+            var x = --na[0]
+            Assert.assertEquals(5, x)
+            var threw = false
+            try {
+                na[1]++
+            } catch (err: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+    }
+}

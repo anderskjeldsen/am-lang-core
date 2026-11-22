@@ -1,0 +1,260 @@
+namespace Tests {
+
+    // Redmine #551 (v1; v2 since #542): `x++` / `x--` as a value inside a
+    // larger expression (an operand, a condition, a receiver, an array index),
+    // on an array element and on an Int?. The value is the old value, the
+    // side effect happens exactly once, operands are evaluated left to right,
+    // and inside && / || only when that operand is evaluated. Prefix forms
+    // bind tighter than any binary operator: `++i + 1` is `(++i) + 1`.
+
+    class PfeHolder {
+        import Am.Lang
+
+        static var sn: Int = 20
+        var n: Int = 5
+        var m: Int? = 7
+        var none: Int? = null
+        var arr: Int[] = new Int[3]
+
+        fun fieldInExpressions(): Int {
+            var a = n++ + 100
+            var b = this.n-- * 2
+            var c = sn++ - 1
+            var d = PfeHolder.sn-- + 1
+            return a * 1000000 + b * 10000 + c * 100 + d
+        }
+
+        fun nullableField(): Int {
+            var a = m++
+            var b = this.m-- + 100
+            var c = ++m
+            var d = --this.m
+            return a * 1000000 + b * 1000 + c * 10 + d
+        }
+
+        fun nullFieldThrows(): Bool {
+            try {
+                var z = none++
+                return false
+            } catch (err: Exception) {
+                return true
+            }
+        }
+
+        fun fieldArray(): Int {
+            arr[0] = 4
+            var a = arr[0]++
+            var b = ++this.arr[0]
+            return a * 100 + b * 10 + arr[0]
+        }
+    }
+
+    class PostfixExpressionTests {
+        import Am.Lang
+        import Am.Tests
+
+        static var calls: Int = 0
+
+        static fun take(v: Int): Int {
+            return v
+        }
+
+        static fun ret(v: Int): Int {
+            var i = v
+            return i-- - 1
+        }
+
+        static fun counted(v: Int): Int {
+            calls++
+            return v
+        }
+
+        test postfixAsOperand() {
+            var d = 3
+            var j = 10
+            var s = d++ + j
+            Assert.assertEquals(13, s)
+            Assert.assertEquals(4, d)
+            var t = d-- * 2
+            Assert.assertEquals(8, t)
+            Assert.assertEquals(3, d)
+            // left to right: the second `d++` sees the first one's update
+            var u = d++ + d++
+            Assert.assertEquals(3 + 4, u)
+            Assert.assertEquals(5, d)
+            var w = 1 + d-- - d--
+            Assert.assertEquals(1 + 5 - 4, w)
+            Assert.assertEquals(3, d)
+            Assert.assertEquals(6, take(d++ * 2))
+            Assert.assertEquals(4, d)
+            Assert.assertEquals(4, ret(5))
+            var l: Long = 5
+            var ll = l++ + 1L
+            Assert.assertTrue(ll == 6)
+            Assert.assertTrue(l == 6)
+            var p = (d++) + 1
+            Assert.assertEquals(5, p)
+            Assert.assertEquals(5, d)
+        }
+
+        test postfixInConditions() {
+            var w = 0
+            var loops = 0
+            while (w-- > -3) {
+                loops++
+            }
+            Assert.assertEquals(3, loops)
+            Assert.assertEquals(-4, w)
+            var d = 3
+            var hit = false
+            if (d++ == 3) {
+                hit = true
+            }
+            Assert.assertTrue(hit)
+            Assert.assertEquals(4, d)
+            var evens = 0
+            var cnt = 0
+            for (q = 0 until 5) {
+                if (cnt++ % 2 == 0) {
+                    evens++
+                }
+            }
+            Assert.assertEquals(3, evens)
+            Assert.assertEquals(5, cnt)
+        }
+
+        test postfixReceiver() {
+            var d = 4
+            var t = d++.toString()
+            Assert.assertEquals("4", t)
+            Assert.assertEquals(5, d)
+            Assert.assertEquals("5", "${d--}")
+            Assert.assertEquals(4, d)
+        }
+
+        test postfixInArrayIndex() {
+            var arr = new Int[5]
+            arr[0] = 10
+            arr[1] = 11
+            arr[2] = 12
+            var d = 5
+            Assert.assertEquals(12, arr[d-- - 3])
+            Assert.assertEquals(4, d)
+            Assert.assertEquals(11, arr[d-- - 3])
+            Assert.assertEquals(3, d)
+        }
+
+        test shortCircuitRunsTheSideEffectOnlyWhenEvaluated() {
+            var k = 0
+            var b = false && k++ > 0
+            Assert.assertFalse(b)
+            Assert.assertEquals(0, k)
+            b = true && k++ >= 0
+            Assert.assertTrue(b)
+            Assert.assertEquals(1, k)
+            b = true || k++ >= 0
+            Assert.assertTrue(b)
+            Assert.assertEquals(1, k)
+            b = false || k++ == 1
+            Assert.assertTrue(b)
+            Assert.assertEquals(2, k)
+            var i = 0
+            var j = 5
+            var n = 0
+            while (i++ < 3 && j-- > 3) {
+                n++
+            }
+            Assert.assertEquals(3, i)
+            Assert.assertEquals(2, j)
+            Assert.assertEquals(2, n)
+        }
+
+        test prefixInExpressions() {
+            var i = 1
+            var a = ++i + 1
+            Assert.assertEquals(3, a)
+            Assert.assertEquals(2, i)
+            var b = --i * 10
+            Assert.assertEquals(10, b)
+            Assert.assertEquals(1, i)
+            var c = 2 * ++i
+            Assert.assertEquals(4, c)
+            Assert.assertEquals(2, i)
+        }
+
+        test arrayElementSteps() {
+            var arr = new Int[3]
+            arr[1] = 4
+            var g = arr[1]++
+            Assert.assertEquals(4, g)
+            Assert.assertEquals(5, arr[1])
+            var h = ++arr[1]
+            Assert.assertEquals(6, h)
+            arr[2]++
+            arr[2]++
+            --arr[2]
+            Assert.assertEquals(1, arr[2])
+            var s = arr[1]-- + arr[1]
+            Assert.assertEquals(6 + 5, s)
+            Assert.assertEquals(5, arr[1])
+            // the index is evaluated once
+            PostfixExpressionTests.calls = 0
+            var g0 = arr[PostfixExpressionTests.counted(0)]++
+            Assert.assertEquals(0, g0)
+            Assert.assertEquals(1, PostfixExpressionTests.calls)
+            Assert.assertEquals(1, arr[0])
+            var bytes = new Byte[1]
+            bytes[0] = 127
+            var bv = bytes[0]++
+            Assert.assertTrue(bv == 127)
+            Assert.assertTrue(bytes[0] == -128)
+            var h2 = new PfeHolder()
+            Assert.assertEquals(4 * 100 + 6 * 10 + 6, h2.fieldArray())
+        }
+
+        test fieldsAndStaticsInExpressions() {
+            var h = new PfeHolder()
+            Assert.assertEquals(105 * 1000000 + 12 * 10000 + 19 * 100 + 22, h.fieldInExpressions())
+            Assert.assertEquals(5, h.n)
+            Assert.assertEquals(20, PfeHolder.sn)
+        }
+
+        test nullableSteps() {
+            var m: Int? = 7
+            var s = m++
+            Assert.assertEquals(7, s)
+            var t = --m
+            Assert.assertEquals(7, t)
+            m++
+            Assert.assertEquals(8, m!!)
+            var u = m-- + 1
+            Assert.assertEquals(9, u)
+            Assert.assertEquals(7, m!!)
+            var h = new PfeHolder()
+            Assert.assertEquals(7 * 1000000 + 108 * 1000 + 8 * 10 + 7, h.nullableField())
+            Assert.assertEquals(7, h.m!!)
+        }
+
+        test nullableNullThrows() {
+            var nn: Int? = null
+            var threw = false
+            try {
+                nn++
+            } catch (err: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+            Assert.assertTrue(new PfeHolder().nullFieldThrows())
+        }
+
+        test namesStayIdentifiers() {
+            // the operators don't reserve anything: names next to them work
+            var plus = 1
+            var minus = 2
+            var r = plus++ + minus--
+            Assert.assertEquals(3, r)
+            Assert.assertEquals(2, plus)
+            Assert.assertEquals(1, minus)
+        }
+    }
+}
