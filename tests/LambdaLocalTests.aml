@@ -10,8 +10,8 @@ namespace Tests {
     }
 
     // A lambda in a typed local (`var g: () => Int = ...`) can be called and passed
-    // on, in a method and in an init { } block. The untyped `var g = () => 1` is a
-    // compile error (#367).
+    // on, in a method and in an init { } block. The untyped `var g = () => 1`
+    // takes its type from the body (#579, InferredLambdaResultTests).
     class LambdaLocalTests {
         import Am.Lang
         import Am.Tests

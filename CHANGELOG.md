@@ -11,6 +11,7 @@ Changes since 0.15.0. Needs amlc 0.16.0.
 
 ### Added
 
+- **InferredLambdaResultTests** (2026-11-22, Redmine #579). `var z = () => show(4)` (a lambda with no parameters in an untyped local, its type from the body: expression and block bodies, void, captures incl. `Int?`) and a lambda local inside a lambda, as a program; v1 handles them since #579, v2 since #574. Passes under v1 and v2.
 - **GenericMultiArgTests** (2026-11-22, Redmine #543). Generic functions with two and three type arguments as a program under v1 and v2: static and instance, in a plain and in a generic class (`GmaBox<String>.pair<String, Int>`), explicit and inferred, a nullable type argument (`pick<String, Int?>`), and a call inside the class. v2 named these symbols with `_` between the type arguments instead of v1's `_x_`.
 - **GenericClassSuspendTests** (2026-11-22, Redmine #569). Suspend methods of a generic class, plain and generic (`suspend fun tagged<T>(t: T)`), on `GsuBox<String>` and `GsuBox<Int>`: a `U`-typed parameter and result, child calls in statement and expression position, a parked call resumed later, an exception caught across a child call, and no leak over repeated runs. Under v1 and v2.
 - **GenericClassStaticCallTests** (2026-11-22, Redmine #575). Moved from tests-v1-only (`GenericClassStaticCallV1Tests`, #568) now that v2 compiles a non-generic static function of a generic class; adds `GsBox<String>.plain(l)` / `GsBox.plain(l)` calls, a static with no parameters, one that throws, and an instance method calling the statics bare and qualified. Under v1 and v2.
