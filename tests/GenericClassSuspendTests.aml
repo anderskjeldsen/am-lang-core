@@ -1,0 +1,118 @@
+namespace Tests {
+
+    // Redmine #569: v2 rendered a suspend method of a generic class as a plain
+    // function in each class variant while the caller started it as a
+    // coroutine (a crash at run time), and gave a GENERIC suspend method of a
+    // generic class no symbol at all (gcc error). Both are now coroutines in
+    // the variant, with the class's (and the method's) type params bound.
+    class GsuBox<U>(var item: U) {
+        import Am.Lang
+        import Am.Async
+
+        var log: String = ""
+
+        suspend fun plainSus(n: Int): String {
+            return this.item.toString() + "#" + n.toString()
+        }
+
+        suspend fun echoItem(u: U): U {
+            return u
+        }
+
+        suspend fun tagged<T>(t: T): String {
+            return this.item.toString() + ":" + t.toString()
+        }
+
+        suspend fun parked<T>(t: T, cell: GsuCell): String {
+            suspend(cont) {
+                cell.pending = cont
+            }
+            return this.item.toString() + "@" + t.toString()
+        }
+
+        suspend fun failing<T>(t: T): Int {
+            throw new Exception("bad " + t.toString())
+        }
+
+        // Child calls from a coroutine of the same variant.
+        suspend fun chain<T>(t: T): String {
+            var a = this.tagged<T>(t)
+            var b = this.plainSus(2)
+            return a + "," + b
+        }
+
+        // Called as a statement (a child call without a result).
+        suspend fun note(u: U) {
+            this.log = this.log + "[" + u.toString() + "]"
+        }
+
+        suspend fun run(cell: GsuCell) {
+            this.note(this.item)
+            this.log = this.log + this.tagged<Int>(5) + " " + this.plainSus(3) + " " + this.echoItem(this.item).toString()
+            this.log = this.log + " " + this.chain<String>("c")
+            try {
+                var x = this.failing<Int>(7)
+            } catch (e: Exception) {
+                this.log = this.log + " " + e.message
+            }
+            this.log = this.log + " " + this.parked<Bool>(true, cell)
+        }
+    }
+
+    class GsuCell {
+        import Am.Async
+        var pending: Continuation? = null
+    }
+
+    class GenericClassSuspendTests {
+        import Am.Lang
+        import Am.Lang.Diagnostics
+        import Am.Async
+        import Am.Tests
+
+        private static fun once(): Bool {
+            var cell = new GsuCell()
+            var bs = new GsuBox<String>("y")
+            bs.run(cell)
+            var c = cell.pending
+            cell.pending = null
+            if (c != null) {
+                c.resume()
+            }
+            return bs.log == "[y]y:5 y#3 y y:c,y#2 bad 7 y@true"
+        }
+
+        test suspendMethodsOfGenericClass() {
+            var cell = new GsuCell()
+            var bs = new GsuBox<String>("x")
+            bs.run(cell)
+            var c = cell.pending
+            cell.pending = null
+            if (c != null) {
+                c.resume()
+            }
+            Assert.assertEquals("[x]x:5 x#3 x x:c,x#2 bad 7 x@true", bs.log)
+        }
+
+        test suspendMethodsOfIntVariant() {
+            var cell = new GsuCell()
+            var bi = new GsuBox<Int>(4)
+            bi.run(cell)
+            var c = cell.pending
+            cell.pending = null
+            if (c != null) {
+                c.resume()
+            }
+            Assert.assertEquals("[4]4:5 4#3 4 4:c,4#2 bad 7 4@true", bi.log)
+        }
+
+        test suspendMethodsOfGenericClassReleaseWhatTheyHold() {
+            Assert.assertTrue(GenericClassSuspendTests.once())
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 5) {
+                GenericClassSuspendTests.once()
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+    }
+}
