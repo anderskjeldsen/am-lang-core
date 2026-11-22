@@ -17,9 +17,25 @@ namespace Tests {
         var s: String = "a"
     }
 
+    // Redmine #554: a class with operator overloading, for `op=` on class targets.
+    class CoVec(var v: Int) {
+        import Am.Lang
+
+        op + (o: CoVec): CoVec {
+            return new CoVec(this.v + o.v)
+        }
+
+        op * (o: CoVec): CoVec {
+            return new CoVec(this.v * o.v)
+        }
+    }
+
     class CoNode {
         import Am.Lang
         var c: Int[] = new Int[4]
+        var ss: String[] = new String[3]
+        var vec: CoVec = new CoVec(1)
+        var vecs: CoVec[] = new CoVec[3]
         var inner: CoInner = new CoInner()
         var pt: CoPoint
         var n: Int = 10
@@ -55,6 +71,25 @@ namespace Tests {
         fun arr(): Int[] {
             CoNode.calls++
             return this.c
+        }
+
+        fun sarr(): String[] {
+            CoNode.calls++
+            return this.ss
+        }
+
+        fun varr(): CoVec[] {
+            CoNode.calls++
+            return this.vecs
+        }
+
+        static fun tag(t: String): String {
+            CoNode.calls++
+            return t
+        }
+
+        static fun fail(): String {
+            throw new Exception("rhs failed")
         }
     }
 
@@ -173,19 +208,133 @@ namespace Tests {
             Assert.assertEquals(9, o.n)
         }
 
-        // v1 renders a class-typed `target op= rhs` as `target = target op rhs` on a
-        // clone of the target, so a call in the receiver runs twice (OperatorBinder,
-        // "accepted" there); only the stored value is checked here. v2 evaluates the
-        // receiver once: ProjectCompileTest.compoundAssignmentEvaluatesTargetOnce.
+        // #554: v1 rendered a class-typed `target op= rhs` as `target = target op rhs`
+        // on a copy of the target, so a call in the receiver ran twice.
         test stringOnCallResult() {
             reset()
             var o = new CoNode()
             o.me().s += "y"
+            Assert.assertEquals(1, CoNode.calls)
             Assert.assertEquals("xy", o.s)
             o.inn().s += "b"
+            Assert.assertEquals(2, CoNode.calls)
             Assert.assertEquals("ab", o.inner.s)
             CoNode.get().s += "z"
+            Assert.assertEquals(3, CoNode.calls)
             Assert.assertEquals("xz", CoNode.shared.s)
+            o.me().me().inn().s += "c"
+            Assert.assertEquals(6, CoNode.calls)
+            Assert.assertEquals("abc", o.inner.s)
+            CoNode.shared.s += "w"
+            Assert.assertEquals("xzw", CoNode.shared.s)
+            o.me().s += CoNode.tag("t")
+            Assert.assertEquals(8, CoNode.calls)
+            Assert.assertEquals("xyt", o.s)
+        }
+
+        test stringElementOnce() {
+            reset()
+            var o = new CoNode()
+            o.ss[0] = "a"
+            o.ss[1] = "b"
+            o.ss[2] = "c"
+            o.ss[CoNode.idx(1)] += "y"
+            Assert.assertEquals(1, CoNode.calls)
+            Assert.assertEquals("by", o.ss[1])
+            o.sarr()[CoNode.idx(2)] += "z"
+            Assert.assertEquals(3, CoNode.calls)
+            Assert.assertEquals("cz", o.ss[2])
+            o.me().ss[CoNode.idx(0)] += "q"
+            Assert.assertEquals(5, CoNode.calls)
+            Assert.assertEquals("aq", o.ss[0])
+            var n = 0
+            o.ss[n++] += "1"
+            o.ss[n++] += "2"
+            Assert.assertEquals(2, n)
+            Assert.assertEquals("aq1", o.ss[0])
+            Assert.assertEquals("by2", o.ss[1])
+            Assert.assertEquals("cz", o.ss[2])
+        }
+
+        static fun fillHeap(a: String[]) {
+            var k = 5
+            a[0] = "abc" + k.toString()
+            a[1] = "def" + k.toString()
+        }
+
+        // The element a heap string held only by the array: the store used to
+        // release it before the right side read it.
+        test heapStringElement() {
+            var a = new String[2]
+            CompoundOnceTests.fillHeap(a)
+            a[0] = a[0] + "x"
+            Assert.assertEquals("abc5x", a[0])
+            a[1] += "y"
+            Assert.assertEquals("def5y", a[1])
+            a[1] += a[1]
+            Assert.assertEquals("def5ydef5y", a[1])
+        }
+
+        // A right side that throws leaves the element as it was.
+        test throwingRhsKeepsElement() {
+            var a = new String[1]
+            CompoundOnceTests.fillHeap(new String[2])
+            var k = 7
+            a[0] = "e" + k.toString()
+            var threw = false
+            try {
+                a[0] += CoNode.fail()
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+            Assert.assertEquals("e7", a[0])
+            threw = false
+            try {
+                a[0] = CoNode.fail()
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+            Assert.assertEquals("e7", a[0])
+        }
+
+        test operatorClassOnce() {
+            reset()
+            var o = new CoNode()
+            o.me().vec += new CoVec(2)
+            Assert.assertEquals(1, CoNode.calls)
+            Assert.assertEquals(3, o.vec.v)
+            o.me().vec *= new CoVec(5)
+            Assert.assertEquals(2, CoNode.calls)
+            Assert.assertEquals(15, o.vec.v)
+            CoNode.get().vec += new CoVec(4)
+            Assert.assertEquals(3, CoNode.calls)
+            Assert.assertEquals(5, CoNode.shared.vec.v)
+            var v = new CoVec(2)
+            v += new CoVec(1)
+            v *= v
+            Assert.assertEquals(9, v.v)
+        }
+
+        test operatorClassElementOnce() {
+            reset()
+            var o = new CoNode()
+            o.vecs[0] = new CoVec(1)
+            o.vecs[1] = new CoVec(10)
+            o.vecs[2] = new CoVec(100)
+            o.vecs[CoNode.idx(1)] += new CoVec(5)
+            Assert.assertEquals(1, CoNode.calls)
+            Assert.assertEquals(15, o.vecs[1].v)
+            o.varr()[CoNode.idx(2)] *= new CoVec(3)
+            Assert.assertEquals(3, CoNode.calls)
+            Assert.assertEquals(300, o.vecs[2].v)
+            var n = 0
+            o.me().vecs[n++] += new CoVec(1)
+            Assert.assertEquals(1, n)
+            Assert.assertEquals(4, CoNode.calls)
+            Assert.assertEquals(2, o.vecs[0].v)
+            Assert.assertEquals(15, o.vecs[1].v)
         }
 
         test structMemberThroughCall() {
