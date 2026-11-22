@@ -1,0 +1,117 @@
+namespace Tests {
+
+    class IlrHolder {
+        import Am.Lang
+        var made: Int = 0
+        init {
+            var g = () => 40
+            this.made = g() + 2
+        }
+    }
+
+    // #579: `var z = () => body` is a function type `() => R` from the body, as
+    // `var f = (x: Int) => body` is (#189); a lambda local inside a lambda too.
+    class InferredLambdaResultTests {
+        import Am.Lang
+        import Am.Tests
+
+        static var counter: Int = 0
+
+        static fun show(x: Int): String {
+            return "v" + x.toString()
+        }
+
+        static fun showN(x: Int?): String {
+            if (x == null) { return "n" }
+            return x!!.toString()
+        }
+
+        static fun bump() {
+            InferredLambdaResultTests.counter = InferredLambdaResultTests.counter + 1
+        }
+
+        test zeroParameterLambdaIsInferredFromExpressionBody() {
+            var four = 4
+            var z = () => InferredLambdaResultTests.show(four)
+            Assert.assertEquals("v4", z())
+            var s = z()
+            Assert.assertEquals("v4", s)
+        }
+
+        test resultTypeOfEachBodyKind() {
+            var i = () => 7
+            var str = () => "seven"
+            var b = () => true
+            Assert.assertEquals(8, i() + 1)
+            Assert.assertEquals("seven!", str() + "!")
+            Assert.assertTrue(b())
+        }
+
+        test blockBodyResultIsInferred() {
+            var base = 10
+            var f = () => {
+                var t = base * 2
+                return t + 1
+            }
+            Assert.assertEquals(21, f())
+        }
+
+        test voidLambdaLocalIsCalled() {
+            InferredLambdaResultTests.counter = 0
+            var v = () => InferredLambdaResultTests.bump()
+            v()
+            v()
+            Assert.assertEquals(2, InferredLambdaResultTests.counter)
+            var w = () => {
+                InferredLambdaResultTests.bump()
+            }
+            w()
+            Assert.assertEquals(3, InferredLambdaResultTests.counter)
+        }
+
+        test inferredLambdaCapturesNullableLocal() {
+            var cq: Int? = 5
+            var z = () => InferredLambdaResultTests.showN(cq)
+            Assert.assertEquals("5", z())
+            var cn: Int? = null
+            var zn = () => InferredLambdaResultTests.showN(cn)
+            Assert.assertEquals("n", zn())
+        }
+
+        test inferredLambdaIsPassedOn() {
+            var z = () => 6
+            var f: () => Int = z
+            Assert.assertEquals(6, f())
+        }
+
+        test nestedInferredLambdaLocalIsResolvable() {
+            var outer = () => {
+                var inner = () => 5
+                return inner() + 1
+            }
+            Assert.assertEquals(6, outer())
+        }
+
+        test nestedInferredLambdaWithParameterAndCapture() {
+            var k = 100
+            var outer = (a: Int) => {
+                var inner = () => a + k
+                return inner() * 2
+            }
+            Assert.assertEquals(206, outer(3))
+        }
+
+        test lambdaLocalInInitBlock() {
+            var h = new IlrHolder()
+            Assert.assertEquals(42, h.made)
+        }
+
+        // contextual: names that are not lambdas keep working
+        test untypedLocalsKeepTheirMeaning() {
+            var z = 3
+            var inner = "i"
+            Assert.assertEquals(3, z)
+            Assert.assertEquals("i", inner)
+        }
+    }
+}
