@@ -1,0 +1,159 @@
+namespace Tests {
+
+    // Redmine #567, #568: a generic call written with explicit type arguments.
+    // #567: in v2 a statement that starts with a generic class's static call,
+    // `List<Int>.newList<Int>().getSize()...` or `GcBox<String>.lenOf<Int>(l).f()`,
+    // matched no statement handler; and `newList<Int>().getSize()` called
+    // getSize through `List_ta_T`.
+    // #568: the class's own generic function called unqualified, `lenOf<Int>(xs)`,
+    // was parsed by v2 as `lenOf < Int > (xs)` in an expression, and v1 lost the
+    // type of a bare static call on the right of an operator (`10 + pick()`).
+    // Comparisons written next to a name (`a<b`, `a<b && c>(d)`) stay comparisons.
+
+    class GcBox<U>(var item: U) {
+        import Am.Lang
+        import Am.Collections
+
+        static fun lenOf<T>(xs: List<T>): Int {
+            return xs.getSize()
+        }
+
+        // Adds v to xs and returns it, so a statement can chain on it.
+        static fun addTo<T>(xs: List<T>, v: T): List<T> {
+            xs.add(v)
+            return xs
+        }
+
+        fun count<T>(xs: List<T>): Int {
+            return xs.getSize() + 100
+        }
+
+        fun staticUnqualified(xs: List<Int>): Int {
+            return lenOf<Int>(xs)
+        }
+
+        fun staticInExpressions(xs: List<Int>): Int {
+            var a = 10 + lenOf<Int>(xs)
+            var b = lenOf<Int>(xs) * 2
+            var c = (lenOf<Int>(xs) + 5)
+            return a + b + c
+        }
+
+        fun instanceUnqualified(xs: List<Int>): Int {
+            return count<Int>(xs) + lenOf<Int>(xs)
+        }
+
+        fun instanceRightOperand(xs: List<Int>): Int {
+            var r = 1 + count<Int>(xs)
+            return r
+        }
+
+        fun asStatement(xs: List<Int>) {
+            addTo<Int>(xs, 7).add(8)
+        }
+
+        fun asArgument(xs: List<Int>): String {
+            return lenOf<Int>(xs).toString() + "/" + count<Int>(xs).toString()
+        }
+    }
+
+    class GcPlain {
+        import Am.Lang
+        import Am.Collections
+
+        static fun lenOf<T>(xs: List<T>): Int {
+            return xs.getSize()
+        }
+
+        static fun pick(): Int {
+            return 7
+        }
+
+        fun count<T>(xs: List<T>): Int {
+            return xs.getSize() + 100
+        }
+
+        static fun staticCalls(xs: List<Int>): Int {
+            var a = 10 + lenOf<Int>(xs)
+            var b = 10 + pick()
+            var c = lenOf<Int>(xs) + pick()
+            return a + b + c
+        }
+
+        fun instanceCalls(xs: List<Int>): Int {
+            return 1 + count<Int>(xs) + lenOf<Int>(xs)
+        }
+    }
+
+    class GenericCallSyntaxTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        test staticCallOnGenericClassAsStatement() {
+            var l = List<Int>.newList<Int>()
+            List<Int>.newList<Int>().getSize().toString()
+            GcBox<String>.addTo<Int>(l, 1).add(2)
+            Assert.assertEquals(2, l.getSize())
+            GcBox<String>.lenOf<Int>(l).toString()
+            GcBox<Int>.addTo<Int>(l, 3)
+            Assert.assertEquals(3, l.getSize())
+            Assert.assertEquals(3, l.get(2))
+        }
+
+        test chainOnStaticGenericResult() {
+            var n = List<Int>.newList<Int>().getSize()
+            Assert.assertEquals(0, n)
+            var s = List<String>.newList<String>().getSize().toString()
+            Assert.assertEquals("0", s)
+        }
+
+        test unqualifiedInGenericClass() {
+            var l = new List<Int>()
+            l.add(1)
+            l.add(2)
+            var b = new GcBox<String>("s")
+            Assert.assertEquals(2, b.staticUnqualified(l))
+            // (10 + 2) + (2 * 2) + (2 + 5)
+            Assert.assertEquals(23, b.staticInExpressions(l))
+            Assert.assertEquals(104, b.instanceUnqualified(l))
+            Assert.assertEquals(103, b.instanceRightOperand(l))
+            Assert.assertEquals("2/102", b.asArgument(l))
+            b.asStatement(l)
+            Assert.assertEquals(4, l.getSize())
+            Assert.assertEquals(8, l.get(3))
+        }
+
+        test unqualifiedInPlainClass() {
+            var l = new List<Int>()
+            l.add(1)
+            // (10 + 1) + (10 + 7) + (1 + 7)
+            Assert.assertEquals(36, GcPlain.staticCalls(l))
+            Assert.assertEquals(103, new GcPlain().instanceCalls(l))
+        }
+
+        test comparisonsNextToNames() {
+            var a = 1
+            var b = 2
+            var c = 3
+            var t1 = a<b
+            Assert.assertTrue(t1)
+            var t2 = a < b && c > (a)
+            Assert.assertTrue(t2)
+            var t3 = a<b && c>(a)
+            Assert.assertTrue(t3)
+            var t4 = (a<b) == (b>a)
+            Assert.assertTrue(t4)
+            var t5 = b<a || c<a
+            Assert.assertFalse(t5)
+            var sh = a<<2
+            Assert.assertEquals(4, sh)
+            var cnt = 0
+            for (i = 0 until 5) {
+                if (i<c) { cnt++ }
+            }
+            Assert.assertEquals(3, cnt)
+            Assert.assertTrue(a<b)
+        }
+    }
+}
