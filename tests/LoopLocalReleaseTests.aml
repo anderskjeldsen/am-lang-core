@@ -1,0 +1,351 @@
+namespace Tests {
+
+    class LlrlBox {
+        import Am.Lang
+        var n: Int = 0
+        var tag: String = "t"
+
+        fun fresh(): LlrlBox {
+            return new LlrlBox()
+        }
+
+        fun text(): String {
+            return "v" + this.tag
+        }
+    }
+
+    // Redmine #582: an object local declared in a loop body is released at
+    // the end of every iteration and when break or continue leaves it, so
+    // Arc.getAllocationCount() right after the loop matches the count before
+    // it. v2 hoisted an unlabeled for/loop/each body's locals to the
+    // enclosing block, so the last iteration's object (or the one a break
+    // left) lived to the end of the function; in a suspend function, to the
+    // end of the function too. v1 already released them every iteration.
+    class LoopLocalReleaseTests {
+        import Am.Lang
+        import Am.Lang.Diagnostics
+        import Am.Collections
+        import Am.Tests
+
+        var delta: Long = 0
+        var seen: Int = 0
+
+        test forLocal() {
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 3) {
+                var b = new LlrlBox()
+                b.n = i
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test forToLocalAndTemps() {
+            var keep = new LlrlBox()
+            var before = Arc.getAllocationCount()
+            for (i = 1 to 3) {
+                var b = keep.fresh()
+                var s = b.text()
+                b.n = s.length() + i
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test forBreak() {
+            var before = Arc.getAllocationCount()
+            var last = 0
+            for (i = 0 until 10) {
+                var b = new LlrlBox()
+                b.n = i
+                last = b.n
+                if (i == 2) {
+                    break
+                }
+            }
+            Assert.assertEquals(2, last)
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test forBreakAfterLocalInIfBlock() {
+            var before = Arc.getAllocationCount()
+            var hits = 0
+            for (i = 0 until 10) {
+                var b = new LlrlBox()
+                if (i == 3) {
+                    var c = new LlrlBox()
+                    hits = hits + c.n + 1
+                    break
+                }
+            }
+            Assert.assertEquals(1, hits)
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test forContinue() {
+            var before = Arc.getAllocationCount()
+            var odd = 0
+            for (i = 0 until 6) {
+                var b = new LlrlBox()
+                if (i % 2 == 0) {
+                    continue
+                }
+                var c = new LlrlBox()
+                odd = odd + 1 + c.n
+            }
+            Assert.assertEquals(3, odd)
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test whileBreakAndContinue() {
+            var before = Arc.getAllocationCount()
+            var k = 0
+            var sum = 0
+            while (k < 100) {
+                var b = new LlrlBox()
+                b.n = k
+                k++
+                if (b.n == 1) {
+                    continue
+                }
+                if (b.n == 4) {
+                    break
+                }
+                sum = sum + b.n
+            }
+            Assert.assertEquals(0 + 2 + 3, sum)
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test loopBreak() {
+            var before = Arc.getAllocationCount()
+            var k = 0
+            loop {
+                var b = new LlrlBox()
+                k++
+                if (k == 3) {
+                    break
+                }
+            }
+            Assert.assertEquals(3, k)
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test eachListLocal() {
+            var l = new List<LlrlBox>()
+            l.add(new LlrlBox())
+            l.add(new LlrlBox())
+            l.add(new LlrlBox())
+            var before = Arc.getAllocationCount()
+            each (x in l) {
+                var y = x.fresh()
+                y.n = x.n
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test eachArrayLocalWithBreak() {
+            var a = new Int[4]
+            var before = Arc.getAllocationCount()
+            var visits = 0
+            each (v in a) {
+                var b = new LlrlBox()
+                visits++
+                if (visits == 2) {
+                    break
+                }
+            }
+            Assert.assertEquals(2, visits)
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        // The loop does not keep an element alive after it: clearing the list
+        // frees as many objects as clearing one the loop never walked.
+        test eachKeepsNoElement() {
+            var walked = new List<LlrlBox>()
+            var plain = new List<LlrlBox>()
+            for (i = 0 until 3) {
+                walked.add(new LlrlBox())
+                plain.add(new LlrlBox())
+            }
+            var c0 = Arc.getAllocationCount()
+            plain.clear()
+            var freedPlain = c0 - Arc.getAllocationCount()
+            each (x in walked) {
+                var y = x.fresh()
+                y.n = 1
+            }
+            var c1 = Arc.getAllocationCount()
+            walked.clear()
+            Assert.assertEquals(freedPlain, c1 - Arc.getAllocationCount())
+        }
+
+        test nestedLoops() {
+            var before = Arc.getAllocationCount()
+            var cells = 0
+            for (i = 0 until 3) {
+                var row = new LlrlBox()
+                for (j = 0 until 4) {
+                    var cell = row.fresh()
+                    if (j == 1) {
+                        continue
+                    }
+                    if (j == 3) {
+                        break
+                    }
+                    cells = cells + 1 + cell.n
+                }
+                var k = 0
+                while (k < 2) {
+                    var w = new LlrlBox()
+                    k++
+                }
+            }
+            Assert.assertEquals(6, cells)
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test labeledBreakAndContinue() {
+            var before = Arc.getAllocationCount()
+            var found = -1
+            outer@ for (i = 0 until 5) {
+                var a = new LlrlBox()
+                for (j = 0 until 5) {
+                    var b = new LlrlBox()
+                    if (j > i) {
+                        continue@outer
+                    }
+                    if (i * 10 + j == 32) {
+                        found = i * 10 + j
+                        break@outer
+                    }
+                }
+            }
+            Assert.assertEquals(32, found)
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        // An object local that escapes the loop body stays alive.
+        test escapedLocalStaysAlive() {
+            var kept = new List<LlrlBox>()
+            for (i = 0 until 3) {
+                var b = new LlrlBox()
+                b.n = i * 10
+                kept.add(b)
+            }
+            var last: LlrlBox? = null
+            for (i = 0 until 2) {
+                var c = new LlrlBox()
+                c.n = 7
+                last = c
+            }
+            Assert.assertEquals(3, kept.getSize())
+            Assert.assertEquals(20, kept.get(2).n)
+            Assert.assertEquals(7, last!!.n)
+        }
+
+        // In a suspend function the body's locals are function-level; they
+        // are released after the loop as well.
+        suspend fun suspendLoops() {
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 3) {
+                var b = new LlrlBox()
+                b.n = i
+                if (i == 1) {
+                    continue
+                }
+                this.seen = this.seen + b.n
+            }
+            var k = 0
+            while (k < 10) {
+                var w = new LlrlBox()
+                k++
+                if (k == 2) {
+                    break
+                }
+            }
+            var l = new List<LlrlBox>()
+            l.add(new LlrlBox())
+            var mid = Arc.getAllocationCount()
+            each (x in l) {
+                var y = x.fresh()
+                this.seen = this.seen + y.n
+            }
+            this.delta = (Arc.getAllocationCount() - mid) + (mid - before - 3)
+        }
+
+        test suspendFunctionLoops() {
+            var t = new LoopLocalReleaseTests()
+            t.suspendLoops()
+            Assert.assertEquals(2, t.seen)
+            Assert.assertEquals(0L, t.delta)
+        }
+
+        // A parameter assigned in a loop owns its value; the loop must not
+        // release it.
+        static fun reassignInLoop(p: LlrlBox): Int {
+            var q = p
+            for (i = 0 until 3) {
+                p = q.fresh()
+                p.n = i + 1
+            }
+            var k = 0
+            while (k < 2) {
+                p = p.fresh()
+                p.n = 10 + k
+                k++
+            }
+            return p.n
+        }
+
+        test paramReassignedInLoopStaysAlive() {
+            var b = new LlrlBox()
+            Assert.assertEquals(11, LoopLocalReleaseTests.reassignInLoop(b))
+            var before = Arc.getAllocationCount()
+            Assert.assertEquals(11, LoopLocalReleaseTests.reassignInLoop(b))
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        static fun makeList(n: Int): List<LlrlBox> {
+            var l = new List<LlrlBox>()
+            for (i = 0 until n) {
+                var b = new LlrlBox()
+                b.n = i
+                l.add(b)
+            }
+            return l
+        }
+
+        // The iterable is a call result: the list and its elements are gone
+        // after the loop.
+        test eachOverCallResult() {
+            var before = Arc.getAllocationCount()
+            var sum = 0
+            each (x in LoopLocalReleaseTests.makeList(4)) {
+                sum = sum + x.n
+            }
+            Assert.assertEquals(6, sum)
+            Assert.assertEquals(before, Arc.getAllocationCount())
+            for (i = 0 until LoopLocalReleaseTests.makeList(2).getSize()) {
+                sum++
+            }
+            Assert.assertEquals(8, sum)
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        suspend fun suspendParam(p: LlrlBox) {
+            var q = p
+            for (i = 0 until 2) {
+                p = q.fresh()
+                p.n = 5 + i
+            }
+            this.seen = p.n
+        }
+
+        test suspendParamReassignedInLoop() {
+            var t = new LoopLocalReleaseTests()
+            var b = new LlrlBox()
+            t.suspendParam(b)
+            Assert.assertEquals(6, t.seen)
+            Assert.assertEquals(0, b.n)
+        }
+    }
+}
