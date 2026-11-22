@@ -1,0 +1,167 @@
+namespace Tests {
+
+    class LlrBox {
+        import Am.Lang
+        var n: Int = 7
+    }
+
+    // Redmine #574: a local holding a lambda (`var f = (x: Int?) => show(x)`, no
+    // declared function type) is called as `f(q)`: its result has the type the
+    // lambda's body gives it, whether the call is a statement, an expression or the
+    // head of a chain. v2 read the result of such a call as an int, or dropped the
+    // call from `f(q).println()` and printed the local itself.
+    class LambdaLocalResultTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun showS(x: Int?): String {
+            if (x == null) {
+                return "null"
+            }
+            return "v" + x.toString()
+        }
+
+        static fun isBig(x: Int?): Bool {
+            if (x == null) {
+                return false
+            }
+            return x > 3
+        }
+
+        static fun mkBox(x: Int?): LlrBox {
+            var b = new LlrBox()
+            if (x != null) {
+                b.n = x
+            }
+            return b
+        }
+
+        static fun twice(x: Int?): Int {
+            if (x == null) {
+                return 0
+            }
+            return x * 2
+        }
+
+        static fun shout(s: String): String {
+            return s + "!"
+        }
+
+        test stringResultExpressionBody() {
+            var q: Int? = 4
+            var f = (x: Int?) => LambdaLocalResultTests.showS(x)
+            var s = f(q)
+            Assert.assertEquals("v4", s)
+            Assert.assertEquals("v4!", LambdaLocalResultTests.shout(f(q)))
+            Assert.assertEquals("v4+", f(q) + "+")
+            Assert.assertEquals("null", f(null))
+            Assert.assertEquals(2, f(q).getLength())
+        }
+
+        test stringResultBlockBody() {
+            var q: Int? = 4
+            var f = (x: Int?) => {
+                var t = LambdaLocalResultTests.showS(x)
+                return t + "?"
+            }
+            var s = f(q)
+            Assert.assertEquals("v4?", s)
+            Assert.assertEquals("v4?", "" + f(q))
+            Assert.assertEquals("v4?!", f(q) + "!")
+        }
+
+        test boolResult() {
+            var q: Int? = 4
+            var big = (x: Int?) => LambdaLocalResultTests.isBig(x)
+            var blk = (x: Int?) => {
+                return x == null
+            }
+            Assert.assertTrue(big(q))
+            Assert.assertFalse(big(2))
+            var r = big(q)
+            Assert.assertTrue(r)
+            Assert.assertFalse(blk(q))
+            Assert.assertTrue(blk(null))
+            var hit = false
+            if (big(q)) {
+                hit = true
+            }
+            Assert.assertTrue(hit)
+        }
+
+        test objectResult() {
+            var q: Int? = 4
+            var f = (x: Int?) => LambdaLocalResultTests.mkBox(x)
+            var g = (x: Int?) => {
+                return LambdaLocalResultTests.mkBox(x)
+            }
+            var b = f(q)
+            Assert.assertEquals(4, b.n)
+            Assert.assertEquals(4, f(q).n)
+            Assert.assertEquals(7, g(null).n)
+            var gb = g(q)
+            Assert.assertEquals(4, gb.n)
+        }
+
+        test intResult() {
+            var q: Int? = 4
+            var f = (x: Int?) => LambdaLocalResultTests.twice(x)
+            var g = (x: Int?) => {
+                return LambdaLocalResultTests.twice(x) + 1
+            }
+            Assert.assertEquals(8, f(q))
+            Assert.assertEquals(9, g(q))
+            Assert.assertEquals("8", f(q).toString())
+            Assert.assertEquals(0, f(null))
+        }
+
+        test resultCalledAsStatement() {
+            var q: Int? = 4
+            var seen = new List<String>()
+            var f = (x: Int?) => LambdaLocalResultTests.showS(x)
+            var note = (x: Int?) => {
+                seen.add(LambdaLocalResultTests.showS(x))
+                return LambdaLocalResultTests.showS(x)
+            }
+            f(q)
+            note(q)
+            note(null)
+            Assert.assertEquals(2, seen.getSize())
+            Assert.assertEquals("v4", seen.get(0))
+            Assert.assertEquals("null", seen.get(1))
+        }
+
+        test resultAsChainHeadStatement() {
+            var q: Int? = 4
+            var sb = new StringBuilder()
+            var f = (x: Int?) => LambdaLocalResultTests.showS(x)
+            // A method called on the result, as a statement: the call is made.
+            var calls = new List<String>()
+            var bump = (x: Int?) => {
+                calls.add("c")
+                return LambdaLocalResultTests.showS(x)
+            }
+            bump(q).toString()
+            bump(q).getLength()
+            Assert.assertEquals(2, calls.getSize())
+            sb.add(f(q).toUpperCase())
+            Assert.assertEquals("V4", sb.toString())
+        }
+
+        test nestedLambdaLocal() {
+            var outer = (x: Int?) => {
+                var inner = (y: Int?) => LambdaLocalResultTests.showS(y)
+                return inner(x) + "."
+            }
+            Assert.assertEquals("v4.", outer(4))
+        }
+
+        test twoParameters() {
+            var f = (a: String, x: Int?) => a + LambdaLocalResultTests.showS(x)
+            Assert.assertEquals("kv4", f("k", 4))
+            var s = f("j", null)
+            Assert.assertEquals("jnull", s)
+        }
+    }
+}
