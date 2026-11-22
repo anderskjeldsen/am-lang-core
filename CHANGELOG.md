@@ -11,6 +11,8 @@ Changes since 0.15.0. Needs amlc 0.16.0.
 
 ### Added
 
+- **NullableCastAndNonNullAssertTests** (2026-11-22, Redmine #552, #524). `!!` on non-null Int, Bool, enum, String locals and fields, `!!` still throwing on null, and `x as T?` on `Int?`/`Color?` locals and fields (same type, `as Long?`, `as Int?`, `as Color?`, null and non-null, back to non-null, `a as Int?` from an Any), as a program under v1 and v2.
+
 - **AnyObjectEqualsTests and tests-v1-only AnyObjectEqualsV1Tests** (2026-11-22, Redmine #562). An Any holding Int, Long, Bool, Double, an enum, a String, an object or null compared with a String, an object, a primitive, null and another Any, `==` and `!=`, as a program: a boxed primitive is not equal to an object and does not crash. v1 and v2 run the chain-result and object-on-the-left cases; a primitive or enum on the left of an Any call result and Any locals compared with enums do not compile in v2 yet (V1Tests).
 
 - **GenericFunctionArrayParamTests** (2026-11-22, Redmine #547). Generic functions with a `T[]` or `List<T>` parameter as a program under v1 and v2: `countOf`, `firstOf`, a `T[]` result and a lambda over the elements, with Int, Long, String, an enum and a class, type arguments inferred and explicit, and an instance function.

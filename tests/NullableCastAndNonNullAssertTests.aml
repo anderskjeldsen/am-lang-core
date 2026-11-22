@@ -1,0 +1,183 @@
+namespace Tests {
+
+    // Redmine #552 and #524 (v2 parity with v1). `x!!` on a value that is not
+    // nullable (an Int, Bool or enum local or field) is a no-op: it used to be
+    // compared with NULL. `x as T?` on a nullable primitive or enum (`Int?`,
+    // `Color?`) passes the box through (null stays null), and converts it to
+    // another nullable primitive or enum type the way v1 does.
+
+    enum NcColor {
+        import Am.Lang
+
+        red = 1
+        green = 2
+    }
+
+    class NcHolder {
+        import Am.Lang
+
+        var n: Int = 4
+        var flag: Bool = true
+        var color: NcColor = NcColor.green
+        var oi: Int? = 8
+        var oc: NcColor? = NcColor.green
+        var on: Int? = null
+
+        fun fieldCasts(): Int {
+            var a = this.oi as Int?
+            var b = this.oc as NcColor?
+            var c = this.on as Int?
+            var r = a!!
+            if (b!! == NcColor.green) { r = r + 100 }
+            if (c == null) { r = r + 1000 }
+            return r
+        }
+
+        fun plainFields(): Int {
+            var r = this.n!! + 1
+            if (this.flag!!) { r = r + 10 }
+            if (this.color!! == NcColor.green) { r = r + 100 }
+            return r
+        }
+    }
+
+    class NullableCastAndNonNullAssertTests {
+        import Am.Lang
+        import Am.Tests
+
+        test bangOnNonNullInt() {
+            var b = 5
+            var c = b!! + 1
+            Assert.assertEquals(6, c)
+            var d = b!!
+            Assert.assertEquals(5, d)
+        }
+
+        test bangOnNonNullBool() {
+            var b = true
+            var c = b!!
+            Assert.assertTrue(c)
+            var n = 0
+            if (b!!) { n = 1 }
+            Assert.assertEquals(1, n)
+            var f = false
+            Assert.assertFalse(f!!)
+        }
+
+        test bangOnNonNullEnum() {
+            var c = NcColor.green
+            var d = c!!
+            Assert.assertTrue(d == NcColor.green)
+            Assert.assertTrue(c!! == NcColor.green)
+        }
+
+        test bangOnNonNullFields() {
+            var h = new NcHolder()
+            var n = h.n!!
+            Assert.assertEquals(4, n)
+            Assert.assertTrue(h.flag!!)
+            Assert.assertTrue(h.color!! == NcColor.green)
+            Assert.assertEquals(115, h.plainFields())
+        }
+
+        test bangOnNonNullString() {
+            var s = "abc"
+            Assert.assertEquals("abc", s!!)
+        }
+
+        test bangStillThrowsOnNull() {
+            var o: Int? = null
+            var threw = false
+            try {
+                var x = o!!
+                Assert.assertEquals(0, x)
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+            var s: String? = null
+            var threw2 = false
+            try {
+                var t = s!!
+                Assert.assertEquals("", t)
+            } catch (e: Exception) {
+                threw2 = true
+            }
+            Assert.assertTrue(threw2)
+        }
+
+        test enumCastSameType() {
+            var c: NcColor? = NcColor.red
+            var d = c as NcColor?
+            Assert.assertFalse(d == null)
+            Assert.assertTrue(d!! == NcColor.red)
+            var n: NcColor? = null
+            var m = n as NcColor?
+            Assert.assertTrue(m == null)
+        }
+
+        test intCastSameType() {
+            var i: Int? = 7
+            var j = i as Int?
+            Assert.assertFalse(j == null)
+            Assert.assertEquals(7, j!!)
+            var k: Int? = null
+            var l = k as Int?
+            Assert.assertTrue(l == null)
+        }
+
+        test castToAnotherNullableType() {
+            var i: Int? = 7
+            var n: Int? = null
+            var a = i as Long?
+            Assert.assertFalse(a == null)
+            Assert.assertEquals(7L, a!!)
+            var b = n as Long?
+            Assert.assertTrue(b == null)
+            var c: NcColor? = NcColor.green
+            var d = c as Int?
+            Assert.assertEquals(2, d!!)
+            var cn: NcColor? = null
+            var e = cn as Int?
+            Assert.assertTrue(e == null)
+            var f = i as NcColor?
+            Assert.assertTrue(f!! == NcColor.red == false)
+        }
+
+        test roundTripBackToNonNull() {
+            var c: NcColor? = NcColor.green
+            var d = c as NcColor?
+            var back = d as NcColor
+            Assert.assertTrue(back == NcColor.green)
+            var i: Int? = 9
+            var j = i as Int?
+            var k = j as Int
+            Assert.assertEquals(9, k)
+            var m = j!!
+            Assert.assertEquals(9, m)
+        }
+
+        test castFromAnyStillWorks() {
+            var a: Any = 3
+            var m = a as Int?
+            Assert.assertEquals(3, m!!)
+            var n: Any = null
+            var o = n as Int?
+            Assert.assertTrue(o == null)
+        }
+
+        test castOnFields() {
+            var h = new NcHolder()
+            Assert.assertEquals(1108, h.fieldCasts())
+        }
+
+        test annotatedTarget() {
+            var i: Int? = 5
+            var j: Int? = i as Int?
+            Assert.assertEquals(5, j!!)
+            var c: NcColor? = NcColor.red
+            var d: NcColor? = c as NcColor?
+            Assert.assertTrue(d!! == NcColor.red)
+        }
+    }
+}
