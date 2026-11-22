@@ -1,0 +1,163 @@
+namespace Tests {
+
+    // Redmine #600: an assignment statement's own new temp (`b.kid = new
+    // AtBox()`) was released only at the end of its block, so in straight-line
+    // code each replaced value lived to the function's exit. The counts below
+    // are read right after the statements. The stored value keeps its own
+    // reference (the property, static, element or local owns it).
+
+    class AtBox {
+        import Am.Lang
+        import Am.Lang.Diagnostics
+        var tag: String = "t"
+        var kid: AtBox? = null
+        static var shared: AtBox? = null
+
+        static fun made(t: String): AtBox {
+            var b = new AtBox()
+            b.tag = t
+            return b
+        }
+
+        fun me(): AtBox {
+            return this
+        }
+
+        // Each replaced kid dies at once: the count grows by one for the
+        // current kid only.
+        fun propertyStraight(): Long {
+            var before = Arc.getAllocationCount()
+            this.kid = new AtBox()
+            this.kid = new AtBox()
+            this.kid = new AtBox()
+            return Arc.getAllocationCount() - before
+        }
+    }
+
+    class AssignTempTests {
+        import Am.Lang
+        import Am.Lang.Diagnostics
+        import Am.Collections
+        import Am.Tests
+
+        test propertyOfLocal() {
+            var b = new AtBox()
+            var before = Arc.getAllocationCount()
+            b.kid = new AtBox()
+            b.kid = new AtBox()
+            b.kid = new AtBox()
+            Assert.assertEquals(1L, Arc.getAllocationCount() - before)
+            Assert.assertEquals("t", b.kid!!.tag)
+        }
+
+        test propertyOfThis() {
+            var b = new AtBox()
+            Assert.assertEquals(1L, b.propertyStraight())
+            Assert.assertEquals("t", b.kid!!.tag)
+        }
+
+        test propertyFromCall() {
+            var b = new AtBox()
+            var before = Arc.getAllocationCount()
+            b.kid = AtBox.made("one")
+            b.kid = AtBox.made("two")
+            b.kid = AtBox.made("three")
+            Assert.assertEquals(1L, Arc.getAllocationCount() - before)
+            Assert.assertEquals("three", b.kid!!.tag)
+        }
+
+        test propertyChainedReceiver() {
+            var b = new AtBox()
+            b.kid = new AtBox()
+            var before = Arc.getAllocationCount()
+            b.kid!!.kid = new AtBox()
+            b.kid!!.kid = new AtBox()
+            b.me().kid!!.kid = new AtBox()
+            Assert.assertEquals(1L, Arc.getAllocationCount() - before)
+            Assert.assertEquals("t", b.kid!!.kid!!.tag)
+        }
+
+        test staticProperty() {
+            AtBox.shared = null
+            var before = Arc.getAllocationCount()
+            AtBox.shared = new AtBox()
+            AtBox.shared = new AtBox()
+            AtBox.shared = new AtBox()
+            Assert.assertEquals(1L, Arc.getAllocationCount() - before)
+            Assert.assertEquals("t", AtBox.shared!!.tag)
+            AtBox.shared = null
+            Assert.assertEquals(0L, Arc.getAllocationCount() - before)
+        }
+
+        test arrayElement() {
+            var arr = new AtBox[2]
+            var before = Arc.getAllocationCount()
+            arr[0] = new AtBox()
+            arr[0] = new AtBox()
+            arr[1] = new AtBox()
+            arr[1] = new AtBox()
+            Assert.assertEquals(2L, Arc.getAllocationCount() - before)
+            Assert.assertEquals("t", arr[0].tag)
+            Assert.assertEquals("t", arr[1].tag)
+        }
+
+        test localReassignment() {
+            var x = new AtBox()
+            var before = Arc.getAllocationCount()
+            x = new AtBox()
+            x = new AtBox()
+            x = new AtBox()
+            Assert.assertEquals(0L, Arc.getAllocationCount() - before)
+            Assert.assertEquals("t", x.tag)
+        }
+
+        test nullableLocalReassignment() {
+            var x: AtBox? = null
+            var before = Arc.getAllocationCount()
+            x = new AtBox()
+            x = new AtBox()
+            x = AtBox.made("m")
+            Assert.assertEquals(1L, Arc.getAllocationCount() - before)
+            Assert.assertEquals("m", x!!.tag)
+        }
+
+        test stringsAndTemplates() {
+            var b = new AtBox()
+            var n = 4
+            var before = Arc.getAllocationCount()
+            b.tag = "a" + n.toString()
+            b.tag = "b" + n.toString()
+            b.tag = "c${n}"
+            Assert.assertEquals("c4", b.tag)
+            Assert.assertEquals(1L, Arc.getAllocationCount() - before)
+        }
+
+        test valueSurvivesFunctionExit() {
+            var b = new AtBox()
+            AssignTempTests.fill(b)
+            Assert.assertEquals("filled", b.kid!!.tag)
+            Assert.assertEquals("filled", AtBox.shared!!.tag)
+            AtBox.shared = null
+        }
+
+        static fun fill(b: AtBox) {
+            b.kid = new AtBox()
+            b.kid!!.tag = "filled"
+            AtBox.shared = b.kid
+            b.kid = AtBox.made("x")
+            b.kid = b.me().kid
+            b.kid = AtBox.shared
+        }
+
+        test sameObjectStoredTwice() {
+            var b = new AtBox()
+            var k = new AtBox()
+            k.tag = "k"
+            b.kid = k
+            b.kid = k
+            b.kid = k.me()
+            Assert.assertEquals("k", b.kid!!.tag)
+            Assert.assertEquals("k", k.tag)
+        }
+    }
+}
