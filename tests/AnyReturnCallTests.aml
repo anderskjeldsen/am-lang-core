@@ -1,0 +1,147 @@
+namespace Tests {
+
+    // Redmine #548 (am-json under v2). Two constructs:
+    // - `fun f(): Any { return v.asInteger() }`: a primitive CALL or chain
+    //   result returned through an Any return type. v2 boxed it by the
+    //   declared Any type, `.object_value = <int>`, which gcc rejected (and
+    //   would have been an int read as a pointer).
+    // - `fun cast<T>(a: Any): T { return a as T }` in one class, instantiated
+    //   with a class that class never names (ArTarget): the instantiation
+    //   names ArTarget's aclass, and v2 didn't include its header.
+
+    class ArTarget(var id: Int) {
+        import Am.Lang
+    }
+
+    class ArSub(id: Int, var extra: Int) : ArTarget(id) {
+        import Am.Lang
+    }
+
+    class ArSource {
+        import Am.Lang
+        var n: Int = 11
+        var big: Long = 1234567890123L
+        var maybe: Int? = null
+        fun count(): Int { return this.n + 1 }
+        fun maybeOf(present: Bool): Int? {
+            if (present) { return 5 }
+            return null
+        }
+    }
+
+    // Names no Ar* class but ArSource: ArTarget reaches this file only through
+    // cast<ArTarget>.
+    class ArBoxer {
+        import Am.Lang
+        import Am.Collections
+
+        static fun i(): Int { return 42 }
+        static fun l(): Long { return 7000000000L }
+        static fun b(): Bool { return true }
+        static fun d(): Double { return 2.5 }
+        static fun f(): Float { return 1.5F }
+        static fun s(): Short { return -3S }
+        static fun us(): UShort { return 60000US }
+        static fun by(): Byte { return -4B }
+        static fun ub(): UByte { return 250UB }
+        static fun ui(): UInt { return 4000000000UI }
+        static fun ul(): ULong { return 9000000000UL }
+
+        static fun callInt(): Any { return ArBoxer.i() }
+        static fun callLong(): Any { return ArBoxer.l() }
+        static fun callBool(): Any { return ArBoxer.b() }
+        static fun callDouble(): Any { return ArBoxer.d() }
+        static fun callFloat(): Any { return ArBoxer.f() }
+        static fun callShort(): Any { return ArBoxer.s() }
+        static fun callUShort(): Any { return ArBoxer.us() }
+        static fun callByte(): Any { return ArBoxer.by() }
+        static fun callUByte(): Any { return ArBoxer.ub() }
+        static fun callUInt(): Any { return ArBoxer.ui() }
+        static fun callULong(): Any { return ArBoxer.ul() }
+
+        static fun method(src: ArSource): Any { return src.count() }
+        static fun field(src: ArSource): Any { return src.n }
+        static fun longField(src: ArSource): Any { return src.big }
+        static fun nullableCall(src: ArSource, present: Bool): Any { return src.maybeOf(present) }
+        static fun nullableField(src: ArSource): Any { return src.maybe }
+        static fun stringLength(): Any { return "abcd".getLength() }
+        static fun listGet(): Any {
+            var list = new List<Int>()
+            list.add(13)
+            list.add(14)
+            return list.get(1)
+        }
+        static fun stringCall(): Any { return "x".toUpperCase() }
+        static fun objectCall(src: ArSource): Any { return src }
+
+        static fun cast<T>(a: Any): T {
+            return a as T
+        }
+
+        static fun isA<T>(a: Any): Bool {
+            return a is T
+        }
+    }
+
+    class AnyReturnCallTests {
+        import Am.Lang
+        import Am.Tests
+
+        test primitiveCallResultsReturnedAsAnyKeepTheirType() {
+            Assert.assertEquals(42, ArBoxer.callInt() as Int)
+            Assert.assertTrue(ArBoxer.callInt() is Int)
+            Assert.assertEquals(7000000000L, ArBoxer.callLong() as Long)
+            Assert.assertTrue(ArBoxer.callLong() is Long)
+            Assert.assertTrue(ArBoxer.callBool() as Bool)
+            Assert.assertTrue(ArBoxer.callBool() is Bool)
+            Assert.assertTrue((ArBoxer.callDouble() as Double) == 2.5)
+            Assert.assertTrue((ArBoxer.callFloat() as Float) == 1.5F)
+            Assert.assertTrue((ArBoxer.callShort() as Short) == -3S)
+            Assert.assertTrue((ArBoxer.callUShort() as UShort) == 60000US)
+            Assert.assertTrue((ArBoxer.callByte() as Byte) == -4B)
+            Assert.assertTrue((ArBoxer.callUByte() as UByte) == 250UB)
+            Assert.assertTrue((ArBoxer.callUInt() as UInt) == 4000000000UI)
+            Assert.assertTrue((ArBoxer.callULong() as ULong) == 9000000000UL)
+            Assert.assertEquals("Am.Lang.Double", ArBoxer.callDouble().getClassRef().getClassName())
+            Assert.assertEquals("Am.Lang.UByte", ArBoxer.callUByte().getClassRef().getClassName())
+        }
+
+        test chainResultsReturnedAsAnyKeepTheirType() {
+            var src = new ArSource()
+            Assert.assertEquals(12, ArBoxer.method(src) as Int)
+            Assert.assertEquals(11, ArBoxer.field(src) as Int)
+            Assert.assertEquals(1234567890123L, ArBoxer.longField(src) as Long)
+            Assert.assertEquals(4, ArBoxer.stringLength() as Int)
+            Assert.assertEquals(14, ArBoxer.listGet() as Int)
+            Assert.assertEquals("X", ArBoxer.stringCall() as String)
+            var back = ArBoxer.objectCall(src) as ArSource
+            Assert.assertEquals(11, back.n)
+        }
+
+        test nullableResultsReturnedAsAnyKeepTheirNull() {
+            var src = new ArSource()
+            Assert.assertEquals(5, ArBoxer.nullableCall(src, true) as Int)
+            Assert.assertTrue(ArBoxer.nullableCall(src, false) == null)
+            Assert.assertTrue(ArBoxer.nullableField(src) == null)
+            src.maybe = 8
+            Assert.assertEquals(8, ArBoxer.nullableField(src) as Int)
+        }
+
+        test genericFunctionInstantiatedWithAClassItsOwnerNeverNames() {
+            var x: Any = new ArTarget(9)
+            var t = ArBoxer.cast<ArTarget>(x)
+            Assert.assertEquals(9, t.id)
+            var sub: Any = new ArSub(3, 4)
+            Assert.assertEquals(3, ArBoxer.cast<ArTarget>(sub).id)
+            Assert.assertTrue(ArBoxer.isA<ArTarget>(sub))
+            Assert.assertTrue(!ArBoxer.isA<ArSub>(x))
+            var threw = false
+            try {
+                ArBoxer.cast<ArSub>(x)
+            } catch (ex: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+    }
+}
