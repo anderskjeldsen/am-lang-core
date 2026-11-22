@@ -1,0 +1,175 @@
+namespace Tests {
+
+    // Redmine #592 (v2): a safe chain with a primitive or enum result is an
+    // `Int?` / `Color?`, null when ANY link is. v2 put the result in a plain
+    // int slot and emitted the `??` fallback only for a null head, so
+    // `a?.kid?.n ?? -1` gave 0 with `a` set and `kid` null.
+    // Redmine #593 (v2): `a?.f()` as a statement did not parse, and a safe
+    // chain right of a binary operator (`"n=" + a?.me().s`) swallowed the
+    // operator and its left operand into the receiver.
+
+    enum ScrColor {
+        import Am.Lang
+
+        red = 1
+        green = 2
+    }
+
+    class ScrNode {
+        import Am.Lang
+        var n: Int = 7
+        var flag: Bool = true
+        var color: ScrColor = ScrColor.green
+        var name: String = "nd"
+        var kid: ScrNode? = null
+        var hits: Int = 0
+
+        fun me(): ScrNode { return this }
+        fun num(): Int { return this.n }
+        fun touch() { this.hits = this.hits + 1 }
+    }
+
+    class SafeChainResultTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun describe(v: Int?): String {
+            if (v == null) { return "null" }
+            return v!!.toString()
+        }
+
+        static fun kidN(a: ScrNode?): Int? {
+            return a?.kid?.n
+        }
+
+        test intFallbackMiddleNull() {
+            var a: ScrNode? = new ScrNode()
+            var z: ScrNode? = null
+            Assert.assertEquals(-1, a?.kid?.n ?? -1)
+            Assert.assertEquals(-2, z?.kid?.n ?? -2)
+            Assert.assertEquals(7, a?.n ?? -3)
+            Assert.assertEquals(-4, a?.kid?.num() ?? -4)
+            Assert.assertEquals(7, a?.num() ?? -5)
+            a.kid = new ScrNode()
+            a.kid.n = 9
+            Assert.assertEquals(9, a?.kid?.n ?? -1)
+            Assert.assertEquals(9, a?.kid?.num() ?? -1)
+        }
+
+        test boolAndEnumFallback() {
+            var a: ScrNode? = new ScrNode()
+            Assert.assertFalse(a?.kid?.flag ?? false)
+            Assert.assertTrue(a?.flag ?? false)
+            var c = a?.kid?.color ?? ScrColor.red
+            Assert.assertTrue(c == ScrColor.red)
+            var d = a?.color ?? ScrColor.red
+            Assert.assertTrue(d == ScrColor.green)
+        }
+
+        test stringFallback() {
+            var a: ScrNode? = new ScrNode()
+            Assert.assertEquals("dflt", a?.kid?.name ?? "dflt")
+            Assert.assertEquals("nd", a?.name ?? "dflt")
+        }
+
+        test inferredLocalIsNullable() {
+            var a: ScrNode? = new ScrNode()
+            var v = a?.kid?.n
+            Assert.assertTrue(v == null)
+            var w = a?.n
+            Assert.assertTrue(w != null)
+            Assert.assertEquals(7, w!!)
+            var c = a?.kid?.color
+            Assert.assertTrue(c == null)
+            var b = a?.flag
+            Assert.assertTrue(b!!)
+        }
+
+        test assignToNullableLocal() {
+            var a: ScrNode? = new ScrNode()
+            var w: Int? = 5
+            w = a?.kid?.n
+            Assert.assertTrue(w == null)
+            w = a?.n
+            Assert.assertEquals(7, w!!)
+            var c: ScrColor? = ScrColor.red
+            c = a?.kid?.color
+            Assert.assertTrue(c == null)
+        }
+
+        test passAndReturn() {
+            var a: ScrNode? = new ScrNode()
+            Assert.assertEquals("null", SafeChainResultTests.describe(a?.kid?.n))
+            Assert.assertEquals("7", SafeChainResultTests.describe(a?.me().n))
+            Assert.assertTrue(SafeChainResultTests.kidN(a) == null)
+            a.kid = new ScrNode()
+            Assert.assertEquals(7, SafeChainResultTests.kidN(a) ?? -1)
+        }
+
+        test compareWithValue() {
+            var a: ScrNode? = new ScrNode()
+            Assert.assertTrue(a?.flag == true)
+            Assert.assertFalse(a?.kid?.flag == true)
+            Assert.assertTrue(a?.color == ScrColor.green)
+            Assert.assertFalse(a?.kid?.color == ScrColor.green)
+            Assert.assertTrue(a?.n == 7)
+            Assert.assertFalse(a?.n != 7)
+            Assert.assertTrue(a?.me().n == 7)
+            Assert.assertFalse(a?.kid?.n == 7)
+            // `a?.kid?.n != 7` / `a?.kid?.n == null` (a null in the middle)
+            // are false under v1; they are checked as v2 C in ProjectCompileTest.
+            a.kid = new ScrNode()
+            a.kid.n = 300
+            Assert.assertTrue(a?.kid?.n == 300)
+            Assert.assertTrue(a?.kid?.me().n == 300)
+        }
+
+        test bangAfterChain() {
+            var a: ScrNode? = new ScrNode()
+            Assert.assertEquals("7", a?.n!!.toString())
+            Assert.assertEquals(7, a?.me().n!!)
+        }
+
+        test fallbackInLoopResets() {
+            var withKid = new ScrNode()
+            withKid.kid = new ScrNode()
+            var nodes = new Am.Collections.List<ScrNode>()
+            nodes.add(withKid)
+            nodes.add(new ScrNode())
+            nodes.add(withKid)
+            var sum = 0
+            each (nd in nodes) {
+                var k = nd.kid?.n ?? 100
+                sum = sum + k
+            }
+            Assert.assertEquals(114, sum)
+        }
+
+        test safeCallStatement() {
+            var a: ScrNode? = new ScrNode()
+            var z: ScrNode? = null
+            a?.touch()
+            z?.touch()
+            a.kid?.touch()
+            a?.kid?.touch()
+            Assert.assertEquals(1, a.hits)
+            a.kid = new ScrNode()
+            a.kid?.touch()
+            a?.kid?.touch()
+            a?.me().touch()
+            Assert.assertEquals(2, a.hits)
+            Assert.assertEquals(2, a.kid.hits)
+        }
+
+        test stringConcatenation() {
+            var a: ScrNode? = new ScrNode()
+            var z: ScrNode? = null
+            Assert.assertEquals("n=nd", "n=" + a?.me().name)
+            Assert.assertEquals("nd!", a?.me().name + "!")
+            Assert.assertEquals("<nd>", "<" + a?.name + ">")
+            Assert.assertEquals("<none>", "<" + (z?.name ?? "none") + ">")
+            Assert.assertEquals("n=7", "n=" + (a?.n ?? 0).toString())
+            Assert.assertEquals("n=0", "n=" + (a?.kid?.n ?? 0).toString())
+        }
+    }
+}
