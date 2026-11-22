@@ -1,0 +1,106 @@
+namespace Tests {
+
+    // Redmine #585: `arr[f(0)]++` as a STATEMENT (postfix or prefix, ++ or --)
+    // with a call in the index gave "No handler matched token" in v2. The index
+    // is evaluated exactly once.
+
+    class IssHelper {
+        import Am.Lang
+
+        static var calls: Int = 0
+        var icalls: Int = 0
+
+        static fun counted(i: Int): Int {
+            IssHelper.calls++
+            return i
+        }
+
+        fun inst(i: Int): Int {
+            this.icalls++
+            return i
+        }
+    }
+
+    class IndexStepStatementTests {
+        import Am.Lang
+        import Am.Tests
+
+        var sc: Int = 0
+
+        fun pick(i: Int): Int {
+            sc++
+            return i
+        }
+
+        test qualifiedStaticCallIndex() {
+            var arr = new Int[3]
+            IssHelper.calls = 0
+            arr[IssHelper.counted(0)]++
+            Assert.assertEquals(1, arr[0])
+            Assert.assertEquals(1, IssHelper.calls)
+            arr[IssHelper.counted(1)]--
+            Assert.assertEquals(-1, arr[1])
+            Assert.assertEquals(2, IssHelper.calls)
+            ++arr[IssHelper.counted(2)]
+            Assert.assertEquals(1, arr[2])
+            --arr[IssHelper.counted(2)]
+            Assert.assertEquals(0, arr[2])
+            Assert.assertEquals(4, IssHelper.calls)
+        }
+
+        test thisCallIndex() {
+            var arr = new Int[2]
+            sc = 0
+            arr[this.pick(1)]++
+            arr[this.pick(1)]++
+            arr[this.pick(0)]--
+            Assert.assertEquals(2, arr[1])
+            Assert.assertEquals(-1, arr[0])
+            Assert.assertEquals(3, sc)
+            ++arr[this.pick(0)]
+            --arr[this.pick(1)]
+            Assert.assertEquals(0, arr[0])
+            Assert.assertEquals(1, arr[1])
+            Assert.assertEquals(5, sc)
+        }
+
+        test instanceCallIndex() {
+            var h = new IssHelper()
+            var arr = new Int[2]
+            arr[h.inst(1)]++
+            arr[h.inst(1)]++
+            --arr[h.inst(0)]
+            Assert.assertEquals(2, arr[1])
+            Assert.assertEquals(-1, arr[0])
+            Assert.assertEquals(3, h.icalls)
+        }
+
+        test nestedCallAndExpressionIndex() {
+            var arr = new Int[4]
+            IssHelper.calls = 0
+            arr[IssHelper.counted(IssHelper.counted(1) + 1)]++
+            Assert.assertEquals(1, arr[2])
+            Assert.assertEquals(2, IssHelper.calls)
+            arr[IssHelper.counted(1) * 3]++
+            Assert.assertEquals(1, arr[3])
+        }
+
+        test followingStatementIsNotClaimed() {
+            var arr = new Int[2]
+            var i = 0
+            arr[IssHelper.counted(0)] = 5
+            i++
+            Assert.assertEquals(5, arr[0])
+            Assert.assertEquals(1, i)
+        }
+
+        test otherElementTypes() {
+            var longs = new Long[2]
+            longs[IssHelper.counted(1)]++
+            Assert.assertTrue(longs[1] == 1L)
+            var bytes = new Byte[1]
+            bytes[IssHelper.counted(0)]--
+            Assert.assertTrue(bytes[0] == -1)
+        }
+    }
+}
