@@ -1,0 +1,113 @@
+namespace Tests {
+
+    // Redmine #547: a generic function with a parameter `T[]` (or `List<T>`),
+    // called with and without type arguments, is instantiated with T taken
+    // from the argument's element type. v2 left the call to an undeclared
+    // `..._f_countOf_0_T` function-pointer type (gcc error).
+
+    enum GapColor {
+        import Am.Lang
+
+        red = 1
+        green = 2
+    }
+
+    class GapNode(var n: Int) {
+        import Am.Lang
+    }
+
+    class GapHelper {
+        import Am.Lang
+
+        fun last<T>(xs: T[]): T {
+            return xs[xs.length() - 1]
+        }
+    }
+
+    class GenericFunctionArrayParamTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun countOf<T>(xs: T[]): Int {
+            return xs.length()
+        }
+
+        static fun firstOf<T>(xs: T[]): T {
+            return xs[0]
+        }
+
+        static fun same<T>(xs: T[]): T[] {
+            return xs
+        }
+
+        static fun sumBy<T>(xs: T[], f: (x: T) => Int): Int {
+            var total = 0
+            var i = 0
+            while (i < xs.length()) {
+                total += f(xs[i])
+                i++
+            }
+            return total
+        }
+
+        static fun sizeOf<T>(xs: List<T>): Int {
+            return xs.getSize()
+        }
+
+        test inferredInt() {
+            var a: Int[] = [4, 5, 6]
+            Assert.assertEquals(3, GenericFunctionArrayParamTests.countOf(a))
+            Assert.assertEquals(4, GenericFunctionArrayParamTests.firstOf(a))
+        }
+
+        test explicitAndInferredLong() {
+            var l: Long[] = [10L, 20L]
+            Assert.assertEquals(2, GenericFunctionArrayParamTests.countOf<Long>(l))
+            Assert.assertEquals(2, GenericFunctionArrayParamTests.countOf(l))
+            Assert.assertEquals(10L, GenericFunctionArrayParamTests.firstOf(l))
+            Assert.assertEquals(10L, GenericFunctionArrayParamTests.firstOf<Long>(l))
+        }
+
+        test stringEnumAndClass() {
+            var s: String[] = ["x", "y"]
+            Assert.assertEquals("x", GenericFunctionArrayParamTests.firstOf(s))
+            var c: GapColor[] = [GapColor.green, GapColor.red]
+            Assert.assertTrue(GenericFunctionArrayParamTests.firstOf(c) == GapColor.green)
+            Assert.assertEquals(2, GenericFunctionArrayParamTests.countOf(c))
+            var ns: GapNode[] = [new GapNode(7), new GapNode(8)]
+            Assert.assertEquals(7, GenericFunctionArrayParamTests.firstOf(ns).n)
+            Assert.assertEquals(2, GenericFunctionArrayParamTests.countOf(ns))
+        }
+
+        test returnsArray() {
+            var s: String[] = ["p", "q", "r"]
+            var back: String[] = GenericFunctionArrayParamTests.same(s)
+            Assert.assertEquals(3, GenericFunctionArrayParamTests.countOf(back))
+            Assert.assertEquals("r", back[2])
+            Assert.assertEquals(3, GenericFunctionArrayParamTests.countOf(GenericFunctionArrayParamTests.same(s)))
+        }
+
+        test lambdaOverElements() {
+            var a: Int[] = [1, 2, 3]
+            Assert.assertEquals(12, GenericFunctionArrayParamTests.sumBy(a, (x) => x * 2))
+            var ns: GapNode[] = [new GapNode(5), new GapNode(6)]
+            Assert.assertEquals(11, GenericFunctionArrayParamTests.sumBy(ns, (x) => x.n))
+        }
+
+        test listParameter() {
+            var l = new List<Long>()
+            l.add(5L)
+            l.add(6L)
+            Assert.assertEquals(2, GenericFunctionArrayParamTests.sizeOf(l))
+        }
+
+        test instanceFunction() {
+            var h = new GapHelper()
+            var a: Int[] = [1, 2, 3]
+            Assert.assertEquals(3, h.last(a))
+            var s: String[] = ["a", "b"]
+            Assert.assertEquals("b", h.last(s))
+        }
+    }
+}
