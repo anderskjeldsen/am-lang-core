@@ -1,0 +1,235 @@
+namespace Tests {
+
+    // Redmine #604: v2 wrote some assignment targets with a raw C store that
+    // retained nothing and released nothing: a slot behind a call or index
+    // link (`a[0].kid = v`, `(list.get(0) as T).kid = v`), an array slot behind
+    // a call (`b.me().arr[0] = v`, which v2 wrote to a temp, dropping the
+    // store), and a captured local written in a lambda. The new value was freed
+    // under the slot once its temp went, and the old one leaked. Each test
+    // stores three new objects (one survives), then reads the slot back after
+    // the storing function has returned.
+
+    class RsBox {
+        import Am.Lang
+        import Am.Collections
+        var tag: String = "t"
+        var kid: RsBox? = null
+        var arr: RsBox[] = new RsBox[2]
+
+        static fun made(t: String): RsBox {
+            var b = new RsBox()
+            b.tag = t
+            return b
+        }
+
+        fun me(): RsBox {
+            return this
+        }
+
+        fun storeThisArrElemField() {
+            this.arr[0].kid = RsBox.made("a")
+            this.arr[0].kid = RsBox.made("b")
+            this.arr[0].kid = RsBox.made("c")
+        }
+    }
+
+    class RawStoreArcTests {
+        import Am.Lang
+        import Am.Lang.Diagnostics
+        import Am.Collections
+        import Am.Tests
+
+        static fun withElems(): RsBox {
+            var b = new RsBox()
+            b.arr[0] = new RsBox()
+            b.arr[1] = new RsBox()
+            return b
+        }
+
+        static fun storeCastCall(list: List<Object>) {
+            (list.get(0) as RsBox).kid = RsBox.made("a")
+            (list.get(0) as RsBox).kid = RsBox.made("b")
+            (list.get(0) as RsBox).kid = RsBox.made("c")
+        }
+
+        test castOfCallReceiver() {
+            var list = new List<Object>()
+            list.add(new RsBox())
+            var before = Arc.getAllocationCount()
+            RawStoreArcTests.storeCastCall(list)
+            Assert.assertEquals(2L, Arc.getAllocationCount() - before)
+            var c = list.get(0) as RsBox
+            Assert.assertEquals("c", c.kid!!.tag)
+        }
+
+        static fun storeElemField(a: RsBox[]) {
+            a[0].kid = RsBox.made("a")
+            a[0].kid = RsBox.made("b")
+            a[0].kid = RsBox.made("c")
+        }
+
+        test elementField() {
+            var b = RawStoreArcTests.withElems()
+            var before = Arc.getAllocationCount()
+            RawStoreArcTests.storeElemField(b.arr)
+            Assert.assertEquals(2L, Arc.getAllocationCount() - before)
+            Assert.assertEquals("c", b.arr[0].kid!!.tag)
+        }
+
+        test propertyElementField() {
+            var b = RawStoreArcTests.withElems()
+            var before = Arc.getAllocationCount()
+            b.storeThisArrElemField()
+            Assert.assertEquals(2L, Arc.getAllocationCount() - before)
+            Assert.assertEquals("c", b.arr[0].kid!!.tag)
+        }
+
+        static fun storeElemBang(a: RsBox[]) {
+            a[0].kid!!.kid = RsBox.made("a")
+            a[0].kid!!.kid = RsBox.made("b")
+            a[0].kid!!.kid = RsBox.made("c")
+        }
+
+        test elementBangField() {
+            var b = RawStoreArcTests.withElems()
+            b.arr[0].kid = new RsBox()
+            var before = Arc.getAllocationCount()
+            RawStoreArcTests.storeElemBang(b.arr)
+            Assert.assertEquals(2L, Arc.getAllocationCount() - before)
+            Assert.assertEquals("c", b.arr[0].kid!!.kid!!.tag)
+        }
+
+        static fun storeCallArr(b: RsBox) {
+            b.me().arr[1] = RsBox.made("a")
+            b.me().arr[1] = RsBox.made("b")
+            b.me().arr[1] = RsBox.made("c")
+        }
+
+        test elementOfCallProperty() {
+            var b = RawStoreArcTests.withElems()
+            var before = Arc.getAllocationCount()
+            RawStoreArcTests.storeCallArr(b)
+            // The replaced element (one of withElems') goes too.
+            Assert.assertEquals(0L, Arc.getAllocationCount() - before)
+            Assert.assertEquals("c", b.arr[1].tag)
+        }
+
+        static fun storeListArr(list: List<RsBox>) {
+            list.get(0).arr[1] = RsBox.made("a")
+            list.get(0).arr[1] = RsBox.made("b")
+            list.get(0).arr[1] = RsBox.made("c")
+        }
+
+        test elementOfListItemProperty() {
+            var list = new List<RsBox>()
+            list.add(RawStoreArcTests.withElems())
+            var before = Arc.getAllocationCount()
+            RawStoreArcTests.storeListArr(list)
+            Assert.assertEquals(0L, Arc.getAllocationCount() - before)
+            Assert.assertEquals("c", list.get(0).arr[1].tag)
+        }
+
+        static fun storeGroupedIndex(list: List<Object>) {
+            (list.get(0) as RsBox).arr[1] = RsBox.made("a")
+            (list.get(0) as RsBox).arr[1] = RsBox.made("b")
+            (list.get(0) as RsBox).arr[1] = RsBox.made("c")
+        }
+
+        test elementOfCastCallProperty() {
+            var list = new List<Object>()
+            list.add(RawStoreArcTests.withElems())
+            var before = Arc.getAllocationCount()
+            RawStoreArcTests.storeGroupedIndex(list)
+            Assert.assertEquals(0L, Arc.getAllocationCount() - before)
+            var c = list.get(0) as RsBox
+            Assert.assertEquals("c", c.arr[1].tag)
+        }
+
+        static fun storeGroupedElemField(o: Object) {
+            (o as RsBox).arr[0].kid = RsBox.made("a")
+            (o as RsBox).arr[0].kid = RsBox.made("b")
+            (o as RsBox).arr[0].kid = RsBox.made("c")
+        }
+
+        test fieldOfCastElement() {
+            var b = RawStoreArcTests.withElems()
+            var before = Arc.getAllocationCount()
+            RawStoreArcTests.storeGroupedElemField(b)
+            Assert.assertEquals(2L, Arc.getAllocationCount() - before)
+            Assert.assertEquals("c", b.arr[0].kid!!.tag)
+        }
+
+        static fun storeCallElemField(b: RsBox) {
+            b.me().arr[0].kid = RsBox.made("a")
+            b.me().arr[0].kid = RsBox.made("b")
+            b.me().arr[0].kid = RsBox.made("c")
+        }
+
+        test fieldOfCallElement() {
+            var b = RawStoreArcTests.withElems()
+            var before = Arc.getAllocationCount()
+            RawStoreArcTests.storeCallElemField(b)
+            Assert.assertEquals(2L, Arc.getAllocationCount() - before)
+            Assert.assertEquals("c", b.arr[0].kid!!.tag)
+        }
+
+        // The slot's old value is the new one: retained before it is released.
+        test selfAssignment() {
+            var b = RawStoreArcTests.withElems()
+            b.arr[0].kid = RsBox.made("k")
+            var list = new List<Object>()
+            list.add(b)
+            var before = Arc.getAllocationCount()
+            b.arr[0].kid = b.arr[0].kid
+            (list.get(0) as RsBox).kid = RsBox.made("g")
+            (list.get(0) as RsBox).kid = (list.get(0) as RsBox).kid
+            b.me().arr[1] = b.me().arr[1]
+            Assert.assertEquals(2L, Arc.getAllocationCount() - before)
+            Assert.assertEquals("k", b.arr[0].kid!!.tag)
+            Assert.assertEquals("g", b.kid!!.tag)
+            Assert.assertEquals("t", b.arr[1].tag)
+        }
+
+        // An owned local reassigned through itself: the new value is retained
+        // before the old one is released.
+        test localReassignedThroughItself() {
+            var x = new RsBox()
+            x.kid = RsBox.made("next")
+            x.kid!!.kid = RsBox.made("last")
+            var before = Arc.getAllocationCount()
+            x = x
+            x = x.kid!!
+            Assert.assertEquals("next", x.tag)
+            Assert.assertEquals(-2L, Arc.getAllocationCount() - before)
+            x = x.kid!!
+            Assert.assertEquals("last", x.tag)
+            Assert.assertEquals(-4L, Arc.getAllocationCount() - before)
+        }
+
+        // A captured local written in a lambda, read back in the same run
+        // after the statement's temp is gone (v2 freed it under the slot). No
+        // counts: v1 keeps a copy per run and leaks it (v2 replaces the slot).
+        test capturedLocalWrittenInLambda() {
+            var x = RsBox.made("first")
+            var f = (t: String) => {
+                x = RsBox.made(t)
+                return x.tag
+            }
+            Assert.assertEquals("a", f("a"))
+            Assert.assertEquals("b", f("b"))
+            Assert.assertEquals("c", f("c"))
+            Assert.assertEquals("first", x.tag)
+        }
+
+        test capturedAnyWrittenInLambda() {
+            var a: Any = 5
+            var f = (t: String) => {
+                a = RsBox.made(t)
+                return t
+            }
+            Assert.assertEquals("a", f("a"))
+            Assert.assertEquals("b", f("b"))
+            Assert.assertEquals(5, a as Int)
+        }
+    }
+}

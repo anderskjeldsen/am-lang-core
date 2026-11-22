@@ -1,0 +1,202 @@
+namespace Tests {
+
+    // Redmine #601: `o?.s = v` with `o` null does nothing, and a null at any
+    // link of `a?.kid?.s = v` skips the store (v2 threw "Null reference: o").
+
+    class SaNode {
+        import Am.Lang
+        var s: String = "a"
+        var n: Int = 1
+        var m: Int? = null
+        var t: String? = null
+        var kid: SaNode? = null
+        var peer: SaNode? = null
+        var arr: Int[] = new Int[2]
+
+        static var rhsCalls: Int = 0
+
+        static fun rhsS(v: String): String {
+            SaNode.rhsCalls++
+            return v
+        }
+
+        static fun rhsN(v: Int): Int {
+            SaNode.rhsCalls++
+            return v
+        }
+
+        static fun rhsNode(): SaNode {
+            SaNode.rhsCalls++
+            return new SaNode()
+        }
+
+        static fun maybe(x: SaNode?): SaNode? {
+            SaNode.rhsCalls += 100
+            return x
+        }
+
+        static fun setS(o: SaNode?, v: String) { o?.s = v }
+        static fun setN(o: SaNode?, v: Int) { o?.n = v }
+        static fun setM(o: SaNode?, v: Int?) { o?.m = v }
+        static fun setT(o: SaNode?, v: String?) { o?.t = v }
+        static fun setKid(o: SaNode?, v: SaNode?) { o?.kid = v }
+        static fun setChain(a: SaNode?, v: String) { a?.kid?.s = v }
+        static fun setChainN(a: SaNode?, v: Int) { a?.kid?.n = v }
+        static fun setIdx(o: SaNode?, v: Int) { o?.arr[1] = v }
+        static fun setViaCall(o: SaNode?, v: String) { SaNode.maybe(o)?.s = v }
+        static fun setRhsCall(o: SaNode?) { o?.s = SaNode.rhsS("r") }
+        static fun setRhsNew(o: SaNode?) { o?.kid = SaNode.rhsNode() }
+
+        // `maybe(o)?.s == "qq"` stored in a Bool and as a condition: v2 once
+        // assigned the Bool to an `aobject *` temp (found with #594).
+        static fun eqBool(o: SaNode?): Bool {
+            var r = SaNode.maybe(o)?.s == "qq"
+            return r
+        }
+
+        static fun eqIf(o: SaNode?): Int {
+            if (SaNode.maybe(o)?.s == "qq") {
+                return 1
+            }
+            return 0
+        }
+    }
+
+    class SafeAssignTests {
+        import Am.Lang
+        import Am.Lang.Diagnostics
+        import Am.Tests
+
+        test stringOnNullDoesNothing() {
+            SaNode.setS(null, "b")
+        }
+
+        test stringStores() {
+            var o = new SaNode()
+            SaNode.setS(o, "b")
+            Assert.assertEquals("b", o.s)
+        }
+
+        test intField() {
+            var o = new SaNode()
+            SaNode.setN(null, 5)
+            SaNode.setN(o, 5)
+            Assert.assertEquals(5, o.n)
+        }
+
+        test nullableIntField() {
+            var o = new SaNode()
+            SaNode.setM(null, 4)
+            Assert.assertTrue(o.m == null)
+            SaNode.setM(o, 4)
+            Assert.assertEquals(4, o.m!!)
+            SaNode.setM(o, null)
+            Assert.assertTrue(o.m == null)
+        }
+
+        test nullableStringField() {
+            var o = new SaNode()
+            SaNode.setT(null, "x")
+            SaNode.setT(o, "x")
+            Assert.assertEquals("x", o.t!!)
+            SaNode.setT(o, null)
+            Assert.assertTrue(o.t == null)
+        }
+
+        test objectField() {
+            var o = new SaNode()
+            var k = new SaNode()
+            k.s = "kid"
+            SaNode.setKid(null, k)
+            Assert.assertTrue(o.kid == null)
+            SaNode.setKid(o, k)
+            Assert.assertEquals("kid", o.kid!!.s)
+            SaNode.setKid(o, null)
+            Assert.assertTrue(o.kid == null)
+        }
+
+        test chainNullAtEachLink() {
+            SaNode.setChain(null, "z")
+            var a = new SaNode()
+            SaNode.setChain(a, "z")
+            Assert.assertTrue(a.kid == null)
+            a.kid = new SaNode()
+            SaNode.setChain(a, "z")
+            Assert.assertEquals("z", a.kid!!.s)
+            Assert.assertEquals("a", a.s)
+            SaNode.setChainN(a, 9)
+            Assert.assertEquals(9, a.kid!!.n)
+            Assert.assertEquals(1, a.n)
+        }
+
+        test indexedElement() {
+            var o = new SaNode()
+            SaNode.setIdx(null, 3)
+            SaNode.setIdx(o, 3)
+            Assert.assertEquals(3, o.arr[1])
+        }
+
+        test receiverCallRunsOnce() {
+            var o = new SaNode()
+            SaNode.rhsCalls = 0
+            SaNode.setViaCall(o, "c")
+            Assert.assertEquals(100, SaNode.rhsCalls)
+            Assert.assertEquals("c", o.s)
+            SaNode.rhsCalls = 0
+            SaNode.setViaCall(null, "c")
+            Assert.assertEquals(100, SaNode.rhsCalls)
+        }
+
+        test rightSideRunsOnlyWhenStored() {
+            var o = new SaNode()
+            SaNode.rhsCalls = 0
+            SaNode.setRhsCall(o)
+            Assert.assertEquals(1, SaNode.rhsCalls)
+            Assert.assertEquals("r", o.s)
+            SaNode.rhsCalls = 0
+            SaNode.setRhsCall(null)
+            Assert.assertEquals(0, SaNode.rhsCalls)
+            SaNode.setRhsNew(null)
+            Assert.assertEquals(0, SaNode.rhsCalls)
+            SaNode.setRhsNew(o)
+            Assert.assertEquals(1, SaNode.rhsCalls)
+            Assert.assertTrue(o.kid != null)
+        }
+
+        test noLeakOnNullOrStore() {
+            var o = new SaNode()
+            SaNode.setKid(o, new SaNode())
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 10) {
+                SaNode.setRhsNew(null)
+                SaNode.setS(null, "q")
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+            for (i = 0 until 10) {
+                SaNode.setRhsNew(o)
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test safeEqualsAsBoolAndCondition() {
+            var o = new SaNode()
+            o.s = "qq"
+            Assert.assertTrue(SaNode.eqBool(o))
+            Assert.assertTrue(!SaNode.eqBool(null))
+            Assert.assertEquals(1, SaNode.eqIf(o))
+            Assert.assertEquals(0, SaNode.eqIf(null))
+            o.s = "other"
+            Assert.assertTrue(!SaNode.eqBool(o))
+            Assert.assertEquals(0, SaNode.eqIf(o))
+        }
+
+        test staysUsableAsIdentifierAssignment() {
+            var o: SaNode? = new SaNode()
+            o?.s = "plain"
+            Assert.assertEquals("plain", o!!.s)
+            var none: SaNode? = null
+            none?.s = "never"
+            Assert.assertTrue(none == null)
+        }
+    }
+}
