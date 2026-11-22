@@ -1,0 +1,176 @@
+namespace Tests {
+
+    // Redmine #557: reading a null element of an object array and then using
+    // it (call, operator, compound assignment, field read, chain) must throw a
+    // catchable "Null reference" exception, not pass NULL on as `this`.
+
+    class NefInner {
+        import Am.Lang
+        var g: Int = 3
+        fun h(): Int {
+            return this.g
+        }
+    }
+
+    class NefObj {
+        import Am.Lang
+        var f: NefInner = new NefInner()
+        var n: Int = 7
+        fun m(): Int {
+            return this.n
+        }
+    }
+
+    class NefVec(var v: Int) {
+        import Am.Lang
+
+        op + (o: NefVec): NefVec {
+            return new NefVec(this.v + o.v)
+        }
+
+        op - (o: NefVec): NefVec {
+            return new NefVec(this.v - o.v)
+        }
+    }
+
+    class NullElementFollowOnTests {
+        import Am.Lang
+        import Am.Tests
+
+        // No try/catch or throw in these: the exception must come from the null
+        // check alone, so they also prove the throws analysis counts it.
+        static fun plusOnNullElement(): String {
+            var ss: String[] = new String[2]
+            return ss[1] + "x"
+        }
+
+        static fun plusEqualsOnNullLocal(): String {
+            var s: String? = null
+            s += "x"
+            return "unreachable"
+        }
+
+        static fun userOpOnNullElement(): Int {
+            var vs: NefVec[] = new NefVec[2]
+            vs[0] = new NefVec(1)
+            var r = vs[1] + vs[0]
+            return r.v
+        }
+
+        static fun userMinusOnNullElement(): Int {
+            var vs: NefVec[] = new NefVec[2]
+            vs[0] = new NefVec(1)
+            var r = vs[1] - vs[0]
+            return r.v
+        }
+
+        static fun msgOf(f: Int): String {
+            // f selects the form; returns the exception message or "none"
+            var ss: String[] = new String[2]
+            var objs: NefObj[] = new NefObj[2]
+            var i = 1
+            try {
+                if (f == 0) {
+                    var n = ss[i].length()
+                } else if (f == 1) {
+                    var r = ss[i] + "x"
+                } else if (f == 2) {
+                    ss[i] += "x"
+                } else if (f == 3) {
+                    var n = objs[i].n
+                } else if (f == 4) {
+                    var n = objs[i].f.g
+                } else if (f == 5) {
+                    var n = objs[i].f.h()
+                } else if (f == 6) {
+                    var n = objs[i].m()
+                }
+            } catch (e: Exception) {
+                return e.message
+            }
+            return "none"
+        }
+
+        test stringElementCall() {
+            Assert.assertEquals("Null reference: []", NullElementFollowOnTests.msgOf(0))
+        }
+
+        test stringElementOperator() {
+            Assert.assertEquals("Null reference: []", NullElementFollowOnTests.msgOf(1))
+        }
+
+        test stringElementCompound() {
+            Assert.assertEquals("Null reference: []", NullElementFollowOnTests.msgOf(2))
+        }
+
+        test objectElementField() {
+            Assert.assertEquals("Null reference: []", NullElementFollowOnTests.msgOf(3))
+        }
+
+        test objectElementChainField() {
+            Assert.assertEquals("Null reference: []", NullElementFollowOnTests.msgOf(4))
+        }
+
+        test objectElementChainCall() {
+            Assert.assertEquals("Null reference: []", NullElementFollowOnTests.msgOf(5))
+        }
+
+        test objectElementCall() {
+            Assert.assertEquals("Null reference: []", NullElementFollowOnTests.msgOf(6))
+        }
+
+        test plusOnNullElementWithoutTry() {
+            var m = ""
+            try {
+                NullElementFollowOnTests.plusOnNullElement()
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertEquals("Null reference: []", m)
+        }
+
+        test plusEqualsOnNullLocal() {
+            var m = ""
+            try {
+                NullElementFollowOnTests.plusEqualsOnNullLocal()
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertEquals("Null reference: s", m)
+        }
+
+        test userOperatorOnNullElement() {
+            var m = ""
+            try {
+                NullElementFollowOnTests.userOpOnNullElement()
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertEquals("Null reference: []", m)
+            m = ""
+            try {
+                NullElementFollowOnTests.userMinusOnNullElement()
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertEquals("Null reference: []", m)
+        }
+
+        test nonNullElementsStillWork() {
+            var ss: String[] = new String[2]
+            ss[0] = "a"
+            ss[0] += "x"
+            Assert.assertEquals("ax", ss[0])
+            Assert.assertEquals(2, ss[0].length())
+            var objs: NefObj[] = new NefObj[1]
+            objs[0] = new NefObj()
+            Assert.assertEquals(3, objs[0].f.g)
+            Assert.assertEquals(3, objs[0].f.h())
+            var vs: NefVec[] = new NefVec[2]
+            vs[0] = new NefVec(1)
+            vs[1] = new NefVec(2)
+            Assert.assertEquals(3, (vs[0] + vs[1]).v)
+            Assert.assertEquals(1, (vs[1] - vs[0]).v)
+        }
+    }
+}
