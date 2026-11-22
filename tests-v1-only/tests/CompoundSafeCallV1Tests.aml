@@ -1,0 +1,151 @@
+namespace TestsV1 {
+
+    // Redmine #558: `target op= rhs` on a class-typed target evaluates its
+    // receiver once (#554) also when the receiver has a safe call (`?.`) or a
+    // suspend call. v1 evaluated such a receiver twice: `n?.me()?.s += "w"`
+    // called me() twice and `this.park().s += "z"` suspended twice.
+    // v1 only: v2 gets these wrong (V2_PORT_PLAN.md, "Compound assignment
+    // through a safe call or a suspend call"): `x?.n += 3` doesn't store, a
+    // null receiver throws instead of skipping, `x?.f(a)?.s += ...` doesn't
+    // parse, and the suspend driver never finishes.
+
+    class CscVec(var v: Int) {
+        import Am.Lang
+
+        op + (o: CscVec): CscVec {
+            return new CscVec(this.v + o.v)
+        }
+    }
+
+    class CscNode {
+        import Am.Lang
+        var s: String = "a"
+        var vec: CscVec = new CscVec(1)
+        var n: Int = 10
+
+        static var calls: Int = 0
+
+        static fun maybe(x: CscNode?): CscNode? {
+            CscNode.calls++
+            return x
+        }
+
+        fun me(): CscNode {
+            CscNode.calls++
+            return this
+        }
+
+        fun meOrNull(give: Bool): CscNode? {
+            CscNode.calls++
+            if (give) {
+                return this
+            }
+            return null
+        }
+    }
+
+    class CompoundSafeCallV1Tests {
+        import Am.Lang
+        import Am.Async
+        import Am.Tests
+
+        static var pending: Continuation? = null
+        var node: CscNode = new CscNode()
+        var finished: Bool = false
+
+        suspend fun park(): CscNode {
+            suspend(cont) {
+                CompoundSafeCallV1Tests.pending = cont
+            }
+            CscNode.calls++
+            return this.node
+        }
+
+        suspend fun parkSome(): CscNode? {
+            suspend(cont) {
+                CompoundSafeCallV1Tests.pending = cont
+            }
+            CscNode.calls++
+            return this.node
+        }
+
+        suspend fun parkNone(): CscNode? {
+            suspend(cont) {
+                CompoundSafeCallV1Tests.pending = cont
+            }
+            CscNode.calls++
+            return null
+        }
+
+        suspend fun run() {
+            this.park().s += "z"
+            this.park().vec += new CscVec(4)
+            this.park().n += 5
+            this.parkSome()?.s += "q"
+            this.parkNone()?.s += "never"
+            this.finished = true
+        }
+
+        private fun drive() {
+            var guard = 0
+            while (!this.finished && guard < 20) {
+                var c = CompoundSafeCallV1Tests.pending
+                CompoundSafeCallV1Tests.pending = null
+                if (c != null) {
+                    c.resume()
+                }
+                guard = guard + 1
+            }
+        }
+
+        test safeCallOnANonNullReceiverCallsOnce() {
+            CscNode.calls = 0
+            var o: CscNode? = new CscNode()
+            CscNode.maybe(o)?.s += "y"
+            Assert.assertEquals("ay", o!!.s)
+            Assert.assertEquals(1, CscNode.calls)
+            CscNode.maybe(o)?.vec += new CscVec(5)
+            Assert.assertEquals(6, o!!.vec.v)
+            Assert.assertEquals(2, CscNode.calls)
+            CscNode.maybe(o)?.n += 3
+            Assert.assertEquals(13, o!!.n)
+            Assert.assertEquals(3, CscNode.calls)
+        }
+
+        test safeCallOnANullReceiverDoesNothing() {
+            CscNode.calls = 0
+            var none: CscNode? = null
+            CscNode.maybe(none)?.s += "y"
+            CscNode.maybe(none)?.vec += new CscVec(5)
+            Assert.assertEquals(2, CscNode.calls)
+        }
+
+        test chainedSafeCallsCallOnce() {
+            CscNode.calls = 0
+            var o: CscNode? = new CscNode()
+            o?.me()?.s += "w"
+            Assert.assertEquals("aw", o!!.s)
+            Assert.assertEquals(1, CscNode.calls)
+            o?.me()?.meOrNull(true)?.s += "v"
+            Assert.assertEquals("awv", o!!.s)
+            Assert.assertEquals(3, CscNode.calls)
+            // the second safe call stops the chain: nothing is written
+            o?.me()?.meOrNull(false)?.s += "x"
+            Assert.assertEquals("awv", o!!.s)
+            Assert.assertEquals(5, CscNode.calls)
+        }
+
+        test suspendReceiverSuspendsOnce() {
+            CscNode.calls = 0
+            var t = new CompoundSafeCallV1Tests()
+            t.run()
+            t.drive()
+            Assert.assertTrue(t.finished)
+            Assert.assertEquals("azq", t.node.s)
+            Assert.assertEquals(5, t.node.vec.v)
+            Assert.assertEquals(15, t.node.n)
+            // five suspend calls, one each
+            Assert.assertEquals(5, CscNode.calls)
+        }
+    }
+}
