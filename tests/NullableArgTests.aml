@@ -1,0 +1,210 @@
+namespace Tests {
+
+    // Redmine #565: an `Int?` local passed to an `Int?` parameter by a bare
+    // call statement (`show(q)`, no `Owner.`) rendered in v2 as
+    // `var_q.value.int_value`, a gcc error, and a null q would have thrown
+    // instead of arriving as null. The box goes through now, as in v1; a plain
+    // Int is boxed. Calls through a function-typed local, property or capture
+    // with an `Int?` parameter take the box too.
+
+    enum NarColor {
+        import Am.Lang
+
+        red = 1
+        green = 2
+    }
+
+    class NarBox(var got: Int?) {
+        import Am.Lang
+    }
+
+    class NarRecorder {
+        import Am.Lang
+
+        static var log: String = ""
+
+        var out: String = ""
+        var f: Int? = 3
+        var cb: (x: Int?) => String = (x: Int?) => NarRecorder.describe(x)
+
+        static fun describe(v: Int?): String {
+            if (v == null) { return "n" }
+            return v!!.toString()
+        }
+
+        static fun describeLong(v: Long?): String {
+            if (v == null) { return "n" }
+            return v!!.toString()
+        }
+
+        static fun describeColor(c: NarColor?): String {
+            if (c == null) { return "n" }
+            if (c == NarColor.green) { return "green" }
+            return "red"
+        }
+
+        static fun note(v: Int?) {
+            log = log + NarRecorder.describe(v) + ","
+        }
+
+        static fun noteLong(v: Long?) {
+            log = log + NarRecorder.describeLong(v) + ","
+        }
+
+        static fun noteColor(c: NarColor?) {
+            log = log + NarRecorder.describeColor(c) + ","
+        }
+
+        static fun noteBool(b: Bool?) {
+            if (b == null) {
+                log = log + "n,"
+            } else if (b!!) {
+                log = log + "t,"
+            } else {
+                log = log + "f,"
+            }
+        }
+
+        fun rec(v: Int?) {
+            this.out = this.out + NarRecorder.describe(v) + ","
+        }
+
+        // Bare calls on `this` from an instance function.
+        fun forward(q: Int?) {
+            rec(q)
+            this.rec(q)
+            var z: Int? = null
+            rec(z)
+            rec(4)
+            rec(null)
+            rec(this.f)
+        }
+
+        fun callProperty(q: Int?): String {
+            return this.cb(q)
+        }
+    }
+
+    class NullableArgTests {
+        import Am.Lang
+        import Am.Tests
+
+        test bareStaticCallPassesTheBox() {
+            NarRecorder.log = ""
+            var q: Int? = 5
+            NarRecorder.note(q)
+            q = null
+            NarRecorder.note(q)
+            Assert.assertEquals("5,n,", NarRecorder.log)
+            NarHelper.run()
+            Assert.assertEquals("5,n,5,n,0,7,n,9,n,green,n,t,n,", NarRecorder.log)
+        }
+
+        test bareInstanceCalls() {
+            var r = new NarRecorder()
+            var q: Int? = 6
+            r.forward(q)
+            Assert.assertEquals("6,6,n,4,n,3,", r.out)
+            r.out = ""
+            r.forward(null)
+            Assert.assertEquals("n,n,n,4,n,3,", r.out)
+            r.out = ""
+            r.f = null
+            r.rec(r.f)
+            Assert.assertEquals("n,", r.out)
+        }
+
+        test qualifiedAndExpressionCalls() {
+            var q: Int? = 8
+            Assert.assertEquals("8", NarRecorder.describe(q))
+            var s = NarRecorder.describe(q)
+            Assert.assertEquals("8", s)
+            q = null
+            Assert.assertEquals("n", NarRecorder.describe(q))
+            Assert.assertEquals("n", NarHelper.wrap(q))
+            q = 2
+            Assert.assertEquals("2", NarHelper.wrap(q))
+        }
+
+        test constructorArgument() {
+            var q: Int? = 4
+            var b = new NarBox(q)
+            Assert.assertEquals("4", NarRecorder.describe(b.got))
+            q = null
+            var b2 = new NarBox(q)
+            Assert.assertTrue(b2.got == null)
+            var b3 = new NarBox(7)
+            Assert.assertEquals(7, b3.got!!)
+        }
+
+        test functionTypedValues() {
+            var f: (x: Int?) => String = (x: Int?) => NarRecorder.describe(x)
+            var q: Int? = 3
+            var r1: String = f(q)
+            Assert.assertEquals("3", r1)
+            q = null
+            var r2: String = f(q)
+            Assert.assertEquals("n", r2)
+            var r3: String = f(5)
+            Assert.assertEquals("5", r3)
+            var rec = new NarRecorder()
+            Assert.assertEquals("n", rec.callProperty(q))
+            Assert.assertEquals("9", rec.callProperty(9))
+            q = 1
+            var r4: String = rec.cb(q)
+            Assert.assertEquals("1", r4)
+            q = null
+            var r5: String = rec.cb(q)
+            Assert.assertEquals("n", r5)
+        }
+    }
+
+    class NarHelper {
+        import Am.Lang
+
+        static fun wrap(q: Int?): String {
+            return NarRecorder.describe(q)
+        }
+
+        // A bare call names a function of its own class: these forward to
+        // NarRecorder, and run() calls them bare.
+        static fun note(v: Int?) {
+            NarRecorder.note(v)
+        }
+
+        static fun noteLong(v: Long?) {
+            NarRecorder.noteLong(v)
+        }
+
+        static fun noteColor(c: NarColor?) {
+            NarRecorder.noteColor(c)
+        }
+
+        static fun noteBool(b: Bool?) {
+            NarRecorder.noteBool(b)
+        }
+
+        static fun run() {
+            var q: Int? = 5
+            note(q)
+            q = null
+            note(q)
+            note(0)
+            var r: Long? = 7L
+            noteLong(r)
+            r = null
+            noteLong(r)
+            var plain = 9
+            note(plain)
+            note(null)
+            var c: NarColor? = NarColor.green
+            noteColor(c)
+            c = null
+            noteColor(c)
+            var b: Bool? = true
+            noteBool(b)
+            b = null
+            noteBool(b)
+        }
+    }
+}
