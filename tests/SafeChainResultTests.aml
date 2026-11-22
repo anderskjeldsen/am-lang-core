@@ -116,8 +116,12 @@ namespace Tests {
             Assert.assertFalse(a?.n != 7)
             Assert.assertTrue(a?.me().n == 7)
             Assert.assertFalse(a?.kid?.n == 7)
-            // `a?.kid?.n != 7` / `a?.kid?.n == null` (a null in the middle)
-            // are false under v1; they are checked as v2 C in ProjectCompileTest.
+            // #596: v1 compared inside the chain, so these read false.
+            Assert.assertTrue(a?.kid?.n != 7)
+            Assert.assertTrue(a?.kid?.n == null)
+            Assert.assertFalse(a?.kid?.n != null)
+            Assert.assertTrue(a?.kid?.flag != true)
+            Assert.assertTrue(a?.kid?.color != ScrColor.green)
             a.kid = new ScrNode()
             a.kid.n = 300
             Assert.assertTrue(a?.kid?.n == 300)
@@ -159,6 +163,136 @@ namespace Tests {
             a?.me().touch()
             Assert.assertEquals(2, a.hits)
             Assert.assertEquals(2, a.kid.hits)
+        }
+
+        // Redmine #596 (v1): `==`, `!=` and `!!` after a safe chain apply to
+        // the chain's result, null when any link is. v1 rendered them inside
+        // the chain's non-null branches, and a null link left NULL in the
+        // result, which read as `false` (and as `0` for `!!`, which never threw).
+        test compareNullAtStart() {
+            var z: ScrNode? = null
+            Assert.assertTrue(z?.n == null)
+            Assert.assertFalse(z?.n != null)
+            Assert.assertFalse(z?.n == 7)
+            Assert.assertTrue(z?.n != 7)
+            Assert.assertTrue(z?.flag == null)
+            Assert.assertFalse(z?.flag == false)
+            Assert.assertTrue(z?.flag != false)
+            Assert.assertTrue(z?.color == null)
+            Assert.assertFalse(z?.color == ScrColor.green)
+            Assert.assertTrue(z?.name == null)
+            Assert.assertFalse(z?.name != null)
+            Assert.assertTrue(z?.kid == null)
+            Assert.assertTrue(z?.me().n == null)
+            Assert.assertTrue(z?.num() == null)
+            Assert.assertTrue(z?.kid?.n == null)
+        }
+
+        test compareNullInTheMiddle() {
+            var a: ScrNode? = new ScrNode()
+            Assert.assertTrue(a?.kid?.n == null)
+            Assert.assertFalse(a?.kid?.n != null)
+            Assert.assertTrue(a?.kid?.n != 300)
+            Assert.assertTrue(a?.kid?.num() == null)
+            Assert.assertTrue(a?.kid?.flag == null)
+            Assert.assertTrue(a?.kid?.color == null)
+            Assert.assertTrue(a?.kid?.name == null)
+            Assert.assertTrue(a?.kid?.kid == null)
+            Assert.assertTrue(a?.kid?.me().n == null)
+            Assert.assertTrue(a?.me().kid?.n == null)
+            a.kid = new ScrNode()
+            Assert.assertTrue(a?.kid?.kid?.n == null)
+            Assert.assertTrue(a?.kid?.kid?.name == null)
+            Assert.assertFalse(a?.kid?.n == null)
+            Assert.assertTrue(a?.kid?.n == 7)
+            Assert.assertTrue(a?.kid?.name == "nd")
+        }
+
+        test compareNullAtTheEnd() {
+            var a: ScrNode? = new ScrNode()
+            Assert.assertTrue(a?.kid == null)
+            Assert.assertFalse(a?.kid != null)
+            Assert.assertTrue(a?.me().kid == null)
+            Assert.assertFalse(a?.n == null)
+            Assert.assertTrue(a?.n != null)
+            Assert.assertFalse(a?.name == null)
+            Assert.assertTrue(a?.name == "nd")
+            Assert.assertFalse(a?.name != "nd")
+            Assert.assertTrue(a?.flag == true)
+            Assert.assertTrue(a?.color == ScrColor.green)
+        }
+
+        test compareInIfAndLocals() {
+            var a: ScrNode? = new ScrNode()
+            var z: ScrNode? = null
+            var hits = 0
+            if (z?.n == null) { hits = hits + 1 }
+            if (a?.kid?.n == null) { hits = hits + 10 }
+            if (a?.kid?.n != 7) { hits = hits + 100 }
+            if (z?.name == null && a?.n == 7) { hits = hits + 1000 }
+            if (a?.kid?.color == ScrColor.green || a?.kid?.name == null) { hits = hits + 10000 }
+            Assert.assertEquals(11111, hits)
+            var b1 = z?.n == null
+            var b2 = a?.kid?.n != 7
+            var b3 = a?.kid?.name == null
+            var b4 = a?.n == null
+            Assert.assertTrue(b1)
+            Assert.assertTrue(b2)
+            Assert.assertTrue(b3)
+            Assert.assertFalse(b4)
+            var b5 = false
+            b5 = a?.kid?.flag == null
+            Assert.assertTrue(b5)
+        }
+
+        test bangOnNullChainThrows() {
+            var a: ScrNode? = new ScrNode()
+            var z: ScrNode? = null
+            var thrown = 0
+            var got = -5
+            var gotS = "none"
+            try {
+                got = a?.kid?.n!!
+            } catch (e: Exception) {
+                thrown = thrown + 1
+            }
+            try {
+                got = z?.n!!
+            } catch (e: Exception) {
+                thrown = thrown + 10
+            }
+            try {
+                gotS = a?.kid?.name!!
+            } catch (e: Exception) {
+                thrown = thrown + 100
+            }
+            Assert.assertEquals(-5, got)
+            Assert.assertEquals("none", gotS)
+            Assert.assertEquals(111, thrown)
+            Assert.assertEquals(7, a?.n!!)
+            Assert.assertEquals("nd", a?.name!!)
+            a.kid = new ScrNode()
+            Assert.assertEquals(7, a?.kid?.n!!)
+            Assert.assertEquals("7", a?.kid?.n!!.toString())
+        }
+
+        test fallbackAfterNullLinks() {
+            var a: ScrNode? = new ScrNode()
+            var z: ScrNode? = null
+            Assert.assertEquals(-1, z?.n ?? -1)
+            Assert.assertEquals(-2, a?.kid?.n ?? -2)
+            Assert.assertEquals("fb", z?.name ?? "fb")
+            Assert.assertEquals("fb", a?.kid?.kid?.name ?? "fb")
+            Assert.assertTrue((a?.kid?.color ?? ScrColor.red) == ScrColor.red)
+        }
+
+        // A name that is also an operator-ish word stays an identifier.
+        test identifiersUnaffected() {
+            var a: ScrNode? = new ScrNode()
+            var kid = a?.kid
+            Assert.assertTrue(kid == null)
+            var n = 3
+            Assert.assertTrue(n == 3)
         }
 
         test stringConcatenation() {
