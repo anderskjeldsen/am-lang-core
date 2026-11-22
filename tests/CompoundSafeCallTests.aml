@@ -1,0 +1,239 @@
+namespace Tests {
+
+    // Redmine #558 (v1), #584 (v2): `target op= rhs` on a target whose
+    // receiver has a safe call (`?.`) or a suspend call evaluates that
+    // receiver once, and a null anywhere in the safe chain means neither side
+    // runs. v1 evaluated such a receiver twice (`n?.me()?.s += "w"` called
+    // me() twice, `this.park().s += "z"` suspended twice); v2 didn't store
+    // `x?.n += 3`, threw on a null receiver, didn't parse `x?.f(a)?.s += ...`
+    // and never finished the suspend driver.
+
+    class CscVec(var v: Int) {
+        import Am.Lang
+
+        op + (o: CscVec): CscVec {
+            return new CscVec(this.v + o.v)
+        }
+    }
+
+    class CscNode {
+        import Am.Lang
+        var s: String = "a"
+        var vec: CscVec = new CscVec(1)
+        var n: Int = 10
+        var m: Int? = 7
+        var mn: Int? = null
+
+        static var calls: Int = 0
+
+        static fun maybe(x: CscNode?): CscNode? {
+            CscNode.calls++
+            return x
+        }
+
+        static var rhsCalls: Int = 0
+
+        static fun rhs(v: Int): Int {
+            CscNode.rhsCalls++
+            return v
+        }
+
+        static fun rhsS(v: String): String {
+            CscNode.rhsCalls++
+            return v
+        }
+
+        fun me(): CscNode {
+            CscNode.calls++
+            return this
+        }
+
+        fun meOrNull(give: Bool): CscNode? {
+            CscNode.calls++
+            if (give) {
+                return this
+            }
+            return null
+        }
+    }
+
+    class CompoundSafeCallTests {
+        import Am.Lang
+        import Am.Async
+        import Am.Tests
+
+        static var pending: Continuation? = null
+        var node: CscNode = new CscNode()
+        var finished: Bool = false
+
+        suspend fun park(): CscNode {
+            suspend(cont) {
+                CompoundSafeCallTests.pending = cont
+            }
+            CscNode.calls++
+            return this.node
+        }
+
+        suspend fun parkSome(): CscNode? {
+            suspend(cont) {
+                CompoundSafeCallTests.pending = cont
+            }
+            CscNode.calls++
+            return this.node
+        }
+
+        suspend fun parkNone(): CscNode? {
+            suspend(cont) {
+                CompoundSafeCallTests.pending = cont
+            }
+            CscNode.calls++
+            return null
+        }
+
+        suspend fun run() {
+            this.park().s += "z"
+            this.park().vec += new CscVec(4)
+            this.park().n += 5
+            this.parkSome()?.s += "q"
+            this.parkNone()?.s += "never"
+            this.finished = true
+        }
+
+        private fun drive() {
+            var guard = 0
+            while (!this.finished && guard < 20) {
+                var c = CompoundSafeCallTests.pending
+                CompoundSafeCallTests.pending = null
+                if (c != null) {
+                    c.resume()
+                }
+                guard = guard + 1
+            }
+        }
+
+        test safeCallOnANonNullReceiverCallsOnce() {
+            CscNode.calls = 0
+            var o: CscNode? = new CscNode()
+            CscNode.maybe(o)?.s += "y"
+            Assert.assertEquals("ay", o!!.s)
+            Assert.assertEquals(1, CscNode.calls)
+            CscNode.maybe(o)?.vec += new CscVec(5)
+            Assert.assertEquals(6, o!!.vec.v)
+            Assert.assertEquals(2, CscNode.calls)
+            CscNode.maybe(o)?.n += 3
+            Assert.assertEquals(13, o!!.n)
+            Assert.assertEquals(3, CscNode.calls)
+        }
+
+        test safeCallOnANullReceiverDoesNothing() {
+            CscNode.calls = 0
+            var none: CscNode? = null
+            CscNode.maybe(none)?.s += "y"
+            CscNode.maybe(none)?.vec += new CscVec(5)
+            Assert.assertEquals(2, CscNode.calls)
+        }
+
+        test chainedSafeCallsCallOnce() {
+            CscNode.calls = 0
+            var o: CscNode? = new CscNode()
+            o?.me()?.s += "w"
+            Assert.assertEquals("aw", o!!.s)
+            Assert.assertEquals(1, CscNode.calls)
+            o?.me()?.meOrNull(true)?.s += "v"
+            Assert.assertEquals("awv", o!!.s)
+            Assert.assertEquals(3, CscNode.calls)
+            // the second safe call stops the chain: nothing is written
+            o?.me()?.meOrNull(false)?.s += "x"
+            Assert.assertEquals("awv", o!!.s)
+            Assert.assertEquals(5, CscNode.calls)
+        }
+
+        test otherOperatorsAndNullableIntThroughASafeCall() {
+            CscNode.calls = 0
+            var o: CscNode? = new CscNode()
+            CscNode.maybe(o)?.n -= 4
+            Assert.assertEquals(6, o!!.n)
+            CscNode.maybe(o)?.n *= 3
+            Assert.assertEquals(18, o!!.n)
+            o?.me()?.n %= 5
+            Assert.assertEquals(3, o!!.n)
+            CscNode.maybe(o)?.m += 2
+            Assert.assertEquals(9, o!!.m!!)
+            o?.me()?.m *= 2
+            Assert.assertEquals(18, o!!.m!!)
+            Assert.assertEquals(5, CscNode.calls)
+        }
+
+        test directSafeMemberTarget() {
+            var o: CscNode? = new CscNode()
+            o?.s += "b"
+            o?.n += 1
+            o?.m -= 1
+            Assert.assertEquals("ab", o!!.s)
+            Assert.assertEquals(11, o!!.n)
+            Assert.assertEquals(6, o!!.m!!)
+            var none: CscNode? = null
+            none?.s += "b"
+            none?.n += 1
+            Assert.assertTrue(none == null)
+        }
+
+        test nullReceiverSkipsTheRightSide() {
+            CscNode.calls = 0
+            CscNode.rhsCalls = 0
+            var none: CscNode? = null
+            CscNode.maybe(none)?.n += CscNode.rhs(1)
+            CscNode.maybe(none)?.s += CscNode.rhsS("y")
+            CscNode.maybe(none)?.m += CscNode.rhs(1)
+            var o: CscNode? = new CscNode()
+            o?.meOrNull(false)?.n += CscNode.rhs(1)
+            Assert.assertEquals(0, CscNode.rhsCalls)
+            Assert.assertEquals(4, CscNode.calls)
+            Assert.assertEquals(10, o!!.n)
+            // a non-null receiver evaluates the right side once
+            CscNode.maybe(o)?.n += CscNode.rhs(2)
+            CscNode.maybe(o)?.s += CscNode.rhsS("k")
+            Assert.assertEquals(12, o!!.n)
+            Assert.assertEquals("ak", o!!.s)
+            Assert.assertEquals(2, CscNode.rhsCalls)
+        }
+
+        test nullIntFieldThroughASafeCallThrows() {
+            var o: CscNode? = new CscNode()
+            var threw = false
+            try {
+                CscNode.maybe(o)?.mn += 1
+            } catch (e: Exception) {
+                threw = true
+            }
+            Assert.assertTrue(threw)
+        }
+
+        test aSafeCallInALoopSkipsOnceTheReceiverIsNull() {
+            var a = new CscNode()
+            var i = 0
+            while (i < 3) {
+                var o: CscNode? = null
+                if (i == 0) { o = a }
+                o?.me()?.n += 1
+                o?.me()?.s += "l"
+                i++
+            }
+            Assert.assertEquals(11, a.n)
+            Assert.assertEquals("al", a.s)
+        }
+
+        test suspendReceiverSuspendsOnce() {
+            CscNode.calls = 0
+            var t = new CompoundSafeCallTests()
+            t.run()
+            t.drive()
+            Assert.assertTrue(t.finished)
+            Assert.assertEquals("azq", t.node.s)
+            Assert.assertEquals(5, t.node.vec.v)
+            Assert.assertEquals(15, t.node.n)
+            // five suspend calls, one each
+            Assert.assertEquals(5, CscNode.calls)
+        }
+    }
+}
