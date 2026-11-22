@@ -1,0 +1,165 @@
+namespace Tests {
+
+    // Redmine #561: a null on the RIGHT of an operator function (String.op+
+    // or a user operator) must throw a catchable "Null reference", not pass
+    // NULL to the callee. No try/catch inside the helpers, so the throws
+    // analysis has to count the check as well.
+
+    class NroVec(var v: Int) {
+        import Am.Lang
+
+        op + (o: NroVec): NroVec {
+            return new NroVec(this.v + o.v)
+        }
+    }
+
+    class NroMaybe(var v: Int) {
+        import Am.Lang
+
+        // Takes a nullable operand: null is allowed and must reach the body.
+        op + (o: NroVec?): Int {
+            if (o == null) {
+                return -1
+            }
+            return this.v + o.v
+        }
+    }
+
+    class NullRightOperandTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun maybeString(n: Int): String? {
+            if (n > 0) {
+                return "s"
+            }
+            return null
+        }
+
+        static fun elementOnRight(): String {
+            var ss: String[] = new String[2]
+            ss[0] = "a"
+            return "x" + ss[1]
+        }
+
+        static fun elementOnRightNonNull(): String {
+            var ss: String[] = new String[2]
+            ss[0] = "a"
+            return "x" + ss[0]
+        }
+
+        static fun callResultBang(n: Int): String {
+            return "x" + maybeString(n)!!
+        }
+
+        static fun localBang(): String {
+            var s: String? = null
+            return "x" + s!!
+        }
+
+        static fun localBangNonNull(): String {
+            var s: String? = "v"
+            return "x" + s!!
+        }
+
+        static fun localOnRight(): String {
+            var s: String? = null
+            return "x" + s
+        }
+
+        static fun compoundElementOnRight(): String {
+            var ss: String[] = new String[2]
+            var t = "x"
+            t += ss[1]
+            return t
+        }
+
+        static fun userOpNullElement(): Int {
+            var vs: NroVec[] = new NroVec[2]
+            vs[0] = new NroVec(1)
+            var r = vs[0] + vs[1]
+            return r.v
+        }
+
+        static fun userOpNonNull(): Int {
+            var vs: NroVec[] = new NroVec[2]
+            vs[0] = new NroVec(1)
+            vs[1] = new NroVec(2)
+            var r = vs[0] + vs[1]
+            return r.v
+        }
+
+        static fun nullableParamOp(): Int {
+            var vs: NroVec[] = new NroVec[1]
+            return new NroMaybe(5) + vs[0]
+        }
+
+        static fun msgOf(f: Int): String {
+            try {
+                if (f == 0) {
+                    NullRightOperandTests.elementOnRight()
+                } else if (f == 1) {
+                    NullRightOperandTests.callResultBang(0)
+                } else if (f == 2) {
+                    NullRightOperandTests.localBang()
+                } else if (f == 3) {
+                    NullRightOperandTests.localOnRight()
+                } else if (f == 4) {
+                    NullRightOperandTests.compoundElementOnRight()
+                } else if (f == 5) {
+                    NullRightOperandTests.userOpNullElement()
+                }
+            } catch (e: Exception) {
+                return e.message
+            }
+            return "none"
+        }
+
+        test nullElementOnRight() {
+            Assert.assertEquals("Null reference: []", NullRightOperandTests.msgOf(0))
+        }
+
+        test nullCallResultWithBang() {
+            var m = ""
+            try {
+                NullRightOperandTests.callResultBang(0)
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertTrue(m.startsWith("Null"))
+        }
+
+        test nullLocalWithBang() {
+            var m = ""
+            try {
+                NullRightOperandTests.localBang()
+            } catch (e: Exception) {
+                m = e.message
+            }
+            Assert.assertTrue(m.startsWith("Null"))
+        }
+
+        test nullLocalOnRight() {
+            Assert.assertEquals("Null reference: s", NullRightOperandTests.msgOf(3))
+        }
+
+        test nullElementOnRightOfCompound() {
+            Assert.assertEquals("Null reference: []", NullRightOperandTests.msgOf(4))
+        }
+
+        test userOpWithNullArgument() {
+            Assert.assertEquals("Null reference: []", NullRightOperandTests.msgOf(5))
+        }
+
+        test nonNullCasesUnchanged() {
+            Assert.assertEquals("xa", NullRightOperandTests.elementOnRightNonNull())
+            Assert.assertEquals("xs", NullRightOperandTests.callResultBang(1))
+            Assert.assertEquals("xv", NullRightOperandTests.localBangNonNull())
+            Assert.assertEquals(3, NullRightOperandTests.userOpNonNull())
+        }
+
+        test nullableParameterAcceptsNull() {
+            Assert.assertEquals(-1, NullRightOperandTests.nullableParamOp())
+        }
+    }
+}
