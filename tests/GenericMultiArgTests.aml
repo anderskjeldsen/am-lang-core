@@ -1,0 +1,96 @@
+namespace Tests {
+
+    // Redmine #543: a generic function with two or more type arguments. v2 joined
+    // them with `_` in the symbol (`..._fv_Am_Lang_String_Am_Lang_Int_nullable_`),
+    // v1 with `_x_`; v2 now uses `_x_` everywhere it builds the name.
+
+    class GmaPoint(var x: Int) {
+        import Am.Lang
+    }
+
+    class GmaPlain {
+        import Am.Lang
+
+        static fun pick<A, B>(a: A, b: B): A {
+            return a
+        }
+
+        static fun second<A, B>(a: A, b: B): B {
+            return b
+        }
+
+        static fun label<A, B, C>(a: A, b: B, c: C): String {
+            return a.toString() + "-" + b.toString() + "-" + c.toString()
+        }
+
+        fun both<A, B>(a: A, b: B): String {
+            return a.toString() + "+" + b.toString()
+        }
+
+        fun nested(): String {
+            return GmaPlain.pick<String, Int>("n", 1) + this.both<Int, String>(2, "m")
+        }
+    }
+
+    class GmaBox<U>(var item: U) {
+        import Am.Lang
+
+        static fun pair<A, B>(a: A, b: B): String {
+            return a.toString() + "," + b.toString()
+        }
+
+        fun withItem<A, B>(a: A, b: B): String {
+            return this.item.toString() + "|" + a.toString() + "|" + b.toString()
+        }
+    }
+
+    class GenericMultiArgTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        test staticTwoArguments() {
+            Assert.assertEquals("a", GmaPlain.pick<String, Int>("a", 1))
+            Assert.assertEquals(1, GmaPlain.second<String, Int>("a", 1))
+            Assert.assertEquals("b", GmaPlain.second<Int, String>(2, "b"))
+            Assert.assertEquals(7, GmaPlain.pick<Int, Bool>(7, true))
+            Assert.assertEquals(5, GmaPlain.pick<GmaPoint, String>(new GmaPoint(5), "p").x)
+        }
+
+        test staticThreeArguments() {
+            Assert.assertEquals("a-1-true", GmaPlain.label<String, Int, Bool>("a", 1, true))
+            Assert.assertEquals("1-b-2", GmaPlain.label<Int, String, Long>(1, "b", 2L))
+        }
+
+        test staticInferred() {
+            Assert.assertEquals("z", GmaPlain.pick("z", 3))
+            Assert.assertEquals(3, GmaPlain.second("z", 3))
+            Assert.assertEquals("x-2-y", GmaPlain.label("x", 2, "y"))
+        }
+
+        test instanceMethod() {
+            var p = new GmaPlain()
+            Assert.assertEquals("a+1", p.both<String, Int>("a", 1))
+            Assert.assertEquals("1+a", p.both(1, "a"))
+            Assert.assertEquals("n2+m", p.nested())
+        }
+
+        test genericClassStatic() {
+            Assert.assertEquals("a,1", GmaBox<String>.pair<String, Int>("a", 1))
+            Assert.assertEquals("2,b", GmaBox<Int>.pair<Int, String>(2, "b"))
+        }
+
+        test genericClassInstance() {
+            var bs = new GmaBox<String>("s")
+            var bi = new GmaBox<Int>(4)
+            Assert.assertEquals("s|a|1", bs.withItem<String, Int>("a", 1))
+            Assert.assertEquals("4|1|a", bi.withItem<Int, String>(1, "a"))
+            Assert.assertEquals("4|x|2", bi.withItem("x", 2))
+        }
+
+        test nullableTypeArgument() {
+            var n: Int? = 5
+            Assert.assertEquals("a", GmaPlain.pick<String, Int?>("a", n))
+        }
+    }
+}
