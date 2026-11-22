@@ -1,0 +1,94 @@
+namespace Tests {
+
+    class NoaBox(var v: Int) {
+        import Am.Lang
+    }
+
+    class NoaHolder {
+        import Am.Lang
+
+        var slots: NoaBox?[] = new NoaBox?[2]
+        var names: String?[] = new String?[2]
+    }
+
+    // Redmine #605: `T?[]` for an object T. The array has the layout of `T[]`
+    // (an object array already holds NULL); only the type says the elements are
+    // nullable. `Int?[]` (nullable primitive elements) stays unsupported.
+    class NullableObjectArrayTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun count(xs: NoaBox?[]): Int {
+            var n = 0
+            var i = 0
+            while (i < (xs.length() as Int)) {
+                if (xs[i] != null) { n++ }
+                i++
+            }
+            return n
+        }
+
+        static fun makeNames(n: Int): String?[] {
+            var r = new String?[n]
+            r[0] = "first"
+            return r
+        }
+
+        static fun makeBoxes(): NoaBox?[] {
+            var r = new NoaBox?[3]
+            r[1] = new NoaBox(7)
+            return r
+        }
+
+        test freshElementsAreNull() {
+            var a: NoaBox?[] = new NoaBox?[3]
+            var s: String?[] = new String?[2]
+            Assert.assertEquals(3, a.length() as Int)
+            Assert.assertTrue(a[0] == null)
+            Assert.assertTrue(a[2] == null)
+            Assert.assertTrue(s[0] == null)
+            Assert.assertTrue(s[1] == null)
+        }
+
+        test storeReadAndNullCheck() {
+            var a = new NoaBox?[3]
+            a[1] = new NoaBox(5)
+            Assert.assertTrue(a[0] == null)
+            Assert.assertTrue(a[1] != null)
+            Assert.assertEquals(5, a[1]!!.v)
+            Assert.assertEquals(5, a[1]?.v ?? -1)
+            Assert.assertEquals(-1, a[0]?.v ?? -1)
+            a[1] = null
+            Assert.assertTrue(a[1] == null)
+            var s: String?[] = new String?[2]
+            s[0] = "hi"
+            Assert.assertEquals("hi", s[0]!!)
+            Assert.assertEquals(2, s[0]?.length() ?? -1)
+            Assert.assertEquals(-1, s[1]?.length() ?? -1)
+            s[0] = null
+            Assert.assertTrue(s[0] == null)
+        }
+
+        test parameterAndReturn() {
+            var a = NullableObjectArrayTests.makeBoxes()
+            Assert.assertEquals(3, a.length() as Int)
+            Assert.assertEquals(1, NullableObjectArrayTests.count(a))
+            Assert.assertEquals(0, NullableObjectArrayTests.count(new NoaBox?[4]))
+            var n = NullableObjectArrayTests.makeNames(2)
+            Assert.assertEquals("first", n[0]!!)
+            Assert.assertTrue(n[1] == null)
+        }
+
+        test fieldsAndLiterals() {
+            var h = new NoaHolder()
+            Assert.assertTrue(h.slots[0] == null)
+            h.slots[1] = new NoaBox(9)
+            Assert.assertEquals(9, h.slots[1]!!.v)
+            h.names[0] = "x"
+            Assert.assertEquals("x", h.names[0]!!)
+            var lit: String?[] = ["a", null]
+            Assert.assertEquals("a", lit[0]!!)
+            Assert.assertTrue(lit[1] == null)
+        }
+    }
+}
