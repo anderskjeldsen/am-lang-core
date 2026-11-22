@@ -474,8 +474,13 @@ static inline void __set_property(aobject * const __obj, int const __index, null
     // Single-threaded by construction: an object is only ever written by the
     // isolate that owns it, so the read-modify-write needs no lock.
     property * __prop = &__obj->object_properties.class_object_properties.properties[__index];
-    if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
-        __decrease_property_reference_count(__prop->nullable_value.value.object_value);
+    // The old value is released after the new one is retained and stored:
+    // they may be the same object (`b.kid = b.kid`, the right side a borrowed
+    // read of the slot), which a release-first store freed before retaining
+    // it (#604).
+    aobject * __old_obj = NULL;
+    if ( !__is_primitive(__prop->nullable_value) ) {
+        __old_obj = __prop->nullable_value.value.object_value;
     }
     if ( !__is_primitive(__prop_value) && __prop_value.value.object_value != NULL ) {
         // Tripwire: when the value being assigned to a property is a
@@ -500,6 +505,9 @@ static inline void __set_property(aobject * const __obj, int const __index, null
     }
 
     __prop->nullable_value = __prop_value;
+    if (__old_obj != NULL) {
+        __decrease_property_reference_count(__old_obj);
+    }
 }
 
 static inline bool __set_property_safe(aobject * const __obj, int const __index, nullable_value __prop_value) {
@@ -544,8 +552,10 @@ static inline void __set_static_property(class_static * const __class_static, in
     // Statics are per isolate (see __static_slot), so this is a plain
     // single-threaded slot write.
     property * __prop = &__static_slot(__class_static, __index);
-    if ( !__is_primitive(__prop->nullable_value) && __prop->nullable_value.value.object_value != NULL ) {
-        __decrease_property_reference_count(__prop->nullable_value.value.object_value);
+    // Released after the new value is stored, as in __set_property (#604).
+    aobject * __old_obj = NULL;
+    if ( !__is_primitive(__prop->nullable_value) ) {
+        __old_obj = __prop->nullable_value.value.object_value;
     }
 
     if ( !__is_primitive(__prop_value) && __prop_value.value.object_value != NULL ) {
@@ -562,6 +572,9 @@ static inline void __set_static_property(class_static * const __class_static, in
         __increase_property_reference_count(__prop_value.value.object_value);
     }
     __prop->nullable_value = __prop_value;
+    if (__old_obj != NULL) {
+        __decrease_property_reference_count(__old_obj);
+    }
 }
 
 static inline void __decrease_reference_count_nullable_value(nullable_value __value) {
