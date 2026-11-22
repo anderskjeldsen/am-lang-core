@@ -808,6 +808,10 @@ void __throw_simple_exception_site(const char * const message, void * const site
 // bounds-checks an array.
 void __throw_index_bounds_site(function_result * const result, void * const site_class, unsigned int line_kind);
 void __throw_negative_size_site(function_result * const result, void * const site_class, unsigned int line_kind);
+// Checked integer division (#427): throws Am.Lang.ArithmeticException with the
+// given literal message ("Division by zero", "Division overflow").
+void __throw_arithmetic_site(const char * const message, void * const site_class, unsigned int line_kind, function_result * const result);
+void __throw_arithmetic(const char * const message, const char * const stack_trace_item_text, function_result * const result);
 void __throw_out_of_memory_exception_site(function_result * const result, void * const site_class, unsigned int line_kind);
 void __throw_simple_exception(const char * const message, const char * const stack_trace_item_text, function_result * const result);
 // Like __throw_simple_exception, but COPIES `message` into the exception
@@ -905,6 +909,7 @@ void __print_memory_header(aobject * const obj, const char * prefix);
 #include <Am/Lang/PropertyInfo.h>
 #include <Am/Lang/Exception.h>
 #include <Am/Lang/OutOfMemoryException.h>
+#include <Am/Lang/ArithmeticException.h>
 // typedef Am_Lang_Object_equals_0_T __object_equals_alias;
 #define __object_equals_alias Am_Lang_Object_f_equals_0_T
 #define __object_equals_index Am_Lang_Object_f_equals_0_index
@@ -914,6 +919,9 @@ void __print_memory_header(aobject * const obj, const char * prefix);
 #define __out_of_memory_exception_class_alias Am_Lang_OutOfMemoryException
 #define __out_of_memory_exception_constructor_alias Am_Lang_OutOfMemoryException_f_OutOfMemoryException_0
 #define __out_of_memory_exception_init_instance_function_alias Am_Lang_OutOfMemoryException___init_instance
+#define __arithmetic_exception_class_alias Am_Lang_ArithmeticException
+#define __arithmetic_exception_constructor_alias Am_Lang_ArithmeticException_f_ArithmeticException_0
+#define __arithmetic_exception_init_instance_function_alias Am_Lang_ArithmeticException___init_instance
 #define __add_stack_trace_item_function_alias Am_Lang_Exception_f_addStackTraceItem_0
 #define __add_stack_trace_site_function_alias Am_Lang_Exception_f_addStackTraceSite_0
 #define __exception_constructor_alias Am_Lang_Exception_f_Exception_0

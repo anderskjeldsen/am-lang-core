@@ -10,6 +10,17 @@ namespace Am.Lang
     }
 
     /**
+     * Thrown by integer division in a checked build (the default for `amlc test`, or a build
+     * target with `checkedDivision: true`): `/`, `%`, `/=` and `%=` by zero raise it with the
+     * message "Division by zero", and a signed `minValue / -1` or `minValue % -1` with
+     * "Division overflow". An unchecked build (the default for `amlc build` and `amlc run`)
+     * divides without a check, so the result of dividing by zero is unspecified there and the
+     * program may crash. Float and Double division never throw.
+     */
+    class ArithmeticException(message: String) : Exception(message) {
+    }
+
+    /**
      * Thrown when a null reference is dereferenced. Narrow nullable values to non-null locals
      * before use rather than catching this.
      */

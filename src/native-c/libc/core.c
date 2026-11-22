@@ -1980,6 +1980,56 @@ void __throw_negative_size_site(function_result * const result, void * const sit
     __throw_simple_exception_site("Array size can't be negative", site_class, line_kind, result);
 }
 
+// Checked integer division (#427). Built like __create_exception, but as an
+// Am.Lang.ArithmeticException so a program can catch exactly that. Returns
+// an owned reference, or NULL when out of memory; an exception the
+// constructor threw comes back in its place.
+static aobject * __create_arithmetic_exception(aobject * const message) {
+    aobject * ex = __allocate_object(&__arithmetic_exception_class_alias);
+    if (ex == NULL) return NULL;
+    function_result ctor = __arithmetic_exception_constructor_alias(ex, message);
+    if (ctor.exception == NULL) {
+        function_result init = __arithmetic_exception_init_instance_function_alias((nullable_value){ .value.object_value = ex });
+        if (init.exception != NULL) ctor.exception = init.exception;
+    }
+    if (ctor.exception != NULL) {
+        __decrease_reference_count(ex);
+        return ctor.exception;
+    }
+    return ex;
+}
+
+// v1's form: the site travels packed, as (aclass*, line*8+kind).
+void __throw_arithmetic_site(const char * const message, void * const site_class, unsigned int line_kind, function_result * const result) {
+    aobject * ex_msg = __create_string_constant(message, &__string_class_alias);
+    aobject * ex = ex_msg == NULL ? NULL : __create_arithmetic_exception(ex_msg);
+    if (ex == NULL) {
+        if (ex_msg != NULL) __decrease_reference_count(ex_msg);
+        __throw_out_of_memory_exception_site(result, site_class, line_kind);
+        return;
+    }
+    __throw_exception_site(result, ex, site_class, line_kind);
+    __decrease_reference_count(ex_msg);
+    __decrease_reference_count(ex);
+}
+
+// v2's form: the site is a stack-trace string, as for __throw_simple_exception.
+void __throw_arithmetic(const char * const message, const char * const stack_trace_item_text, function_result * const result) {
+    aobject * ex_msg = __create_string_constant(message, &__string_class_alias);
+    aobject * stit = __create_string_constant(stack_trace_item_text, &__string_class_alias);
+    aobject * ex = (ex_msg == NULL || stit == NULL) ? NULL : __create_arithmetic_exception(ex_msg);
+    if (ex == NULL) {
+        if (ex_msg != NULL) __decrease_reference_count(ex_msg);
+        if (stit != NULL) __decrease_reference_count(stit);
+        __throw_out_of_memory_exception(result, stack_trace_item_text);
+        return;
+    }
+    __throw_exception(result, ex, stit);
+    __decrease_reference_count(ex_msg);
+    __decrease_reference_count(stit);
+    __decrease_reference_count(ex);
+}
+
 void __throw_out_of_memory_exception_site(function_result * const result, void * const site_class, unsigned int line_kind) {
     __amlc_oom_fatal(site_class, line_kind, NULL);   // does not return when the isolate has a jump target
     if (__oom_singleton == NULL) {

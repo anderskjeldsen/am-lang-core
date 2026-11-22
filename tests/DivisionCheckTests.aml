@@ -1,0 +1,418 @@
+namespace Tests {
+
+    // Redmine #427: in a checked build (`amlc test`, or a build target with
+    // `checkedDivision: true`) integer `/`, `%`, `/=` and `%=` throw
+    // ArithmeticException("Division by zero") on a zero divisor, and a signed
+    // `minValue / -1` or `minValue % -1` throws "Division overflow". Before,
+    // the C division trapped (SIGFPE on x86) or gave an unspecified value.
+
+    struct DcPoint {
+        import Am.Lang
+        var x: Int
+        var y: Int
+    }
+
+    class DcHolder {
+        import Am.Lang
+        static var total: Long = 64L
+        var pt: DcPoint
+        var n: Int = 100
+        var m: Int? = 50
+        var arr: Int[] = new Int[2]
+    }
+
+    // toString is #noThrow (Am.Lang.Any). In a checked build #noThrow is
+    // ignored on AmLang functions, so this override's division throws.
+    class DcShape(var n: Int) {
+        import Am.Lang
+
+        override fun toString(): String {
+            return (100 / this.n).toString()
+        }
+    }
+
+    class DivisionCheckTests {
+        import Am.Lang
+        import Am.Tests
+
+        // The division sits in a function of its own: its exception must
+        // reach the caller (a division is a throw site in a checked build).
+        static fun idiv(a: Int, b: Int): Int {
+            return a / b
+        }
+
+        static fun irem(a: Int, b: Int): Int {
+            return a % b
+        }
+
+        #noThrow
+        static fun noThrowDiv(a: Int, b: Int): Int {
+            return a / b
+        }
+
+        static fun divInt(a: Int, b: Int): String {
+            try {
+                return idiv(a, b).toString()
+            } catch (e: ArithmeticException) {
+                return e.message
+            }
+        }
+
+        static fun remInt(a: Int, b: Int): String {
+            try {
+                return irem(a, b).toString()
+            } catch (e: ArithmeticException) {
+                return e.message
+            }
+        }
+
+        static fun divByte(a: Byte, b: Byte): String {
+            try {
+                var r: Byte = a / b
+                return r.toString()
+            } catch (e: ArithmeticException) {
+                return e.message
+            }
+        }
+
+        static fun remByte(a: Byte, b: Byte): String {
+            try {
+                var r: Byte = a % b
+                return r.toString()
+            } catch (e: ArithmeticException) {
+                return e.message
+            }
+        }
+
+        static fun divShort(a: Short, b: Short): String {
+            try {
+                var r: Short = a / b
+                return r.toString()
+            } catch (e: ArithmeticException) {
+                return e.message
+            }
+        }
+
+        static fun remShort(a: Short, b: Short): String {
+            try {
+                var r: Short = a % b
+                return r.toString()
+            } catch (e: ArithmeticException) {
+                return e.message
+            }
+        }
+
+        static fun divLong(a: Long, b: Long): String {
+            try {
+                return (a / b).toString()
+            } catch (e: ArithmeticException) {
+                return e.message
+            }
+        }
+
+        static fun remLong(a: Long, b: Long): String {
+            try {
+                return (a % b).toString()
+            } catch (e: ArithmeticException) {
+                return e.message
+            }
+        }
+
+        static fun divUByte(a: UByte, b: UByte): String {
+            try {
+                var r: UByte = a / b
+                return r.toString()
+            } catch (e: ArithmeticException) {
+                return e.message
+            }
+        }
+
+        static fun remUByte(a: UByte, b: UByte): String {
+            try {
+                var r: UByte = a % b
+                return r.toString()
+            } catch (e: ArithmeticException) {
+                return e.message
+            }
+        }
+
+        static fun divUShort(a: UShort, b: UShort): String {
+            try {
+                var r: UShort = a / b
+                return r.toString()
+            } catch (e: ArithmeticException) {
+                return e.message
+            }
+        }
+
+        static fun remUShort(a: UShort, b: UShort): String {
+            try {
+                var r: UShort = a % b
+                return r.toString()
+            } catch (e: ArithmeticException) {
+                return e.message
+            }
+        }
+
+        static fun divUInt(a: UInt, b: UInt): String {
+            try {
+                return (a / b).toString()
+            } catch (e: ArithmeticException) {
+                return e.message
+            }
+        }
+
+        static fun remUInt(a: UInt, b: UInt): String {
+            try {
+                return (a % b).toString()
+            } catch (e: ArithmeticException) {
+                return e.message
+            }
+        }
+
+        static fun divULong(a: ULong, b: ULong): String {
+            try {
+                return (a / b).toString()
+            } catch (e: ArithmeticException) {
+                return e.message
+            }
+        }
+
+        static fun remULong(a: ULong, b: ULong): String {
+            try {
+                return (a % b).toString()
+            } catch (e: ArithmeticException) {
+                return e.message
+            }
+        }
+
+        test intDivisionByZeroThrows() {
+            Assert.assertEquals("Division by zero", divInt(7, 0))
+            Assert.assertEquals("Division by zero", remInt(7, 0))
+            Assert.assertEquals("Division by zero", divInt(0, 0))
+        }
+
+        test intDivisionStillDivides() {
+            Assert.assertEquals("3", divInt(7, 2))
+            Assert.assertEquals("-3", divInt(-7, 2))
+            Assert.assertEquals("1", remInt(7, 3))
+            Assert.assertEquals("-1", remInt(-7, 3))
+            Assert.assertEquals("-7", divInt(7, -1))
+            Assert.assertEquals("0", remInt(7, -1))
+        }
+
+        test signedMinByMinusOneOverflows() {
+            Assert.assertEquals("Division overflow", divInt(Int.minValue, -1))
+            Assert.assertEquals("Division overflow", remInt(Int.minValue, -1))
+            Assert.assertEquals("Division overflow", divLong(Long.minValue, -1L))
+            Assert.assertEquals("Division overflow", remLong(Long.minValue, -1L))
+            Assert.assertEquals("Division overflow", divByte(Byte.minValue, -1B))
+            Assert.assertEquals("Division overflow", remByte(Byte.minValue, -1B))
+            Assert.assertEquals("Division overflow", divShort(Short.minValue, -1S))
+            Assert.assertEquals("Division overflow", remShort(Short.minValue, -1S))
+            // minValue by anything else, and anything else by -1, divides.
+            Assert.assertEquals("-1073741824", divInt(Int.minValue, 2))
+            Assert.assertEquals("2147483647", divInt(-2147483647, -1))
+        }
+
+        test everyWidthChecksZero() {
+            Assert.assertEquals("Division by zero", divByte(9B, 0B))
+            Assert.assertEquals("Division by zero", remByte(9B, 0B))
+            Assert.assertEquals("Division by zero", divShort(9S, 0S))
+            Assert.assertEquals("Division by zero", remShort(9S, 0S))
+            Assert.assertEquals("Division by zero", divLong(9L, 0L))
+            Assert.assertEquals("Division by zero", remLong(9L, 0L))
+            Assert.assertEquals("Division by zero", divUByte(9UB, 0UB))
+            Assert.assertEquals("Division by zero", remUByte(9UB, 0UB))
+            Assert.assertEquals("Division by zero", divUShort(9US, 0US))
+            Assert.assertEquals("Division by zero", remUShort(9US, 0US))
+            Assert.assertEquals("Division by zero", divUInt(9UI, 0UI))
+            Assert.assertEquals("Division by zero", remUInt(9UI, 0UI))
+            Assert.assertEquals("Division by zero", divULong(9UL, 0UL))
+            Assert.assertEquals("Division by zero", remULong(9UL, 0UL))
+        }
+
+        test everyWidthStillDivides() {
+            Assert.assertEquals("4", divByte(9B, 2B))
+            Assert.assertEquals("1", remByte(9B, 2B))
+            Assert.assertEquals("4", divShort(9S, 2S))
+            Assert.assertEquals("4", divLong(9L, 2L))
+            Assert.assertEquals("4", divUByte(9UB, 2UB))
+            Assert.assertEquals("1", remUShort(9US, 2US))
+            Assert.assertEquals("4", divUInt(9UI, 2UI))
+            Assert.assertEquals("1", remULong(9UL, 2UL))
+            // Unsigned values have no -1: the top value divides normally.
+            Assert.assertEquals("1", divUInt(4294967295UI, 4294967295UI))
+        }
+
+        test compoundLocalChecks() {
+            var a = 20
+            var z = 0
+            var message = ""
+            try {
+                a /= z
+            } catch (e: ArithmeticException) {
+                message = e.message
+            }
+            Assert.assertEquals("Division by zero", message)
+            Assert.assertEquals(20, a)
+            message = ""
+            try {
+                a %= z
+            } catch (e: ArithmeticException) {
+                message = e.message
+            }
+            Assert.assertEquals("Division by zero", message)
+            var two = 2
+            a /= two
+            Assert.assertEquals(10, a)
+            var three = 3
+            a %= three
+            Assert.assertEquals(1, a)
+            var lo = Int.minValue
+            var minusOne = -1
+            message = ""
+            try {
+                lo /= minusOne
+            } catch (e: ArithmeticException) {
+                message = e.message
+            }
+            Assert.assertEquals("Division overflow", message)
+        }
+
+        test compoundPropertyArrayAndNullableChecks() {
+            var h = new DcHolder()
+            var z = 0
+            var message = ""
+            try {
+                h.n /= z
+            } catch (e: ArithmeticException) {
+                message = e.message
+            }
+            Assert.assertEquals("Division by zero", message)
+            Assert.assertEquals(100, h.n)
+            message = ""
+            h.arr[1] = 9
+            try {
+                h.arr[1] %= z
+            } catch (e: ArithmeticException) {
+                message = e.message
+            }
+            Assert.assertEquals("Division by zero", message)
+            Assert.assertEquals(9, h.arr[1])
+            message = ""
+            try {
+                h.m /= z
+            } catch (e: ArithmeticException) {
+                message = e.message
+            }
+            Assert.assertEquals("Division by zero", message)
+            var four = 4
+            h.n /= four
+            h.arr[1] %= four
+            Assert.assertEquals(25, h.n)
+            Assert.assertEquals(1, h.arr[1])
+            var l: Long? = 30L
+            var lz = 0L
+            message = ""
+            try {
+                l /= lz
+            } catch (e: ArithmeticException) {
+                message = e.message
+            }
+            Assert.assertEquals("Division by zero", message)
+        }
+
+        test compoundStructAndStaticChecks() {
+            var h = new DcHolder()
+            h.pt.x = 12
+            var z = 0
+            var message = ""
+            try {
+                h.pt.x /= z
+            } catch (e: ArithmeticException) {
+                message = e.message
+            }
+            Assert.assertEquals("Division by zero", message)
+            Assert.assertEquals(12, h.pt.x)
+            var five = 5
+            h.pt.x %= five
+            Assert.assertEquals(2, h.pt.x)
+            var lz = 0L
+            message = ""
+            try {
+                DcHolder.total /= lz
+            } catch (e: ArithmeticException) {
+                message = e.message
+            }
+            Assert.assertEquals("Division by zero", message)
+            var eight = 8L
+            DcHolder.total /= eight
+            Assert.assertEquals(8L, DcHolder.total)
+        }
+
+        test caughtAsExceptionWithStackTrace() {
+            var message = ""
+            var frames = 0
+            try {
+                idiv(1, 0)
+            } catch (e: Exception) {
+                message = e.message
+                frames = e.getStackTrace().length() as Int
+            }
+            Assert.assertEquals("Division by zero", message)
+            Assert.assertTrue(frames > 0)
+        }
+
+        // A #noThrow function compiles with an uncaught division, and in a
+        // checked build (amlc test) the division throws to the caller.
+        test noThrowFunctionsThrowInACheckedBuild() {
+            var message = ""
+            try {
+                noThrowDiv(1, 0)
+            } catch (e: ArithmeticException) {
+                message = e.message
+            }
+            Assert.assertEquals("Division by zero", message)
+            Assert.assertEquals(3, noThrowDiv(7, 2))
+            message = ""
+            var shape = new DcShape(0)
+            try {
+                shape.toString()
+            } catch (e: ArithmeticException) {
+                message = e.message
+            }
+            Assert.assertEquals("Division by zero", message)
+            Assert.assertEquals("25", new DcShape(4).toString())
+        }
+
+        test literalDivisorsDivide() {
+            var x = 17
+            Assert.assertEquals(8, x / 2)
+            Assert.assertEquals(2, x % 3)
+            Assert.assertEquals(-17, x / -1)
+            Assert.assertEquals(0, x % -1)
+            var y = 100L
+            y /= 10L
+            Assert.assertEquals(10L, y)
+        }
+
+        test literalZeroDivisorThrows() {
+            var x = 17
+            var message = ""
+            try {
+                x = x / 0
+            } catch (e: ArithmeticException) {
+                message = e.message
+            }
+            Assert.assertEquals("Division by zero", message)
+        }
+
+        test floatDivisionDoesNotThrow() {
+            var f = 1.0
+            var z = 0.0
+            var r = f / z
+            Assert.assertTrue(r > 1000000.0)
+        }
+    }
+}
