@@ -216,11 +216,55 @@ namespace Tests {
             }
         }
 
-        // (`maybe(o)?.s == "qq"` doesn't compile in v2, a bug of its own.)
         static fun asNotNullString(o: StvNode?) {
             StvNode.setS(o, "qq")
             if (StvNode.maybe(o)?.s != null) {
                 StvLeak.sink += 1
+            }
+        }
+
+        // #596: a comparison or `!!` after the chain applies to its result.
+        static fun asNullCheckLocal(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            var b = StvNode.maybe(o)?.make() == null
+            if (b) {
+                StvLeak.sink += 1
+            }
+        }
+
+        static fun asOnlyOwnerNotNull(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            if (StvNode.maybe(o)?.make() != null) {
+                StvLeak.sink += 1
+            }
+        }
+
+        static fun asValueCompare(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            if (StvNode.maybe(o)?.make() == "qq!") {
+                StvLeak.sink += 1
+            }
+            if (StvNode.maybe(o)?.s != "qq") {
+                StvLeak.sink += 10
+            }
+        }
+
+        static fun asBang(o: StvNode?) {
+            StvNode.setS(o, "qq")
+            try {
+                StvLeak.sink += StvLeak.take(StvNode.maybe(o)?.make()!!)
+            } catch (e: Exception) {
+                StvLeak.sink += 100
+            }
+        }
+
+        static fun asKidNullCheck(o: StvNode?) {
+            StvNode.setKid(o)
+            if (StvNode.maybe(o)?.kid?.kid == null) {
+                StvLeak.sink += 1
+            }
+            if (StvNode.maybe(o)?.kid?.make() == null) {
+                StvLeak.sink += 10
             }
         }
 
@@ -330,9 +374,14 @@ namespace Tests {
             if (kind == 27) { StvLeak.asArgInLoop(o) }
             if (kind == 28) { StvLeak.asSuspendArg(o) }
             if (kind == 29) { StvLeak.asSuspendArgs(o) }
+            if (kind == 30) { StvLeak.asNullCheckLocal(o) }
+            if (kind == 31) { StvLeak.asOnlyOwnerNotNull(o) }
+            if (kind == 32) { StvLeak.asValueCompare(o) }
+            if (kind == 33) { StvLeak.asBang(o) }
+            if (kind == 34) { StvLeak.asKidNullCheck(o) }
         }
 
-        static var kinds: Int = 30
+        static var kinds: Int = 35
 
         // Runs [kind] ten times on [o] and returns how many objects it left.
         static fun leftBy(kind: Int, o: StvNode?): Long {
@@ -415,6 +464,11 @@ namespace Tests {
             Assert.assertEquals(9, StvLeak.valueOf(27, o))
             Assert.assertEquals(3, StvLeak.valueOf(28, o))
             Assert.assertEquals(232, StvLeak.valueOf(29, o))
+            Assert.assertEquals(0, StvLeak.valueOf(30, o))
+            Assert.assertEquals(1, StvLeak.valueOf(31, o))
+            Assert.assertEquals(1, StvLeak.valueOf(32, o))
+            Assert.assertEquals(3, StvLeak.valueOf(33, o))
+            Assert.assertEquals(1, StvLeak.valueOf(34, o))
         }
 
         test nullReceiverValues() {
@@ -436,13 +490,19 @@ namespace Tests {
             Assert.assertEquals(0, StvLeak.valueOf(17, null))
             Assert.assertEquals(0, StvLeak.valueOf(18, null))
             Assert.assertEquals(2, StvLeak.valueOf(20, null))
-            // (21: `null?.s == null` reads false in v1, a bug of its own)
+            // #596: `null?.s == null` read false in v1.
+            Assert.assertEquals(1, StvLeak.valueOf(21, null))
             Assert.assertEquals(0, StvLeak.valueOf(22, null))
             Assert.assertEquals(0, StvLeak.valueOf(23, null))
             Assert.assertEquals(0, StvLeak.valueOf(26, null))
             Assert.assertEquals(0, StvLeak.valueOf(27, null))
             Assert.assertEquals(0, StvLeak.valueOf(28, null))
             Assert.assertEquals(54, StvLeak.valueOf(29, null))
+            Assert.assertEquals(1, StvLeak.valueOf(30, null))
+            Assert.assertEquals(0, StvLeak.valueOf(31, null))
+            Assert.assertEquals(10, StvLeak.valueOf(32, null))
+            Assert.assertEquals(100, StvLeak.valueOf(33, null))
+            Assert.assertEquals(11, StvLeak.valueOf(34, null))
         }
     }
 }
