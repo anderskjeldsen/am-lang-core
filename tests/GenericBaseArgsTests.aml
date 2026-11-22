@@ -1,0 +1,317 @@
+namespace Tests {
+
+    class GaBase<T> {
+        import Am.Lang
+        import Am.Collections
+
+        var items: List<T> = new List<T>()
+        var byName: HashMap<String, T> = new HashMap<String, T>()
+        var adds: Int = 0
+
+        fun add(name: String, item: T) {
+            this.items.add(item)
+            this.byName.set(name, item)
+            this.adds = this.adds + 1
+        }
+
+        fun count(): Int {
+            return this.items.getSize()
+        }
+
+        fun first(): T {
+            return this.items.get(0)
+        }
+
+        fun lookup(name: String): T {
+            return this.byName.get(name)
+        }
+
+        fun has(name: String): Bool {
+            return this.byName.containsKey(name)
+        }
+
+        open fun describe(): String {
+            return "base " + this.items.getSize().toString()
+        }
+
+        open fun pick(i: Int): T {
+            return this.items.get(i)
+        }
+    }
+
+    // A non-generic subclass: T is String everywhere above it.
+    class GaNames : GaBase<String> {
+        import Am.Lang
+        import Am.Collections
+
+        var extra: List<String> = new List<String>()
+
+        fun joined(): String {
+            var s = ""
+            each (x in this.items) {
+                s = s + x + ","
+            }
+            return s
+        }
+
+        fun firstUpper(): String {
+            return this.first() + "!"
+        }
+
+        fun addTwice(name: String, v: String) {
+            this.add(name, v)
+            add(name + "2", v)
+        }
+
+        override fun describe(): String {
+            return "names " + this.items.getSize().toString() + " " + this.first()
+        }
+
+        override fun pick(i: Int): String {
+            return "<" + this.items.get(i) + ">"
+        }
+    }
+
+    // T is a primitive: the inherited fields hold Int values.
+    class GaCounts : GaBase<Int> {
+        import Am.Lang
+
+        fun sum(): Int {
+            var s = 0
+            each (x in this.items) {
+                s = s + x
+            }
+            return s
+        }
+
+        fun firstPlusOne(): Int {
+            return this.first() + 1
+        }
+    }
+
+    // A non-generic class between the generic base and the leaf.
+    class GaMid : GaBase<String> {
+        import Am.Lang
+
+        fun mid(): String {
+            return "mid " + this.count().toString()
+        }
+    }
+
+    class GaLeaf : GaMid {
+        import Am.Lang
+
+        fun leaf(): String {
+            return this.mid() + " " + this.first()
+        }
+    }
+
+    // The subclass names its parameter differently from the base.
+    class GaSub<K> : GaBase<K> {
+        import Am.Lang
+
+        fun last(): K {
+            return this.items.get(this.items.getSize() - 1)
+        }
+    }
+
+    // Parameters mapped by position, not by name.
+    class GaPair<A, B> : GaBase<B> {
+        import Am.Lang
+        import Am.Collections
+
+        var lefts: List<A> = new List<A>()
+
+        fun put(a: A, name: String, b: B) {
+            this.lefts.add(a)
+            this.add(name, b)
+        }
+
+        fun left(i: Int): A {
+            return this.lefts.get(i)
+        }
+    }
+
+    // The base's argument is itself generic.
+    class GaNested<K> : GaBase<List<K>> {
+        import Am.Lang
+        import Am.Collections
+
+        fun total(): Int {
+            var n = 0
+            each (l in this.items) {
+                n = n + l.getSize()
+            }
+            return n
+        }
+    }
+
+    // A generic base with a primary constructor, given its argument.
+    class GaHolder<T>(var held: T) {
+        import Am.Lang
+        import Am.Collections
+
+        var log: List<T> = new List<T>()
+
+        fun keep() {
+            this.log.add(this.held)
+        }
+    }
+
+    class GaNamedHolder : GaHolder<String>("start") {
+        import Am.Lang
+
+        fun heldTwice(): String {
+            return this.held + this.held
+        }
+    }
+
+    interface GaSized {
+        fun count(): Int
+    }
+
+    // An interface implemented by a method inherited from the generic base.
+    class GaSizedNames : GaBase<String>, GaSized {
+        import Am.Lang
+    }
+
+    // Redmine #422: v2 dropped a base class's type arguments, so `class GaNames :
+    // GaBase<String>` had no GaBase<String> to extend: inherited members typed T
+    // rendered erased symbols (a gcc error) and v2 rejected the class when the base
+    // has a field initializer that names T. `GaSub<K> : GaBase<K>` left T unbound.
+    class GenericBaseArgsTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun describeOf(b: GaBase<String>): String {
+            return b.describe()
+        }
+
+        static fun sizeOf(s: GaSized): Int {
+            return s.count()
+        }
+
+        test nonGenericSubclassInheritsFields() {
+            var n = new GaNames()
+            Assert.assertEquals(0, n.count())
+            n.add("a", "x")
+            n.add("b", "y")
+            Assert.assertEquals(2, n.count())
+            Assert.assertEquals(2, n.adds)
+            Assert.assertEquals("x,y,", n.joined())
+            Assert.assertEquals("y", n.lookup("b"))
+            Assert.assertTrue(n.has("a"))
+            Assert.assertFalse(n.has("c"))
+            Assert.assertEquals("x", n.first())
+            Assert.assertEquals("x!", n.firstUpper())
+            Assert.assertEquals(2, n.items.getSize())
+            Assert.assertEquals(0, n.extra.getSize())
+        }
+
+        test inheritedCallsFromTheSubclass() {
+            var n = new GaNames()
+            n.addTwice("k", "v")
+            Assert.assertEquals(2, n.count())
+            Assert.assertEquals("v", n.lookup("k2"))
+        }
+
+        test overridesAndVirtualCallsThroughTheBase() {
+            var n = new GaNames()
+            n.add("a", "x")
+            n.add("b", "y")
+            Assert.assertEquals("names 2 x", n.describe())
+            Assert.assertEquals("<y>", n.pick(1))
+            var b: GaBase<String> = n
+            Assert.assertEquals("names 2 x", b.describe())
+            Assert.assertEquals("<x>", b.pick(0))
+            Assert.assertEquals("x", b.first())
+            Assert.assertEquals("names 2 x", GenericBaseArgsTests.describeOf(n))
+            var plain = new GaBase<String>()
+            plain.add("p", "q")
+            Assert.assertEquals("base 1", GenericBaseArgsTests.describeOf(plain))
+            Assert.assertEquals("q", plain.pick(0))
+        }
+
+        test isAndAsThroughTheBase() {
+            var b: GaBase<String> = new GaNames()
+            Assert.assertTrue(b is GaNames)
+            var n = b as GaNames
+            n.add("a", "z")
+            Assert.assertEquals("z,", n.joined())
+        }
+
+        test primitiveTypeArgument() {
+            var c = new GaCounts()
+            c.add("a", 3)
+            c.add("b", 4)
+            Assert.assertEquals(7, c.sum())
+            Assert.assertEquals(4, c.firstPlusOne())
+            Assert.assertEquals(4, c.lookup("b"))
+            Assert.assertEquals(3, c.pick(0))
+            Assert.assertEquals("base 2", c.describe())
+        }
+
+        test nonGenericClassInBetween() {
+            var l = new GaLeaf()
+            l.add("a", "w")
+            Assert.assertEquals("mid 1 w", l.leaf())
+            Assert.assertEquals("w", l.lookup("a"))
+        }
+
+        test genericSubclassRenamesTheParameter() {
+            var s = new GaSub<Int>()
+            s.add("p", 5)
+            s.add("q", 7)
+            Assert.assertEquals(7, s.last())
+            Assert.assertEquals(5, s.first())
+            Assert.assertEquals(7, s.lookup("q"))
+            Assert.assertEquals(2, s.count())
+            var t = new GaSub<String>()
+            t.add("a", "s")
+            Assert.assertEquals("s", t.last())
+            Assert.assertEquals("s", t.lookup("a"))
+        }
+
+        test parametersMapByPosition() {
+            var p = new GaPair<String, Int>()
+            p.put("l", "n", 9)
+            Assert.assertEquals("l", p.left(0))
+            Assert.assertEquals(9, p.first())
+            Assert.assertEquals(9, p.lookup("n"))
+        }
+
+        test genericBaseArgument() {
+            var g = new GaNested<Int>()
+            var a = new List<Int>()
+            a.add(1)
+            a.add(2)
+            g.add("a", a)
+            Assert.assertEquals(2, g.total())
+            Assert.assertEquals(2, g.first().getSize())
+        }
+
+        test baseConstructorArgument() {
+            var h = new GaNamedHolder()
+            Assert.assertEquals("start", h.held)
+            Assert.assertEquals("startstart", h.heldTwice())
+            h.keep()
+            Assert.assertEquals(1, h.log.getSize())
+            Assert.assertEquals("start", h.log.get(0))
+        }
+
+        test interfaceImplementedByAnInheritedMethod() {
+            var s = new GaSizedNames()
+            s.add("a", "b")
+            Assert.assertEquals(1, GenericBaseArgsTests.sizeOf(s))
+        }
+
+        test eachInstanceHasItsOwnFields() {
+            var a = new GaNames()
+            var b = new GaNames()
+            a.add("a", "x")
+            Assert.assertEquals(1, a.count())
+            Assert.assertEquals(0, b.count())
+        }
+    }
+}
