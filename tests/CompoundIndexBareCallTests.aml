@@ -1,0 +1,64 @@
+namespace Tests {
+
+    // Redmine #588: the index of a compound target, `arr[take(1)] += 1`, is a
+    // root expression: a bare call to a static function of the same class
+    // resolves, and runs once, in static and instance functions.
+    class CompoundIndexBareCallTests {
+        import Am.Lang
+        import Am.Tests
+
+        static var calls: Int = 0
+        var icalls: Int = 0
+        var data: Int[] = new Int[3]
+
+        static fun take(i: Int): Int {
+            CompoundIndexBareCallTests.calls++
+            return i
+        }
+
+        fun itake(i: Int): Int {
+            this.icalls++
+            return i
+        }
+
+        test staticBareIndex() {
+            CompoundIndexBareCallTests.calls = 0
+            var arr = new Int[3]
+            arr[take(1)] += 5
+            Assert.assertEquals(1, CompoundIndexBareCallTests.calls)
+            arr[take(1)] -= 2
+            arr[take(1)] *= 4
+            Assert.assertEquals(12, arr[1])
+            Assert.assertEquals(3, CompoundIndexBareCallTests.calls)
+            Assert.assertEquals(0, arr[0])
+        }
+
+        test plainAssignStillWorks() {
+            var arr = new Int[3]
+            arr[take(0)] = 1
+            arr[CompoundIndexBareCallTests.take(2)] += 3
+            Assert.assertEquals(1, arr[0])
+            Assert.assertEquals(3, arr[2])
+        }
+
+        test instanceBareIndex() {
+            this.icalls = 0
+            CompoundIndexBareCallTests.calls = 0
+            this.data[itake(2)] += 7
+            this.data[itake(2)] -= 1
+            this.data[take(0)] += 9
+            Assert.assertEquals(6, this.data[2])
+            Assert.assertEquals(9, this.data[0])
+            Assert.assertEquals(2, this.icalls)
+            Assert.assertEquals(1, CompoundIndexBareCallTests.calls)
+        }
+
+        test localArrayInInstanceFunction() {
+            this.icalls = 0
+            var arr = new Int[3]
+            arr[itake(1)] += 4
+            Assert.assertEquals(4, arr[1])
+            Assert.assertEquals(1, this.icalls)
+        }
+    }
+}
