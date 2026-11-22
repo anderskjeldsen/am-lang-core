@@ -1,0 +1,55 @@
+namespace Tests {
+
+    // Redmine #598 (v2): the receiver temp of a safe chain was named `sc<N>`,
+    // rendered `var_sc<N>`: the C name a source local `sc<N>` gets. A function
+    // with locals sc0..sc9 next to safe chains could read or overwrite the
+    // temp. The temp has a `__` name of its own now.
+
+    class ScNode {
+        import Am.Lang
+
+        var n: Int = 10
+        var kid: ScNode? = null
+
+        fun me(): ScNode {
+            return this
+        }
+    }
+
+    class SafeChainTempNameTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun run(a: ScNode): Int {
+            var sc0: Int = 1
+            var sc1: Int = 2
+            var sc2: Int = 3
+            var sc3: Int = 4
+            var sc4: Int = 5
+            var sc5: Int = 6
+            var sc6: Int = 7
+            var sc7: Int = 8
+            var sc8: Int = 9
+            var sc9: Int = 10
+            var x = a.kid?.me()
+            var y = a.kid?.me()?.kid?.me()
+            var z = a.kid?.n ?? -1
+            var w = a.kid?.me().n ?? -2
+            var hit = 0
+            if (x != null) { hit += 1 }
+            if (y != null) { hit += 10 }
+            return sc0 + sc1 + sc2 + sc3 + sc4 + sc5 + sc6 + sc7 + sc8 + sc9 + z + w + hit * 1000
+        }
+
+        test localsNamedScNKeepTheirValuesNextToSafeChains() {
+            var a = new ScNode()
+            // no kid: the chains are null, the fallbacks apply
+            Assert.assertEquals(55 + -1 + -2, run(a))
+            a.kid = new ScNode()
+            // a kid without a kid of its own: x set, y null
+            Assert.assertEquals(55 + 10 + 10 + 1 * 1000, run(a))
+            a.kid!!.kid = new ScNode()
+            Assert.assertEquals(55 + 10 + 10 + 11 * 1000, run(a))
+        }
+    }
+}
