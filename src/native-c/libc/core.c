@@ -2030,13 +2030,6 @@ void __throw_arithmetic(const char * const message, const char * const stack_tra
     __decrease_reference_count(ex);
 }
 
-// A checked division in a #noThrow function: it can't throw, so stop here.
-void __amlc_arithmetic_abort(const char * const message, const char * const function_name, const char * const file, unsigned int line) {
-    fprintf(stderr, "AmLang: %s in #noThrow function %s (%s line %u); aborting.\n", message, function_name, file, line);
-    fflush(stderr);
-    abort();
-}
-
 void __throw_out_of_memory_exception_site(function_result * const result, void * const site_class, unsigned int line_kind) {
     __amlc_oom_fatal(site_class, line_kind, NULL);   // does not return when the isolate has a jump target
     if (__oom_singleton == NULL) {

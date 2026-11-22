@@ -21,6 +21,16 @@ namespace Tests {
         var arr: Int[] = new Int[2]
     }
 
+    // toString is #noThrow (Am.Lang.Any). In a checked build #noThrow is
+    // ignored on AmLang functions, so this override's division throws.
+    class DcShape(var n: Int) {
+        import Am.Lang
+
+        override fun toString(): String {
+            return (100 / this.n).toString()
+        }
+    }
+
     class DivisionCheckTests {
         import Am.Lang
         import Am.Tests
@@ -33,6 +43,11 @@ namespace Tests {
 
         static fun irem(a: Int, b: Int): Int {
             return a % b
+        }
+
+        #noThrow
+        static fun noThrowDiv(a: Int, b: Int): Int {
+            return a / b
         }
 
         static fun divInt(a: Int, b: Int): String {
@@ -347,6 +362,28 @@ namespace Tests {
             }
             Assert.assertEquals("Division by zero", message)
             Assert.assertTrue(frames > 0)
+        }
+
+        // A #noThrow function compiles with an uncaught division, and in a
+        // checked build (amlc test) the division throws to the caller.
+        test noThrowFunctionsThrowInACheckedBuild() {
+            var message = ""
+            try {
+                noThrowDiv(1, 0)
+            } catch (e: ArithmeticException) {
+                message = e.message
+            }
+            Assert.assertEquals("Division by zero", message)
+            Assert.assertEquals(3, noThrowDiv(7, 2))
+            message = ""
+            var shape = new DcShape(0)
+            try {
+                shape.toString()
+            } catch (e: ArithmeticException) {
+                message = e.message
+            }
+            Assert.assertEquals("Division by zero", message)
+            Assert.assertEquals("25", new DcShape(4).toString())
         }
 
         test literalDivisorsDivide() {

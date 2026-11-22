@@ -812,9 +812,6 @@ void __throw_negative_size_site(function_result * const result, void * const sit
 // given literal message ("Division by zero", "Division overflow").
 void __throw_arithmetic_site(const char * const message, void * const site_class, unsigned int line_kind, function_result * const result);
 void __throw_arithmetic(const char * const message, const char * const stack_trace_item_text, function_result * const result);
-// The same check inside a #noThrow function, which has no way to throw: print
-// where it happened and abort the program.
-void __amlc_arithmetic_abort(const char * const message, const char * const function_name, const char * const file, unsigned int line);
 void __throw_out_of_memory_exception_site(function_result * const result, void * const site_class, unsigned int line_kind);
 void __throw_simple_exception(const char * const message, const char * const stack_trace_item_text, function_result * const result);
 // Like __throw_simple_exception, but COPIES `message` into the exception
