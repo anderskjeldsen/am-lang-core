@@ -11,6 +11,7 @@ Changes since 0.15.0. Needs amlc 0.16.0.
 
 ### Added
 
+- **GenericMethodGenericClassTests** (2026-11-22, Redmine #536, #564). Generic functions declared in a generic class, as a program under v1 and v2: instance methods on `GmBox<String>` and `GmBox<Int>` with the method's T an Int, a String or a class, explicit and inferred, one using the class's U and the method's T together, `List<T>` and `T[]` parameters, static generic functions called on a class variant (`GmBox<String>.sizeOf<Int>(l)`, `GmBox<Int>.countAll(arr)`), calls from inside the class, and `new T[n]` in a generic function (static and instance).
 - **NullableCastAndNonNullAssertTests** (2026-11-22, Redmine #552, #524). `!!` on non-null Int, Bool, enum, String locals and fields, `!!` still throwing on null, and `x as T?` on `Int?`/`Color?` locals and fields (same type, `as Long?`, `as Int?`, `as Color?`, null and non-null, back to non-null, `a as Int?` from an Any), as a program under v1 and v2.
 
 - **AnyObjectEqualsTests and tests-v1-only AnyObjectEqualsV1Tests** (2026-11-22, Redmine #562). An Any holding Int, Long, Bool, Double, an enum, a String, an object or null compared with a String, an object, a primitive, null and another Any, `==` and `!=`, as a program: a boxed primitive is not equal to an object and does not crash. v1 and v2 run the chain-result and object-on-the-left cases; a primitive or enum on the left of an Any call result and Any locals compared with enums do not compile in v2 yet (V1Tests).

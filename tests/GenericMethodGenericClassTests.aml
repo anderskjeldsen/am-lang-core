@@ -1,0 +1,152 @@
+namespace Tests {
+
+    // Redmine #536: a generic function declared in a generic class. v2 called
+    // `new GmBox<String>(..).ident<Int>(5)` through an undeclared
+    // `..._GmBox_ta_Am_Lang_String_f_ident_0___static_fv_Am_Lang_Int` and
+    // rendered the unsubstituted generic body (`List_ta_T`) into every class
+    // variant for a static one. Also #564: `new T[n]` in a generic function.
+
+    class GmPoint(var x: Int) {
+        import Am.Lang
+    }
+
+    class GmBox<U>(var item: U) {
+        import Am.Lang
+        import Am.Collections
+
+        fun ident<T>(x: T): T {
+            return x
+        }
+
+        // Uses the class's U and the method's T together.
+        fun describe<T>(t: T): String {
+            var u: U = this.item
+            return u.toString() + "/" + t.toString()
+        }
+
+        fun itemOr<T>(flag: Bool, other: T): String {
+            if (flag) { return this.item.toString() }
+            return other.toString()
+        }
+
+        fun firstOr<T>(xs: List<T>, d: T): T {
+            if (xs.getSize() == 0) { return d }
+            return xs.get(0)
+        }
+
+        fun lastOf<T>(xs: T[]): T {
+            return xs[xs.length() - 1]
+        }
+
+        fun fillWith<T>(v: T, n: Int): T[] {
+            var a = new T[n]
+            for (i = 0 until n) { a[i] = v }
+            return a
+        }
+
+        // Calls a static and an instance generic method from inside the class.
+        fun viaOwn(xs: List<Int>): Int {
+            return GmBox<U>.sizeOf<Int>(xs) + this.ident<Int>(100)
+        }
+
+        static fun sizeOf<T>(xs: List<T>): Int {
+            return xs.getSize()
+        }
+
+        static fun countAll<T>(xs: T[]): Int {
+            return xs.length()
+        }
+    }
+
+    class GmFill {
+        import Am.Lang
+
+        static fun fill<T>(v: T, n: Int): T[] {
+            var a = new T[n]
+            for (i = 0 until n) { a[i] = v }
+            return a
+        }
+    }
+
+    class GenericMethodGenericClassTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        test instanceExplicit() {
+            var bs = new GmBox<String>("s")
+            var bi = new GmBox<Int>(4)
+            Assert.assertEquals(5, bs.ident<Int>(5))
+            Assert.assertEquals("str", bi.ident<String>("str"))
+            Assert.assertEquals(9, bi.ident<GmPoint>(new GmPoint(9)).x)
+            Assert.assertEquals("t", bs.ident<String>("t"))
+        }
+
+        test instanceInferred() {
+            var bs = new GmBox<String>("s")
+            var bi = new GmBox<Int>(4)
+            Assert.assertEquals(7, bs.ident(7))
+            Assert.assertEquals("w", bi.ident("w"))
+            Assert.assertEquals(3, bs.ident(new GmPoint(3)).x)
+        }
+
+        test usesClassAndMethodParams() {
+            var bs = new GmBox<String>("s")
+            var bi = new GmBox<Int>(4)
+            Assert.assertEquals("s/3", bs.describe<Int>(3))
+            Assert.assertEquals("4/q", bi.describe("q"))
+            Assert.assertEquals("4", bi.itemOr<String>(true, "o"))
+            Assert.assertEquals("o", bi.itemOr<String>(false, "o"))
+            Assert.assertEquals("12", bs.itemOr(false, 12))
+        }
+
+        test listAndArrayParams() {
+            var bi = new GmBox<Int>(4)
+            var bs = new GmBox<String>("s")
+            var l = new List<Int>()
+            Assert.assertEquals(8, bi.firstOr<Int>(l, 8))
+            l.add(1)
+            Assert.assertEquals(1, bi.firstOr<Int>(l, 8))
+            var names = new List<String>()
+            names.add("a")
+            Assert.assertEquals("a", bs.firstOr(names, "z"))
+            var arr: Int[] = [1, 2, 3]
+            Assert.assertEquals(3, bs.lastOf<Int>(arr))
+            var strs: String[] = ["x", "y"]
+            Assert.assertEquals("y", bi.lastOf(strs))
+        }
+
+        test staticOnVariant() {
+            var l = new List<Int>()
+            l.add(1)
+            l.add(2)
+            Assert.assertEquals(2, GmBox<String>.sizeOf<Int>(l))
+            Assert.assertEquals(2, GmBox<Int>.sizeOf(l))
+            var arr: Int[] = [1, 2, 3]
+            Assert.assertEquals(3, GmBox<String>.countAll<Int>(arr))
+            Assert.assertEquals(3, GmBox<Int>.countAll(arr))
+            var ps: GmPoint[] = [new GmPoint(1)]
+            Assert.assertEquals(1, GmBox<String>.countAll<GmPoint>(ps))
+        }
+
+        test callsFromInsideTheClass() {
+            var bs = new GmBox<String>("s")
+            var l = new List<Int>()
+            l.add(5)
+            Assert.assertEquals(101, bs.viaOwn(l))
+        }
+
+        test newArrayOfMethodTypeParam() {
+            var a = GmFill.fill<Int>(3, 2)
+            Assert.assertTrue(a.length() == 2)
+            Assert.assertEquals(3, a[1])
+            var s = GmFill.fill<String>("x", 3)
+            Assert.assertEquals("x", s[2])
+            var bs = new GmBox<String>("s")
+            var p = bs.fillWith<GmPoint>(new GmPoint(6), 2)
+            Assert.assertEquals(6, p[1].x)
+            var n = bs.fillWith(4L, 1)
+            Assert.assertEquals(4L, n[0])
+        }
+    }
+}
