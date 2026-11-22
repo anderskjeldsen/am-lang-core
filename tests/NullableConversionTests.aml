@@ -1,0 +1,126 @@
+namespace Tests {
+
+    // Redmine #571: an `Int?` passed to a `Long?` parameter (or returned or
+    // assigned as one) passed the Int box on unchanged, and the callee read
+    // `.long_value`: -5 printed as 4294967291. Payload and flags convert now,
+    // and null stays null.
+    // Redmine #572: `true as Bool?` and `b as Bool?` rendered an RTTI check on
+    // a plain bool (a gcc error), and `null as Int?` gave an internal error.
+    // Redmine #573: `s = f(2)` in a static function: the bare call on the right
+    // of an assignment was looked up on the target's type.
+
+    class NcvHolder {
+        import Am.Lang
+
+        var stored: Long? = null
+        var total: Int = 0
+
+        static fun describe(l: Long?): String {
+            if (l == null) { return "n" }
+            return l!!.toString()
+        }
+
+        static fun twice(i: Int): Int {
+            return i + i
+        }
+
+        fun thrice(i: Int): Int {
+            return i * 3
+        }
+
+        static fun asLong(q: Int?): Long? {
+            return q
+        }
+
+        fun keep(q: Int?) {
+            this.stored = q
+        }
+
+        fun accept(l: Long?): String {
+            return NcvHolder.describe(l)
+        }
+
+        fun instanceCalls(): Int {
+            var s = this.thrice(1)
+            s = thrice(2)
+            this.total = thrice(3)
+            this.total += twice(1)
+            return s + this.total
+        }
+    }
+
+    class NullableConversionTests {
+        import Am.Lang
+        import Am.Tests
+
+        test intToLongArgument() {
+            var q: Int? = -5
+            Assert.assertEquals("-5", NcvHolder.describe(q))
+            var n: Int? = null
+            Assert.assertEquals("n", NcvHolder.describe(n))
+        }
+
+        test intToLongInstanceArgument() {
+            var h = new NcvHolder()
+            var q: Int? = -7
+            Assert.assertEquals("-7", h.accept(q))
+            var n: Int? = null
+            Assert.assertEquals("n", h.accept(n))
+        }
+
+        test largeValuesSurviveWidening() {
+            var q: Int? = 2147483647
+            Assert.assertEquals("2147483647", NcvHolder.describe(q))
+        }
+
+        test boolCastToNullableBool() {
+            var bt = true
+            var b = bt as Bool?
+            Assert.assertTrue(b!!)
+            var c = true as Bool?
+            Assert.assertTrue(c!!)
+            var f = false as Bool?
+            Assert.assertFalse(f!!)
+            Assert.assertFalse(f == null)
+        }
+
+        test nullCastToNullable() {
+            var a = null as Int?
+            Assert.assertTrue(a == null)
+            var s = null as String?
+            Assert.assertTrue(s == null)
+            var l: Long? = 3
+            l = null as Long?
+            Assert.assertTrue(l == null)
+        }
+
+        test bareCallOnTheRightOfAnAssignment() {
+            var s = NcvHolder.twice(1)
+            Assert.assertEquals(2, s)
+            s = NcvHolder.twice(2)
+            Assert.assertEquals(4, s)
+            s += NcvHolder.twice(3)
+            Assert.assertEquals(10, s)
+        }
+
+        static fun bareStatic(): Int {
+            var s = twice(1)
+            s = twice(2)
+            s += twice(3)
+            return s
+        }
+
+        static fun twice(i: Int): Int {
+            return i + i
+        }
+
+        test bareStaticCalls() {
+            Assert.assertEquals(10, NullableConversionTests.bareStatic())
+        }
+
+        test bareInstanceCalls() {
+            var h = new NcvHolder()
+            Assert.assertEquals(6 + 11, h.instanceCalls())
+        }
+    }
+}
