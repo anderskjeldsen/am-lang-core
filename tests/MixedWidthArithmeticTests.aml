@@ -1,0 +1,107 @@
+namespace Tests {
+
+    // Redmine #599: the type of a mixed-width sum. `Long + Int` took the right
+    // operand's type (Int): the C sum was truncated to Int and boxed with Int
+    // flags, so `Assert.assertEquals(before + 1, countLong())` said "expected
+    // '1488', got '1488'" (Any equality compares the type bits exactly).
+    // `Int + Long` was right. The wider operand now decides in both orders.
+
+    class MixedWidthArithmeticTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun kind(v: Byte): String { return "Byte" }
+        static fun kind(v: Short): String { return "Short" }
+        static fun kind(v: Int): String { return "Int" }
+        static fun kind(v: Long): String { return "Long" }
+        static fun kind(v: UInt): String { return "UInt" }
+        static fun kind(v: Float): String { return "Float" }
+        static fun kind(v: Double): String { return "Double" }
+
+        static fun count(): Long { return 1488L }
+
+        test longPlusIntIsLong() {
+            var l: Long = 5000000000L
+            var i: Int = 1
+            var a = l + i
+            var b = i + l
+            Assert.assertEquals("Long", kind(a))
+            Assert.assertEquals("Long", kind(b))
+            Assert.assertEquals(5000000001L, a)
+            Assert.assertEquals(5000000001L, b)
+            Assert.assertEquals("Long", kind(l - i))
+            Assert.assertEquals("Long", kind(l * i))
+            Assert.assertEquals("Long", kind(l / i))
+            Assert.assertEquals("Long", kind(l % i))
+        }
+
+        test widerOperandDecidesTheType() {
+            var b: Byte = 3
+            var s: Short = 4
+            var i: Int = 5
+            var l: Long = 6L
+            var u: UInt = 7
+            var f: Float = 1.5
+            var d: Double = 2.5
+            Assert.assertEquals("Int", kind(i + b))
+            Assert.assertEquals("Int", kind(b + i))
+            Assert.assertEquals("Short", kind(s + b))
+            Assert.assertEquals("Int", kind(i + s))
+            Assert.assertEquals("Long", kind(s + l))
+            Assert.assertEquals("Long", kind(l + s))
+            Assert.assertEquals("Long", kind(b + l))
+            Assert.assertEquals("Long", kind(l + b))
+            Assert.assertEquals("Long", kind(u + l))
+            Assert.assertEquals("Long", kind(l + u))
+            Assert.assertEquals("Double", kind(d + i))
+            Assert.assertEquals("Double", kind(i + d))
+            Assert.assertEquals("Double", kind(d + f))
+            Assert.assertEquals("Double", kind(f + d))
+            Assert.assertEquals("Float", kind(f + i))
+            Assert.assertEquals("Float", kind(i + f))
+            Assert.assertEquals("Float", kind(f + l))
+            Assert.assertEquals("Float", kind(l + f))
+        }
+
+        test chainsKeepTheWidest() {
+            var l: Long = 5000000000L
+            var i: Int = 1
+            Assert.assertEquals("Long", kind(l + i + i))
+            Assert.assertEquals("Long", kind(i + i + l))
+            Assert.assertEquals("Long", kind(i + l + i))
+            Assert.assertEquals(5000000003L, l + i + i + i)
+        }
+
+        test sumPassedToAnyEqualsLong() {
+            var before: Long = count()
+            var x: Any = before + 1
+            var y: Any = before + 1L
+            var z: Any = 1 + before
+            Assert.assertTrue(x == y)
+            Assert.assertTrue(z == y)
+            Assert.assertTrue(x == (1489L))
+            Assert.assertTrue(x != (1489))
+            Assert.assertEquals(1489L, before + 1)
+            Assert.assertEquals(before + 1, 1489L)
+            Assert.assertEquals(before + 1, count() + 1)
+            Assert.assertEquals(before + 1L, before + 1)
+        }
+
+        test sumPassedToAnyEqualsInt() {
+            var i: Int = 1488
+            var b: Byte = 1
+            Assert.assertEquals(1489, i + b)
+            Assert.assertEquals(i + b, 1489)
+            var x: Any = i + 1
+            Assert.assertTrue(x == (1489))
+        }
+
+        test sameWidthKeepsItsType() {
+            var a: Int = 1
+            var b: Int = 2
+            Assert.assertEquals("Int", kind(a + b))
+            var l: Long = 1L
+            Assert.assertEquals("Long", kind(l + l))
+        }
+    }
+}
