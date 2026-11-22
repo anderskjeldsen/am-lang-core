@@ -24,6 +24,7 @@ namespace Tests {
         var m: Int? = 7
         var mn: Int? = null
         var arr: Int[] = new Int[3]
+        var t: String? = null
 
         static var calls: Int = 0
 
@@ -44,6 +45,10 @@ namespace Tests {
             return v
         }
 
+        static fun fresh(v: String): String {
+            return v + ""
+        }
+
         fun me(): CscNode {
             CscNode.calls++
             return this
@@ -58,8 +63,60 @@ namespace Tests {
         }
     }
 
+    // Redmine #589: a value stored through a safe-call chain kept the extra
+    // reference the chain's top variable holds, so `maybe(o)?.s += "y"`,
+    // `o?.vec += v` and `p.t = maybe(o)?.s` leaked the stored object each
+    // time. Each helper runs in a call of its own, so every temp it made is
+    // released before the count is read.
+    class CscLeak {
+        import Am.Lang
+        import Am.Lang.Diagnostics
+        import Am.Tests
+
+        static fun appendS(o: CscNode?) {
+            CscNode.maybe(o)?.s += CscNode.fresh("y")
+        }
+
+        static fun appendDirect(o: CscNode?) {
+            o?.s += CscNode.fresh("y")
+        }
+
+        static fun addVec(o: CscNode?) {
+            CscNode.maybe(o)?.vec += new CscVec(2)
+        }
+
+        static fun addN(o: CscNode?) {
+            CscNode.maybe(o)?.n += 2
+        }
+
+        static fun storeSafe(p: CscNode, o: CscNode) {
+            o.s = CscNode.fresh("q")
+            p.t = CscNode.maybe(o)?.s
+        }
+
+        static fun reset(o: CscNode) {
+            o.s = CscNode.fresh("a")
+        }
+
+        // Runs [kind] ten times on [o] and returns how many objects it left.
+        static fun leftBy(kind: Int, o: CscNode?): Long {
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 10) {
+                if (kind == 0) { CscLeak.appendS(o) }
+                if (kind == 1) { CscLeak.appendDirect(o) }
+                if (kind == 2) { CscLeak.addVec(o) }
+                if (kind == 3) { CscLeak.addN(o) }
+            }
+            if (o != null) {
+                CscLeak.reset(o!!)
+            }
+            return Arc.getAllocationCount() - before
+        }
+    }
+
     class CompoundSafeCallTests {
         import Am.Lang
+        import Am.Lang.Diagnostics
         import Am.Async
         import Am.Tests
 
@@ -89,6 +146,52 @@ namespace Tests {
             }
             CscNode.calls++
             return null
+        }
+
+        static var parkedRhs: Int = 0
+
+        suspend fun parkInt(v: Int): Int {
+            suspend(cont) {
+                CompoundSafeCallTests.pending = cont
+            }
+            CompoundSafeCallTests.parkedRhs++
+            return v
+        }
+
+        suspend fun parkStr(v: String): String {
+            suspend(cont) {
+                CompoundSafeCallTests.pending = cont
+            }
+            CompoundSafeCallTests.parkedRhs++
+            return v
+        }
+
+        suspend fun parkVec(v: Int): CscVec {
+            suspend(cont) {
+                CompoundSafeCallTests.pending = cont
+            }
+            CompoundSafeCallTests.parkedRhs++
+            return new CscVec(v)
+        }
+
+        // Redmine #590: a right side that suspends inside the safe call's
+        // branch. The branch's temps (the receiver, the value read before
+        // the call) weren't saved across the suspension: at -O3 `n` kept its
+        // old value and the String case wrote through a garbage receiver.
+        suspend fun runSuspendingRight() {
+            this.parkSome()?.n += this.parkInt(100)
+            var o: CscNode? = this.node
+            o?.n += this.parkInt(1000)
+            o?.s += this.parkStr("b")
+            this.parkSome()?.s += this.parkStr("c")
+            this.parkSome()?.vec += this.parkVec(3)
+            // a null receiver: the right side never runs
+            this.parkNone()?.n += this.parkInt(5)
+            this.parkNone()?.s += this.parkStr("never")
+            var none: CscNode? = null
+            none?.n += this.parkInt(7)
+            none?.s += this.parkStr("never")
+            this.finished = true
         }
 
         suspend fun run() {
@@ -236,6 +339,48 @@ namespace Tests {
             none?.arr[1] += 4
             CscNode.maybe(none)?.arr[1] += 4
             Assert.assertEquals(3, CscNode.calls)
+        }
+
+        test safeCallCompoundAssignmentsDontLeak() {
+            var o: CscNode? = new CscNode()
+            CscLeak.reset(o!!)
+            var none: CscNode? = null
+            for (kind = 0 until 4) {
+                // once to settle, then counted
+                CscLeak.leftBy(kind, o)
+                Assert.assertEquals(0L, CscLeak.leftBy(kind, o))
+                Assert.assertEquals(0L, CscLeak.leftBy(kind, none))
+            }
+            Assert.assertEquals(41, o!!.vec.v)
+            Assert.assertEquals(50, o!!.n)
+        }
+
+        test aSafeCallValueStoredInAPropertyDoesntLeak() {
+            var p = new CscNode()
+            var o = new CscNode()
+            CscLeak.storeSafe(p, o)
+            var before = Arc.getAllocationCount()
+            for (i = 0 until 10) {
+                CscLeak.storeSafe(p, o)
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+            Assert.assertEquals("q", p.t!!)
+        }
+
+        test suspendingRightSideInASafeCall() {
+            CscNode.calls = 0
+            CompoundSafeCallTests.parkedRhs = 0
+            var t = new CompoundSafeCallTests()
+            t.runSuspendingRight()
+            t.drive()
+            Assert.assertTrue(t.finished)
+            Assert.assertEquals(1110, t.node.n)
+            Assert.assertEquals("abc", t.node.s)
+            Assert.assertEquals(4, t.node.vec.v)
+            // parkSome three times, parkNone twice
+            Assert.assertEquals(5, CscNode.calls)
+            // only the five right sides with a non-null receiver ran
+            Assert.assertEquals(5, CompoundSafeCallTests.parkedRhs)
         }
 
         test suspendReceiverSuspendsOnce() {
