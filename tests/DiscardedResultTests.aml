@@ -4,12 +4,14 @@ namespace Tests {
     // it right after the statement, so Arc.getAllocationCount() right after the
     // statement matches the count before it (v2 kept the last result alive: a
     // result of `this.f()` was never released, one of `T.f()` or a chain lived
-    // to the end of the function). Counts are taken right after a loop, so
-    // they hold under v1 too, which frees locals of a straight-line statement
-    // only at function exit.
+    // to the end of the function). Redmine #583: v1 released the result of a
+    // straight-line statement only at the end of its block (in a function
+    // body, at function exit); the `...Straight` tests count right after such
+    // statements.
 
     class DrBox {
         import Am.Lang
+        import Am.Lang.Diagnostics
         var tag: String = "t"
         var kid: DrBox? = null
 
@@ -39,6 +41,18 @@ namespace Tests {
 
         static fun made(i: Int): String {
             return "m" + i.toString()
+        }
+
+        // Calls on `this` and a bare call in straight-line code: the
+        // difference in allocations across them.
+        fun selfCallsStraight(): Long {
+            var before = Arc.getAllocationCount()
+            this.once()
+            this.fresh()
+            this.text()
+            once()
+            fresh().fresh()
+            return Arc.getAllocationCount() - before
         }
 
         // Calls on `this` and a bare call, results discarded.
@@ -152,6 +166,71 @@ namespace Tests {
             for (i = 0 until 5) {
                 "abc".toUpperCase()
                 "abc".substring(1, 1)
+            }
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test discardedResultsStraight() {
+            var b = new DrBox()
+            var before = Arc.getAllocationCount()
+            b.fresh()
+            Assert.assertEquals(before, Arc.getAllocationCount())
+            b.text()
+            b.once()
+            Assert.assertEquals(before, Arc.getAllocationCount())
+            DrBox.made(3)
+            Assert.assertEquals(before, Arc.getAllocationCount())
+            b.fresh().fresh().fresh()
+            b.fresh().once()
+            b.self().text()
+            Assert.assertEquals(before, Arc.getAllocationCount())
+            new DrBox().once()
+            new DrBox()
+            "abc".toUpperCase()
+            Assert.assertEquals(before, Arc.getAllocationCount())
+            b.text().length()
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test discardedResultsThroughNonNullStraight() {
+            var b = new DrBox()
+            var k = new DrBox()
+            b.kid = k
+            var before = Arc.getAllocationCount()
+            b.kid!!.fresh()
+            b.kid!!.text()
+            Assert.assertEquals(before, Arc.getAllocationCount())
+        }
+
+        test discardedResultsOnThisStraight() {
+            var b = new DrBox()
+            Assert.assertEquals(0L, b.selfCallsStraight())
+        }
+
+        // The statement's own temps only: an earlier statement's value, a
+        // local and a field set from a call, stays alive.
+        test keptResultsStraight() {
+            var b = new DrBox()
+            var s = b.text()
+            b.fresh()
+            var k = b.fresh()
+            k.tag = "k"
+            b.kid = b.fresh()
+            b.text()
+            b.kid!!.tag = s
+            Assert.assertEquals("vt", s)
+            Assert.assertEquals("k", k.tag)
+            Assert.assertEquals("vt", b.kid!!.tag)
+            Assert.assertEquals("vk", k.text())
+        }
+
+        test discardedResultsInIfBlockStraight() {
+            var b = new DrBox()
+            var before = Arc.getAllocationCount()
+            if (b.tag == "t") {
+                b.fresh()
+                Assert.assertEquals(before, Arc.getAllocationCount())
+                b.text()
             }
             Assert.assertEquals(before, Arc.getAllocationCount())
         }
