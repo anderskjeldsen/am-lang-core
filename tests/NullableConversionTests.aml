@@ -36,6 +36,18 @@ namespace Tests {
             this.stored = q
         }
 
+        static fun callResultAsLong(q: Int?): Long? {
+            return NcvHolder.identity(q)
+        }
+
+        static fun identity(q: Int?): Int? {
+            return q
+        }
+
+        fun keepCallResult(q: Int?) {
+            this.stored = NcvHolder.identity(q)
+        }
+
         fun accept(l: Long?): String {
             return NcvHolder.describe(l)
         }
@@ -66,6 +78,47 @@ namespace Tests {
             Assert.assertEquals("-7", h.accept(q))
             var n: Int? = null
             Assert.assertEquals("n", h.accept(n))
+        }
+
+        test intToLongReturn() {
+            var q: Int? = -5
+            Assert.assertEquals("-5", NcvHolder.describe(NcvHolder.asLong(q)))
+            var n: Int? = null
+            Assert.assertEquals("n", NcvHolder.describe(NcvHolder.asLong(n)))
+            Assert.assertEquals("-5", NcvHolder.describe(NcvHolder.callResultAsLong(q)))
+            Assert.assertEquals("n", NcvHolder.describe(NcvHolder.callResultAsLong(n)))
+        }
+
+        test intToLongAssignment() {
+            var q: Int? = -5
+            var l: Long? = q
+            Assert.assertEquals("-5", NcvHolder.describe(l))
+            var m: Long? = 99
+            m = q
+            Assert.assertEquals("-5", NcvHolder.describe(m))
+            var n: Int? = null
+            m = n
+            Assert.assertEquals("n", NcvHolder.describe(m))
+            var ln: Long? = n
+            Assert.assertEquals("n", NcvHolder.describe(ln))
+            var lc: Long? = NcvHolder.identity(q)
+            Assert.assertEquals("-5", NcvHolder.describe(lc))
+            m = NcvHolder.identity(n)
+            Assert.assertEquals("n", NcvHolder.describe(m))
+        }
+
+        test intToLongPropertyAssignment() {
+            var h = new NcvHolder()
+            var q: Int? = -5
+            h.keep(q)
+            Assert.assertEquals("-5", NcvHolder.describe(h.stored))
+            var n: Int? = null
+            h.keep(n)
+            Assert.assertEquals("n", NcvHolder.describe(h.stored))
+            h.keepCallResult(q)
+            Assert.assertEquals("-5", NcvHolder.describe(h.stored))
+            h.keepCallResult(n)
+            Assert.assertEquals("n", NcvHolder.describe(h.stored))
         }
 
         test largeValuesSurviveWidening() {

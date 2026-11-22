@@ -1,0 +1,175 @@
+namespace Tests {
+
+    // Redmine #578: a function type that returns a nullable primitive or enum
+    // (`(x: Int?) => Int?`), and a lambda capturing an `Int?` / `Color?` local.
+    // The lambda's result and the capture are whole nullable_values: null stays
+    // null.
+
+    enum NlColor {
+        import Am.Lang
+
+        red = 0
+        green = 1
+    }
+
+    class NullableLambdaTests {
+        import Am.Lang
+        import Am.Tests
+
+        static fun id(x: Int?): Int? {
+            return x
+        }
+
+        static fun idLong(x: Long?): Long? {
+            return x
+        }
+
+        static fun idColor(c: NlColor?): NlColor? {
+            return c
+        }
+
+        static fun showInt(x: Int?): String {
+            if (x == null) { return "n" }
+            return x!!.toString()
+        }
+
+        static fun showLong(x: Long?): String {
+            if (x == null) { return "n" }
+            return x!!.toString()
+        }
+
+        static fun showColor(c: NlColor?): String {
+            if (c == null) { return "n" }
+            if (c!! == NlColor.red) { return "red" }
+            return "green"
+        }
+
+        test inferredIntResult() {
+            var ii = (x: Int?) => NullableLambdaTests.id(x)
+            Assert.assertEquals("7", NullableLambdaTests.showInt(ii(7)))
+            Assert.assertEquals("0", NullableLambdaTests.showInt(ii(0)))
+            Assert.assertEquals("n", NullableLambdaTests.showInt(ii(null)))
+            var q: Int? = 4
+            var n: Int? = null
+            Assert.assertEquals("4", NullableLambdaTests.showInt(ii(q)))
+            Assert.assertEquals("n", NullableLambdaTests.showInt(ii(n)))
+        }
+
+        test declaredIntResult() {
+            var ii: (x: Int?) => Int? = (x: Int?) => NullableLambdaTests.id(x)
+            Assert.assertEquals("7", NullableLambdaTests.showInt(ii(7)))
+            Assert.assertEquals("n", NullableLambdaTests.showInt(ii(null)))
+            var jj: (x: Int?) => Int? = (x) => x
+            Assert.assertEquals("9", NullableLambdaTests.showInt(jj(9)))
+            Assert.assertEquals("n", NullableLambdaTests.showInt(jj(null)))
+        }
+
+        test declaredLongAndColorResults() {
+            var ll: (x: Long?) => Long? = (x: Long?) => NullableLambdaTests.idLong(x)
+            Assert.assertEquals("5000000000", NullableLambdaTests.showLong(ll(5000000000L)))
+            Assert.assertEquals("n", NullableLambdaTests.showLong(ll(null)))
+            var cc: (c: NlColor?) => NlColor? = (c: NlColor?) => NullableLambdaTests.idColor(c)
+            Assert.assertEquals("red", NullableLambdaTests.showColor(cc(NlColor.red)))
+            Assert.assertEquals("green", NullableLambdaTests.showColor(cc(NlColor.green)))
+            Assert.assertEquals("n", NullableLambdaTests.showColor(cc(null)))
+        }
+
+        test resultCanBeCompared() {
+            var ii: (x: Int?) => Int? = (x: Int?) => NullableLambdaTests.id(x)
+            Assert.assertTrue(ii(null) == null)
+            Assert.assertTrue(ii(3) != null)
+            Assert.assertEquals(3, ii(3) ?? 0)
+            Assert.assertEquals(11, ii(null) ?? 11)
+        }
+
+        test resultIntoNullableLocal() {
+            var ii: (x: Int?) => Int? = (x: Int?) => NullableLambdaTests.id(x)
+            var r: Int? = ii(6)
+            Assert.assertEquals("6", NullableLambdaTests.showInt(r))
+            var s: Int? = ii(null)
+            Assert.assertEquals("n", NullableLambdaTests.showInt(s))
+        }
+
+        test lambdaReturnsNullOrValue() {
+            var pick: (flag: Bool) => Int? = (flag: Bool) => {
+                if (flag) { return 5 }
+                return null
+            }
+            Assert.assertEquals("5", NullableLambdaTests.showInt(pick(true)))
+            Assert.assertEquals("n", NullableLambdaTests.showInt(pick(false)))
+        }
+
+        test capturedInt() {
+            var q: Int? = 5
+            var z: () => String = () => NullableLambdaTests.showInt(q)
+            Assert.assertEquals("5", z())
+            var d: () => String = () => NullableLambdaTests.showInt(q)
+            Assert.assertEquals("5", d())
+        }
+
+        test capturedNullInt() {
+            var q: Int? = null
+            var z: () => String = () => NullableLambdaTests.showInt(q)
+            Assert.assertEquals("n", z())
+            var d: () => String = () => NullableLambdaTests.showInt(q)
+            Assert.assertEquals("n", d())
+            var isNull: () => Bool = () => q == null
+            Assert.assertTrue(isNull())
+        }
+
+        test capturedLongAndColor() {
+            var l: Long? = 5000000000L
+            var ln: Long? = null
+            var c: NlColor? = NlColor.green
+            var cn: NlColor? = null
+            var a: () => String = () => NullableLambdaTests.showLong(l)
+            var b: () => String = () => NullableLambdaTests.showLong(ln)
+            var d: () => String = () => NullableLambdaTests.showColor(c)
+            var e: () => String = () => NullableLambdaTests.showColor(cn)
+            Assert.assertEquals("5000000000", a())
+            Assert.assertEquals("n", b())
+            Assert.assertEquals("green", d())
+            Assert.assertEquals("n", e())
+        }
+
+        test capturedIntReadByNarrowingAndDefault() {
+            var q: Int? = 8
+            var qn: Int? = null
+            var plus: () => Int = () => q!! + 1
+            var dflt: () => Int = () => qn ?? 20
+            Assert.assertEquals(9, plus())
+            Assert.assertEquals(20, dflt())
+        }
+
+        test capturedIntReturnedFromLambda() {
+            var q: Int? = 12
+            var qn: Int? = null
+            var f: () => Int? = () => q
+            var g: () => Int? = () => qn
+            Assert.assertEquals("12", NullableLambdaTests.showInt(f()))
+            Assert.assertEquals("n", NullableLambdaTests.showInt(g()))
+        }
+
+        test capturedIntInNestedLambda() {
+            var q: Int? = 3
+            var qn: Int? = null
+            var outer: () => String = () => {
+                var inner: () => String = () => NullableLambdaTests.showInt(q)
+                return inner()
+            }
+            var outerNull: () => String = () => {
+                var inner: () => String = () => NullableLambdaTests.showInt(qn)
+                return inner()
+            }
+            Assert.assertEquals("3", outer())
+            Assert.assertEquals("n", outerNull())
+        }
+
+        test captureSeesTheValueAtCreation() {
+            var q: Int? = 1
+            var z: () => String = () => NullableLambdaTests.showInt(q)
+            q = 2
+            Assert.assertEquals("1", z())
+        }
+    }
+}
