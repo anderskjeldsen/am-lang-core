@@ -6,6 +6,9 @@ namespace Tests {
     // instead of arriving as null. The box goes through now, as in v1; a plain
     // Int is boxed. Calls through a function-typed local, property or capture
     // with an `Int?` parameter take the box too.
+    // Redmine #566: `var a = 5 as Int?` (an Int literal or local, a Long, an
+    // enum member) typed the local as int in v2 and rendered
+    // `int var_a = ((nullable_value)(5))`. It is an `Int?` now, as in v1.
 
     enum NarColor {
         import Am.Lang
@@ -156,6 +159,40 @@ namespace Tests {
             q = null
             var r5: String = rec.cb(q)
             Assert.assertEquals("n", r5)
+        }
+
+        test asNullableFromPlainValues() {
+            var a = 5 as Int?
+            Assert.assertEquals("5", NarRecorder.describe(a))
+            a = null
+            Assert.assertTrue(a == null)
+            var n = 9
+            var b = n as Int?
+            Assert.assertEquals(9, b!!)
+            b = null
+            Assert.assertEquals("n", NarRecorder.describe(b))
+            var lg = 6000000000L
+            var c = lg as Long?
+            Assert.assertEquals("6000000000", NarRecorder.describeLong(c))
+            c = null
+            Assert.assertEquals("n", NarRecorder.describeLong(c))
+            var d = n as Long?
+            Assert.assertEquals("9", NarRecorder.describeLong(d))
+            var neg = 0 - 4
+            var d2 = neg as Long?
+            Assert.assertEquals("-4", NarRecorder.describeLong(d2))
+            var e = 5 as Long?
+            Assert.assertEquals("5", NarRecorder.describeLong(e))
+            var g = NarColor.green as NarColor?
+            Assert.assertTrue(g == NarColor.green)
+            Assert.assertEquals("green", NarRecorder.describeColor(g))
+            g = null
+            Assert.assertTrue(g == null)
+            var ce = NarColor.red
+            var h = ce as NarColor?
+            Assert.assertEquals("red", NarRecorder.describeColor(h))
+            var t: Int? = 3 as Int?
+            Assert.assertEquals(3, t!!)
         }
     }
 
