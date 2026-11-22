@@ -1,0 +1,76 @@
+namespace Tests {
+
+    // Native methods of the floating-point primitive classes (Redmine #556): the C side
+    // takes the primitive as `this` (`double const this`), so these calls only work when
+    // the compiler declares the natives that way and defines FEATURE_FLOATING_POINT for
+    // the C files that implement them.
+    class PrimitiveNativeTests {
+        import Am.Lang
+        import Am.Tests
+
+        test doubleSqrt() {
+            var nine = 9.0
+            Assert.assertDoubleClose(3.0, nine.sqrt(), 0.000001)
+            var zero = 0.0
+            Assert.assertDoubleClose(0.0, zero.sqrt(), 0.000001)
+            var two = 2.0
+            Assert.assertDoubleClose(1.414213562, two.sqrt(), 0.000001)
+            var d = 16.0
+            Assert.assertDoubleClose(4.0, d.sqrt(), 0.000001)
+        }
+
+        test floatSqrt() {
+            var f: Float = 25.0F
+            Assert.assertFloatClose(5.0F, f.sqrt(), 0.0001F)
+            var g: Float = 2.0F
+            Assert.assertFloatClose(1.41421F, g.sqrt(), 0.0001F)
+        }
+
+        test doubleConversions() {
+            var d = 3.75
+            Assert.assertEquals(3, d.toInt())
+            Assert.assertEquals(3L, d.toLong())
+            Assert.assertDoubleClose(3.75, d.toFloat().toDouble(), 0.000001)
+            Assert.assertTrue(d.toBool())
+            var zero = 0.0
+            Assert.assertFalse(zero.toBool())
+        }
+
+        test floatConversions() {
+            var f: Float = 7.5F
+            Assert.assertEquals(7, f.toInt())
+            Assert.assertEquals(7L, f.toLong())
+            Assert.assertDoubleClose(7.5, f.toDouble(), 0.000001)
+            Assert.assertTrue(f.toBool())
+        }
+
+        test integerToFloatingPoint() {
+            var i = 42
+            Assert.assertDoubleClose(42.0, i.toDouble(), 0.000001)
+            Assert.assertFloatClose(42.0F, i.toFloat(), 0.0001F)
+            var l = 5000000000L
+            Assert.assertDoubleClose(5000000000.0, l.toDouble(), 0.5)
+            var s: Short = 12S
+            Assert.assertDoubleClose(12.0, s.toDouble(), 0.000001)
+            var b: Byte = 5B
+            Assert.assertFloatClose(5.0F, b.toFloat(), 0.0001F)
+        }
+
+        test parseAndFormat() {
+            Assert.assertDoubleClose(2.5, Double.parse("2.5"), 0.000001)
+            Assert.assertDoubleClose(-0.125, Double.parse("-0.125"), 0.000001)
+            Assert.assertFloatClose(1.5F, Float.parse("1.5"), 0.0001F)
+            var d = 0.5
+            Assert.assertDoubleClose(0.5, Double.parse(d.toString()), 0.000001)
+        }
+
+        test hashIsStable() {
+            var a = 1.25
+            var b = 1.25
+            Assert.assertEquals(a.hash(), b.hash())
+            var x: Float = 1.25F
+            var y: Float = 1.25F
+            Assert.assertEquals(x.hash(), y.hash())
+        }
+    }
+}
