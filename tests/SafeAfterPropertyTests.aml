@@ -1,0 +1,130 @@
+namespace Tests {
+
+    // Redmine #591 (v2): `a.kid?.me()` — a safe call whose receiver is a
+    // property link (not the chain root) dispatched to the ENCLOSING class's
+    // `me` (v2 lost the receiver type) instead of SapNode.me.
+
+    class SapNode {
+        import Am.Lang
+        var n: Int = 10
+        var kid: SapNode? = null
+        var name: String = "x"
+
+        fun me(): SapNode { return this }
+        fun num(): Int { return this.n }
+
+        fun viaThisRead(): Int {
+            var v = this.kid?.n
+            if (v == null) { return -1 }
+            return v
+        }
+        fun viaThisMe(): SapNode? {
+            return this.kid?.me()
+        }
+    }
+
+    class SapTests {
+        import Am.Lang
+        import Am.Tests
+
+        // Deliberately has its own `me`, the wrong target in #591.
+        fun me(): Int { return 99 }
+
+        test callNonNull() {
+            var a = new SapNode()
+            a.kid = new SapNode()
+            a.kid.n = 5
+            var x = a.kid?.me()
+            Assert.assertTrue(x != null)
+            Assert.assertEquals(5, x.n)
+        }
+
+        test callNull() {
+            var a = new SapNode()
+            var x = a.kid?.me()
+            Assert.assertTrue(x == null)
+        }
+
+        test readProperty() {
+            var a = new SapNode()
+            a.kid = new SapNode()
+            a.kid.n = 7
+            var x = a.kid?.n ?? -1
+            Assert.assertEquals(7, x)
+            var b = new SapNode()
+            var y = b.kid?.n ?? -1
+            Assert.assertEquals(-1, y)
+        }
+
+        test callReturningInt() {
+            var a = new SapNode()
+            a.kid = new SapNode()
+            a.kid.n = 3
+            var x = a.kid?.num() ?? -1
+            Assert.assertEquals(3, x)
+            var b = new SapNode()
+            Assert.assertEquals(-1, b.kid?.num() ?? -1)
+        }
+
+        test methodChain() {
+            var a = new SapNode()
+            a.kid = new SapNode()
+            a.kid.kid = new SapNode()
+            a.kid.kid.n = 42
+            var x = a.kid?.me()?.kid?.n ?? -1
+            Assert.assertEquals(42, x)
+            var b = new SapNode()
+            b.kid = new SapNode()
+            var c = new SapNode()
+            var z = c.kid?.me()?.kid?.n ?? -1
+            Assert.assertEquals(-1, z)
+            var w = a.kid?.me()?.kid?.me()
+            Assert.assertTrue(w != null)
+            Assert.assertEquals(42, w.n)
+            var u = b.kid?.me()?.kid?.me()
+            Assert.assertTrue(u == null)
+        }
+
+        test fallback() {
+            var a = new SapNode()
+            Assert.assertEquals(-5, a.kid?.n ?? -5)
+            a.kid = new SapNode()
+            Assert.assertEquals(10, a.kid?.n ?? -5)
+            Assert.assertEquals(10, a.kid?.me()?.n ?? -5)
+        }
+
+        test compoundThroughMe() {
+            var a = new SapNode()
+            a.kid = new SapNode()
+            a.kid?.me().n += 5
+            Assert.assertEquals(15, a.kid.n)
+            a.kid?.n += 2
+            Assert.assertEquals(17, a.kid.n)
+            var b = new SapNode()
+            b.kid?.me().n += 5
+            b.kid?.n += 2
+            Assert.assertTrue(b.kid == null)
+        }
+
+        test thisReceiver() {
+            var a = new SapNode()
+            Assert.assertEquals(-1, a.viaThisRead())
+            Assert.assertTrue(a.viaThisMe() == null)
+            a.kid = new SapNode()
+            a.kid.n = 8
+            Assert.assertEquals(8, a.viaThisRead())
+            Assert.assertTrue(a.viaThisMe() != null)
+        }
+
+        test inExpression() {
+            var a = new SapNode()
+            a.kid = new SapNode()
+            a.kid.n = 4
+            Assert.assertEquals(4, a.kid?.me().n ?? 0)
+            var b = new SapNode()
+            Assert.assertEquals(0, b.kid?.me().n ?? 0)
+            var k = a.kid?.me()
+            if (k != null) { Assert.assertEquals(4, k.num()) }
+        }
+    }
+}
