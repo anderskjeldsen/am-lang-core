@@ -1,0 +1,72 @@
+namespace TestsV1 {
+
+    // Redmine #587: `op=` on a nullable primitive slot that nothing wrote yet
+    // (an element of `new Int?[n]`, flags 0) must throw the null-reference
+    // error like an explicit null; it used to pass the check and crash. Also
+    // `!!` on such an element. v2 has no Int?[] (V2_PORT_PLAN.md).
+    class NullableCompoundV1Tests {
+        import Am.Lang
+        import Am.Tests
+
+        var f: Int? = null
+        var fresh: Int?[] = new Int?[2]
+
+        test freshIntElementThrows() {
+            var na: Int?[] = new Int?[2]
+            var threw = false
+            try { na[1] += 1 } catch (err: Exception) { threw = true }
+            Assert.assertTrue(threw)
+            threw = false
+            try { na[1] -= 1 } catch (err: Exception) { threw = true }
+            Assert.assertTrue(threw)
+            threw = false
+            try { na[1] *= 2 } catch (err: Exception) { threw = true }
+            Assert.assertTrue(threw)
+        }
+
+        test freshLongElementThrows() {
+            var la: Long?[] = new Long?[2]
+            var threw = false
+            try { la[0] += 1 } catch (err: Exception) { threw = true }
+            Assert.assertTrue(threw)
+        }
+
+        test fieldArrayElementThrows() {
+            var threw = false
+            try { this.fresh[0] += 1 } catch (err: Exception) { threw = true }
+            Assert.assertTrue(threw)
+        }
+
+        test nullFieldThrows() {
+            var threw = false
+            try { this.f += 1 } catch (err: Exception) { threw = true }
+            Assert.assertTrue(threw)
+        }
+
+        test assignedElementWorks() {
+            var na: Int?[] = new Int?[2]
+            na[1] = 1
+            na[1] += 1
+            Assert.assertEquals(2, na[1]!!)
+            na[1] -= 5
+            Assert.assertEquals(-3, na[1]!!)
+            na[1] *= 3
+            Assert.assertEquals(-9, na[1]!!)
+            var la: Long?[] = new Long?[1]
+            la[0] = 10
+            la[0] += 5
+            Assert.assertEquals(15L, la[0]!!)
+            this.f = 4
+            this.f += 1
+            this.f *= 2
+            Assert.assertEquals(10, this.f!!)
+        }
+
+        test freshElementNonNullAssertThrows() {
+            var na: Int?[] = new Int?[2]
+            var threw = false
+            try { var v = na[1]!! } catch (err: Exception) { threw = true }
+            Assert.assertTrue(threw)
+        }
+    }
+}

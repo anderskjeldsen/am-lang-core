@@ -11,6 +11,7 @@ Changes since 0.15.0. Needs amlc 0.16.0.
 
 ### Added
 
+- **CompoundIndexBareCallTests and NullableCompoundV1Tests** (2026-11-22, Redmine #588, #587). `arr[take(1)] += 1` with a bare static call in the index, in static and instance functions, the index evaluated once (v1 and v2); and `op=` / `!!` on a fresh `Int?[]` element throwing the null-reference error (tests-v1-only, v2 has no `Int?[]`).
 - **DiscardedResultTests** (2026-11-22, #580). Statement calls whose object result is discarded (`b.f()`, `this.f()`, a bare `f()`, `T.f()`, chains, `new T().f()`, a string literal receiver), in `for` and `while` loops, with `Arc.getAllocationCount()` equal before and after, and borrowed results (`this`, a property, a literal) still alive. Needs amlc 0.16.0 (v1 or v2).
 - **InferredLambdaResultTests** (2026-11-22, Redmine #579). `var z = () => show(4)` (a lambda with no parameters in an untyped local, its type from the body: expression and block bodies, void, captures incl. `Int?`) and a lambda local inside a lambda, as a program; v1 handles them since #579, v2 since #574. Passes under v1 and v2.
 - **GenericMultiArgTests** (2026-11-22, Redmine #543). Generic functions with two and three type arguments as a program under v1 and v2: static and instance, in a plain and in a generic class (`GmaBox<String>.pair<String, Int>`), explicit and inferred, a nullable type argument (`pick<String, Int?>`), and a call inside the class. v2 named these symbols with `_` between the type arguments instead of v1's `_x_`.
