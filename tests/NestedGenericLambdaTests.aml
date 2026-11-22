@@ -1,0 +1,130 @@
+namespace Tests {
+
+    // A lambda in a method of a generic class instantiated with a generic
+    // argument (#537): Box<List<Int>> and Box<List<String>> each get their own
+    // lambda class, so a captured T and `this` dispatch through their own variants.
+    class NglBox<T>(var value: T) {
+        import Am.Lang
+        import Am.Collections
+        var count: Int = 3
+
+        fun size(): Int {
+            var xs = new List<T>()
+            xs.add(this.value)
+            xs.add(this.value)
+            return xs.getSize() + this.count
+        }
+
+        // Captures a local of type T, a plain local and `this`.
+        fun viaLocal(f: (v: T) => Int): Int {
+            var extra = 5
+            var v = this.value
+            return NestedGenericLambdaTests.apply((a) => f(v) + a + extra + this.size(), 1)
+        }
+
+        // A captured List<T>: its calls go to List<List<Int>> or List<List<String>>.
+        fun viaListInLambda(f: (v: T) => Int): Int {
+            var xs = new List<T>()
+            xs.add(this.value)
+            xs.add(this.value)
+            return NestedGenericLambdaTests.apply((a) => {
+                return f(xs.get(1)) * xs.getSize() + a
+            }, 10)
+        }
+
+        // A lambda inside a lambda, the inner one using the captured T.
+        fun nested(f: (v: T) => Int): Int {
+            var v = this.value
+            return NestedGenericLambdaTests.apply((a) => {
+                return NestedGenericLambdaTests.apply((b) => f(v) + a + b, a)
+            }, 2)
+        }
+    }
+
+    class NestedGenericLambdaTests {
+        import Am.Lang
+        import Am.Collections
+        import Am.Tests
+
+        static fun apply(f: (x: Int) => Int, x: Int): Int {
+            return f(x)
+        }
+
+        // A generic function's lambda, instantiated with List<Int> and List<String>.
+        static fun gen<T>(v: T, f: (v: T) => Int): Int {
+            var extra = 7
+            var xs = new List<T>()
+            xs.add(v)
+            return NestedGenericLambdaTests.apply((a) => {
+                var copy = v
+                return f(copy) + f(xs.get(0)) - f(v) + a + extra
+            }, 1)
+        }
+
+        static fun ints(): List<Int> {
+            var li = new List<Int>()
+            li.add(42)
+            li.add(8)
+            return li
+        }
+
+        static fun strings(): List<String> {
+            var ls = new List<String>()
+            ls.add("hello")
+            return ls
+        }
+
+        test boxOfListOfIntLambda() {
+            var b = new NglBox<List<Int>>(NestedGenericLambdaTests.ints())
+            // 42 + 1 + 5 + (2 + 3)
+            Assert.assertEquals(53, b.viaLocal((l: List<Int>) => l.get(0)))
+        }
+
+        test boxOfListOfStringLambda() {
+            var b = new NglBox<List<String>>(NestedGenericLambdaTests.strings())
+            // 5 + 1 + 5 + (2 + 3)
+            Assert.assertEquals(16, b.viaLocal((l: List<String>) => l.get(0).length()))
+        }
+
+        // Both instantiations in one test, each lambda run in turn.
+        test bothInstantiationsInterleaved() {
+            var bi = new NglBox<List<Int>>(NestedGenericLambdaTests.ints())
+            var bs = new NglBox<List<String>>(NestedGenericLambdaTests.strings())
+            Assert.assertEquals(53, bi.viaLocal((l: List<Int>) => l.get(0)))
+            Assert.assertEquals(16, bs.viaLocal((l: List<String>) => l.get(0).length()))
+            Assert.assertEquals(13, bi.viaLocal((l: List<Int>) => l.getSize() + l.get(1) - 8))
+            Assert.assertEquals(21, bs.viaLocal((l: List<String>) => l.getSize() * 10))
+        }
+
+        test listOfTInsideLambda() {
+            var bi = new NglBox<List<Int>>(NestedGenericLambdaTests.ints())
+            var bs = new NglBox<List<String>>(NestedGenericLambdaTests.strings())
+            // f(...) * 2 + 10
+            Assert.assertEquals(18, bi.viaListInLambda((l: List<Int>) => l.get(1) / 2))
+            Assert.assertEquals(20, bs.viaListInLambda((l: List<String>) => l.get(0).length()))
+        }
+
+        test nestedLambdaCapturesNestedGenericT() {
+            var bi = new NglBox<List<Int>>(NestedGenericLambdaTests.ints())
+            var bs = new NglBox<List<String>>(NestedGenericLambdaTests.strings())
+            // f(v) + 2 + 2
+            Assert.assertEquals(46, bi.nested((l: List<Int>) => l.get(0)))
+            Assert.assertEquals(9, bs.nested((l: List<String>) => l.get(0).length()))
+        }
+
+        // Deeper nesting: T is List<List<Int>>.
+        test boxOfListOfListLambda() {
+            var outer = new List<List<Int>>()
+            outer.add(NestedGenericLambdaTests.ints())
+            var b = new NglBox<List<List<Int>>>(outer)
+            // 50 + 1 + 5 + (2 + 3)
+            Assert.assertEquals(61, b.viaLocal((l: List<List<Int>>) => l.get(0).get(0) + l.get(0).get(1)))
+        }
+
+        test genericFunctionWithListArguments() {
+            Assert.assertEquals(50, NestedGenericLambdaTests.gen<List<Int>>(NestedGenericLambdaTests.ints(), (l: List<Int>) => l.get(0)))
+            Assert.assertEquals(13, NestedGenericLambdaTests.gen<List<String>>(NestedGenericLambdaTests.strings(), (l: List<String>) => l.get(0).length()))
+            Assert.assertEquals(16, NestedGenericLambdaTests.gen<List<Int>>(NestedGenericLambdaTests.ints(), (l: List<Int>) => l.get(1)))
+        }
+    }
+}
